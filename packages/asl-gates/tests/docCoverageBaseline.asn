@@ -1263,8 +1263,6 @@
 (:gap "asl/tools/release.asl#makeMilestoneReceipt")
 (:gap "asl/tools/release.asl#buildReleasePackage")
 (:gap "asl/tools/release.asl#superviseClosureGate")
-(:gap "asl/tools/release.asl#build_release_package")
-(:gap "asl/tools/release.asl#supervise_closure_gate")
 (:gap "asl/tools/release.asl#release_bundle")
 (:gap "asl/tools/release.asl#milestone_receipt")
 (:gap "asl/tools/seed.asl#Entry")

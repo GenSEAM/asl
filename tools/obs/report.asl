@@ -1,5 +1,5 @@
 (module ws/asl/tools/obs/report
-  :x [report parseLevers rateText groupCounts]
+  :x [report parseLevers rateText]
   :i [(ws/asl/tools/obs/sx :a sx)
       (ws/asl/tools/obs/obs :a ob)
       (ws/asl/tools/obs/classify :a cl)])
@@ -35,9 +35,6 @@ fn countKeys keys: (List String) -> (List (Pair String Int64))
 fn pad9 v: Int64 -> String
   (let [(s (n v))]
     (str (stringRepeat "0" (- 9 (stringLength s))) s))
-
-fn groupCounts keys: (List String) -> (List (Pair String Int64))
-  (countKeys keys)
 
 fn pairsText ps: (List (Pair String Int64)) -> String
   (stringJoin (map (fn [(p (Pair String Int64))] -> String (str "(" (pairFirst p) " " (n (pairSecond p)) ")")) ps) " ")

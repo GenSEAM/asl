@@ -1,5 +1,5 @@
 (module asl-tools/coord/worktree
-  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! removeWt! renderWt protectedUnit? ageSec! gcWt! auditWt! main]
+  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
   :i [(asl-tools/fleet/run :a fr)])
 
 (schema Cfg
@@ -111,10 +111,6 @@ fn ! listWt! cfg: Cfg -> (Result (List Wt) String)
                                                     :dirty (pairFirst c) :ignored (pairSecond c)
                                                     :merged (mergedInto! cfg e.head) :lease "unknown")))))))
                   (list) (parseWorktrees g.out))))))
-
-fn renderWt w: Wt -> String
-  (str "(:wt :unit " w.unit " :head " w.head " :branch \"" w.branch "\" :detached " (if w.detached "true" "false")
-       " :dirty " w.dirty " :ignored " w.ignored " :merged " (if w.merged "true" "false") " :lease " w.lease ")")
 
 fn ! findWt! cfg: Cfg unit: String -> (Result Wt String)
   (cond
