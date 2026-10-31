@@ -363,6 +363,7 @@
 (:doc :symbol "asl/packages/asl-checker/src/tailPos.asl#notTailCount" :text "How many self-calls of a tailrec function sit outside tail position, constructor arguments excepted.")
 (:doc :symbol "asl/packages/asl-checker/src/tailPos.asl#notTailDiags" :text "A diagnostic for each tailrec function whose self-call is not in tail position.")
 (:doc :symbol "asl/packages/asl-checker/src/checkCached.asl#checkFileCached!" :text "Checks a file through the incremental cache, reusing the module index of earlier calls, and returns the verdict with the updated cache.")
+(:doc :symbol "asl/packages/asl-checker/src/checkCached.asl#checkFileCachedIn!" :text "checkFileCached! with the tree its closure stamp labels dependencies from: a check of a byte-identical copy (the asl-forms staged overlay) passes the copy root so its deps hit the workspace stamp; checkFileCached! passes the current directory")
 (:doc :symbol "asl/packages/asl-checker/src/claims.asl#groundClaims!" :text "Reads a claims registry file and returns its claims, or an err naming the unreadable path.")
 (:doc :symbol "asl/packages/asl-checker/src/constAssert.asl#foldsToConstant?" :text "Whether an expression folds to a constant under an environment of known-constant locals and a list of pure functions.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#loadModuleDepsFrom!" :text "Loads the import closure of the given imports from the roots, starting from a seeded dependency map and module index.")

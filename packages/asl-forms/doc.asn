@@ -557,6 +557,7 @@
 (:doc :symbol "asl/packages/asl-forms/tests/checkSemanticTest.asl#testTempFileWriteFailure!" :text "test temp file write failure error receipt")
 (:doc :symbol "asl/packages/asl-forms/tests/checkSemanticTest.asl#testTemplateLiteralDynamicImports!" :text "test template literal dynamic import resolution")
 (:doc :symbol "asl/packages/asl-forms/tests/checkSemanticTest.asl#runTests" :text "run all semantic check tests")
+(:doc :symbol "asl/packages/asl-forms/tests/overlayStampTest.asl#runTests" :text "a staged check in a copied overlay summarises a dependency the workspace already stamped clean instead of re-checking its body")
 (:doc :symbol "asl/packages/asl-forms/tests/claimTest.asl#" :text "Scope leases shared by linked worktrees and enforced on writes")
 (:doc :symbol "asl/packages/asl-forms/tests/driverParityTest.asl#" :text "Legacy driver parity for implemented cases plus intentional FR1 rejection behavior")
 (:doc :symbol "asl/packages/asl-forms/tests/editsPerfTest.asl#" :text "Timed gates for asl-forms/edit: a 4000-line unified diff under 2 s and an edit plus diff of a 52k-line file")
