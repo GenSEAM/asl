@@ -37,6 +37,8 @@
       gatewayLimitWindows
       defaultBucketWaitSec
       defaultQueueBudgetSec
+      queueBudgetMaxSec
+      defaultBusyRetrySec
       gatewayQueueBudgetSecFromProps
       gatewayBucketWaitSecFromProps
       asnScalar
@@ -428,14 +430,27 @@ fn queueBudgetValue props: (Map String rd/SExpr) -> (Option Float64)
     ((none) none)
     ((some v) (match (asnScalar v) ((scalarInt n) (some (int64ToFloat64 n))) ((scalarFloat f) (some f)) (_ (some -1.0)))))
 
+; (:m :ref GW-LIMIT-LEFTOVERS :do "(:gateway :queueBudgetSec N) is 1..3600 seconds (3600 adopted as the upper bound, a longer wait outlives any client): above it config check is an error and the runtime load warns and keeps the default 30")
+fn queueBudgetMaxSec -> Float64
+  3600.0
+
+; (:m :ref GW-LIMIT-LEFTOVERS :do "(:gateway :busyRetrySec N): the Retry-After the gateway puts on a 503 it makes itself when a retry soon is the right answer (an endpoint that went away or did not warm in time, no endpoint admitted); 1..3600, default 1 adopted, the wait Leon applies to a 503 without the header")
+fn defaultBusyRetrySec -> Int64
+  1
+
 fn gatewayQueueBudgetSecFromProps g: (Map String rd/SExpr) -> Float64
   (match (queueBudgetValue g)
-    ((some f) (if (> f 0.0) f (defaultQueueBudgetSec)))
+    ((some f) (if (and (> f 0.0) (<= f (queueBudgetMaxSec))) f (defaultQueueBudgetSec)))
     ((none) (defaultQueueBudgetSec)))
 
 fn gatewayQueueBudgetWarnings g: (Map String rd/SExpr) -> (List String)
   (match (queueBudgetValue g)
-    ((some f) (if (> f 0.0) (list) (list ":queueBudgetSec must be a positive number; using the default")))
+    ((some f) (if (and (> f 0.0) (<= f (queueBudgetMaxSec))) (list) (list ":queueBudgetSec must be a positive number of at most 3600 seconds; using the default")))
+    ((none) (list)))
+
+fn queueBudgetRangeErrors g: (Map String rd/SExpr) -> (List String)
+  (match (queueBudgetValue g)
+    ((some f) (if (> f (queueBudgetMaxSec)) (list ":queueBudgetSec must be at most 3600 seconds") (list)))
     ((none) (list)))
 
 ; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "config check is strict where the runtime load only warns: a non-positive :bucketWaitSec or :queueBudgetSec is an error in the check receipt, while serve keeps the default so a live hub never dies on it")
@@ -488,9 +503,10 @@ fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
                 (listAppend (listAppend (cooldownErrorOf g "affinityStickSec" 1 86400) (cooldownErrorOf g "affinityForgetSec" 1 604800)) order)))
 
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
+  (listAppend (listAppend (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
               (gatewayAffinityErrors g))
               (gatewayLimitErrors g))
+              (listAppend (queueBudgetRangeErrors g) (rangeErrorOf g "busyRetrySec" 1 3600 "seconds")))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")

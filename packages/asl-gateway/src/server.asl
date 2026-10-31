@@ -1,5 +1,5 @@
 (module aslGateway/server
-  :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
@@ -829,6 +829,17 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
 fn errorOutcome status: Int64 reason: String -> ch/ChatOutcome
   (ch/outHttp (ch/httpError status reason (list (pair (ch/gatewayOriginHeader) "gateway")) (str "{\"error\": \"" (wire/asnEscape reason) "\"}")))
 
+; (:m :ref GW-LIMIT-LEFTOVERS :do "a 503 the gateway makes itself because a retry soon is the right answer carries Retry-After from (:gateway :busyRetrySec), default 1; a caller that waits Retry-After no longer guesses")
+fn busyOutcome srv: GatewayLoop reason: String -> ch/ChatOutcome
+  (busyOutcomeIn (optionOr srv.wiringText "") reason)
+
+fn busyOutcomeIn wiringText: String reason: String -> ch/ChatOutcome
+  (let [(sec (inRangeOr (c/gatewayTopIntOverride wiringText "busyRetrySec") 1 3600 (c/defaultBusyRetrySec)))]
+    (ch/outHttp (ch/httpError 503 reason (list (pair (ch/gatewayOriginHeader) "gateway") (pair "Retry-After" (stringFromInt64 sec))) (str "{\"error\": \"" (wire/asnEscape reason) "\"}"))))
+
+fn planOutcome srv: GatewayLoop status: Int64 reason: String -> ch/ChatOutcome
+  (if (= status 503) (busyOutcome srv reason) (errorOutcome status reason))
+
 fn jsonFloatOf v: (Option j/Json) -> (Option Float64)
   (match v ((none) none) ((some jv) (match jv ((j/jint i) (some (int64ToFloat64 i))) ((j/jfloat f) (some f)) ((j/jnum n) (some n)) (_ none))))
 
@@ -906,7 +917,7 @@ fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint req
         (match planned
           ((dp/planReject status reason row)
             (do (logLine! (dp/decisionText row))
-              (drive! srv fd tag (k (errorOutcome status reason)))))
+              (drive! srv fd tag (k (planOutcome srv status reason)))))
           ((dp/planSend slot provider sent row)
             (do (logLine! (dp/decisionText row))
               (sendPlanned! (loopWiring srv (pairSecond reserved) srv.wiringText) fd tag slot provider sent (dp/sendTimeout w hint provider timeout) (servedModelK w slot hint k) hint.model hint.intent profile firstByteSec)))
@@ -942,11 +953,11 @@ fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provi
   (let [(now (nowMs!))]
     (match (dp/slotReady srv.wiring slot now)
       ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile firstByteSec))
-      ((dp/readyGone reason) (drive! srv conn.fd tag (k (errorOutcome 503 reason))))
+      ((dp/readyGone reason) (drive! srv conn.fd tag (k (busyOutcome srv reason))))
       ((dp/readyLater)
         (if (> now deadline)
           (do (logLine! (str "(:gateway :lifecycle :op wait :endpoint \"" slot "\" :result timeout)"))
-            (drive! srv conn.fd tag (k (errorOutcome 503 (str "endpoint " slot " did not warm within coldStartMs")))))
+            (drive! srv conn.fd tag (k (busyOutcome srv (str "endpoint " slot " did not warm within coldStartMs")))))
           (loopConns srv (listAppend srv.conns (list conn)))))))
 
 fn ! settled! srv: GatewayLoop slot: String provider: String intent: String model: String tag: String params: ul/CallParams body: String startMs: Int64 success: Bool profile: String status: Int64 headers: (List (Pair String String)) reason: String -> GatewayLoop
