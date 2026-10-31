@@ -1,4 +1,4 @@
-(module asl-hypergraph :x [HyperNode makeHyperNode HyperEdge makeHyperEdge HyperIndex makeHyperIndex ImpactReceipt makeImpactReceipt findEdgesByTarget findEdgesBySource findNodeById extractSymbolsFromSexpr extractNodesAndEdgesFromModule buildHypergraphFromModules serializeHyperIndex deserializeHyperIndex loadOrBuildHyperIndex! querySymbolImpact formatImpactReceipt estimateReceiptTokens] :i [(asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-hypergraph/query :a query) (asl-parser/reader :a rd)])
+(module asl-hypergraph :x [makeHyperNode makeHyperEdge makeHyperIndex makeImpactReceipt findEdgesByTarget findEdgesBySource findNodeById extractSymbolsFromSexpr extractNodesAndEdgesFromModule buildHypergraphFromModules serializeHyperIndex deserializeHyperIndex loadOrBuildHyperIndex! querySymbolImpact formatImpactReceipt estimateReceiptTokens] :i [(asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-hypergraph/query :a query) (asl-parser/reader :a rd)])
 
 fn makeHyperNode id: Str kind: Str module: Str symbol: Str doc: Str -> model/HyperNode
   (model/makeHyperNode id kind module symbol doc)
