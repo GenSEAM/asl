@@ -603,7 +603,9 @@ fn belowReasoningFloor? body: j/Json -> Bool
 fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
   (let [(ep e.params)
         (b0 cx.baseBody)
-        (b1 (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))
+        (b1 (match ep.temperatureFixed
+              ((some _) (pt/jset b0 "temperature" (floatJson ep.temperatureFixed)))
+              ((none) (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))))
         (b2 (match ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
         (b3 (match ep.maxTokens
               ((some n) (if (listContains? cx.reqKeys "max_tokens") b2 (pt/jset b2 "max_tokens" (paramJson cx e "maxTokens" (j/jint n)))))

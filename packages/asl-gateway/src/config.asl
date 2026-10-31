@@ -149,7 +149,9 @@ fn scalarToString sc: AsnScalar -> String
   (:f api (Option String))
   (:f prefill (Option Bool))
   (:f retry (Option RetryPolicy))
-  (:f nativeTools (Option Bool) :default none))
+  (:f nativeTools (Option Bool) :default none)
+  ; (:m :ref KIMI-TEMP-FIXED :do "a model that accepts one sampling temperature only (Kimi: 1): the gateway sends this value whatever the request or the route says; exclusive with :temperature on the same row")
+  (:f temperatureFixed (Option Float64) :default none))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -180,7 +182,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :api (if (some? override.api) override.api base.api)
     :prefill (if (some? override.prefill) override.prefill base.prefill)
     :retry (if (some? override.retry) override.retry base.retry)
-    :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools))
+    :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools)
+    :temperatureFixed (if (some? override.temperatureFixed) override.temperatureFixed base.temperatureFixed))
 
 (schema GatewayRoute
   (:f intent String)
@@ -721,6 +724,16 @@ fn checkTemperature props: (Map String rd/SExpr) what: String cur: GatewayParams
           ((scalarInt n) (pair (with cur :temperature (some (int64ToFloat64 n))) errs))
           (_ (pair cur (cons (str what ": :temperature must be a number") errs)))))))
 
+fn checkTemperatureFixed props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "temperatureFixed")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(clash (if (mapHas? props "temperature") (list (str what ": :temperatureFixed and :temperature are exclusive on one row")) (list)))]
+        (match (asn_figure expr)
+          ((scalarFloat f) (pair (with cur :temperatureFixed (some f)) (listAppend clash errs)))
+          ((scalarInt n) (pair (with cur :temperatureFixed (some (int64ToFloat64 n))) (listAppend clash errs)))
+          (_ (pair cur (cons (str what ": :temperatureFixed must be a number") (listAppend clash errs))))))))
+
 fn checkEffort props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "effort")
     ((none) (pair cur errs))
@@ -860,8 +873,9 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
         (s8c (checkPrefill props what (pairFirst s8b) (pairSecond s8b)))
         (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))
-        (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))]
-    (pair (pairFirst s9b) (listReverse (pairSecond s9b))))
+        (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))
+        (s9c (checkTemperatureFixed props what (pairFirst s9b) (pairSecond s9b)))]
+    (pair (pairFirst s9c) (listReverse (pairSecond s9c))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "api")
@@ -909,6 +923,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "api") (some? params.api))
     ((= k "prefill") (some? params.prefill))
     ((= k "nativeTools") (some? params.nativeTools))
+    ((= k "temperatureFixed") (some? params.temperatureFixed))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -927,7 +942,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
