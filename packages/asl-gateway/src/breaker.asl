@@ -213,7 +213,7 @@ fn headerText headers: (List (Pair String String)) name: String -> String
     ((some h) (stringTrim (pairSecond h)))
     ((none) ""))
 
-; (:m :ref GW-429-WINDOW-WAIT :do "the wait a 429's headers name: Retry-After delta seconds first, else the longest of x-ratelimit-reset-requests, x-ratelimit-reset-tokens and x-ratelimit-reset; 0 when none parses (an HTTP-date Retry-After included), so the window or the base applies")
+; (:m :ref GW-429-WINDOW-WAIT :do "the wait a 429's headers name: Retry-After delta seconds first, else the longest of x-ratelimit-reset-requests, x-ratelimit-reset-tokens and x-ratelimit-reset; an IMF-fixdate Retry-After ending GMT counts from the clock; 0 when none parses, so the window or the base applies")
 fn retryAfterHintSec text: String nowSec: Float64 -> Int64
   (let [(delta (hintOfText text))]
     (if (> delta 0) delta
