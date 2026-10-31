@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
+      breakerStateFromConfig GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -1310,6 +1310,10 @@ fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/
       :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!))))
 
 
+; (:m :ref PARKMAX-SERVER-TEST :do "the breaker a loaded config text gets: :breakerCooldownSec, the three 429 cooldown rows and the :parkMaxSec park ceiling, each absent row keeping its default; linkOpenWith! builds GatewayLoop.breaker from it, and parkMaxServerTest drives it")
+fn breakerStateFromConfig text: String -> b/BreakerState
+  (b/withParkMax (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1))) (optionOr (c/gatewayTopIntOverride text "parkMaxSec") 0))
+
 ; (:m :ref GW-BREAKER-STALE-20261018 :tags (breaker config) :do "the breaker's cooldown comes from the loaded config's (:gateway ... :breakerCooldownSec N) when present, else the 600s default via makeBreakerState's own guard; a config that never sets it is unchanged from before. BreakerState itself is held only in this GatewayLoop value, freshly built here on every linkOpen! call -- there is no file-backed persistence across processes, so GW-BREAKER-STALE-20261018's '45-cell sweep stuck open' incident was one long-lived in-process breaker outlasting a fixed 600s cooldown within a single sweep run, not state surviving a restart")
 fn ! linkOpen! env: (Map String String) home: String rootDir: String families: (List dp/LifecycleFamily) -> (Result GatewayLoop String)
   (match (secretsOverlayAt! home env)
@@ -1334,7 +1338,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
                         :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
                         :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
-                        :breaker (b/withParkMax (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1))) (optionOr (c/gatewayTopIntOverride text "parkMaxSec") 0))
+                        :breaker (breakerStateFromConfig text)
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
                         :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
                         :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))
