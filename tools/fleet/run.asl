@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -465,23 +465,27 @@ fn ! removeLease! pgid: Int64 -> Bool
 fn ! leaseDeadline startNs: Int64 timeoutMs: Int64 -> Int64
   (+ startNs (* (if (> timeoutMs 0) timeoutMs 3600000) 1000000))
 
-fn ! reapLeaseFile! now: Int64 alive: (List Int64) name: String -> Bool
-  (let [(path (str (leaseDir) "/" name))
+fn ! reapLeaseFile! dir: String now: Int64 alive: (List Int64) name: String -> Bool
+  (let [(path (str dir "/" name))
         (lease (parseLease (resultOr (fileReadString path) "")))
         (expired (and (> lease.deadlineNs 0) (> now lease.deadlineNs)))
         (ownerGone (not (listContains? alive lease.ownerPid)))]
     (if (and (> lease.pgid 0) (or ownerGone expired))
       (let [(_ (killTreeWith! lease.pgid (list lease.pgid) (list)))
-            (_ (removeLease! lease.pgid))]
+            (_ (pathRemove path))]
         true)
       false))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "every runGuarded call reaps first: a caller that died mid-job left its lease behind with nothing watching it, so the next call anywhere is what finds and kills the orphaned tree")
-fn ! reapStaleLeases! -> Int64
+; (:m :ref RELAY-LEASE-MASS-REAP :do "a snapshot that does not hold the reaper itself is broken, not proof that every owner died: with fds 0-2 closed ps printed nothing, every lease looked orphaned and one runGuarded call killed every leased tree on node2, the relay's jobs among them; such a snapshot reaps nothing")
+fn ! reapLeasesIn! dir: String snap: (List Proc) self: Int64 -> Int64
   (let [(now (monotonicNs))
-        (alive (map (fn [(p Proc)] -> Int64 p.pid) (procSnapshot)))
-        (names (resultOr (dirList (leaseDir)) (list)))]
-    (fold (fn [(n Int64) (name String)] -> Int64 (if (reapLeaseFile! now alive name) (+ n 1) n)) 0 names))
+        (alive (map (fn [(p Proc)] -> Int64 p.pid) snap))
+        (names (if (listContains? alive self) (resultOr (dirList dir) (list)) (list)))]
+    (fold (fn [(n Int64) (name String)] -> Int64 (if (reapLeaseFile! dir now alive name) (+ n 1) n)) 0 names))
+
+fn ! reapStaleLeases! -> Int64
+  (reapLeasesIn! (leaseDir) (procSnapshot) (procSelf))
 
 ; (:m :ref GW-SESSION-BIND :do "a guarded run a caller steps itself: guardStart! reaps stale leases, spawns and writes the lease; each guardAdvance! pumps output once and judges the limits, returning the ProcOut when the child has ended, so a single-threaded server can park the run and look at it between other work; guardFds is what to poll. guardLoop and runGuarded are this same step in a blocking loop")
 (schema Guarded
