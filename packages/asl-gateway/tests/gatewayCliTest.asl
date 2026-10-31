@@ -1,6 +1,6 @@
 (module aslGateway/tests/gatewayCliTest
   :x [runTests main]
-  :i [])
+  :i [(asl-tools/fleet/run :a fr)])
 
 fn ! gatewayShellQuoteTail text: String index: Int64 -> String
   (if (>= index (stringLength text)) ""
@@ -24,7 +24,9 @@ fn ! cliRoot -> String
   (stringTrim (processRun "pwd").stdout)
 
 fn ! cliInvoke command: String -> ProcessOutput
-  (processRun (str "HOME=/dev/null " command))
+  (let [(home (stringTrim (processRun "mktemp -d /tmp/asl-gateway-home.XXXXXX").stdout))
+        (out (processRun (str "HOME=" home " " (stringJoin (fr/cacheEnv!) " ") " " command)))]
+    (do (processRun (str "rm -rf " home)) out))
 
 ; (:m :ref TEST-FIXED-PORTS :do "an offline-status port is bound with port 0, read back and closed, so no fixed port can be held by another process")
 fn ! gatewayTestFreePort -> Int64
@@ -45,7 +47,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (injectionMarker (str temp "/shell-injection-ran"))
         (pathDir (str temp "/path"))
         (_path (processRun (str "/bin/mkdir -p " pathDir " && /bin/ln -sf /bin/bash " pathDir "/bash && /bin/ln -sf /usr/bin/dirname " pathDir "/dirname && /bin/ln -sf /usr/bin/basename " pathDir "/basename && /bin/ln -sf /bin/mkdir " pathDir "/mkdir"
-                           " && /bin/ln -sf /usr/bin/clang " pathDir "/clang && /bin/ln -sf /usr/bin/perl " pathDir "/perl && /bin/ln -sf /usr/bin/uname " pathDir "/uname")))
+                           " && /bin/ln -sf /usr/bin/clang " pathDir "/clang && /bin/ln -sf /usr/bin/perl " pathDir "/perl && /bin/ln -sf /usr/bin/uname " pathDir "/uname" " && /bin/ln -sf /usr/bin/ld " pathDir "/ld")))
         (valid (str temp "/valid.asn"))
         (invalidA (str temp "/invalid-a.asn"))
         (invalidB (str temp "/invalid-b.asn"))
@@ -83,7 +85,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
       (assert (!= offlinePort "-1") "a free loopback port was bound with port 0 and read back")
       (let [(python (processRun (str "PATH=" pathDir " command -v python3")))
             (run (processRun (str "PATH=" pathDir " ASL_GATEWAY_PORT=" offlinePort " " runner " status --port " offlinePort)))]
-        (assert (= python.exitCode 1) "runtime PATH has no python3")
+        (assert (and (!= python.exitCode 0) (= python.stdout "")) "runtime PATH has no python3")
         (assert (= run.exitCode 0) "gateway status runs with python3 absent from PATH"))
       (let [(run (cliInvoke (str runner " config check " valid)))
             (expected (str "(:configCheck :file \"" valid "\" :v 1 :registry \"" registry "\" :status :ok :errors () :warnings () :profiles 1)\n"))]
