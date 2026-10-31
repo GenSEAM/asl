@@ -140,15 +140,16 @@ fn ! testReusedPid -> Bool
               (assert (ok? gone) "the fixture dir is removed")
               true)))))
 
+; (:m :do "close the pipes only after the kill: the holder prints (:coldLock :holding) once it holds the lock, and on Darwin a closed read end fails that write and the holder exits, releasing the lock")
 fn ! testKilledHolder -> Bool
   (let [(cache (fresh! "killed"))]
     (match (fr/spawnSep (list "/bin/sh" (buildSh!) "--cold-hold" cache "60") "." (fr/childEnv (list)))
       ((err d) (do (assert false (str "holder spawn failed: " d.stderr)) false))
       ((ok h)
-        (let [(_ (fdClose h.outFd))
-              (_ (fdClose h.errFd))
-              (lines (holderLines! cache (monotonicNs)))
+        (let [(lines (holderLines! cache (monotonicNs)))
               (_ (stopHolder! h.pid))
+              (_ (fdClose h.outFd))
+              (_ (fdClose h.errFd))
               (left (fileExists? (str cache "/build.lockd")))
               (r (probe! cache "20"))
               (gone (removeAll! cache))]
