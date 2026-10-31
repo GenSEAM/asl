@@ -7,99 +7,6 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 OUT=${ASL_HOST_OUT:-$HERE/out}
 mkdir -p "$OUT"
-
-# (:m :ref COLDSTART-WAIT-LIVE-HOLDER :why "--cold CACHE [WINDOW]: one cold-start build per node at a time, by the lock dir CACHE/build.lockd holding the holder's pid, out dir, ps start time and watcher pid. A waiter waits while the holder is alive (the pid runs, is no zombie and still has the recorded start time, so a reused pid after a SIGKILL reads as gone) and makes progress: CPU time of its tree grows, or files get newer under its out dir, the CACHE/tmp.PID dirs of its descendants or the build pool CACHE/../jobserver/build (a token wait); a gone holder is taken over at once; the waiter gives up only after WINDOW seconds with no progress (default .asl.config.asn :nativeCli :coldStallS, else 1800, the old fixed cap). The holder runs a --cold-watch child that stops the holder's tree and the holder itself (exit 75, lock released) after the same window without progress, so no waiter waits on a hung build. A fixed deadline used to fail every agent queued behind a slow but healthy cold build. --cold-probe takes the lock and exits; --cold-hold takes it and idles under the watcher")
-cold_window() {
-  awk 'match($0, /:coldStallS[ \t]+[0-9]+/) { s = substr($0, RSTART, RLENGTH); sub(/:coldStallS[ \t]+/, "", s); print s; exit }' "$HERE/../../.asl.config.asn" 2>/dev/null || true
-}
-cold_start() { ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//' || true; }
-cold_alive() {
-  kill -0 "$1" 2>/dev/null || return 1
-  case "$(ps -o stat= -p "$1" 2>/dev/null || true)" in *Z*) return 1 ;; esac
-  [ -z "$2" ] || [ "$(cold_start "$1")" = "$2" ]
-}
-cold_descendants() {
-  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" -v skip="${2:-0}" '{ p[$1] = $2 } END { for (x in p) { y = x; n = 0; while ((y in p) && y != r && y != skip && n < 64) { y = p[y]; n++ } if (y == r && x != r) print x } }'
-}
-cold_cpu() {
-  ps -A -o pid= -o ppid= -o time= 2>/dev/null | awk -v r="$1" -v skip="${2:-0}" '
-    function secs(t,  d, a, n, i, s) { d = 0; if (index(t, "-")) { split(t, a, "-"); d = a[1]; t = a[2] } n = split(t, a, ":"); s = 0; for (i = 1; i <= n; i++) s = s * 60 + a[i]; return d * 86400 + s }
-    { p[$1] = $2; c[$1] = $3 }
-    END { s = 0; for (x in p) { y = x; n = 0; while ((y in p) && y != r && y != skip && n < 64) { y = p[y]; n++ } if (y == r) s += secs(c[x]) } printf "%d\n", s * 100 }'
-}
-cold_files() {
-  for d in "$2" "$3/../jobserver/build"; do
-    [ -n "$(find "$d" -newer "$4" -print 2>/dev/null | head -n 1)" ] && return 0
-  done
-  for d in $(cold_descendants "$1" "$5"); do
-    [ -d "$3/tmp.$d" ] && [ -n "$(find "$3/tmp.$d" -newer "$4" -print 2>/dev/null | head -n 1)" ] && return 0
-  done
-  return 1
-}
-cold_lock() {
-  L=$1/build.lockd; win=$2; mkdir -p "$1"
-  mark="$1/.coldWait.$$"; : > "$mark"; seen=$(date +%s); last=""; cpu0=""
-  while ! mkdir "$L" 2>/dev/null; do
-    pid=$(sed -n 1p "$L/holder" 2>/dev/null || true); dir=$(sed -n 2p "$L/holder" 2>/dev/null || true)
-    st=$(sed -n 3p "$L/holder" 2>/dev/null || true); wp=$(sed -n 4p "$L/holder" 2>/dev/null || true)
-    if [ -n "$pid" ] && ! cold_alive "$pid" "$st"; then
-      [ "$(sed -n 1p "$L/holder" 2>/dev/null || true)" = "$pid" ] && rm -rf "$L"
-      continue
-    fi
-    [ "$pid" = "$last" ] || { last=$pid; seen=$(date +%s); cpu0=""; }
-    if [ -n "$pid" ]; then
-      cpu=$(cold_cpu "$pid" "${wp:-0}")
-      if { [ -n "$cpu0" ] && [ "$cpu" -gt "$cpu0" ]; } || cold_files "$pid" "${dir:-$L}" "$1" "$mark" "${wp:-0}"; then seen=$(date +%s); : > "$mark"; fi
-      cpu0=$cpu
-    fi
-    if [ $(( $(date +%s) - seen )) -ge "$win" ]; then
-      if [ -z "$pid" ]; then rm -rf "$L"; continue; fi
-      rm -f "$mark"; echo "build.sh: the cold-start build lock holder $pid made no progress for ${win}s; giving up" >&2; return 1
-    fi
-    sleep 1
-  done
-  rm -f "$mark"
-  COLD_L=$L
-  printf '%s\n%s\n%s\n' "$$" "$OUT" "$(cold_start $$)" > "$L/holder"
-  sh "$0" --cold-watch "$$" "$1" "$win" "$OUT" &
-  COLD_W=$!
-  echo "$COLD_W" >> "$L/holder"
-  trap 'cold_release' EXIT
-  trap 'cold_release; exit 130' INT
-  trap 'cold_release; exit 75' TERM
-}
-cold_release() {
-  [ -z "${COLD_W:-}" ] || kill "$COLD_W" 2>/dev/null || true
-  [ -z "${COLD_L:-}" ] || rm -rf "$COLD_L"
-}
-cold_watch() {
-  h=$1; mark="$2/build.lockd/.self"; : > "$mark" 2>/dev/null || true; seen=$(date +%s); cpu0=""
-  while kill -0 "$h" 2>/dev/null; do
-    cpu=$(cold_cpu "$h" "$$")
-    if { [ -n "$cpu0" ] && [ "$cpu" -gt "$cpu0" ]; } || cold_files "$h" "$4" "$2" "$mark" "$$"; then seen=$(date +%s); : > "$mark" 2>/dev/null || true; fi
-    cpu0=$cpu
-    if [ $(( $(date +%s) - seen )) -ge "$3" ]; then
-      echo "build.sh: the cold-start build $h made no progress for ${3}s; stopping it" >&2
-      kids=$(cold_descendants "$h" "$$")
-      kill -TERM "$h" 2>/dev/null || true
-      for d in $kids; do kill -TERM "$d" 2>/dev/null || true; done
-      break
-    fi
-    sleep 1
-  done
-  rm -f "$mark" 2>/dev/null || true
-}
-case "${1:-}" in
-  --cold-watch) cold_watch "$2" "$3" "$4" "$5"; exit 0 ;;
-  --cold|--cold-probe|--cold-hold)
-    w=${3:-$(cold_window)}; case "$w" in ''|*[!0-9]*) w=1800 ;; esac
-    cold_lock "${2:?build.sh $1 needs the cache dir}" "$w" || exit 1
-    case "$1" in
-      --cold-probe) echo "(:coldLock :got $$)"; exit 0 ;;
-      --cold-hold) echo "(:coldLock :holding $$)"; sleep 600 & wait $! || true; exit 0 ;;
-    esac
-    shift; shift; [ $# -gt 0 ] && shift ;;
-esac
 # (:m :why "VPSLIN-2: with CLANG unset the first of clang, clang-19 .. clang-15 on PATH is used (a distro that ships only clang-18 has no bare clang); an explicit CLANG is never second-guessed")
 if [ -z "${CLANG:-}" ]; then
   CLANG=clang
@@ -285,9 +192,7 @@ if runtime_possible; then
     if [ ! -f "$GC_DIR/$RT_NAME" ]; then
       GC_TMP="$CACHE_DIR/rt/.tmp.$$"
       rm -rf "$GC_TMP" && mkdir -p "$GC_TMP"
-      trap 'rm -rf "$GC_TMP"; cold_release' EXIT
-      trap 'rm -rf "$GC_TMP"; cold_release; exit 130' INT
-      trap 'rm -rf "$GC_TMP"; cold_release; exit 75' TERM
+      trap 'rm -rf "$GC_TMP"' EXIT INT TERM
       if runtime "$GC_TMP"; then
         mkdir -p "$GC_DIR"
         mv -f "$GC_TMP/$RT_NAME" "$GC_DIR/$RT_NAME.tmp.$$"
@@ -297,9 +202,7 @@ if runtime_possible; then
         RT_OK=0
       fi
       rm -rf "$GC_TMP"
-      trap 'cold_release' EXIT
-      trap 'cold_release; exit 130' INT
-      trap 'cold_release; exit 75' TERM
+      trap - EXIT INT TERM
     fi
     [ "$RT_OK" = "1" ] && install_copy "$GC_DIR/$RT_NAME" "$OUT/$RT_NAME"
   else

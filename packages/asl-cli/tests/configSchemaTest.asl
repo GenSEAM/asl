@@ -19,7 +19,7 @@ fn validText -> String
     "(:aslConfig :workspace \"w\" :build (:anything 1 :goes (2 3))"
     "  ; another comment"
     "  :native (:parts 8 :level :dev :rc :notrace :clang \"/usr/bin/clang\" :llc \"/usr/bin/llc\" :opt \"/usr/bin/opt\" :wasmLd \"/usr/bin/wasm-ld\" :llvmNm \"/usr/bin/llvm-nm\" :node \"/usr/bin/node\" :storeCap 2G :storeMinAge 60m :sweep false :claimWaitS 900 :lockGraceS 10 :buildPool \"/tmp/pool\" :buildTokens 2)"
-    "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
+    "  :nativeCli (:buildWaitS 3600 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"
     "") "\n")
 
