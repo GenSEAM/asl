@@ -1,5 +1,5 @@
 (module asl-gates/docLedger
-  :x [DocRow loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! exportGaps coverageGaps! packageGaps! docPackages! main]
+  :x [DocRow loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! exportGaps staleGaps coverageGaps! packageGaps! docPackages! main]
   :i [(asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-syntax/asl/asn :a asn) (asl-gates/metaAudit :a meta) (asl-gates/docExtract :a dx)])
 
 (schema DocRow
@@ -218,6 +218,11 @@ fn ! aslFilesUnder! root: String rel: String -> (Result (List String) String)
 fn exportGaps rows: (List DocRow) file: String exported: (List String) -> (List String)
   (map (fn [(name String)] -> String (str file "#" name))
        (filter (fn [(name String)] -> Bool (not (some? (findRowBySymbol rows (str file "#" name))))) exported))
+
+; (:m :ref DOCLEDGER-STALE-RED :do "baseline rows that are no longer gaps, in baseline order: the export gained a doc row or is gone, so the baseline has to be regenerated")
+fn staleGaps baseline: (List String) gaps: (List String) -> (List String)
+  (let [(seen (fold (fn [(m (Map String Bool)) (g String)] -> (Map String Bool) (mapSet m g true)) (mapEmpty) gaps))]
+    (filter (fn [(g String)] -> Bool (not (mapHas? seen g))) baseline))
 
 ; (:m :ref DOCLEDGER-TOOLS-COVERAGE :do "exports under asl/<area> with no (:doc :symbol \"path#name\") row in asl/doc/<area>.asn, the ledgerPathFor home of a non-package asl/ path")
 fn ! coverageGaps! root: String area: String -> (Result (List String) String)

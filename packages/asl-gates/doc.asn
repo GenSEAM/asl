@@ -122,6 +122,7 @@
 (:doc :symbol "asl/packages/asl-gates/src/docLedger.asl#coverageGaps!" :text "Undocumented exports under asl/<area> against asl/doc/<area>.asn")
 (:doc :symbol "asl/packages/asl-gates/src/docLedger.asl#packageGaps!" :text "Undocumented exports under asl/packages/<pkg>, src and tests, against that package's doc.asn")
 (:doc :symbol "asl/packages/asl-gates/src/docLedger.asl#docPackages!" :text "Packages under asl/packages that have a doc.asn, in name order; --gaps packages scans exactly these")
+(:doc :symbol "asl/packages/asl-gates/src/docLedger.asl#staleGaps" :text "Baseline rows that are no longer in gaps, in baseline order: the export gained a doc row or is gone, so the ratchet baseline must be regenerated")
 (:doc :symbol "asl/packages/asl-gates/tests/docLedgerTest.asl#testPackageGaps!" :text "A sandbox package export with no row in its doc.asn is a gap in src and tests alike, and a package without a doc.asn is not scanned")
 (:doc :symbol "asl/packages/asl-gates/tests/docLedgerTest.asl#testPackageRatchet!" :text "Every package export without a doc row is named in docPackageBaseline.asn, which --gaps packages regenerates and which only shrinks")
 (:doc :symbol "asl/packages/asl-gates/src/dyck.asl#" :text "String- and comment-aware delimiter balance checker for .asl and .asn.")
