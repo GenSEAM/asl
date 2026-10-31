@@ -502,11 +502,25 @@ fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
     (listAppend (listAppend on switch)
                 (listAppend (listAppend (cooldownErrorOf g "affinityStickSec" 1 86400) (cooldownErrorOf g "affinityForgetSec" 1 604800)) order)))
 
+; (:m :ref GW-LIMIT-LEARN :do "the learn settings, range checked in config check and kept at their defaults at runtime: :learnRamp true|false (default false), :learnRampPct 5..100 (default 25), :learnWindows a string of window names from minute hour fiveHour day week")
+fn learnWindowErrors s: String -> (List String)
+  (let [(bad (filter (fn [(w String)] -> Bool (not (listContains? (list "minute" "hour" "fiveHour" "day" "week") w))) (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit s " "))))]
+    (if (listEmpty? bad) (list) (list (str ":learnWindows names unknown windows: " (stringJoin bad " ")))))
+
+fn learnConfigErrors g: (Map String rd/SExpr) -> (List String)
+  (let [(ramp (match (mapGet g "learnRamp")
+                ((none) (list))
+                ((some v) (match (asnScalar v) ((scalarBool _) (list)) (_ (list ":learnRamp must be true or false"))))))
+        (windows (match (mapGet g "learnWindows")
+                   ((none) (list))
+                   ((some v) (match (asnScalar v) ((scalarStr s) (learnWindowErrors s)) (_ (list ":learnWindows must be a string of window names"))))))]
+    (listAppend (listAppend ramp windows) (rangeErrorOf g "learnRampPct" 5 100 "percent")))
+
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
   (listAppend (listAppend (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
               (gatewayAffinityErrors g))
               (gatewayLimitErrors g))
-              (listAppend (queueBudgetRangeErrors g) (rangeErrorOf g "busyRetrySec" 1 3600 "seconds")))
+              (listAppend (listAppend (queueBudgetRangeErrors g) (rangeErrorOf g "busyRetrySec" 1 3600 "seconds")) (learnConfigErrors g)))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
