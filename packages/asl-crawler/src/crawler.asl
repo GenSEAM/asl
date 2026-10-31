@@ -1,7 +1,6 @@
 (module aslCrawler/crawler
   :x [CrawlJob CrawlResult CrawlPool crawlJob makeCrawlJob makePool poolJobs crawlOk crawlErr statusOk? curlArgs crawlDoc crawlAsn crawlDistilledAsn isSpaShell? makeSuccessResult makeFailureResult isSuccessfulStatus buildCurlFetchArgs crawlToDoc crawlToAsn isValidCrawlUrl? isWafBlocked? cacheFallbackJobs stripCacheDecorations normalizeCrawlResponse crawlWithFallback CrawlMode modeExtension modePatchright modeStaticHttp modeCloudProxy modeAuto modeToString stringToMode crawlWithMode distillHtmlToAsn fetchCurl! fetchStealthBrowser! findStealthBrowser! runArgv! browserFailureText main]
   :i [(aslCrawler/stealth :a st)
-      (aslCrawler/browserDetector :a bd)
       (aslCrawler/inBrowserAgent :a iba)
       (aslCrawler/automation :a auto)
       (asl-proc/pool :a proc)
