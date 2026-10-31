@@ -28,8 +28,9 @@ fn validId? id: String -> Bool
       (and (!= (bytesGet bs 0) 46)
         (listAll? (fn [(i Int64)] -> Bool (idByte (bytesGet bs i))) (range 0 n)))))
 
+; (:m :ref POOL-FORM-MISSING-TASK :do "every control reply is one line: sessionPool.asnQuote writes a newline as a backslash and the newline itself, so a receipt :result with several lines was a several-line reply and the client, which reads to the first newline, cut it; here the newline is written as backslash n (the client's unquote reads both forms back)")
 fn asnQuote text: String -> String
-  (sp/asnQuote text)
+  (str "\"" (stringReplace (stringReplace (stringReplace text "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
 
 fn unquoteLoop s: String i: Int64 acc: (List String) -> (Option String)
   (if (>= i (stringLength s)) none
