@@ -1,5 +1,5 @@
 (module aslGateway/tests/serverTest :x [testModelsModeRoutesToCli testBreakerEventParks testExtractThinkBlocks testDetectEshViolation testInspectCompletionCleanTurn testInspectCompletionEshRejection testInspectCompletionQuarantine testStatePathIsolation testEnsureSessionHeader testApiKindOf testEffSleepMsDoesNotBlockReactor testEffBucketWaitDoesNotBlockReactor testBucketWaitReservationsAreSpaced testEffUsageNoteRecordsProfile testBudgetRefusalBlocksOverBudgetProfile testSpreadOrderRatioPersistsAcrossRealCalls testSpreadNote429CooldownGatesViaRealLoop runTests]
-  :i [(server :a srv) (aslGateway/config :a c) (aslGateway/usageLedger :a ul) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b) (aslGateway/upstream :a u) (aslGateway/dispatch :a dp) (aslGateway/chat :a ch) (asl-json/json :a j) (aslGateway/omniApi :a om)])
+  :i [(server :a srv) (aslGateway/config :a c) (aslGateway/usageLedger :a ul) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b) (aslGateway/upstream :a u) (aslGateway/dispatch :a dp) (aslGateway/chat :a ch) (asl-json/json :a j) (aslGateway/omniApi :a om) (aslGateway/router :a rt)])
 
 fn testExtractThinkBlocks -> Bool
   (let [(raw "<think>Planning the solution step by step</think>Here is the completed code.") (res (srv/extractThinkBlocks raw)) (thinkPart (pairFirst res)) (uiPart (pairSecond res))] (do (assert (= thinkPart "Planning the solution step by step") "Think content must match") (assert (= uiPart "Here is the completed code.") "UI content must be stripped of think tags") true))
@@ -191,6 +191,10 @@ fn stringsOutcome o: ch/ChatOutcome -> (List String)
   (match o ((ch/outStrings xs) xs) (_ (list)))
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "drives 8 real effSpreadOrder calls through the SAME GatewayLoop, threading srv forward exactly as drive! would across 8 separate chat requests, so the SWRR rotation is proven to live in GatewayLoop.spreadState rather than reset per call")
+; (:m :ref SPREADLIVE-TEST-SEED :do "the spread rotation starts at a clock-seeded offset in production (GW-SPREAD-START); the test pins the seed to 0 so the expected order is fixed, and the seeded state is the one effSpreadOrder reads under spreadProf|coder")
+fn ! seededSpreadLoop -> srv/GatewayLoop
+  (with (loopForSpread) :spreadState (mapSet (mapEmpty) "spreadProf|coder" (rt/spreadSeedState (list (pair "a" 3) (pair "b" 1)) 0)))
+
 fn ! pickOverCalls! srv: srv/GatewayLoop n: Int64 acc: (List String) -> (List String)
   (if (<= n 0) (listReverse acc)
     (let [(ran (srv/runEffect! srv (ch/effSpreadOrder "spreadProf" "coder" (list (pair "a" 3) (pair "b" 1)) 60 (list))))
@@ -200,7 +204,7 @@ fn ! pickOverCalls! srv: srv/GatewayLoop n: Int64 acc: (List String) -> (List St
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "GW-SPREAD-LIVE recorded-provider-stub gate: weights (3 1) through runEffect!'s real GatewayLoop-persisted state give exactly the 6:2 (a a b a a a b a) ratio router.asl's own pure simulation proved in isolation -- without GatewayLoop persistence this would instead pick the same top-weight member every single call")
 fn ! testSpreadOrderRatioPersistsAcrossRealCalls -> Bool
-  (let [(picks (pickOverCalls! (loopForSpread) 8 (list)))]
+  (let [(picks (pickOverCalls! (seededSpreadLoop) 8 (list)))]
     (do
       (assert (= picks (list "a" "a" "b" "a" "a" "a" "b" "a")) (str "SPREADLIVE: weights (3 1) through the real server path must give a a b a a a b a over 8 calls, got " picks))
       true))
