@@ -1335,22 +1335,24 @@ fn ! settleWatch t0: Int64 w: WorkerWatch -> WorkerWatch
       (WorkerWatch :proc w.proc :outOpen false :errOpen false :errText w.errText :groups w.groups :known w.known
                    :verdict w.verdict :exit exit :done true)))
 
+; (:m :ref NT-KNOWN-ADDNEW :do "a breach kills with the groups and pins this watch recorded, so a setsid child seen in the tree and then orphaned out of the lineage dies with the worker; fr/killTree! started from nothing and missed it")
 fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) self: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
   (if w.done w
     (let [(overTime (> (/ (- now t0) 1000000) lim.timeoutMs))
           (tree (if checked (fr/treeOf snap w.proc.pid w.groups w.known self) (pair w.known w.groups)))
+          (known (fr/pinsOf snap (pairFirst tree)))
           (descN (if checked (listLength (pairFirst tree)) 0))
           (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
       (if (stringEmpty? verdict)
-        (WorkerWatch :proc w.proc :outOpen w.outOpen :errOpen w.errOpen :errText w.errText :groups (pairSecond tree) :known (fr/pinsOf snap (pairFirst tree))
+        (WorkerWatch :proc w.proc :outOpen w.outOpen :errOpen w.errOpen :errText w.errText :groups (pairSecond tree) :known known
                      :verdict "" :exit w.exit :done false)
-        (let [(left (fr/killTree! w.proc.pid))
+        (let [(left (fr/killTreeWith! w.proc.pid (pairSecond tree) known))
               (_ (if w.outOpen (do (fdClose w.proc.outFd) ()) ()))
               (_ (if w.errOpen (do (fdClose w.proc.errFd) ()) ()))
               (_ (reapWorker w.proc.pid))]
           (WorkerWatch :proc w.proc :outOpen false :errOpen false
                        :errText (str w.errText "\nNATIVE-WORKERS :killed :verdict :" verdict " :pid " w.proc.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left "\n")
-                       :groups (pairSecond tree) :known (fr/pinsOf snap (pairFirst tree)) :verdict verdict :exit (if (= verdict "timeout") 124 125) :done true)))))
+                       :groups (pairSecond tree) :known known :verdict verdict :exit (if (= verdict "timeout") 124 125) :done true)))))
 
 fn watchFds ws: (List WorkerWatch) -> (List (Pair Int64 Int64))
   (fold (fn [(acc (List (Pair Int64 Int64))) (w WorkerWatch)] -> (List (Pair Int64 Int64))

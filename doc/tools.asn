@@ -1727,6 +1727,7 @@
 (:doc :symbol "asl/tools/fleet/run.asl#pinsOf" :text "the keys of the given pids, pinned with the birth time of the matching process row and bare when no row matches")
 (:doc :symbol "asl/tools/fleet/run.asl#procsAt" :text "the process rows of a ps text taken at a given second: born is that second minus the elapsed time, -1 when the elapsed time is unknown")
 (:doc :symbol "asl/tools/fleet/run.asl#stopGuard!" :text "kills a guarded run with the process groups and birth pins its guard recorded, so a setsid escapee still dies; returns how many of its processes are left alive, 0 when the tree is gone or fenced")
+(:doc :symbol "asl/tools/fleet/run.asl#killTreeWith!" :text "kills the tree of root together with the process groups and birth pins a watcher recorded, so a setsid escapee it saw in the tree dies even after it was orphaned out of the lineage; returns how many of its processes are left alive")
 (:doc :symbol "asl/tools/renderTag.asl#importFiles" :text "the files named by the module header's :i list, read lexically; a header without one imports nothing")
 (:doc :symbol "asl/tools/renderTag.asl#renderEntry" :text "the renderer's entry source, asl/packages/asl-cli/src/verify.asl")
 (:doc :symbol "asl/tools/renderTag.asl#renderTagIn!" :text "a 16 hex digit digest of the renderer entry and its direct imports under a root, so a cached checker verdict keys on the renderer source; an unreadable file contributes a missing marker")
