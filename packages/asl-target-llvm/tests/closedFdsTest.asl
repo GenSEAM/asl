@@ -45,8 +45,8 @@ fn ! runTests -> Bool
                     (let [(code (closedRun exe "run" ""))] (assert (= code 0) (str "processRun with open fds returns the child's output: exit " code)))
                     (let [(code (closedRun exe "spawn" "0<&- 1>&- 2>&-"))] (assert (= code 0) (str "processSpawn with fds 0-2 closed returns the child's output: exit " code)))
                     (let [(code (closedRun exe "run" "0<&- 1>&- 2>&-"))] (assert (= code 0) (str "processRun with fds 0-2 closed returns the child's output: exit " code)))
-                    (let [(code (closedRun exe "spawn" "0<&-"))] (assert (= code 0) (str "processSpawn with only stdin closed returns the child's output: exit " code)))
-                    (let [(code (closedRun exe "spawn" "1>&-"))] (assert (= code 0) (str "processSpawn with only stdout closed returns the child's output: exit " code)))
+                    (let [(code (closedRun exe "spawn" "0<&-"))] (assert (= code 0) (str "behaviour pin (guards no single line of the fix): processSpawn with only stdin closed returns the child's output: exit " code)))
+                    (let [(code (closedRun exe "spawn" "1>&-"))] (assert (= code 0) (str "behaviour pin (guards no single line of the fix): processSpawn with only stdout closed returns the child's output: exit " code)))
                     true)))
             (let [(gone (rc/sh (str "rm -rf " (rc/shellQuote dir))))]
               (assert (= gone.exitCode 0) "work directory removed"))
