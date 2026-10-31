@@ -490,8 +490,12 @@ fn inferCtorForm fm: FrameMachine head: String args: (List rd/SExpr) st: InferSt
 fn fmCallStepCore cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
   (let [(pv (popValue fm)) (val (pairFirst pv)) (remValues (pairSecond pv)) (revDone (cons val argsDone))] (if (listEmpty? argsPending) (if (and (ty/genericMulti? cname) (and (not (mapHas? fm.env cname)) (ty/isTyVar? (u/applySubst fm.state.subst cty)))) (genericCallStep cname (listReverse revDone) remValues restFrames fm) (let [(prunedCallee (u/applySubst fm.state.subst cty))] (match prunedCallee ((ty/tyFun params ret) (let [(stUnify (foldExpectArgs (listReverse revDone) params cname fm.path fm.mod.name fm.state))] (with fm :frames restFrames :values (cons (u/applySubst stUnify.subst ret) remValues) :state stUnify))) (_ (let [(fRes (freshVar fm.state "any"))] (with fm :frames restFrames :values (cons (pairFirst fRes) remValues) :state (pairSecond fRes))))))) (let [(nextArg (r/firstExprUnit argsPending)) (remPending (r/safeTail argsPending))] (with fm :frames (cons (fEval nextArg) (cons (fCall cname cty revDone remPending cenv) restFrames)) :values remValues))))
 
+; (:m :ref MAC-FENCE-UNSUPPORTED :do "a name the module itself binds (local, function, enum constructor, or a constructor imported unqualified) shadows a low-level builtin of the same name: fence is a builtin name here and a constructor in agentLoop/reply.asl, and reporting it unrouted made every native test of that module fail")
+fn ownsName? name: String fm: FrameMachine -> Bool
+  (or (mapHas? fm.env name) (or (some? (r/modFun fm.mod name)) (or (mapHas? fm.mod.caseOwner name) (some? (lookupUnqualifiedCaseInDeps name fm.mod fm.deps fm.state)))))
+
 fn fmCallStep cname: String cty: ty/Type argsDone: (List ty/Type) argsPending: (List rd/SExpr) cenv: (Map String ty/Type) restFrames: (List InferFrame) fm: FrameMachine -> FrameMachine
-  (if (and (listEmpty? argsPending) (and (ll/unroutedName? cname) (and (not (mapHas? fm.env cname)) (none? (r/modFun fm.mod cname)))))
+  (if (and (listEmpty? argsPending) (and (ll/unroutedName? cname) (not (ownsName? cname fm))))
     (fmCallStepCore cname cty argsDone argsPending cenv restFrames (with fm :state (addDiag fm.state "ERR_LOWLEVEL_UNROUTED" (str cname " has a signature but no lowering in the native target yet, so a build would fail; its lowering unit adds it to loweredNames") fm.path)))
     (fmCallStepCore cname cty argsDone argsPending cenv restFrames fm))
 
