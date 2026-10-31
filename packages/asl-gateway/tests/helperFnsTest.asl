@@ -1,0 +1,41 @@
+(module aslGateway/tests/helperFnsTest :x [runTests] :i [(pyText :a py) (localTime :a lt) (wire :a w) (dispatch :a d) (upstream :a u) (poolDispatch :a pd)])
+
+; (:m :ref COVBATCH6 :do "gateway helpers: code point slicing, touch timestamp text, balanced ASN form check, chat reply rendering from a JSON string, usage token lists, curl config line quoting, pool registry counters")
+fn lst xs: (List Int64) -> String
+  (stringJoin (map (fn [(i Int64)] -> String (stringFromInt64 i)) xs) ",")
+
+fn cfg r: (Result String String) -> String
+  (match r ((ok s) s) ((err e) (str "ERR " e)))
+
+fn runTests -> Bool
+  (let [(reg (pd/emptyPoolRegistry))
+        (scaled (with reg :scaleDowns 3))]
+    (do (assert (= (py/cpSlice "héllo wörld" 1 4) "éll") "cpSlice counts code points, not bytes")
+        (assert (= (py/cpSlice "日本語x" 1 3) "本語") "cpSlice handles three-byte characters")
+        (assert (= (py/cpSlice "abc" 2 99) "c") "an end past the string is clamped")
+        (assert (= (py/cpSlice "abc" 2 1) "") "an end before the start gives empty")
+        (assert (= (py/cpSlice "abc" 0 3) "abc") "the full range is the whole string")
+        (assert (= (lt/formatUtcTouch 0) "197001010000.00") "epoch zero in touch -t form")
+        (assert (= (lt/formatUtcTouch 1700000000) "202311142213.20") "a known instant in touch -t form")
+        (assert (= (lt/formatUtcTouch 59) "197001010000.59") "seconds are the last field")
+        (assert (w/isBalancedAsnForm "(a (b))") "nested parens are balanced")
+        (assert (w/isBalancedAsnForm "  (a)  ") "surrounding whitespace is trimmed")
+        (assert (w/isBalancedAsnForm "(:x \"a)b\")") "a paren inside a string does not count")
+        (assert (not (w/isBalancedAsnForm "(a (b)")) "a missing close is unbalanced")
+        (assert (not (w/isBalancedAsnForm "")) "empty is not a form")
+        (assert (not (w/isBalancedAsnForm "a b")) "text not starting with a paren is not a form")
+        (assert (= (w/chatReplyAsnStr "{\"model\":\"m\",\"choices\":[{\"message\":{\"content\":\"hi\"},\"finish_reason\":\"length\"}]}") "(:reply :model \"m\" :content \"hi\" :finish \"length\")\n") "a JSON chat reply renders as one reply form")
+        (assert (= (w/chatReplyAsnStr "nope") "(:reply :model \"\" :content \"\" :finish \"stop\")\n") "unparseable JSON gives the empty reply")
+        (assert (stringContains? (w/chatReplyAsnStr "{\"model\":\"m\",\"choices\":[{\"message\":{\"content\":\"(:a 1)\"}}]}") ":content (:a 1) :finish \"stop\"") "balanced ASN content is embedded unquoted and finish defaults to stop")
+        (assert (= (lst (d/callUsageTokens "{\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2}}")) "5,0,2,0") "OpenAI style usage gives input, cached, output, reasoning")
+        (assert (= (lst (d/callUsageTokens "{\"usage\":{\"inputTokens\":5,\"cachedTokens\":1,\"outputTokens\":2,\"reasoningTokens\":3}}")) "5,1,2,3") "camel case usage keys are read")
+        (assert (stringStartsWith? (lst (d/callUsageTokens "{}")) "0,0,0") "a body without usage counts nothing")
+        (assert (stringStartsWith? (lst (d/callUsageTokens "zz")) "0,0,0") "an unparseable body counts nothing")
+        (assert (= (cfg (u/curlConfigLine "url" "http://x/a")) "url = \"http://x/a\"\n") "a plain value is quoted on one line")
+        (assert (= (cfg (u/curlConfigLine "h" "a\"b\\c")) "h = \"a\\\"b\\\\c\"\n") "quotes and backslashes are escaped")
+        (assert (stringStartsWith? (cfg (u/curlConfigLine "h" "a\u0000b")) "ERR") "a NUL byte is refused")
+        (assert (= (pd/poolCallCount reg) 0) "a new registry has no calls")
+        (assert (= (pd/poolScaleDowns reg) 0) "a new registry has no scale downs")
+        (assert (= (pd/poolScaleDowns scaled) 3) "scale downs reads its own field")
+        (assert (= (pd/poolCallCount scaled) 0) "call count does not read scale downs")
+        true))
