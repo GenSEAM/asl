@@ -1,4 +1,4 @@
-(module asl-cli/tests/migrateTest :x [runTests] :i [(migrate :a mig) (cli :a c) (reader :a rd) (ast :a a) (indentParser :a ip)])
+(module asl-cli/tests/migrateTest :x [runTests] :i [(migrate :a mig) (cli :a c) (reader :a rd)])
 
 fn sampleModuleSource -> Str
   (str "(module demo/calculator\n" "  :x [add]\n" "  :i [(reader :a rd)])\n\n" "(df add [(x Int64) (y Int64)] -> Int64\n" "  (+ x y))\n")

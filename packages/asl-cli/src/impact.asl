@@ -1,4 +1,4 @@
-(module asl-cli/impact :x [runImpactCommand! formatImpactHelp executeImpactQuery!] :i [(asl-hypergraph :a hyper) (asl-hypergraph/model :a model)])
+(module asl-cli/impact :x [runImpactCommand! formatImpactHelp executeImpactQuery!] :i [(asl-hypergraph :a hyper)])
 
 fn formatImpactHelp -> Str
   (str "Usage: asl impact <symbol>\n\n" "Analyzes blast radius, direct callers, test dependencies, and type signatures.\n\n" "Arguments:\n" "  <symbol>    Target function, struct, or type identifier (Module:symbol or symbol)\n\n" "[Teleology] Principle: GroundTruthOverReport (ADR D94)\n" "  \"Codebase hypergraph queries bound perceptual tokens (<80 tokens) with zero line numbers.\"\n\n" "[Assistive Ontology] Enforces High-SNR Compact Perceptions:\n" "  • Truncated Callers: High fan-in symbols truncated to max 5 direct callers\n" "  • Test Linkage: Direct and transitive test suite blast radius mapping\n" "  • Zero-Line-Number Invariant: Code addressed strictly by Module:symbol and :anchor\n")

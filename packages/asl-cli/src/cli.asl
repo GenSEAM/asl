@@ -1,4 +1,4 @@
-(module asl-cli/cli :x [formatVersion formatHelp checkGateFiles dispatchRpc dispatchCmd executeCli main] :i [(ast :a a) (compiler :a comp) (asl-checker/types :a ty) (asl-checker/check :a chk) (reader :a rd) (batch :a b) (migrate :a mig) (asl-cli/patch :a patchCli) (asl-cli/impact :a impactCli) (asl-cli/check :a checkCli) (asl-cli/watch :a watchCli) (asl-cli/heal :a healCli) (asl-cli/digest :a digestCli) (asl-cli/auditCmd :a auditCli) (asl-cli/lensCmd :a lensCmd) (asl-cli/consiliumCmd :a consiliumCmd)])
+(module asl-cli/cli :x [formatVersion formatHelp checkGateFiles dispatchRpc dispatchCmd executeCli main] :i [(ast :a a) (compiler :a comp) (asl-checker/types :a ty) (asl-checker/check :a chk) (batch :a b) (migrate :a mig) (asl-cli/patch :a patchCli) (asl-cli/impact :a impactCli) (asl-cli/check :a checkCli) (asl-cli/watch :a watchCli) (asl-cli/heal :a healCli) (asl-cli/digest :a digestCli) (asl-cli/auditCmd :a auditCli) (asl-cli/lensCmd :a lensCmd) (asl-cli/consiliumCmd :a consiliumCmd)])
 
 fn formatVersion -> Str
   "asl 0.1.0 (pure AgentSlang self-hosted toolchain)"

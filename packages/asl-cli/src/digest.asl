@@ -1,4 +1,4 @@
-(module asl-cli/digest :x [generateAstOutline formatOutlineHelp formatImpactHelp runOutlineCommand!] :i [(asl-parser/ast :a a) (asl-parser/reader :a rd)])
+(module asl-cli/digest :x [generateAstOutline formatOutlineHelp formatImpactHelp runOutlineCommand!] :i [(asl-parser/ast :a a)])
 
 fn formatOutlineHelp -> Str
   (str "Usage: asl outline <file.asl>\n\n" "Extracts structural symbol signatures without internal bodies strictly under sub-80 token SLA.\n\n" "[Teleology] Principle: HighSNROverFullContext (ADR D97)\n" "  \"Outlines deliver maximal decision entropy with zero line numbers and zero body noise.\"\n\n" "[Assistive Ontology] Enforces:\n" "  • Signature Extraction: Function params and return types without expressions\n" "  • Zero-Line-Number Invariant: Symbols addressed strictly by name\n")
