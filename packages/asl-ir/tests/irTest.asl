@@ -1,8 +1,6 @@
 (module asl-ir/tests/irTest
   :x [testLoweringOptions testVerifyDetectsUnterminatedBlock testVerifyPassesValidFunction testVerifyCatchesUnboundVar testVerifyCatchesBufEscape testAstPatchOperations testAstDigest runTests]
   :i [(asl-ir/types :a ty)
-      (asl-ir/lowering :a low)
-      (asl-ir/verify :a vfy)
       (asl-ir/patch :a patch)
       (asl-ir/main :a ir)])
 

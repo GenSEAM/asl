@@ -1,4 +1,4 @@
-(module asl-ir/tests/patchOperationsAcceptanceTest :x [RunTests runTests] :i [(asl-ir/main :a irMain) (asl-ir/patch :a patch)])
+(module asl-ir/tests/patchOperationsAcceptanceTest :x [RunTests runTests] :i [(asl-ir/patch :a patch)])
 
 fn isOk? r: (Result T E) -> Bool
   (match r ((ok _) true) ((err _) false))
