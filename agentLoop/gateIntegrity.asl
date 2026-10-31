@@ -1,6 +1,6 @@
 (module asl/agentLoop/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles]
-  :i [(asl/agentLoop/gates :a g) (asl/agentLoop/gitOps :a io) (asl/agentLoop/context :a ctx) (asl/agentLoop/loop :a lp) (asl/agentLoop/core :a c) (asl/agentLoop/diff :a d)])
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles vacuousForm gateVacuousRounds vacuousRetry]
+  :i [(asl/agentLoop/gates :a g) (asl/agentLoop/gitOps :a io) (asl/agentLoop/context :a ctx) (asl/agentLoop/loop :a lp) (asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl/agentLoop/agentConfig :a ac)])
 
 enum Claim
   (claimOf text: (Option String) receipt: (Option String) cmd: (Option String) exit: (Option Int64) backed: Bool)
@@ -148,6 +148,40 @@ fn testFile? path: String -> Bool
 
 fn implFiles changed: (List String) gates: (List String) -> (List String)
   (filter (fn [f] (not (testFile? f))) (pairSecond (g/gatePartitionFiles changed (g/gateRunScripts gates))))
+
+fn quotedList xs: (List String) -> String
+  (c/joinSep (map (fn [(x String)] -> String (str "\"" (c/escapeAsn x) "\"")) xs) " ")
+
+; (:m :ref WRITER-GATE-VACUOUS :do "a failed revert check as the one ASN form the writer gets: the gates that stayed green with the change reverted to HEAD and the reverted files, parsed from gateRevertVerdict's message; none when the check passed or failed for another cause (no asserts, restore failed)")
+fn vacuousForm integrity: (Pair Bool String) -> (Option String)
+  (let [msg (pairSecond integrity)
+        lead "no gate reports a failed assertion with "
+        mid " reverted to HEAD: "]
+    (if (or (pairFirst integrity) (not (stringStartsWith? msg lead)))
+      none
+      (match (stringIndexOf msg mid)
+        ((none) none)
+        ((some at)
+          (let [files (stringSplit (optionOr (stringSlice msg (stringLength lead) at) "") ", ")
+                items (stringSplit (optionOr (stringSlice msg (+ at (stringLength mid)) (stringLength msg)) "") "; ")
+                gates (map (fn [(i String)] -> String (optionOr (stringSlice i 0 (optionOr (stringIndexOf i " :passesOnRevert ") 0)) ""))
+                           (filter (fn [(i String)] -> Bool (stringContains? i " :passesOnRevert ")) items))]
+            (if (listEmpty? gates)
+              none
+              (some (str "(:gateVacuous :gates (" (quotedList gates) ") :files (" (quotedList files) ") :passesOnRevert true :do \"each gate stays green with the files reverted to HEAD, so it does not test the change; change the test so it fails with them reverted, run it, then finish\")"))))))))
+
+fn defaultGateVacuousRounds -> Int64
+  2
+
+; (:m :ref WRITER-GATE-VACUOUS :do "how many finished turns whose gate passes on revert go back to the writer before the run ends failed with signal gateIntegrity: :agentLoop :gateVacuousRounds of .asl.config.asn, a positive integer, default 2")
+fn gateVacuousRounds cfgText: String -> Int64
+  (match (ac/agentLoopValue cfgText ":gateVacuousRounds")
+    ((some v) (optionOr (ac/positiveInt v) (defaultGateVacuousRounds)))
+    ((none) (defaultGateVacuousRounds)))
+
+; (:m :ref WRITER-GATE-VACUOUS :do "the form to send back when the revert check found a gate green without the change and the rounds sent so far are under the cap; none means the run ends as before, failed with signal gateIntegrity")
+fn vacuousRetry integrity: (Pair Bool String) rounds: Int64 cap: Int64 -> (Option String)
+  (if (< rounds cap) (vacuousForm integrity) none)
 
 fn unionPaths a: (List String) b: (List String) -> (List String)
   (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
