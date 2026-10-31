@@ -175,6 +175,10 @@ fn walk! env: Env dir: String rel: String skip: (List String) acc: (List String)
                   (else (cons (str shown " :file " (match (fileReadString p) ((ok t) (bytesSha256 (stringToBytes (stringReplace t env.sandbox "<S>")))) ((err _) "<unreadable>"))) a)))))
             acc names)))
 
+; (:m :ref BASE-RED-4 :do "the installers check runs python3 with HOME set to the sandbox; the Xcode python3 on macOS writes its bytecode cache under HOME/Library/Caches/com.apple.python, which is no part of the installer's output, so the home tree ignores that directory on both sides")
+fn notPythonCache? row: String -> Bool
+  (not (stringStartsWith? row "Library/Caches/com.apple.python/"))
+
 fn treeRows n: Node -> (List String)
   (listSort (map (fn [row] (str (atom (nth row 0)) " " (atom (nth row 1)) " " (atom (nth row 2)))) (items n)))
 
@@ -188,14 +192,18 @@ fn nativeCliCache! -> String
 fn checkCacheDir! -> String
   (optionOr (envGet "ASL_CHECK_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/cache/check"))
 
+; (:m :ref BASE-RED-4 :do "asl test writes its compile cache under $HOME/.asl/run/nativeTest; the sandbox HOME must stay clean, so the child pins that cache to the caller's own like the native CLI and check caches")
+fn nativeTestCache! -> String
+  (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeTest"))
+
 fn childEnv! env: Env -> (List String)
   (listAppend
     (filter (fn [r] (not (or (stringStartsWith? r "PATH=") (stringStartsWith? r "HOME=") (stringStartsWith? r "TMPDIR=") (stringStartsWith? r "LC_ALL=")
-                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=") (stringStartsWith? r "ASL_CHECK_CACHE=")
+                             (stringStartsWith? r "STUB_") (stringStartsWith? r "ASL_ROOT=") (stringStartsWith? r "ASL_HOST=") (stringStartsWith? r "ASL_NATIVE_CLI_CACHE=") (stringStartsWith? r "ASL_CHECK_CACHE=") (stringStartsWith? r "ASL_NATIVE_TEST_CACHE=")
                              (stringContains? (optionOr (listHead (stringSplit r "=")) "") "_API_KEY"))))
       (envList))
     (list (str "PATH=" env.sandbox "/stub/bin:/usr/bin:/bin:/usr/sbin:/sbin") (str "HOME=" env.home) (str "TMPDIR=" env.sandbox "/tmp")
-          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!)) (str "ASL_CHECK_CACHE=" (checkCacheDir!))))
+          "LC_ALL=C" (str "STUB_LOG=" env.sandbox "/stub/log") (str "STUB_STATE=" env.sandbox "/stub/state") (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache!)) (str "ASL_CHECK_CACHE=" (checkCacheDir!)) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCache!))))
 
 fn stripSkillLines s: String -> String
   (dist/joinLines (filter (fn [l] (not (stringContains? l " install-skill"))) (dist/splitLines s)))
@@ -244,7 +252,7 @@ fn replay! fx: Node blobs: (Map String Blob) repo: String host: String c: Node -
         (outWant (atom (field c ":stdout")))
         (rootSkip (if (= entry ":rules") (list "scripts/install.sh" "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh" ".asl/tmp") (list "scripts/install.sh" ".asl/tmp" "asl/packages" ".asl.config.asn" (if (= entry ":bootstrap") "bin/asl" "scripts/install.sh"))))
         (rootGot (listSort (walk! env env.root "" rootSkip (list))))
-        (homeGot (listSort (walk! env env.home "" (list) (list))))
+        (homeGot (filter notPythonCache? (listSort (walk! env env.home "" (list) (list)))))
         (mode (optionOr (listHead args) ""))
         (emitWant (cond ((not (stringContains? outWant " install-skill")) "none") ((= mode "--check-rules") "ok") ((or (= mode "--render-rules") (= mode "--render-home")) "rendered") (else "none")))
         (results (list
