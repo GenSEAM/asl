@@ -1,4 +1,4 @@
-(module aslMem/migration :x [PcpMigrationResult migratePcpConstitution serializeLedgerAsn queryMemoryShortcode benchmarkMemLatency makeEmptyMigrationResult] :i [(records :a rec) (asl-text/string :a s)])
+(module aslMem/migration :x [PcpMigrationResult migratePcpConstitution serializeLedgerAsn queryMemoryShortcode benchmarkMemLatency makeEmptyMigrationResult] :i [(records :a rec)])
 
 (schema PcpMigrationResult (:f migratedRules (List rec/AdrRule)) (:f totalRules I64) (:f rawTokens I64) (:f asnTokens I64) (:f tokenSavingsPercent F64) (:f success Bool))
 

@@ -1,4 +1,4 @@
-(module aslMem/spoolSearchTest :x [runTests] :i [(spoolSearch :a ss) (bm25 :a bm)])
+(module aslMem/spoolSearchTest :x [runTests] :i [(spoolSearch :a ss)])
 
 fn testSpoolIndexing -> Bool
   (let [(lines (list "building packages/asl-sh" "compiling src/reducer.asl" "compiling src/ansi.asl" "all modules compiled cleanly")) (idx (ss/spoolIndexLines lines))] (assert (= idx.docCount 4) "Index must contain 4 documents") (assert (> idx.avgDocLength 0.0) "Average document length must be positive") (assert (mapHas? idx.termDocCounts "compiling") "Term doc counts must index compiling") (assert (= (optionOr (mapGet idx.termDocCounts "compiling") 0) 2) "Compiling appears in 2 documents") true)
