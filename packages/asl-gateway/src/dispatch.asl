@@ -683,11 +683,12 @@ fn servedModel body: String fallback: String -> String
       ((none) fallback)
       ((some m) (match m ((j/jstr s) (if (stringEmpty? s) fallback s)) (_ fallback))))))
 
+; (:m :ref CALL-USAGE-TOKENS-ARITY :do "always four values (in cached out reasoning), the shape usage.asl#usageTokens returns; a body with no usage or no JSON is four zeros, not three")
 fn callUsageTokens body: String -> (List Int64)
   (match (j/jsonParse body)
-    ((err _) (list 0 0 0))
+    ((err _) (list 0 0 0 0))
     ((ok v) (match (j/jsonGet v "usage")
-      ((none) (list 0 0 0))
+      ((none) (list 0 0 0 0))
       ((some usage) (g/usageTokens usage)))))
 
 ; (:m :ref GW-BALANCER-WIRE :do "a balancer pick is charged to its windows whether or not the upstream call succeeded: a provider counts the request either way, so charging only greens would overrun a daily request quota, and a failed pick sits out its cooldown so the chat cascade retry reaches another model (GW-BALANCER-CASCADE)")

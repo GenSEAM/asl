@@ -448,8 +448,17 @@ fn ! socketChecks -> Bool
       (assert (not (listAny? (fn [(x String)] -> Bool (stringEndsWith? x "/chat/completions")) (pathsFrom fifth.seen (listLength third.seen)))) "a request that timed out on a cold start is never sent")
       (and killed (and closed removed))))
 
+; (:m :ref CALL-USAGE-TOKENS-ARITY :do "callUsageTokens has one arity: four values with and without usage")
+fn callUsageArity -> Bool
+  (do
+    (assert (= (listLength (dp/callUsageTokens "{\"choices\":[]}")) 4) "a body with no usage gives four values")
+    (assert (= (dp/callUsageTokens "not json") (list 0 0 0 0)) "an unparseable body gives four zeros")
+    (assert (= (listLength (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}")) 4) "a body with usage gives four values")
+    (assert (= (optionOr (listGet (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}") 2) -1) 3) "the third value is the output tokens")
+    true)
+
 fn ! runTests -> Bool
-  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))))
+  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (and (socketChecks) (callUsageArity)))))))
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
