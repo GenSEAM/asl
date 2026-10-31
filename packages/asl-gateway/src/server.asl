@@ -581,6 +581,8 @@ fn breakerEvent! st: b/BreakerState event: String pool: String now: Int64 parkSe
   (cond
     ((= event "markDown") (b/breakerMarkDownFor st pool now parkSec))
     ((= event "note503") (pairFirst (b/breakerNote503 st pool now)))
+    ((= event "note429") (b/breakerNote429 st pool now parkSec 0))
+    ((stringStartsWith? event "note429window:") (b/breakerNote429 st pool now parkSec (optionOr (stringToInt64 (optionOr (stringSlice event 14 (stringLength event)) "")) 0)))
     ((= event "reset503") (b/breakerReset503 st pool))
     ((= event "clear") (b/breakerClear st pool))
     (else (do (logLine! (str "(:gateway :breaker :unknownEvent \"" (wire/asnEscape event) "\")")) st)))
@@ -1325,7 +1327,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
                         :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
                         :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
-                        :breaker (b/makeBreakerState (optionOr (c/gatewayBreakerCooldownSecOverride text) 600))
+                        :breaker (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1)))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
                         :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
                         :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))

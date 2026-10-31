@@ -1,6 +1,6 @@
 (module aslGateway/tests/breakerTest
   :x [runTests]
-  :i [(breaker :a brk)])
+  :i [(breaker :a brk) (config :a c)])
 
 fn testFixtureLoaded! -> Bool
   (let [(fixtureRes (fileReadString "asl/packages/asl-gateway/tests/breakerFixture.asn"))]
@@ -352,6 +352,56 @@ fn testMemberScope -> Bool
       (assert (= (brk/breakerScope 429 "Rate limit reached for model m" "p" "p:m") "p:m") "a model-scoped 429 stays on the member")
       true))
 
+fn cfgText extra: String -> String
+  (str "(:gateway :v 2" extra " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1))))) :uses ((:use :for default :profile default)))\n")
+
+fn leftAfter st: brk/BreakerState key: String now: Int64 -> Int64
+  (pairSecond (brk/breakerDownFor st key now))
+
+; (:m :ref GW-429-WINDOW-WAIT :do "a 429 cools a member for what its provider names or its window needs, not the fixed 600 s: an rpm-paced member to the end of the minute, Retry-After and x-ratelimit-reset* as given, a daily cap to its reset, and with no hint 15 s doubled per 429 in a row up to the max, a success ending the streak; the three cooldown rows are read from config and range-checked")
+fn testQuotaCooldown -> Bool
+  (let [(p (brk/defaultQuotaPolicy))
+        (st0 (brk/makeBreakerStateWith 600 p))
+        (nimLeft (leftAfter (brk/breakerNote429 st0 "nim:m" 1000 0 60) "nim:m" 1000))
+        (ra (brk/quotaHintSec (list (pair "Retry-After" "7"))))
+        (raLeft (leftAfter (brk/breakerNote429 st0 "p:m" 1000 ra 0) "p:m" 1000))
+        (dur (brk/quotaHintSec (list (pair "x-ratelimit-reset-requests" "6m0s") (pair "x-ratelimit-reset-tokens" "850ms"))))
+        (frac (brk/quotaHintSec (list (pair "x-ratelimit-reset" "2.5s"))))
+        (nowE 1793372800)
+        (epochMs (brk/quotaHintSec (list (pair "X-RateLimit-Reset" "1793372830000"))))
+        (epochLeft (leftAfter (brk/breakerNote429 st0 "or:m" nowE epochMs 0) "or:m" nowE))
+        (none0 (brk/quotaHintSec (list (pair "Retry-After" "Wed, 21 Oct 2026 07:28:00 GMT"))))
+        (daily (leftAfter (brk/breakerMarkDownFor st0 "g:m" 1000 25200) "g:m" 1000))
+        (g1 (brk/breakerNote429 st0 "q:m" 1000 0 0))
+        (g2 (brk/breakerNote429 g1 "q:m" 1000 0 0))
+        (g3 (brk/breakerNote429 g2 "q:m" 1000 0 0))
+        (sibling (leftAfter g3 "q:other" 1000))
+        (cleared (brk/breakerNote429 (brk/breakerClear g3 "q:m") "q:m" 1000 0 0))
+        (chkBad (c/gatewayConfigCheckText! (cfgText " :cooldown429Sec 0 :cooldownSlackSec 99") "src" ".asl/mem/calibration/index.asn"))
+        (chkInv (c/gatewayConfigCheckText! (cfgText " :cooldown429Sec 60 :cooldown429MaxSec 30") "src" ".asl/mem/calibration/index.asn"))
+        (chkOk (c/gatewayConfigCheckText! (cfgText " :cooldown429Sec 10 :cooldown429MaxSec 300 :cooldownSlackSec 2") "src" ".asl/mem/calibration/index.asn"))]
+    (do
+      (assert (and (> nimLeft 0) (<= nimLeft 60)) (str "an rpm-paced member's 429 waits for the end of its minute window, not 600 s: " nimLeft))
+      (assert (= nimLeft 21) (str "at second 40 of the minute the window ends in 20 s, plus 1 s slack: " nimLeft))
+      (assert (and (= ra 7) (= raLeft 7)) (str "Retry-After 7 cools the member for 7 s: " raLeft))
+      (assert (= dur 360) (str "the longest x-ratelimit-reset duration wins, 6m0s is 360 s: " dur))
+      (assert (= frac 3) (str "a fractional reset rounds up to whole seconds: " frac))
+      (assert (= epochLeft 30) (str "an epoch-millisecond X-RateLimit-Reset is read against now: " epochLeft))
+      (assert (= none0 0) "an HTTP-date Retry-After is no hint, so the window or the base applies")
+      (assert (= daily 25200) (str "a daily cap parks until its window end: " daily))
+      (assert (= (list (leftAfter g1 "q:m" 1000) (leftAfter g2 "q:m" 1000) (leftAfter g3 "q:m" 1000)) (list 15 30 60)) "repeated 429 with no hint doubles from 15 s")
+      (assert (= sibling 0) "the streak opens only its own member")
+      (assert (= (brk/quotaCooldownSec p 0 3600 1000 0) 2601) "a :limits hour window waits to the end of the hour plus slack")
+      (assert (= (brk/quotaCooldownSec p 0 86400 86399 0) 2) "a :limits day window ending in 1 s waits 1 s plus slack")
+      (assert (= (leftAfter cleared "q:m" 1000) 15) "a success ends the streak")
+      (assert (= (brk/quotaCooldownSec p 0 0 1000 30) 600) "growth stops at the max")
+      (assert (= (brk/quotaCooldownSec (brk/quotaPolicy 5 40 0) 0 0 1000 3) 40) "config base 5 grows 5 10 20 40 and its max 40 caps it")
+      (assert (and (= (pairSecond chkBad) 1) (and (stringContains? (pairFirst chkBad) "cooldown429Sec") (stringContains? (pairFirst chkBad) "cooldownSlackSec"))) (str "config check rejects an out-of-range base and slack: " (pairFirst chkBad)))
+      (assert (and (= (pairSecond chkInv) 1) (stringContains? (pairFirst chkInv) "cooldown429MaxSec must not be under")) (str "config check rejects a max under the base: " (pairFirst chkInv)))
+      (assert (= (pairSecond chkOk) 0) (str "config check accepts in-range cooldown rows: " (pairFirst chkOk)))
+      (assert (= (c/gatewayTopIntOverride (cfgText " :cooldown429Sec 10") "cooldown429Sec") (some 10)) "a :cooldown429Sec row is read back")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testFixtureLoaded!) "testFixtureLoaded passed")
@@ -362,4 +412,5 @@ fn ! runTests -> Bool
     (assert (testCooldownExpiryAndSnapshot) "testCooldownExpiryAndSnapshot passed")
     (assert (testDirectApiEquivalence) "testDirectApiEquivalence passed")
     (assert (testMemberScope) "testMemberScope passed")
+    (assert (testQuotaCooldown) "testQuotaCooldown passed")
     true)

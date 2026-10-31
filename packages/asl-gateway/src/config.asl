@@ -91,6 +91,7 @@
       gatewaySharedUsagePathOverride
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
+      gatewayTopIntOverride
       expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
@@ -405,8 +406,31 @@ fn waitErrorOf key: String value: (Option Float64) -> (List String)
     ((some f) (if (> f 0.0) (list) (list (str ":" key " must be a positive number of seconds"))))
     ((none) (list)))
 
+fn topIntOf g: (Map String rd/SExpr) key: String -> (Option Int64)
+  (match (mapGet g key)
+    ((none) none)
+    ((some value) (match (asn_scalar value) ((scalarInt n) (some n)) (_ none))))
+
+; (:m :ref GW-429-WINDOW-WAIT :do "config check ranges for the 429 cooldown rows: :cooldown429Sec 1..3600, :cooldown429MaxSec 1..90000 and not under :cooldown429Sec, :cooldownSlackSec 0..30; a present value that is not an integer is an error too, while serve falls back to the default")
+fn cooldownErrorOf g: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 -> (List String)
+  (match (mapGet g key)
+    ((none) (list))
+    ((some _)
+      (match (topIntOf g key)
+        ((some n) (if (and (>= n lo) (<= n hi)) (list) (list (str ":" key " must be an integer from " lo " to " hi " seconds"))))
+        ((none) (list (str ":" key " must be an integer number of seconds"))))))
+
+fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
+  (let [(base (topIntOf g "cooldown429Sec"))
+        (top (topIntOf g "cooldown429MaxSec"))
+        (order (match base
+                 ((some b) (match top ((some m) (if (< m b) (list ":cooldown429MaxSec must not be under :cooldown429Sec") (list))) ((none) (list))))
+                 ((none) (list))))]
+    (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
+                (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) order)))
+
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g)))
+  (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
@@ -2318,6 +2342,10 @@ fn gatewaySharedUsagePathOverride text: String -> (Option String)
 
 ; (:m :ref GW-BREAKER-STALE-20261018 :do "an optional top-level (:gateway ... :breakerCooldownSec N), same shape as :ledgerPath above; absent, unparseable or non-int text is none, so a config that never sets this keeps the 600s default -- GW-BREAKER-STALE-20261018's own incident was a cooldown fixed at 600s outlasting an entire sweep with no way to shorten it")
 fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
+  (gatewayTopIntOverride text "breakerCooldownSec")
+
+; (:m :ref GW-429-WINDOW-WAIT :do "an optional top-level (:gateway ... :KEY N) int, read the way :breakerCooldownSec always was; absent, unparseable or non-int is none")
+fn gatewayTopIntOverride text: String key: String -> (Option Int64)
   (match (ast/readForms (lx/tokenize text))
     ((err _) none)
     ((ok forms)
@@ -2327,7 +2355,7 @@ fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
          (match (asn_props top (some ":gateway"))
            ((err _) none)
            ((ok g)
-            (match (mapGet g "breakerCooldownSec")
+            (match (mapGet g key)
               ((none) none)
               ((some value)
                (match (asn_scalar value)

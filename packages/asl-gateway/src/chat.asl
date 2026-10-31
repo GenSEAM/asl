@@ -2006,6 +2006,20 @@ fn httpFailedFinal cx: Ctx l: Loop a: Attempt status: Int64 reason: String heade
       (askFloat (effClock)
         (fn [(now Float64)] -> ChatStep (httpFailedParked cx l a status reason headers body (u/dailyCapParkSec kind headers body now))))))
 
+fn limitWindowSec w: String -> Int64
+  (cond ((= w "minute") 60) ((= w "hour") 3600) ((= w "day") 86400) (else 0))
+
+; (:m :ref GW-429-WINDOW-WAIT :do "the aligned window a member's limit resets on: 60 s when the alias is paced by :rpm, else the shortest minute, hour or day of the (:gateway :limits ...) rows for its provider (scope account) or for the alias itself (scope model); 0 when none, so the breaker uses its growing base; fiveHour, week and month are rolling and give no boundary")
+fn memberWindowSec cx: Ctx a: Attempt -> Int64
+  (match a.v2
+    ((none) 0)
+    ((some e)
+      (let [(fromRpm (match e.rpm ((some r) (if (> r 0.0) 60 0)) ((none) 0)))
+            (rows (match cx.world.table ((ok t) t.limits) ((err _) (list))))
+            (own (filter (fn [(l c/GatewayLimit)] -> Bool (and (= l.provider e.provider) (or (= l.scope "account") (= l.model e.alias)))) rows))
+            (secs (filter (fn [(n Int64)] -> Bool (> n 0)) (cons fromRpm (map (fn [(l c/GatewayLimit)] -> Int64 (limitWindowSec l.window)) own))))]
+        (fold (fn [(m Int64) (n Int64)] -> Int64 (if (or (= m 0) (< n m)) n m)) 0 secs))))
+
 fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
@@ -2013,11 +2027,13 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
         (quota (or (= status 429) (b/breakerIsQuotaError body)))
         (pool (b/breakerScope status body a.providerPool a.pool))
         (park (if (and (> parkSec 0) (and quota (not providerWide))) parkSec 0))
+        ; (:m :ref GW-429-WINDOW-WAIT :do "a 429 that is not a daily cap sends note429 (note429window:SECONDS for a member with an aligned window, see memberWindowSec) with the wait its headers name; the breaker turns that into the hint, the minute window end or the growing base")
+        (windowSec (memberWindowSec cx a))
         (errText (u/httpErrorText status reason))
         (l1 (failed l errText))
         (event (cond
                  (providerWide "markDown")
-                 (quota "markDown")
+                 (quota (cond ((> park 0) "markDown") ((> windowSec 0) (str "note429window:" windowSec)) (else "note429")))
                  ((= status 503) "note503")
                  (else "reset503")))
         (relay (fn [] -> ChatStep
@@ -2049,7 +2065,7 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
                                      ((none) (if (> cx.cascadeLen 1) (loopStep cx (advance l1 l1.body)) (relay)))))))))))
                        (else (relay)))))))
         ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 for the spread cooldown, in addition to (never instead of) the existing per-model breaker trip above -- the breaker's own cooldown is fixed and provider/account-scoped, :cooldownSec is per-route and configurable, the two must stay independent")
-        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool park)))
+        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool (if (stringStartsWith? event "note429") (b/quotaHintSec headers) park))))
                 (if (and (= status 429) (not (listEmpty? cx.spread))) (list (effSpreadNote429 alias)) (list))))]
     (if (listEmpty? effs) (after) (tellAll effs after)))
 
