@@ -90,10 +90,16 @@ fn ! cacheEnv! -> (List String)
                 (else (listAppend acc (list (str (pairFirst r) "=" home (pairSecond r))))))))
           (list) (cacheRows)))
 
+; (:m :ref WT-FRESH-HOST-BUILD :do "a child given its own HOME and no ASL_NATIVE_TEST_CACHE gets this process's compile cache row from cacheEnv!: in a linked worktree the cache follows HOME, so a test's temp-HOME child recompiled 100 modules and the prelude on every start (gateway serve 36-39 s on node2, 2026-10-31) and outran its 30 s ready wait")
 fn ! childEnv overrides: (List String) -> (List String)
   (let [(nameOf (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)))
-        (names (map nameOf overrides))]
-    (listAppend overrides
+        (given (map nameOf overrides))
+        (cache (if (and (listContains? given "HOME") (not (listContains? given "ASL_NATIVE_TEST_CACHE")))
+                 (filter (fn [(row String)] -> Bool (= (nameOf row) "ASL_NATIVE_TEST_CACHE")) (cacheEnv!))
+                 (list)))
+        (rows (listAppend overrides cache))
+        (names (map nameOf rows))]
+    (listAppend rows
       (filter (fn [(row String)] -> Bool
                 (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
               (envList))))
