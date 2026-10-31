@@ -1,4 +1,4 @@
-(module asl-compiler/asl1 :x [main usage] :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-checker/types :a ty) (asl-compiler/compiler :a comp) (asl-compiler/checkCache :a cc)])
+(module asl-compiler/asl1 :x [main usage] :i [(asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/check :a chk) (asl-compiler/compiler :a comp) (asl-compiler/checkCache :a cc)])
 
 fn usage -> String
   "usage: asl1 build ENTRY -o OUT.ll [--rc 0|1|asan|notrace] [--target linux-aarch64|linux-x86_64|darwin-arm64] | asl1 check ENTRY | asl1 deps ENTRY"
