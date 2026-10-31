@@ -1,7 +1,6 @@
 (module asl-engine/tests/parityTest
   :x [runTests]
-  :i [(asl-engine/wire :a w)
-      (asl-engine/breaker :a brk)
+  :i [(asl-engine/breaker :a brk)
       (asl-engine/lease :a lse)
       (asl-engine/engine :a eng)])
 
