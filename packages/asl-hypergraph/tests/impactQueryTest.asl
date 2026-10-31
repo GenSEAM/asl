@@ -1,4 +1,4 @@
-(module asl/packages/asl-hypergraph/tests/impactQueryTest :x [RunTests runTests] :i [(asl-hypergraph :a hyper) (asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-hypergraph/query :a query) (asl-cli/impact :a cliImpact)])
+(module asl/packages/asl-hypergraph/tests/impactQueryTest :x [RunTests runTests] :i [(asl-hypergraph :a hyper) (asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-cli/impact :a cliImpact)])
 
 fn isOk? r: (Result T E) -> Bool
   (match r ((ok _) true) ((err _) false))
