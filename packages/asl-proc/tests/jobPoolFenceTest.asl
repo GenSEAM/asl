@@ -27,6 +27,15 @@ fn testEscapee -> Bool
         (refute (listContains? (pairFirst bare) 950) "a bare known pid without a recorded birth never qualifies as an escapee")
         true))
 
+fn testPinBits -> Bool
+  (let [(procs (jp/procsAt (escapeeSnapshot) 1000000))
+        (wide (jp/treeOf procs 740 (list 740 950) (list 741 (jp/pinOf (+ 8388608 950) 999819)) 720))]
+    (do (assert (= (jp/pinOf 8388608 5) 8388608) "a pid at 2^23 stays bare, it does not fit the pin")
+        (assert (= (jp/pinOf 0 5) 0) "pid 0 stays bare")
+        (assert (= (jp/pinOf 8388607 5) (+ (* 5 8388608) 8388607)) "the largest pid below 2^23 is packed")
+        (refute (listContains? (pairFirst wide) 950) "a known pid of 2^23+950 never aliases to pid 950 born a second later")
+        true))
+
 fn testFence -> Bool
   (let [(procs (jp/procsOf (nodeSnapshot)))
         (pids (map (fn [(p jp/Proc)] -> Int64 p.pid) procs))
@@ -49,5 +58,6 @@ fn testFence -> Bool
 
 fn ! runTests -> Bool
   (do (assert (testEscapee) "the package tree killer takes a known escapee younger than the job and spares an older foreign process")
+      (assert (testPinBits) "a pid outside the pin bits stays bare and never aliases another pid")
       (assert (testFence) "the package tree killer never reaches pid 0, itself, its ancestors, a foreign group or a user manager")
       true)

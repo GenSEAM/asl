@@ -138,8 +138,9 @@ fn pinBase -> Int64
   8388608
 
 ; (:m :ref KILL-SETSID-ESCAPEE :do "a known entry is a bare pid or a pin, born * 2^23 + pid, recorded when the pid was seen in the tree; pids stay below 2^23 on Linux and macOS")
+; (:m :ref PIN-PID-BITS :do "a pid outside 1..2^23-1 stays bare, so it can never decode as another pid; Linux caps pid_max at 2^22 (PID_MAX_LIMIT) and macOS pids stay below 100000, so no live pid is left unpinned")
 fn pinOf pid: Int64 born: Int64 -> Int64
-  (if (< born 0) pid (+ (* born (pinBase)) pid))
+  (if (or (< born 0) (or (< pid 1) (>= pid (pinBase)))) pid (+ (* born (pinBase)) pid))
 
 fn pinPid k: Int64 -> Int64
   (- k (* (/ k (pinBase)) (pinBase)))
