@@ -1,6 +1,6 @@
 (module asl-parser/selfParseTest
   :x [runTests]
-  :i [(asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-parser/indentParser :a ip)])
+  :i [(asl-parser/ast :a a) (asl-parser/reader :a rd)])
 
 (schema ClosureModule (:f path String) (:f expected Int64))
 
