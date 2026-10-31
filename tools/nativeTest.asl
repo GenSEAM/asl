@@ -2015,11 +2015,16 @@ fn inlineName rel: String -> String
 fn stemOf rel: String -> String
   (if (stringEndsWith? rel ".asl") (optionOr (stringSlice rel 0 (- (stringLength rel) 4)) rel) rel)
 
+; (:m :ref FIX-HINT-PATH-ESCAPE :do "the rendered body names rel raw in diagnostics, once escaped as the :indentFix :file string and twice inside its :fix string; each quoted site takes name escaped to its own depth, so a name with a quote or backslash still reads back as itself")
+fn quotedNamed reason: String rel: String name: String -> String
+  (stringReplace (stringReplace reason (str "\\\"" (esc (esc rel)) "\\\"") (str "\\\"" (esc (esc name)) "\\\""))
+                 (str "\"" (esc rel) "\"") (str "\"" (esc name) "\""))
+
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a staged copy of an outside file is named by the path the user gave (run --as), as asl check names it")
 fn failText root: String rel: String path: String shown: String reason: String -> String
   (if (or (inlineStaged? rel) (not (stringEmpty? shown)))
     (let [(name (if (inlineStaged? rel) (inlineName rel) shown))]
-      (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) reason (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
+      (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) (quotedNamed reason rel name) (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
     (str "FAIL " path ": " reason))
 
 ; (:m :ref PAREN-OUTSIDE-PATH :do "a checker-rejected suite staged from outside the workspace (outside/ or outsidePkg/) is named by the path the user gave in its FAIL line, diagnostics and :indentFix hint, as run --as and asl check name it; an in-root suite keeps its root-relative name")
