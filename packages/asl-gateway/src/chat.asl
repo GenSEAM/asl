@@ -1673,6 +1673,10 @@ fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
     (askLimit cx l a 0)
     (httpAttemptSend cx l a))
 
+; (:m :ref GW-PARK-LAST-ONLY :do "true when no chain member follows the current one: only that member parks on a full concurrency limit, an earlier one is skipped at once so a later member can answer")
+fn lastMember? l: Loop -> Bool
+  (>= (+ l.idx 1) (listLength l.models))
+
 fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
   (askStrings (effLimit a.upstream.provider a.alias)
     (fn [(v (List String))] -> ChatStep
@@ -1681,11 +1685,13 @@ fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
         ((some outcome)
           (if (!= outcome "park")
             (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))
-            (let [(poll (optionOr (stringToInt64 (optionOr (listGet v 2) "250")) 250))
-                  (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
-              (if (>= (+ waitedMs poll) budgetMs)
-                (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full for the whole queue budget")
-                (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l a (+ waitedMs poll)))))))))))
+            (if (not (lastMember? l))
+              (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full, a later chain member answers")
+              (let [(poll (optionOr (stringToInt64 (optionOr (listGet v 2) "250")) 250))
+                    (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
+                (if (>= (+ waitedMs poll) budgetMs)
+                  (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full for the whole queue budget")
+                  (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l a (+ waitedMs poll))))))))))))
 
 fn httpAttemptSend cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)

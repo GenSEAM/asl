@@ -46,7 +46,10 @@ fn concLimit scopeName: String group: String alias: String n: Int64 -> c/Gateway
   (c/GatewayLimit :provider "nim" :scope scopeName :model alias :window "" :calls 0 :tokens 0 :group group :concurrency n)
 
 fn cfgWith extra: String -> String
-  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :priceInPerM 1.0 :priceOutPerM 2.0) (:model :id m2 :provider fp :name \"n2\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default))" extra ")")
+  (cfgChain "m1 m2" extra)
+
+fn cfgChain chain: String extra: String -> String
+  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :priceInPerM 1.0 :priceOutPerM 2.0) (:model :id m2 :provider fp :name \"n2\")) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default))" extra ")")
 
 fn checkOf extra: String -> (Pair String Int64)
   (c/gatewayConfigCheckText! (cfgWith extra) "src" ".asl/mem/calibration/index.asn")
@@ -68,8 +71,8 @@ fn ! drive! step: ch/ChatStep labels: String parks: Int64 fuel: Int64 -> String
          ((ch/effCli _ _) (drive! (k (ch/outCli none)) labels parks (- fuel 1)))
          ((ch/effSleepMs ms) (drive! (k ch/outDone) (str labels "|sleep:" (stringFromInt64 ms)) parks (- fuel 1)))
          ((ch/effLimit _ alias)
-          (drive! (k (ch/outStrings (if (and (= alias "m1") (> parks 0)) (list "park" "provider concurrency limit full" "50") (list))))
-                  (str labels "|limit:" alias) (if (= alias "m1") (- parks 1) parks) (- fuel 1)))
+          (drive! (k (ch/outStrings (if (> parks 0) (list "park" "provider concurrency limit full" "50") (list))))
+                  (str labels "|limit:" alias) (- parks 1) (- fuel 1)))
          ((ch/effUsageNote _ _ outcome _) (drive! (k ch/outDone) (str labels "|note:" outcome) parks (- fuel 1)))
          ((ch/effHttp _ m _ _ _ _ _ _)
           (drive! (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fine\"},\"finish_reason\":\"stop\"}]}")))
@@ -77,7 +80,10 @@ fn ! drive! step: ch/ChatStep labels: String parks: Int64 fuel: Int64 -> String
          (_ (drive! (k ch/outDone) labels parks (- fuel 1)))))))
 
 fn ! run! limits: String parks: Int64 queueMs: String -> String
-  (match (c/gatewayConfigParse! (cfgWith limits) "default" ".asl/mem/calibration/index.asn")
+  (runOn! "m1 m2" limits parks queueMs)
+
+fn ! runOn! chain: String limits: String parks: Int64 queueMs: String -> String
+  (match (c/gatewayConfigParse! (cfgChain chain limits) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -130,8 +136,10 @@ fn ! runTests -> Bool
         (badLease (checkOf " :concurrencyLeaseSec 5"))
         (badUsd (checkOf " :limits ((:limit :provider fp :window day :usd -1.0))"))
         (noUnit (checkOf " :limits ((:limit :provider fp :window day))"))
-        (parked (run! " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))" 2 ""))
-        (exhausted (run! " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))" 100 "120"))
+        (parked (runOn! "m1" " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))" 2 ""))
+        (exhausted (runOn! "m1" " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))" 100 "120"))
+        (early (run! " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))" 100 "120"))
+        (lastParks (run! " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1) (:limit :provider fp :scope model :model m2 :concurrency 1))" 2 ""))
         (home (stringTrim (resultOr (fr/shellOut "/usr/bin/mktemp -d /tmp/limitScopeTest.XXXXXX" 5000) "")))
         (text (cfgWith " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))"))
         (s0 (loopAt home text))
@@ -180,7 +188,9 @@ fn ! runTests -> Bool
       (assert (= (pairSecond badUsd) 1) (str "a negative usd cap is an error: " (pairFirst badUsd)))
       (assert (= (pairSecond noUnit) 1) (str "a row with a window and no unit is an error: " (pairFirst noUnit)))
       (assert (and (stringContains? parked "|limit:m1|sleep:50|limit:m1|sleep:50|limit:m1|http:n1") (not (stringContains? parked "outOfFuel"))) (str "a full concurrency limit parks the call: it sleeps the poll interval, asks again and then sends: " parked))
-      (assert (and (stringContains? exhausted "|note:limit:concurrency") (stringContains? exhausted "|http:n2") (not (stringContains? exhausted "|http:n1"))) (str "after the queue budget the member is skipped with limit:concurrency and the cascade goes on: " exhausted))
+      (assert (and (stringContains? exhausted "|note:limit:concurrency") (not (stringContains? exhausted "|http:n")) (not (stringContains? exhausted "outOfFuel"))) (str "the last member parks until the queue budget is gone and is then skipped with limit:concurrency: " exhausted))
+      (assert (and (stringContains? early "|limit:m1|note:limit:concurrency") (stringContains? early "|http:n2") (not (stringContains? early "sleep"))) (str "a full member that is not the last skips at once, without parking: " early))
+      (assert (and (stringContains? lastParks "|limit:m1|note:limit:concurrency") (not (stringContains? lastParks "|limit:m1|sleep")) (stringContains? lastParks "|limit:m2|sleep:50|limit:m2|http:n2")) (str "with both members full the first skips at once and the last parks, then sends: " lastParks))
       (assert (and (= (pairSecond r1) "") (stringContains? (pairSecond r2) "park/provider concurrency limit full/250")) (str "the server admits the first call and parks the second: " (pairSecond r1) " then " (pairSecond r2)))
       (assert (= (pairSecond r3) "") (str "a sent usage row frees the slot for the next call: " (pairSecond r3)))
       (assert (stringContains? (pairSecond r4) "park") (str "a skipped usage row frees nothing: " (pairSecond r4)))

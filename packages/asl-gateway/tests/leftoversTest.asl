@@ -13,7 +13,10 @@
 
 ; (:m :ref GW-LIMIT-LEFTOVERS :do "three leftovers of the limit scopes: :queueBudgetSec above 3600 is a config error and the runtime default 30, a park that ends in limit:concurrency leaves a usage-ledger row with that outcome (it already did; this guards it end to end through the real effUsageNote path), and the 503s the gateway makes itself carry Retry-After from (:gateway :busyRetrySec), default 1")
 fn cfgWith extra: String -> String
-  (str "(:gateway :v 2" extra " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\") (:model :id m2 :provider fp :name \"n2\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default)))")
+  (cfgChain "m1 m2" extra)
+
+fn cfgChain chain: String extra: String -> String
+  (str "(:gateway :v 2" extra " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\") (:model :id m2 :provider fp :name \"n2\")) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default)))")
 
 fn checkOf extra: String -> (Pair String Int64)
   (c/gatewayConfigCheckText! (cfgWith extra) "src" ".asl/mem/calibration/index.asn")
@@ -77,7 +80,7 @@ fn ! drive! s: srv/GatewayLoop step: ch/ChatStep labels: String fuel: Int64 -> S
          (_ (drive! s (k ch/outDone) labels (- fuel 1)))))))
 
 fn ! parkedRun! home: String -> String
-  (match (parsed! " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))")
+  (match (c/gatewayConfigParse! (cfgChain "m1" " :limits ((:limit :provider fp :scope model :model m1 :concurrency 1))") "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -129,6 +132,6 @@ fn ! runTests -> Bool
       (assert (= (headerOf viaLoop "Retry-After") "4") (str "the loop form reads busyRetrySec from the wiring text: " (headerOf viaLoop "Retry-After")))
       (assert (and (= (statusOfOut plan503) 503) (= (headerOf plan503 "Retry-After") "1")) "a planner 503 (no endpoint admitted) carries Retry-After")
       (assert (and (= (statusOfOut plan429) 429) (= (headerOf plan429 "Retry-After") "-")) "a planner status other than 503 stays a plain error without Retry-After")
-      (assert (and (stringContains? ran "|note:limit:concurrency") (stringContains? ran "|http:n2")) (str "a park that outlasts its queue budget is skipped with a limit:concurrency note and the cascade goes on: " ran))
+      (assert (and (stringContains? ran "|note:limit:concurrency") (not (stringContains? ran "|http:n"))) (str "a park that outlasts its queue budget on the last member is skipped with a limit:concurrency note: " ran))
       (assert (= (listLength skipRows) 1) (str "the skipped park leaves one usage-ledger row with outcome limit:concurrency: " (stringFromInt64 (listLength rows)) " rows"))
       true))
