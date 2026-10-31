@@ -466,6 +466,8 @@ fn attribConsumer packed: String -> (Option String)
   ; (:m :ref LIMITS-LEDGER-COST :do "rows the provider limit windows count over, and when they were last read from the shared ledger (0 = never)")
   (:f limitRows (List ul/CallRow))
   (:f limitSeededMs Int64)
+  ; (:m :ref GW-LIMIT-LONG-WINDOW :do "the shared ledger's day rows, read with limitRows, so a week or month window counts calls of pruned generations")
+  (:f limitDays (List ul/DayRow) :default (list))
   ; (:m :ref GW-LIMIT-SCOPES :do "concurrency slots held by calls in flight: taken when a call passes its limit check, freed by the sent usage row of its provider and alias or when the lease runs out")
   (:f leases (List lim/Lease) :default (list))
   ; (:m :ref GW-REQUEST-ACCOUNTING :do "the accepted requests still open, one per connection fd: id, start, and once the reply is rendered the outcome and status their done row carries")
@@ -658,12 +660,25 @@ fn ! cliRunSync! srv: GatewayLoop client: String args: (List (Pair String j/Json
       (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none)))))
 
 ; (:m :ref LIMITS-LEDGER-COST :do "reads the shared ledger only when the held rows are unseeded or older than seedTtlMs, and keeps just the rows a configured window can still count")
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "the day rollup of the shared ledger: (:gateway :ledgerRollupPath P) or the ledger path with .days, keeping (:gateway :ledgerRollupKeepDays N) days, 62 by default")
+fn sharedRollup text: String sharedPath: String -> ul/Rollup
+  (ul/Rollup :path (match (c/gatewayTopScalarOverride text "ledgerRollupPath") ((some (c/scalarStr s)) (if (stringEmpty? s) (ul/defaultRollupPath sharedPath) s)) (_ (ul/defaultRollupPath sharedPath)))
+             :keepDays (optionOr (c/gatewayTopIntOverride text "ledgerRollupKeepDays") (ul/defaultRollupKeepDays)))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "rows at or before the rollup's :last are in its day rows, so a seed reads the ledger only from there, never later than 24 h back, the longest trailing window (rollingDay)")
+fn seedSinceMs limits: (List c/GatewayLimit) days: (List ul/DayRow) nowMs: Int64 -> Int64
+  (max (lim/longestStartMs limits nowMs) (min (+ (ul/daysThrough days) 1) (- nowMs 86400000)))
+
 fn ! limitSeeded! srv: GatewayLoop text: String limits: (List c/GatewayLimit) nowMs: Int64 -> GatewayLoop
   (if (not (lim/needsSeed? srv.limitSeededMs nowMs))
     srv
     (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
-          (rows (resultOr (ul/readRowsSince! sharedPath (lim/longestStartMs limits nowMs)) (list)))]
-      (with srv :limitRows (lim/keepRows rows (lim/longestStartMs limits nowMs)) :limitSeededMs nowMs)))
+          (days (match (ul/readDays! (sharedRollup text sharedPath).path)
+                  ((ok ds) ds)
+                  ((err e) (do (logLine! (str "(:gateway :limitRollup :error \"" (wire/asnEscape e) "\")")) (list)))))
+          (since (seedSinceMs limits days nowMs))
+          (rows (resultOr (ul/readRowsSince! sharedPath since) (list)))]
+      (with srv :limitRows (lim/keepRows rows since) :limitDays days :limitSeededMs nowMs)))
 
 ; (:m :ref GW-LIMIT-SCOPES :do "a call that passed its windows takes a slot in every concurrency limit covering it; when any is full the answer is park with the poll interval and nothing is taken; leases older than :concurrencyLeaseSec (default 600) are dropped first")
 fn limitConcurrency srv: GatewayLoop text: String sc: c/LimitScope limits: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Pair GatewayLoop ch/ChatOutcome)
@@ -690,7 +705,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
             (sc (c/gatewayLimitScopeFromText text))
             (now (/ (nowNs) 1000000))
             (srv1 (limitSeeded! srv text limits now))
-            (verdict (lim/decideIn sc limits srv1.limitRows provider alias now))]
+            (verdict (lim/decideWith sc limits srv1.limitRows srv1.limitDays provider alias now))]
         (match verdict
           ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
           ((none) (limitConcurrency srv1 text sc limits provider alias now)))))
@@ -733,10 +748,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
             ; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "the ledger rotates at (:gateway :ledgerMaxBytes N) and keeps (:gateway :ledgerKeep N) generations; absent rows keep the defaults in usageLedger")
             (maxBytes (optionOr (match srv.wiringText ((some t) (c/gatewayTopIntOverride t "ledgerMaxBytes")) ((none) none)) (ul/maxLedgerBytes)))
             (keep (optionOr (match srv.wiringText ((some t) (c/gatewayTopIntOverride t "ledgerKeep")) ((none) none)) (ul/defaultLedgerKeep)))
-            (wrote (ul/appendCallRowWith! ledgerPath row maxBytes keep))
-            ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
             (sharedPath (optionOr (match srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
-            (wroteShared (if (= sharedPath ledgerPath) (ok true) (ul/appendCallRowWith! sharedPath row maxBytes keep)))]
+            (ru (sharedRollup (optionOr srv.wiringText "") sharedPath))
+            (wrote (ul/appendCallRowRolled! ledgerPath row maxBytes keep (if (= sharedPath ledgerPath) ru (ul/noRollup))))
+            ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
+            (wroteShared (if (= sharedPath ledgerPath) (ok true) (ul/appendCallRowRolled! sharedPath row maxBytes keep ru)))]
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))

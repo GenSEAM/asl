@@ -15,6 +15,21 @@
       rotateWith!
       appendCallRow!
       appendCallRowWith!
+      appendCallRowRolled!
+      rotateRolled!
+      sentOutcome?
+      DayRow
+      Rollup
+      noRollup
+      defaultRollupKeepDays
+      defaultRollupPath
+      dayRowLine
+      dayRowParse
+      foldCalls
+      keptDays
+      daysThrough
+      readDays!
+      writeDays!
       readRows!
       readRowsSince!
       windowReadNewest!
@@ -305,10 +320,128 @@ fn ! generations! path: String -> (List Int64)
     (listSort (fold (fn [(acc (List Int64)) (name String)] -> (List Int64) (match (generationSeq base name) ((some k) (cons k acc)) ((none) acc)))
                     (list) (resultOr (dirList (g/posixDirname path)) (list)))))
 
-fn ! pruneGenerations! path: String gens: (List Int64) keep: Int64 -> Bool
-  (listAll? (fn [(k Int64)] -> Bool (ok? (pathRemove (str path "." (stringFromInt64 k))))) (listTake gens (max 0 (- (listLength gens) (max 1 keep)))))
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a call reached the provider unless the gateway answered it itself (open breaker, skipped member, daily cap, a limit or pace skip, a local bucket throttle); only those calls count against a limit or a day row")
+fn sentOutcome? o: String -> Bool
+  (not (or (stringStartsWith? o "breaker") (or (stringStartsWith? o "skipped") (or (stringStartsWith? o "daily") (or (stringStartsWith? o "limit") (or (stringStartsWith? o "pace") (= o "throttled")))))))
 
-fn ! shiftUnderLock! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String)
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "the ledger keeps a few generations of maxLedgerBytes, about 80 h at the 2026-10-31 volume, so a week or month limit could not count its window from it; before a generation is pruned its sent calls fold into one row per UTC day, provider and alias, and :last is the newest call folded in, so a reader counts live rows only after it")
+(schema DayRow
+  (:f day Int64)
+  (:f provider String)
+  (:f alias String)
+  (:f calls Int64)
+  (:f inTokens Int64)
+  (:f outTokens Int64)
+  (:f cachedTokens Int64)
+  (:f lastMs Int64))
+
+(schema Rollup
+  (:f path String)
+  (:f keepDays Int64))
+
+fn noRollup -> Rollup
+  (Rollup :path "" :keepDays 0)
+
+fn defaultRollupKeepDays -> Int64
+  62
+
+fn defaultRollupPath ledgerPath: String -> String
+  (str ledgerPath ".days")
+
+fn dayRowLine d: DayRow -> String
+  (str "(:day :day " (stringFromInt64 d.day) " :provider " (asnStr d.provider) " :alias " (asnStr d.alias)
+       " :calls " (stringFromInt64 d.calls) " :in " (stringFromInt64 d.inTokens) " :out " (stringFromInt64 d.outTokens)
+       " :cached " (stringFromInt64 d.cachedTokens) " :last " (stringFromInt64 d.lastMs) ")\n")
+
+fn dayRowParse line: String -> (Option DayRow)
+  (match (c/asnProps (rd/parseSexpr (stringTrim line)) (some ":day"))
+    ((err _) none)
+    ((ok p)
+     (let [(day (optionOr (fieldInt p "day") (- 0 1)))
+           (provider (optionOr (fieldStr p "provider") ""))]
+       (if (or (< day 0) (stringEmpty? provider))
+         none
+         (some (DayRow :day day :provider provider :alias (optionOr (fieldStr p "alias") "")
+                       :calls (optionOr (fieldInt p "calls") 0) :inTokens (optionOr (fieldInt p "in") 0)
+                       :outTokens (optionOr (fieldInt p "out") 0) :cachedTokens (optionOr (fieldInt p "cached") 0)
+                       :lastMs (optionOr (fieldInt p "last") 0)))))))
+
+fn sameDayRow? d: DayRow day: Int64 r: CallRow -> Bool
+  (and (= d.day day) (and (= d.provider r.provider) (= d.alias r.alias)))
+
+fn addCall days: (List DayRow) r: CallRow -> (List DayRow)
+  (let [(day (/ r.atMs 86400000))]
+    (if (listAny? (fn [(d DayRow)] -> Bool (sameDayRow? d day r)) days)
+      (map (fn [(d DayRow)] -> DayRow
+             (if (sameDayRow? d day r)
+               (with d :calls (+ d.calls 1) :inTokens (+ d.inTokens r.inTokens) :outTokens (+ d.outTokens r.outTokens)
+                       :cachedTokens (+ d.cachedTokens r.cachedTokens) :lastMs (max d.lastMs r.atMs))
+               d))
+           days)
+      (listAppend days (list (DayRow :day day :provider r.provider :alias r.alias :calls 1 :inTokens r.inTokens
+                                     :outTokens r.outTokens :cachedTokens r.cachedTokens :lastMs r.atMs)))))
+
+fn foldCalls days: (List DayRow) rows: (List CallRow) -> (List DayRow)
+  (fold (fn [(acc (List DayRow)) (r CallRow)] -> (List DayRow) (if (sentOutcome? r.outcome) (addCall acc r) acc)) days rows)
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "day rows older than keepDays before the newest one are dropped; the newest day, not the clock, anchors it, so folding the same generation gives the same file")
+fn keptDays days: (List DayRow) keepDays: Int64 -> (List DayRow)
+  (let [(newest (fold (fn [(m Int64) (d DayRow)] -> Int64 (max m d.day)) 0 days))]
+    (filter (fn [(d DayRow)] -> Bool (> d.day (- newest keepDays))) days))
+
+fn daysThrough days: (List DayRow) -> Int64
+  (fold (fn [(m Int64) (d DayRow)] -> Int64 (max m d.lastMs)) 0 days)
+
+fn ! readDays! path: String -> (Result (List DayRow) String)
+  (if (stringEmpty? path)
+    (ok (list))
+    (match (fileStat path)
+      ((err _) (ok (list)))
+      ((ok _)
+       (match (fileReadString path)
+         ((err e) (err (str "read " path ": " e)))
+         ((ok raw) (ok (fold (fn [(acc (List DayRow)) (l String)] -> (List DayRow) (match (dayRowParse l) ((some d) (listAppend acc (list d))) ((none) acc)))
+                             (list) (nonEmptyLines raw))))))))
+
+fn ! writeDays! path: String days: (List DayRow) -> (Result Bool String)
+  (let [(tmp (str path ".tmp"))]
+    (match (fileWrite tmp (stringJoin (map dayRowLine days) ""))
+      ((err e) (err (str "rollup write " tmp ": " e)))
+      ((ok _)
+       (match (pathRename tmp path)
+         ((err e) (err (str "rollup rename " path ": " e)))
+         ((ok _) (ok true))))))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a generation is read whole and a row that does not parse is left out of the day rows, the way a reader already skips it, so one bad line never keeps a generation from being pruned")
+fn ! generationCalls! file: String -> (Result (List CallRow) String)
+  (match (fileReadString file)
+    ((err e) (err (str "read " file ": " e)))
+    ((ok raw) (ok (fold (fn [(acc (List CallRow)) (l String)] -> (List CallRow) (match (callRowParse l) ((ok r) (cons r acc)) ((err _) acc)))
+                        (list) (nonEmptyLines raw)))))
+
+fn ! rollUp! file: String ru: Rollup -> (Result Bool String)
+  (if (stringEmpty? ru.path)
+    (ok true)
+    (match (generationCalls! file)
+      ((err e) (err e))
+      ((ok rows)
+       (match (readDays! ru.path)
+         ((err e) (err e))
+         ((ok days) (writeDays! ru.path (keptDays (foldCalls days rows) ru.keepDays)))))))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a generation is removed only after its calls are in the day rows; one that cannot be rolled up stays on disk, is retried at the next rotation and its error is returned")
+fn ! pruneGenerations! path: String gens: (List Int64) keep: Int64 ru: Rollup -> (Result Bool String)
+  (fold (fn [(acc (Result Bool String)) (k Int64)] -> (Result Bool String)
+          (match acc
+            ((err e) (err e))
+            ((ok _)
+             (let [(file (str path "." (stringFromInt64 k)))]
+               (match (rollUp! file ru)
+                 ((err e) (err e))
+                 ((ok _) (match (pathRemove file) ((err e) (err (str "prune " file ": " e))) ((ok _) (ok true)))))))))
+        (ok true) (listTake gens (max 0 (- (listLength gens) (max 1 keep)))))
+
+fn ! shiftUnderLock! path: String maxBytes: Int64 keep: Int64 ru: Rollup -> (Result Bool String)
   (match (fileStat path)
     ((err _) (ok false))
     ((ok st)
@@ -318,9 +451,9 @@ fn ! shiftUnderLock! path: String maxBytes: Int64 keep: Int64 -> (Result Bool St
              (next (+ (fold (fn [(a Int64) (b Int64)] -> Int64 (max a b)) 0 gens) 1))]
          (match (pathRename path (str path "." (stringFromInt64 next)))
            ((err e) (err (str "rotate " path ": " e)))
-           ((ok _) (do (pruneGenerations! path (listAppend gens (list next)) keep) (ok true))))))))
+           ((ok _) (pruneGenerations! path (listAppend gens (list next)) keep ru)))))))
 
-fn ! rotateWith! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String)
+fn ! rotateRolled! path: String maxBytes: Int64 keep: Int64 ru: Rollup -> (Result Bool String)
   (match (fileStat path)
     ((err _) (ok false))
     ((ok st)
@@ -329,20 +462,27 @@ fn ! rotateWith! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String
        (match (fileLock (str path ".rotate") true)
          ((err e) (if (= e "busy") (ok false) (err (str "rotate lock " path ": " e))))
          ((ok fd)
-          (let [(res (shiftUnderLock! path maxBytes keep))
+          (let [(res (shiftUnderLock! path maxBytes keep ru))
                 (closed (fdClose fd))]
             res))))))
+
+fn ! rotateWith! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String)
+  (rotateRolled! path maxBytes keep (noRollup))
 
 fn ! rotateIfNeeded! path: String -> (Result Bool String)
   (rotateWith! path (maxLedgerBytes) (defaultLedgerKeep))
 
-fn ! appendCallRowWith! path: String row: CallRow maxBytes: Int64 keep: Int64 -> (Result Bool String)
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a rotation or rollup error no longer drops the row: it is appended to the live file and the error is returned for the caller to log")
+fn ! appendCallRowRolled! path: String row: CallRow maxBytes: Int64 keep: Int64 ru: Rollup -> (Result Bool String)
   (match (dirCreate (g/posixDirname path))
     ((err e) (err (str "ledger dir " (g/posixDirname path) ": " e)))
     ((ok _)
-     (match (rotateWith! path maxBytes keep)
-       ((err e) (err e))
+     (match (rotateRolled! path maxBytes keep ru)
+       ((err e) (match (g/appendFile! path (callRowLine row) 200) ((ok _) (err e)) ((err e2) (err (str e "; " e2)))))
        ((ok _) (g/appendFile! path (callRowLine row) 200)))))
+
+fn ! appendCallRowWith! path: String row: CallRow maxBytes: Int64 keep: Int64 -> (Result Bool String)
+  (appendCallRowRolled! path row maxBytes keep (noRollup))
 
 fn ! appendCallRow! path: String row: CallRow -> (Result Bool String)
   (appendCallRowWith! path row (maxLedgerBytes) (defaultLedgerKeep))

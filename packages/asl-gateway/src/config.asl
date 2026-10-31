@@ -377,7 +377,9 @@ fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
   (:f tokensOut Int64 :default 0)
   (:f tokensCached Int64 :default 0)
   (:f usd Float64 :default 0.0)
-  (:f concurrency Int64 :default 0))
+  (:f concurrency Int64 :default 0)
+  (:f resetDay Int64 :default 1)
+  (:f pace String :default "even"))
 
 ; (:m :ref GW-LIMIT-SCOPES :do "a (:group :id G :provider P :models (ALIAS ...)) row under (:gateway :groups (...)): the listed aliases of provider P share every limit row that names the group, so one budget spans several models (a plan quota shared across its models, a free-tier daily count across all free models)")
 (schema GatewayGroup
@@ -523,7 +525,7 @@ fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
               (listAppend (listAppend (queueBudgetRangeErrors g) (rangeErrorOf g "busyRetrySec" 1 3600 "seconds")) (learnConfigErrors g)))
 
 fn gatewayLimitWindows -> (List String)
-  (list "minute" "hour" "fiveHour" "day" "week" "month")
+  (list "minute" "hour" "fiveHour" "rollingDay" "day" "week" "month")
 
 fn limitStr props: (Map String rd/SExpr) key: String -> String
   (match (mapGet props key)
@@ -551,6 +553,10 @@ fn limitFloat props: (Map String rd/SExpr) key: String -> Float64
 fn limitScopes -> (List String)
   (list "account" "group" "model" "endpoint")
 
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "even spreads a calendar window's cap over the whole window; remaining spreads what is left of it over the days left, today included; off never paces, so the row stops calls only once its cap is spent")
+fn limitPaces -> (List String)
+  (list "even" "remaining" "off")
+
 fn limitMaxConcurrency -> Int64
   1024
 
@@ -577,6 +583,8 @@ fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
            (tCached (limitInt p "tokensCached"))
            (usd (limitFloat p "usd"))
            (conc (limitInt p "concurrency"))
+           (reset (if (mapHas? p "resetDay") (limitInt p "resetDay") 1))
+           (pace (if (stringEmpty? (limitStr p "pace")) "even" (limitStr p "pace")))
            (windowed (or (> calls 0) (or (> tokens 0) (or (> tIn 0) (or (> tOut 0) (or (> tCached 0) (> usd 0.0)))))))
            (who (limitWho provider group endpoint))]
        (cond
@@ -587,10 +595,14 @@ fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
          ((and (= scope "model") (stringEmpty? model)) (err (str "limit " who ": :scope model needs :model")))
          ((or (< calls 0) (or (< tokens 0) (or (< tIn 0) (or (< tOut 0) (or (< tCached 0) (< usd 0.0)))))) (err (str "limit " who ": :calls :tokens :tokensIn :tokensOut :tokensCached and :usd must be whole numbers or amounts of zero or more")))
          ((or (< conc 0) (> conc (limitMaxConcurrency))) (err (str "limit " who ": :concurrency must be a whole number from 1 to 1024")))
-         ((and windowed (not (listContains? (gatewayLimitWindows) window))) (err (str "limit " who ": :window must be one of minute hour fiveHour day week month, found " window)))
+         ((and windowed (not (listContains? (gatewayLimitWindows) window))) (err (str "limit " who ": :window must be one of minute hour fiveHour rollingDay day week month, found " window)))
          ((and (not windowed) (= conc 0)) (err (str "limit " who " " window ": needs :calls, :tokens, :tokensIn, :tokensOut, :tokensCached, :usd or :concurrency")))
+         ((or (< reset 1) (> reset 31)) (err (str "limit " who ": :resetDay must be a day of the month from 1 to 31, found " (stringFromInt64 reset))))
+         ((and (!= reset 1) (!= window "month")) (err (str "limit " who " " window ": :resetDay applies only to a month window")))
+         ((not (listContains? (limitPaces) pace)) (err (str "limit " who ": :pace must be even, remaining or off, found " pace)))
+         ((and (= pace "remaining") (not (listContains? (list "day" "week" "month") window))) (err (str "limit " who " " window ": :pace remaining needs a day, week or month window")))
          (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens
-                                 :group group :endpoint endpoint :tokensIn tIn :tokensOut tOut :tokensCached tCached :usd usd :concurrency conc)))))))
+                                 :group group :endpoint endpoint :tokensIn tIn :tokensOut tOut :tokensCached tCached :usd usd :concurrency conc :resetDay reset :pace pace)))))))
 
 ; (:m :ref GW-DAILY-SHORTHAND :do "a provider row (:provider :id P ... :dailyCalls N) is the account limit row (:limit :provider P :scope account :window day :calls N); a missing, zero or invalid N makes no row")
 fn dailyCallsLimit p: (Map String rd/SExpr) -> (List GatewayLimit)
@@ -696,7 +708,14 @@ fn limitGroupErrors g: (Map String rd/SExpr) -> (List String)
 ; (:m :ref GW-LIMIT-SCOPES :do "config check is strict where the runtime load drops or warns: a malformed limit row, a group that names an unknown model or is declared twice, a limit naming an undeclared group and an out-of-range :concurrencyLeaseSec or :concurrencyPollMs are errors")
 fn gatewayLimitErrors g: (Map String rd/SExpr) -> (List String)
   (listAppend (listAppend (gatewayLimitWarnings g) (listAppend (groupErrors g) (limitGroupErrors g)))
-              (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (listAppend (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds") (listAppend (rangeErrorOf g "healthKeep" 1 10000 "files") (rangeErrorOf g "requestKeepRows" 100 10000000 "rows"))))))
+              (listAppend (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (listAppend (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds") (listAppend (rangeErrorOf g "healthKeep" 1 10000 "files") (rangeErrorOf g "requestKeepRows" 100 10000000 "rows")))))
+                          (listAppend (rangeErrorOf g "ledgerRollupKeepDays" 62 3660 "days") (rollupPathErrors g))))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "an optional (:gateway ... :ledgerRollupPath \"...\") names the day-rollup file of the shared ledger; present, it is a non-empty string")
+fn rollupPathErrors g: (Map String rd/SExpr) -> (List String)
+  (match (mapGet g "ledgerRollupPath")
+    ((none) (list))
+    ((some v) (match (asnScalar v) ((scalarStr s) (if (stringEmpty? s) (list ":ledgerRollupPath must be a non-empty path") (list))) (_ (list ":ledgerRollupPath must be a quoted path")))))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
