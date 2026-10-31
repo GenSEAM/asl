@@ -1,4 +1,4 @@
-(module browserPlugin/popup :i [(aslVdom/html :a h) (aslVdom/vdom :a v)] :x [renderPopup viewModel])
+(module browserPlugin/popup :i [(aslVdom/html :a h)] :x [renderPopup viewModel])
 
 fn viewModel -> (Map Str Str)
   (let [(m0 (mapEmpty)) (m1 (mapSet m0 "title" "ASL Agent Plugin")) (m2 (mapSet m1 "status" "WASI Sandbox")) (m3 (mapSet m2 "prompt" "Extract DOM & execute agent tools in browser memory:")) (m4 (mapSet m3 "output" "Ready. Click a button to execute.")) (m5 (mapSet m4 "pending-action" "None"))] m5)

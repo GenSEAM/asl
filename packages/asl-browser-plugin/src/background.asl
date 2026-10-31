@@ -1,4 +1,4 @@
-(module aslBrowserPlugin/background :x [initServiceWorker routeActionMessage handleMessage] :i [(content :a cnt) (safetyGate :a sg)])
+(module aslBrowserPlugin/background :x [initServiceWorker routeActionMessage handleMessage] :i [(safetyGate :a sg)])
 
 fn initServiceWorker -> Str
   "(:service-worker :state \"active\" :engine \"wasi\")"
