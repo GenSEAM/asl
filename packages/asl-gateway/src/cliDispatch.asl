@@ -1,5 +1,7 @@
 (module aslGateway/cliDispatch
   :x [CliUsage
+      gatewayStatsFor!
+      gatewayUsageFor!
       CliParseResult
       CliVersionInfo
       CliPromptDir
@@ -425,13 +427,22 @@ fn ! gatewayStatsCli! args: (List String) -> (Result Int64 String)
        (match (ul/keyFor byText)
          ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
          ((ok keyFn)
-          (match (ul/readRows! path)
+          (match (gatewayStatsFor! path windowMs keyFn tagText (/ (nowNs) 1000000))
             ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 1)))
-            ((ok allRows)
-             (let [(rows (ul/filterByTag allRows tagText))
-                   (nowMs (/ (nowNs) 1000000))
-                   (stats (ul/computeStats rows nowMs windowMs keyFn))]
-               (do (sys/say! (ul/statsAsn stats)) (ok 0))))))))))
+            ((ok text) (do (sys/say! text) (ok 0)))))))))
+
+; (:m :ref GW-LEDGER-READ-COST :do "the stats report reads the ledger from the window start only, so a 1 h window opens the live file alone and never the older generations a 24 h day row needs")
+fn ! gatewayStatsFor! path: String windowMs: Int64 keyFn: (fn [ul/CallRow] -> String) tagText: String nowMs: Int64 -> (Result String String)
+  (match (ul/readRowsSince! path (- nowMs windowMs))
+    ((err e) (err e))
+    ((ok rows) (ok (ul/statsAsn (ul/computeStats (ul/filterByTag rows tagText) nowMs windowMs keyFn)))))
+
+; (:m :ref GW-LEDGER-READ-COST :do "the daily report: days 0 totals every kept day and reads every generation, days N totals today and the N-1 UTC days before it and reads only the generations reaching back to that midnight")
+fn ! gatewayUsageFor! path: String tagText: String days: Int64 nowMs: Int64 -> (Result String String)
+  (let [(since (if (<= days 0) (- 0 1) (- (- nowMs (mod nowMs 86400000)) (* (- days 1) 86400000))))]
+    (match (ul/readRowsSince! path since)
+      ((err e) (err e))
+      ((ok rows) (ok (ul/statsAsn (ul/computeDailyStats (ul/filterByTag rows tagText)))))))
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "the per-day per-provider per-model total command, reading the SHARED accounting ledger (ul/defaultSharedUsagePath/:sharedUsagePath), never the per-HOME stats ledgerPath gateway stats reads above -- the shared ledger is the one meant to survive a scratch HOME's deletion, so this is the authoritative source for 'how many tokens did provider/model X use on day Y'")
 fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
@@ -441,12 +452,14 @@ fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
         (configPath (cfg/gatewayProfilesPath home))
         (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
         (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))]
-    (match (ul/readRows! path)
-      ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
-      ((ok allRows)
-       (let [(rows (ul/filterByTag allRows tagText))
-             (stats (ul/computeDailyStats rows))]
-         (do (sys/say! (ul/statsAsn stats)) (ok 0))))))
+    (match (optionOr (match (flagValue args "--days") ((some d) (some (stringToInt64 d))) ((none) none)) (some 0))
+      ((none) (do (sys/sayErr! "gateway usage: --days takes a whole number of days") (ok 2)))
+      ((some days)
+       (if (< days 0)
+         (do (sys/sayErr! "gateway usage: --days takes a whole number of days") (ok 2))
+         (match (gatewayUsageFor! path tagText days (/ (nowNs) 1000000))
+           ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
+           ((ok text) (do (sys/say! text) (ok 0))))))))
 
 fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
   (let [(mode (gatewayCliArg args 0))

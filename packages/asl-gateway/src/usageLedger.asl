@@ -17,6 +17,7 @@
       appendCallRowWith!
       readRows!
       readRowsSince!
+      windowReadNewest!
       windowRead!
       redactReason
       rowsInWindow
@@ -403,6 +404,28 @@ fn ! windowRead! path: String sinceMs: Int64 -> (Result (Pair (List String) (Lis
      (match (olderUntil! path (listReverse (pairFirst snap)) sinceMs (list path) (pairSecond snap))
        ((err e) (err e))
        ((ok got) (ok (pair (pairFirst got) (filter (fn [(r CallRow)] -> Bool (>= r.atMs sinceMs)) (pairSecond got))))))))
+
+fn ! newestNonEmpty! path: String gens: (List Int64) files: (List String) rows: (List CallRow) -> (Result (Pair (List Int64) (Pair (List String) (List CallRow))) String)
+  (if (or (not (listEmpty? rows)) (listEmpty? gens))
+    (ok (pair gens (pair files rows)))
+    (let [(file (str path "." (stringFromInt64 (optionOr (listHead gens) 0))))]
+      (match (fileRows! file)
+        ((err e) (err e))
+        ((ok older) (newestNonEmpty! path (optionOr (listTail gens) (list)) (listAppend files (list file)) older)))))
+
+; (:m :ref GW-LEDGER-READ-COST :do "a window whose start depends on the newest call rather than a clock: the live file is read (or, right after a shift, the newest generation holding rows), sinceOf maps the newest atMs to the window start, and older generations are opened only until one reaches back to it")
+fn ! windowReadNewest! path: String sinceOf: (fn [Int64] -> Int64) -> (Result (Pair (List String) (List CallRow)) String)
+  (match (liveSnapshot! path 3)
+    ((err e) (err e))
+    ((ok snap)
+     (match (newestNonEmpty! path (listReverse (pairFirst snap)) (list path) (pairSecond snap))
+       ((err e) (err e))
+       ((ok got)
+        (let [(rows (pairSecond (pairSecond got)))
+              (since (if (listEmpty? rows) 0 (sinceOf (fold (fn [(m Int64) (r CallRow)] -> Int64 (max m r.atMs)) 0 rows))))]
+          (match (olderUntil! path (pairFirst got) since (pairFirst (pairSecond got)) rows)
+            ((err e) (err e))
+            ((ok all) (ok (pair (pairFirst all) (filter (fn [(r CallRow)] -> Bool (>= r.atMs since)) (pairSecond all)))))))))))
 
 fn ! readRowsSince! path: String sinceMs: Int64 -> (Result (List CallRow) String)
   (match (windowRead! path sinceMs) ((ok got) (ok (pairSecond got))) ((err e) (err e)))

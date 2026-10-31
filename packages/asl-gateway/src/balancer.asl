@@ -4,7 +4,7 @@
       parseTier parseMode tierName modeName windowMsOf tierAdmitted? defaultPolicy makeBalancer
       windowStart budgetUsed hardCap softCap pacingFactor modelPacing qualityFor tierPrior
       parseCalScores parseBalancer emptyUse chargeUse usageFromCalls scoreOf pick replay
-      budgetRows budgetRowLine blockingBudgets Pool loadPool! poolFromParts poolRequest poolPick poolCharge poolTarget pickWhy refusalText poolFailed Observed RateObs parseDurationMs parseRfc3339Ms parseRateHeaders retryAfterMs poolObserve poolObserveEndpoint effectiveUse poolPickLanes laneOf laneFor Poll pollsDue poolPolled poolPollReply parseHttpDateMs urlHost deriveInstance Hold poolReserve poolRelease poolAliasesFor poolHonour modelKey poolReleaseAt deriveInstanceWithRoles]
+      budgetRows budgetRowLine blockingBudgets Pool loadPool! poolFromParts poolRequest poolPick poolCharge poolTarget pickWhy refusalText poolFailed Observed RateObs parseDurationMs parseRfc3339Ms parseRateHeaders retryAfterMs poolObserve poolObserveEndpoint effectiveUse poolPickLanes laneOf laneFor ledgerSinceMs Poll pollsDue poolPolled poolPollReply parseHttpDateMs urlHost deriveInstance Hold poolReserve poolRelease poolAliasesFor poolHonour modelKey poolReleaseAt deriveInstanceWithRoles]
   :i [(asl-parser/reader :a rd)
       (aslGateway/config :a cfg)
       (aslGateway/usageLedger :a ul)
@@ -813,6 +813,10 @@ fn deriveInstanceWithRoles sec: (Map String rd/SExpr) table: (Option cfg/Gateway
 fn filterRoles roles: (Map String String) role: String -> (Map String String)
   (fold (fn [(acc (Map String String)) (id String)] -> (Map String String) (if (= (mapGetOr roles id "") role) (mapSet acc id role) acc)) (mapEmpty) (mapKeys roles))
 
+; (:m :ref GW-LEDGER-READ-COST :do "the earliest call any budget can still count at nowMs: the start of each budget's current window, its anchor for a lifetime budget; loadPool! passes the newest ledger call, since no later request can count a row of an earlier window and the balancer keeps no clock of its own, so older generations stay closed")
+fn ledgerSinceMs bal: Balancer nowMs: Int64 -> Int64
+  (fold (fn [(acc Int64) (b Budget)] -> Int64 (min acc (windowStart b nowMs))) nowMs (mapValues bal.budgets))
+
 fn ! loadPool! text: String table: (Option cfg/GatewayTable) home: String routable: (fn [String] -> Bool) -> (Result (Option Pool) String)
   (let [(form (rd/parseSexpr text))]
     (match (cfg/asnProps form (some ":gateway"))
@@ -837,7 +841,7 @@ fn ! loadPool! text: String table: (Option cfg/GatewayTable) home: String routab
                               (ledger (match (mapGet sec "ledger")
                                         ((some e) (cfg/scalarToString (cfg/asnScalar e)))
                                         ((none) (optionOr (cfg/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath home)))))]
-                          (match (ul/readRows! ledger)
+                          (match (match (ul/windowReadNewest! ledger (fn [(newest Int64)] -> Int64 (ledgerSinceMs bal newest))) ((ok got) (ok (pairSecond got))) ((err e) (err e)))
                             ((err e) (err (str "usage ledger " ledger ": " e)))
                             ((ok rows)
                               (match (propInt sec "failCooldownMs" 60000)
