@@ -201,7 +201,7 @@ fn testCtx tbl: (Option c/GatewayTable) -> ch/Ctx
     :world (testWorld tbl) :path "/chat/completions" :asn true :sanitize false
     :intent "" :role "coder" :workspace "/tmp" :explicitModel "" :profileRouted false :profileName ""
     :table tbl :reqKeys (list) :headerEff (none) :envEff (none) :tempExplicit false :timeoutExplicit false
-    :baseBody (j/jnull) :cascadeLen 1 :spread (list) :cooldownSec 60)
+    :baseBody (j/jnull) :cascadeLen 1 :spread (list) :cooldownSec 60 :session "" :stuck "" :dropOnSwitch false)
 
 fn testLoop -> ch/Loop
   (ch/Loop :body (j/jnull) :models (list) :idx 0 :lastErr (none) :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0)

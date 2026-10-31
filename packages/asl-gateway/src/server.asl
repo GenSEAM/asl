@@ -4,7 +4,7 @@
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -447,6 +447,8 @@ fn attribConsumer packed: String -> (Option String)
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "live SWRR state: keyed profile|intent, each a (List (Pair String Int64)) alias->current-weight map persisted across calls; spreadLast429 is alias->epoch-ms of its last 429, independent of and in addition to srv.breaker's own per-model trip")
   (:f spreadState (Map String (Map String Int64)))
   (:f spreadLast429 (Map String Int64))
+  ; (:m :ref GW-SESSION-AFFINITY :do "session key -> the member that last answered it and when; af/affinityNote forgets records past :affinityForgetSec")
+  (:f affinity (Map String af/AffinityRecord))
   (:f omni om/OmniState)
   (:f admitWaits (List Int64))
   ; (:m :ref LIMITS-LEDGER-COST :do "rows the provider limit windows count over, and when they were last read from the shared ledger (0 = never)")
@@ -707,6 +709,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (pair (loopSpreadState srv (mapSet (mapSet srv.spreadState key nextState) (spc/paceCacheKey) factors) srv.spreadLast429) (ch/outStrings order))))
     ((ch/effSpreadNote429 alias)
       (pair (loopSpreadState srv srv.spreadState (mapSet srv.spreadLast429 alias (/ (nowNs) 1000000))) ch/outDone))
+    ; (:m :ref GW-SESSION-AFFINITY :do "the affinity rows come from the loaded config text on every ask, so a gw apply takes effect without a restart; no text means the defaults")
+    ((ch/effAffinity session)
+      (pair srv (ch/outStrings (af/affinityAnswer (af/affinityConfigFromText (optionOr srv.wiringText "")) srv.affinity session (/ (nowNs) 1000000)))))
+    ((ch/effAffinityNote session alias)
+      (pair (with srv :affinity (af/affinityNote (af/affinityConfigFromText (optionOr srv.wiringText "")) srv.affinity session alias (/ (nowNs) 1000000))) ch/outDone))
     ((ch/effTelemetry rec)
       (do (match rec ((some r) (logLine! r)) ((none) true)) (pair srv ch/outDone)))
     ((ch/effNoteIntent i)
@@ -1299,7 +1306,7 @@ fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/
       :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
       :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
       :wiring (dp/emptyWiring (resultOr (u/upstreamSettings env) (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0)))
-      :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+      :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
       :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!))))
 
 
@@ -1329,7 +1336,7 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                         :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
                         :breaker (b/withParkMax (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1))) (optionOr (c/gatewayTopIntOverride text "parkMaxSec") 0))
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
-                        :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+                        :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
                         :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))
 
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)

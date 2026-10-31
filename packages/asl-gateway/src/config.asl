@@ -72,6 +72,7 @@
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
       gatewayTopIntOverride
+      gatewayTopScalarOverride
       expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
@@ -415,8 +416,25 @@ fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
     (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
                 (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800)) order)))
 
+; (:m :ref GW-SESSION-AFFINITY :do "config check for the affinity rows: :affinity is true or false, :affinityStickSec 1..86400, :affinityForgetSec 1..604800 and not under :affinityStickSec, :affinitySwitch dropReasoning or keep")
+fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
+  (let [(on (match (mapGet g "affinity")
+              ((none) (list))
+              ((some v) (match (asnScalar v) ((scalarBool _) (list)) (_ (list ":affinity must be true or false"))))))
+        (switch (match (mapGet g "affinitySwitch")
+                  ((none) (list))
+                  ((some v) (match (asnScalar v)
+                              ((scalarStr s) (if (listContains? (list "dropReasoning" "keep") s) (list) (list ":affinitySwitch must be dropReasoning or keep")))
+                              (_ (list ":affinitySwitch must be dropReasoning or keep"))))))
+        (order (match (topIntOf g "affinityStickSec")
+                 ((some s) (match (topIntOf g "affinityForgetSec") ((some f) (if (< f s) (list ":affinityForgetSec must not be under :affinityStickSec") (list))) ((none) (list))))
+                 ((none) (list))))]
+    (listAppend (listAppend on switch)
+                (listAppend (listAppend (cooldownErrorOf g "affinityStickSec" 1 86400) (cooldownErrorOf g "affinityForgetSec" 1 604800)) order)))
+
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
+  (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
+              (gatewayAffinityErrors g))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
@@ -2291,6 +2309,12 @@ fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
 
 ; (:m :ref GW-429-WINDOW-WAIT :do "an optional top-level (:gateway ... :KEY N) int, read the way :breakerCooldownSec always was; absent, unparseable or non-int is none")
 fn gatewayTopIntOverride text: String key: String -> (Option Int64)
+  (match (gatewayTopScalarOverride text key)
+    ((some (scalarInt n)) (some n))
+    (_ none))
+
+; (:m :ref GW-SESSION-AFFINITY :do "an optional top-level (:gateway ... :KEY V) scalar; absent or unparseable text is none")
+fn gatewayTopScalarOverride text: String key: String -> (Option AsnScalar)
   (match (ast/readForms (lx/tokenize text))
     ((err _) none)
     ((ok forms)
@@ -2299,13 +2323,7 @@ fn gatewayTopIntOverride text: String key: String -> (Option Int64)
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
          (match (asnProps top (some ":gateway"))
            ((err _) none)
-           ((ok g)
-            (match (mapGet g key)
-              ((none) none)
-              ((some value)
-               (match (asnScalar value)
-                 ((scalarInt n) (some n))
-                 (_ none))))))))))
+           ((ok g) (optionMap asnScalar (mapGet g key))))))))
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "walks (:dailyTokenBudgets ((profileId N) ...)) looking for one row naming profile; a profile absent from the list has no budget (none), never guessed, so an operator who sets no budget for a profile keeps today's unlimited behaviour")
 fn gatewayDailyTokenBudgetItems items: (List rd/SExpr) profile: String -> (Option Int64)
