@@ -1,7 +1,6 @@
 (module asl-intel/graph
   :x [GraphNode Graph Rated GraphSummary resolveWorkspace! buildGraph! analyzeGraph! analyzeGraphAt! ratedJson runGraph! fl flag]
   :i [(asl-intel/text :a t)
-      (asl-intel/rx :a r)
       (asl-intel/pats :a p)
       (asl-intel/json :a j)
       (asl-intel/host :a h)
