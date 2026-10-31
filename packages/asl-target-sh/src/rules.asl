@@ -643,12 +643,13 @@ fn checkInstallers! root: String -> Int64
                                   (do (dist/writeErr! (str "installers: unauthorized or rogue tracked installer found: " t "\n")) true)))
                               e2 (filter (fn [t] (not (stringEmpty? t))) (dist/splitLines r.out)))))
               e2))
-        (harness (str root "/tests/acceptance/third_party_toolbelt_harness_test.py"))]
+        (harness (str root "/tests/acceptance/thirdPartyToolbeltHarnessTest.asl"))
+        (entry (str root "/bin/asl"))]
     (if (not (dist/isRegular! harness))
       (do (dist/writeErr! (str "installers: missing required third-party toolbelt harness test: " harness "\n")) 1)
-      (let [(ran (dist/runArgv! (list "python3" harness) (none) (none) 3600000))
+      (let [(ran (dist/runArgv! (list entry "test" harness) (some root) (none) 3600000))
             (e4 (match ran
-                  ((err e) (do (dist/writeErr! (str "installers: ERR_TOOL_ABSENT python3 (" e ")\n")) true))
+                  ((err e) (do (dist/writeErr! (str "installers: ERR_TOOL_ABSENT bin/asl (" e ")\n")) true))
                   ((ok r) (do (dist/writeOut! r.out) (dist/writeErr! r.errText)
                               (if (= r.code 0) e3 (do (dist/writeErr! "installers: third-party toolbelt harness acceptance verification failed\n") true))))))]
         (if e4

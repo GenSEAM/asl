@@ -175,9 +175,6 @@ fn walk! env: Env dir: String rel: String skip: (List String) acc: (List String)
                   (else (cons (str shown " :file " (match (fileReadString p) ((ok t) (bytesSha256 (stringToBytes (stringReplace t env.sandbox "<S>")))) ((err _) "<unreadable>"))) a)))))
             acc names)))
 
-; (:m :ref BASE-RED-4 :do "the installers check runs python3 with HOME set to the sandbox; the Xcode python3 on macOS writes its bytecode cache under HOME/Library/Caches/com.apple.python, which is no part of the installer's output, so the home tree ignores that directory on both sides")
-fn notPythonCache? row: String -> Bool
-  (not (stringStartsWith? row "Library/Caches/com.apple.python/"))
 
 fn treeRows n: Node -> (List String)
   (listSort (map (fn [row] (str (atom (nth row 0)) " " (atom (nth row 1)) " " (atom (nth row 2)))) (items n)))
@@ -252,7 +249,7 @@ fn replay! fx: Node blobs: (Map String Blob) repo: String host: String c: Node -
         (outWant (atom (field c ":stdout")))
         (rootSkip (if (= entry ":rules") (list "scripts/install.sh" "asl/dist/install.sh" "asl/web/dist/install.sh" "asl/web/public/install.sh" ".asl/tmp") (list "scripts/install.sh" ".asl/tmp" "asl/packages" ".asl.config.asn" (if (= entry ":bootstrap") "bin/asl" "scripts/install.sh"))))
         (rootGot (listSort (walk! env env.root "" rootSkip (list))))
-        (homeGot (filter notPythonCache? (listSort (walk! env env.home "" (list) (list)))))
+        (homeGot (listSort (walk! env env.home "" (list) (list))))
         (mode (optionOr (listHead args) ""))
         (emitWant (cond ((not (stringContains? outWant " install-skill")) "none") ((= mode "--check-rules") "ok") ((or (= mode "--render-rules") (= mode "--render-home")) "rendered") (else "none")))
         (results (list
