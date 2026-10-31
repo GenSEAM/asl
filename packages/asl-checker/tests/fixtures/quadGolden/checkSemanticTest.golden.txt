@@ -3,6 +3,7 @@ asl/packages/asl-checker/src/checkCached.asl
 asl/packages/asl-checker/src/constAssert.asl
 asl/packages/asl-checker/src/foreign.asl
 asl/packages/asl-checker/src/hints.asl
+asl/packages/asl-checker/src/lowLevelSigs.asl
 asl/packages/asl-checker/src/numKinds.asl
 asl/packages/asl-checker/src/resolve.asl
 asl/packages/asl-checker/src/tailPos.asl

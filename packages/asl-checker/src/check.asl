@@ -35,7 +35,7 @@ fn typeText t: ty/Type -> String
   (match t ((ty/tyCon name args _ _) (if (listEmpty? args) name (str "(" name " " (stringJoin (map typeText args) " ") ")"))) ((ty/tyVar _ _) "_") ((ty/tyFun _ _) "fn"))
 
 fn expectType st: InferState have: ty/Type want: ty/Type where: String path: String modName: String -> InferState
-  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg) path)))))
+  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg (mixedWidthHint (u/applySubst st1.subst want) (u/applySubst st1.subst have))) path)))))
 
 fn qualifyTypeWithMod t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> ty/Type
   (match t
@@ -565,8 +565,31 @@ fn scriptStepFm fm: FrameMachine restFrames: (List InferFrame) args: (List rd/SE
 fn evalFm fm: FrameMachine e: rd/SExpr st: InferState -> (Pair ty/Type InferState)
   (evalWithEnv fm e fm.env st)
 
+; (:m :ref LL-SIZED-CHECK :do "a U64 literal is its 64-bit pattern: a radix literal up to 0xFFFFFFFFFFFFFFFF is accepted whole (it parses to a negative Int64 bit pattern), a decimal literal must fit Int64 as everywhere else, and a signed negative literal never fits")
+fn u64LitBad? tokStr: String -> Bool
+  (if (stringStartsWith? tokStr "-")
+    true
+    (match (nk/parseIntLitBits tokStr)
+      ((none) true)
+      ((some n) (and (< n 0) (!= (nk/intLitShape tokStr) "radix")))))
+
+; (:m :ref LL-SIZED-CHECK :do "two different sized integral types never convert implicitly: the mismatch names the explicit conversion, (U32 x) for a U32 wanted and an argument of another sized type")
+fn conversionName name: String -> String
+  (cond ((= name "Int64") "I64") ((= name "Int32") "I32") (else name))
+
+fn mixedWidthHint want: ty/Type have: ty/Type -> String
+  (match want
+    ((ty/tyCon wn _ _ _)
+      (match have
+        ((ty/tyCon hn _ _ _)
+          (if (and (!= wn hn) (and (ty/isIntegralType? wn) (ty/isIntegralType? hn)))
+            (str "; no implicit conversion between integer types, write (" (conversionName wn) " x)")
+            ""))
+        (_ "")))
+    (_ ""))
+
 fn checkLiteralRanges intSites: (List (Pair String Int64)) subst: (Map Int64 ty/Type) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (nk/parseIntLit tokStr)) (badLit? (match numOpt ((none) true) ((some n) (or (< n low) (> n high)))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
+  (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic) (let [(tokStr (pairFirst site)) (vid (pairSecond site)) (wty (u/applySubst subst (ty/tyVar vid "int"))) (tname (match wty ((ty/tyCon n _ _ _) n) (_ "Int64")))] (match (ty/intRangeBounds tname) ((none) a) ((some b) (let [(low (pairFirst b)) (high (pairSecond b)) (numOpt (nk/parseIntLit tokStr)) (badLit? (if (= tname "U64") (u64LitBad? tokStr) (match numOpt ((none) true) ((some n) (or (< n low) (> n high))))))] (if badLit? (let [(msg (str "the literal " tokStr " does not fit " tname " (" (stringFromInt64 low) ".." (stringFromInt64 high) ")"))] (cons (ty/Diagnostic :code "literal-range" :message msg :msg msg :line 1 :col 1 :path path) a)) a)))))) acc intSites)
 
 fn mapHasKey? m: (Map String Bool) k: String -> Bool
   (match (mapGet m k) ((some _) true) ((none) false))

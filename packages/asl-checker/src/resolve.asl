@@ -1142,8 +1142,9 @@ fn fnHead? h: String mod: ModuleSummary deps: DepIndex -> Bool
         ((none) false)))
     (mapHas? mod.funs h))
 
+; (:m :ref LL-SIZED-CHECK :do "a head that has a builtin signature is a call, not a record constructor: the sized conversions (U8 x) (I64 x) (F64 x) are PascalCase but build no record")
 fn isCtorHead? h: String -> Bool
-  (if (isPascalName? h) true (if (isQualifiedName? h) (isPascalName? (pairSecond (splitQual h))) false))
+  (if (some? (ty/builtinSig h)) false (if (isPascalName? h) true (if (isQualifiedName? h) (isPascalName? (pairSecond (splitQual h))) false)))
 
 fn findUnqualifiedSchemaInDeps head: String mod: ModuleSummary deps: DepIndex -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
   (fold (fn [(acc (Pair (Option SchemaSummary) (Option ty/Diagnostic))) (mpath String)] -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
