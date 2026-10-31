@@ -1837,6 +1837,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
+                  _ (let [(edits (jr/editReceiptsOf opReceipts))] (if (stringEmpty? edits) true (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :observation \"" (c/escapeAsn edits) "\")\n")))))
                   _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :proseChars " (stringFromInt64 (at/proseChars reply)) ")\n"))
                   _ (if (at/attractorOn? ra.attractor)

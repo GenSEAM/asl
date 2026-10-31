@@ -1,7 +1,7 @@
 (module asl/agentLoop/journal
   :x [Snapshot Written AsnNode Layer
       harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
-      applyResumePatch handBack writtenField handBackFields
+      applyResumePatch handBack writtenField handBackFields editReceiptsOf
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (asl/agentLoop/grounding :a gr)])
 
@@ -943,3 +943,14 @@ fn ! buildSystemPromptDrop repoRoot: String task: String rootDir: String base: S
                                      (listAppend dynRows
                                        (opt (not (stringEmpty? base)) (str "(:base " (quoted (list base)) ")")))))))
                            "\n"))))))))
+
+; (:m :ref PAREN-LEON-JOURNAL :do "the receipts of a turn's edit-family ops (write edit txn flush fix discard delete), whole and one per line, for the journal's (:turn N :observation ...) row: ok, repaired and rejected edits stay measurable per model while read and query bodies stay out of the journal")
+fn editReceiptOps -> (List String)
+  (list "write" "edit" "txn" "flush" "fix" "discard" "delete")
+
+fn editReceipt? line: String -> Bool
+  (and (stringStartsWith? line "(:receipt ")
+       (fold (fn [(a Bool) (op String)] -> Bool (or a (stringContains? line (str " :op \"" op "\" ")))) false (editReceiptOps)))
+
+fn editReceiptsOf receipts: String -> String
+  (stringJoin (filter editReceipt? (stringSplit receipts "\n")) "\n")
