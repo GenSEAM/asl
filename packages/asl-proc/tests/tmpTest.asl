@@ -1,4 +1,4 @@
-(module asl-proc/tmpTest :x [runTests] :i [(asl-proc/process :a proc) (reducer :a red) (sh :a sh) (apm :a apm) (spool :a spool)])
+(module asl-proc/tmpTest :x [runTests] :i [(asl-proc/process :a proc) (apm :a apm) (spool :a spool)])
 
 fn ! testOobStreamDemuxMemoryBound -> Bool
   (let [(spoolPathRes (spool/reserveSpoolPath! "oob-100mb" 0))]
