@@ -224,18 +224,18 @@ fn ! gapSet! path: String -> (Map String Bool)
 
 fn ! testPackageGaps! -> Bool
   (let [(dir (sandboxDir!))
-        (made (processRun (str "mkdir -p '" dir "/asl/packages/fxpkg/src' '" dir "/asl/packages/fxpkg/tests' '" dir "/asl/packages/nodoc/src'")))
+        (made (and (ok? (dirCreate (str dir "/asl/packages/fxpkg/src"))) (and (ok? (dirCreate (str dir "/asl/packages/fxpkg/tests"))) (ok? (dirCreate (str dir "/asl/packages/nodoc/src"))))))
         (doc (ok? (fileWrite (str dir "/asl/packages/fxpkg/doc.asn") "(:doc :symbol \"asl/packages/fxpkg/src/thing.asl#kept\" :text \"documented\")\n")))
         (src (ok? (fileWrite (str dir "/asl/packages/fxpkg/src/thing.asl") "(module fxpkg/thing\n  :x [kept fresh]\n  :i [])\n\nfn kept -> Int64\n  1\n\nfn fresh -> Int64\n  2\n")))
         (tst (ok? (fileWrite (str dir "/asl/packages/fxpkg/tests/thingTest.asl") "(module fxpkg/tests/thingTest\n  :x [runTests]\n  :i [])\n\nfn runTests -> Bool\n  true\n")))
         (bare (ok? (fileWrite (str dir "/asl/packages/nodoc/src/x.asl") "(module nodoc/x\n  :x [y]\n  :i [])\n\nfn y -> Int64\n  1\n")))
         (gaps (resultOr (dl/packageGaps! dir "fxpkg") (list "!scan")))
         (pkgs (dl/docPackages! dir))
-        (gone (processRun (str "rm -rf '" dir "'")))]
-    (do (assert (and (= made.exitCode 0) (and doc (and src (and tst bare)))) "package fixture written")
+        (gone (ok? (pathRemove dir)))]
+    (do (assert (and made (and doc (and src (and tst bare)))) "package fixture written")
         (assert (= gaps (list "asl/packages/fxpkg/src/thing.asl#fresh" "asl/packages/fxpkg/tests/thingTest.asl#runTests")) (str "a package export without a row in its doc.asn is a gap, src and tests alike: " (stringJoin gaps " ")))
         (assert (= pkgs (list "fxpkg")) (str "only packages with a doc.asn are scanned: " (stringJoin pkgs " ")))
-        (assert (= gone.exitCode 0) "package fixture removed")
+        (assert gone "package fixture removed")
         true))
 
 ; (:m :ref DOCLEDGER-SCOPE-GAP :do "every export under a package with a doc.asn has a row there, except the gaps listed in docPackageBaseline.asn on its date; covered baseline rows are printed as stale so the list can shrink")

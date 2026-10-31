@@ -24,9 +24,10 @@ fn ! cliRoot -> String
   (stringTrim (processRun "pwd").stdout)
 
 fn ! cliInvoke command: String -> ProcessOutput
-  (let [(home (stringTrim (processRun "mktemp -d /tmp/asl-gateway-home.XXXXXX").stdout))
+  (let [(home (str "/tmp/asl-gateway-home." (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (made (dirCreate home))
         (out (processRun (str "HOME=" home " " (stringJoin (fr/cacheEnv!) " ") " " command)))]
-    (do (processRun (str "rm -rf " home)) out))
+    (do (pathRemove home) out))
 
 ; (:m :ref TEST-FIXED-PORTS :do "an offline-status port is bound with port 0, read back and closed, so no fixed port can be held by another process")
 fn ! gatewayTestFreePort -> Int64

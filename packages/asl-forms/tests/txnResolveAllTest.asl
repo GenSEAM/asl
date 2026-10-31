@@ -1,13 +1,14 @@
-(module asl-forms/tests/txnResolveAllTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/gate :a g) (asl-forms/tests/formsDriver :a fd)])
+(module asl-forms/tests/txnResolveAllTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/tests/formsDriver :a fd) (asl-tools/fleet/run :a fr)])
 
 fn scratchDir! tag: String -> String
   (str (optionOr (envGet "TMPDIR") "/tmp/") tag "_" (stringFromInt64 (mod (nowNs) 1000000000)))
 
-fn txnRun! root: String payload: String -> g/RunOut
+; (:m :ref NOSELFHOST-RED-20261031 :do "the forms host runs through fleet/run with a 60 s timeout and a descendant limit, so a hung or forking child is killed with its tree")
+fn txnRun! root: String payload: String -> fr/Done
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
         (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs"))))]
-    (g/runArgv! (list host "--root" root payload) (some repo) (some env) 60000 0))
+    (fr/runOneLimited (fr/job (list host "--root" root payload) repo env) (fr/limits 60 16)))
 
 fn libText -> String
   "(module tmp/lib :x [one])\\nfn one -> Int64\\n  1\\n"

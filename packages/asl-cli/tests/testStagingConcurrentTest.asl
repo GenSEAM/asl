@@ -26,7 +26,7 @@ fn moduleA body: String -> String
 fn ! aslTest! testPath: String -> fr/Job
   (fr/job (list (str (repoRoot!) "/bin/asl") "test" testPath) (repoRoot!) (fr/childEnv (list)))
 
-fn ! runOne! testPath: String -> fr/Done
+fn ! runStaged! testPath: String -> fr/Done
   (fr/runOneLimited (aslTest! testPath) (fr/limits 900 64))
 
 fn ! pin! path: String link: String -> Bool
@@ -53,15 +53,15 @@ fn ! testStagingAcrossRuns! -> Bool
         (gitInit (fr/runOneLimited (fr/job (list "git" "init" "-q") root (fr/childEnv (list))) (fr/limits 60 8)))
         (stage (str (repoRoot!) "/.asl/cache/nativeTest/outsidePkg/" (bytesSha256 (stringToBytes (resultOr (realPath root) root)))))
         (testPath (str root "/theTest.asl"))
-        (run1 (runOne! testPath))
+        (run1 (runStaged! testPath))
         (probes (and (pin! (str stage "/data/rows.bin") (str stage "/.probeData")) (pin! (str stage "/a.asl") (str stage "/.probeA"))))
         (data1 (inode! (str stage "/.probeData")))
         (a1 (inode! (str stage "/.probeA")))
-        (run2 (runOne! testPath))
+        (run2 (runStaged! testPath))
         (data2 (inode! (str stage "/data/rows.bin")))
         (a2 (inode! (str stage "/a.asl")))
         (wA3 (fileWrite (str root "/a.asl") (moduleA "(+ 3 4)")))
-        (run3 (runOne! testPath))
+        (run3 (runStaged! testPath))
         (a3 (inode! (str stage "/a.asl")))
         (a3text (resultOr (fileReadString (str stage "/a.asl")) ""))
         (both (fr/runPoolLimited (list (aslTest! testPath) (aslTest! testPath)) 2 (fr/limits 900 64)))

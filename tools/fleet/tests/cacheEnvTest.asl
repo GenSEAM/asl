@@ -3,7 +3,7 @@
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref CACHE-HOME-LEAK :do "bin/asl run tools/remote/vps.asl (no verb, no network) is warmed with this HOME, then run twice, each time with a new empty HOME and only PATH plus fr/cacheEnv!: the second run answers in under 10 s and neither fresh HOME gets a check cache, so every HOME-keyed cache came from the rows; the temp homes are removed")
-fn ! spawn! home: String -> fr/Done
+fn ! runFresh! home: String -> fr/Done
   (fr/runOneLimited (fr/job (list "./bin/asl" "run" "tools/remote/vps.asl") (resultOr (realPath ".") ".")
                             (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" home)) (fr/cacheEnv!)))
                     (fr/limits 900 200))
@@ -20,10 +20,10 @@ fn ! runTests -> Bool
   (let [(rows (fr/cacheEnv!))
         (warm (fr/runOneLimited (fr/job (list "./bin/asl" "run" "tools/remote/vps.asl") (resultOr (realPath ".") ".") (fr/childEnv (list))) (fr/limits 1800 400)))
         (h1 (freshHome! "a"))
-        (one (spawn! h1))
+        (one (runFresh! h1))
         (h2 (freshHome! "b"))
         (t0 (monotonicNs))
-        (two (spawn! h2))
+        (two (runFresh! h2))
         (ms (/ (- (monotonicNs) t0) 1000000))
         (leaked (or (fileExists? (str h1 "/.asl/cache/check")) (fileExists? (str h2 "/.asl/cache/check"))))
         (removed (= (fr/runShell! (str "rm -rf \"" h1 "\" \"" h2 "\"") "." (fr/childEnv (list)) (fr/limits 60 4)).exit 0))]
