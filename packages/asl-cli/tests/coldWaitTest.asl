@@ -104,6 +104,8 @@ fn ! runTests -> Bool
       (assert (testReusedPid) "a reused holder pid with another start time is taken over")
       (assert (testKilledHolder) "a SIGKILLed real holder's lock is taken over")
       (assert (testHolderStopsItself) "a holder with no progress stops itself and releases the lock")
+      (assert (testClosedOutputHolder) "a holder with closed stdout and stderr keeps the lock")
+      (assert (testClosedOutputStops) "a holder with closed output and no progress is still stopped")
       true)
 
 fn ! testBusyHolder -> Bool
@@ -158,6 +160,37 @@ fn ! testKilledHolder -> Bool
               (assert (stringContains? r.stdout "(:coldLock :got") (str "a waiter takes the lock of a SIGKILLed holder over: " r.exitCode " " r.stderr))
               (assert (ok? gone) "the fixture dir is removed")
               true)))))
+
+; (:m :do "a caller that runs build.sh with stdout and stderr closed (asl ... >&- 2>&-, or a reader that went away) must not lose the cold lock: the holder's status echo fails (EBADF) and is non-fatal, so it still records four lines and holds")
+fn ! testClosedOutputHolder -> Bool
+  (let [(cache (fresh! "closed"))]
+    (match (fr/spawnSep (list "/bin/sh" "-c" "exec /bin/sh \"$0\" --cold-hold \"$1\" 60 >&- 2>&-" (buildSh!) cache) "." (fr/childEnv (list)))
+      ((err d) (do (assert false (str "holder spawn failed: " d.stderr)) false))
+      ((ok h)
+        (let [(_ (fdClose h.outFd))
+              (_ (fdClose h.errFd))
+              (lines (holderLines! cache (monotonicNs)))
+              (_ (sleepMs 1500))
+              (held (fileExists? (str cache "/build.lockd")))
+              (named (optionOr (listHead (stringLines (resultOr (fileReadString (str cache "/build.lockd/holder")) ""))) ""))
+              (_ (stopHolder! h.pid))
+              (gone (removeAll! cache))]
+          (do (assert (= lines 4) (str "a holder with stdout and stderr closed still records four lines: " lines))
+              (assert held "and still holds the lock after its status echo failed")
+              (assert (= named (str h.pid)) (str "and the lock names it: " named " " h.pid))
+              (assert (ok? gone) "the fixture dir is removed")
+              true)))))
+
+; (:m :do "the watcher's status echo is non-fatal too: with stdout and stderr closed a holder with no progress is still stopped (exit 75) and its lock released")
+fn ! testClosedOutputStops -> Bool
+  (let [(cache (fresh! "closedSelf"))
+        (r (fr/runGuarded (list "/bin/sh" "-c" "exec /bin/sh \"$0\" --cold-hold \"$1\" 2 >&- 2>&-" (buildSh!) cache) "." (fr/childEnv (list)) (fr/limits 60 16)))
+        (released (not (fileExists? (str cache "/build.lockd"))))
+        (gone (removeAll! cache))]
+    (do (assert (= r.exitCode 75) (str "a holder with closed output and no progress is still stopped with exit 75: " r.exitCode))
+        (assert released "and releases the lock")
+        (assert (ok? gone) "the fixture dir is removed")
+        true))
 
 fn ! testHolderStopsItself -> Bool
   (let [(cache (fresh! "self"))

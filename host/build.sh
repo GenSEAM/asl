@@ -54,7 +54,7 @@ cold_lock() {
     fi
     if [ $(( $(date +%s) - seen )) -ge "$win" ]; then
       if [ -z "$pid" ]; then rm -rf "$L"; continue; fi
-      rm -f "$mark"; echo "build.sh: the cold-start build lock holder $pid made no progress for ${win}s; giving up" >&2; return 1
+      rm -f "$mark"; echo "build.sh: the cold-start build lock holder $pid made no progress for ${win}s; giving up" >&2 || true; return 1
     fi
     sleep 1
   done
@@ -79,7 +79,7 @@ cold_watch() {
     if { [ -n "$cpu0" ] && [ "$cpu" -gt "$cpu0" ]; } || cold_files "$h" "$4" "$2" "$mark" "$$"; then seen=$(date +%s); : > "$mark" 2>/dev/null || true; fi
     cpu0=$cpu
     if [ $(( $(date +%s) - seen )) -ge "$3" ]; then
-      echo "build.sh: the cold-start build $h made no progress for ${3}s; stopping it" >&2
+      echo "build.sh: the cold-start build $h made no progress for ${3}s; stopping it" >&2 || true
       kids=$(cold_descendants "$h" "$$")
       kill -TERM "$h" 2>/dev/null || true
       for d in $kids; do kill -TERM "$d" 2>/dev/null || true; done
@@ -90,13 +90,13 @@ cold_watch() {
   rm -f "$mark" 2>/dev/null || true
 }
 case "${1:-}" in
-  --cold-watch) cold_watch "$2" "$3" "$4" "$5"; exit 0 ;;
+  --cold-watch) trap "" PIPE; cold_watch "$2" "$3" "$4" "$5"; exit 0 ;;
   --cold|--cold-probe|--cold-hold)
     w=${3:-$(cold_window)}; case "$w" in ''|*[!0-9]*) w=1800 ;; esac
     cold_lock "${2:?build.sh $1 needs the cache dir}" "$w" || exit 1
     case "$1" in
-      --cold-probe) echo "(:coldLock :got $$)"; exit 0 ;;
-      --cold-hold) echo "(:coldLock :holding $$)"; sleep 600 & wait $! || true; exit 0 ;;
+      --cold-probe) trap "" PIPE; echo "(:coldLock :got $$)" || true; exit 0 ;;
+      --cold-hold) trap "" PIPE; echo "(:coldLock :holding $$)" || true; sleep 600 & wait $! || true; exit 0 ;;
     esac
     shift; shift; [ $# -gt 0 ] && shift ;;
 esac
