@@ -1,6 +1,6 @@
 (module asl-forms/tests/parenBenchTest
   :x [runTests]
-  :i [(asl-forms/bench/parenMutants :a pm) (asl-forms/bench/parenBench :a pb) (asl-forms/indent :a ind)])
+  :i [(asl-forms/bench/parenMutants :a pm) (asl-forms/bench/parenBench :a pb)])
 
 ; (:m :ref PAREN-BENCH :do "gates the paren bench: segmenting, trail sites, the three mutation kinds and their closer arithmetic, determinism of a seed, the restored/balancedOther/unbalanced classification against asl-forms/indent, and a bounded run over three real source files; the 20000-mutant tracked-tree figure lives in bench/results.lock.asn")
 fn fixture -> String
