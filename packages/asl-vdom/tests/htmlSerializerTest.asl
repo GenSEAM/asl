@@ -1,4 +1,4 @@
-(module aslVdom/tests/htmlSerializerTest :x [runTests] :i [(aslVdom/vdom :a v) (aslVdom/html :a h)])
+(module aslVdom/tests/htmlSerializerTest :x [runTests] :i [(aslVdom/html :a h)])
 
 fn testBasicTextNode -> Bool
   (let [(node (h/t "Hello & <World>")) (serialized (h/vnodeToHtml node))] (assert (= serialized "Hello &amp; &lt;World&gt;") "Text node should escape special chars") true)

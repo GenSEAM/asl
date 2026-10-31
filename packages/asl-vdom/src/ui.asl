@@ -1,4 +1,4 @@
-(module aslVdom/ui :x [ButtonProps CardProps ListProps ModalProps uiButton uiCard uiList uiModal isValidButtonVariant? isValidButtonSize? isValidButtonProps? isAccessibleModal? isValidListProps? buttonBgToken buttonColorToken buttonPaddingToken buttonRadiusToken listSpacingToken] :i [(aslVdom/vdom :a v) (aslVdom/theme :a t)])
+(module aslVdom/ui :x [ButtonProps CardProps ListProps ModalProps uiButton uiCard uiList uiModal isValidButtonVariant? isValidButtonSize? isValidButtonProps? isAccessibleModal? isValidListProps? buttonBgToken buttonColorToken buttonPaddingToken buttonRadiusToken listSpacingToken] :i [(aslVdom/vdom :a v)])
 
 (schema ButtonProps (:f label String) (:f variant String) (:f size String) (:f action String) (:f disabled Bool))
 
