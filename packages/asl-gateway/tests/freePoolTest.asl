@@ -80,6 +80,10 @@ fn cfgWith provExtra: String m1Extra: String -> String
 fn bodyWith extra: String -> String
   (str "{\"model\":\"default\"," extra "\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")
 
+; (:m :ref IFM-4XX-20261031 :do "a multi-turn history: one assistant turn without a thinking field, one with reasoning")
+fn multiTurnBody -> String
+  "{\"model\":\"default\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"},{\"role\":\"assistant\",\"content\":\"b\"},{\"role\":\"assistant\",\"content\":\"c\",\"reasoning\":\"r\"},{\"role\":\"user\",\"content\":\"d\"}]}"
+
 fn ! runTests -> Bool
   (let [(throttled (run! (twoModels) (chatBody) false (list)))
         (daily (run! (twoModels) (chatBody) true (list (ch/httpError 429 "Too Many Requests" (list) (groqDaily)) (ok200))))
@@ -91,6 +95,8 @@ fn ! runTests -> Bool
         (dropped (run! (cfgWith " :dropEmptyTools true" "") (bodyWith "\"tools\":[],") true (list)))
         (keptEmpty (run! (cfgWith "" "") (bodyWith "\"tools\":[],") true (list)))
         (droppedFull (run! (cfgWith " :dropEmptyTools true" "") (bodyWith "\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\"}}],") true (list)))
+        (filled (run! (cfgWith " :assistantReasoning true" "") (multiTurnBody) true (list)))
+        (unfilled (run! (cfgWith "" "") (multiTurnBody) true (list)))
         (budget (run! (cfgWith "" " :contextBudget 10") (longBody) true (list)))
         (budgetFits (run! (cfgWith "" " :contextBudget 100000") (longBody) true (list)))
         (emptySys (run! (twoModels) (sysBody "") true (list)))
@@ -132,6 +138,9 @@ fn ! runTests -> Bool
       (assert (not (stringContains? dropped.labels "\"tools\"")) (str "dropEmptyTools removes tools:[] from the body: " dropped.labels))
       (assert (stringContains? keptEmpty.labels "\"tools\"") (str "without the option tools:[] is sent as before: " keptEmpty.labels))
       (assert (stringContains? droppedFull.labels "\"tools\"") (str "dropEmptyTools leaves a non-empty tools array alone: " droppedFull.labels))
+      (assert (= (listLength (stringSplit filled.labels "reasoning_content")) 2) (str "assistantReasoning adds reasoning_content to the one assistant turn without a thinking field: " filled.labels))
+      (assert (stringContains? filled.labels "\"reasoning\"") (str "an assistant turn that has reasoning keeps it: " filled.labels))
+      (assert (not (stringContains? unfilled.labels "reasoning_content")) (str "without the flag no thinking field is added: " unfilled.labels))
       (assert (and (not (stringContains? budget.labels "http:n1")) (stringContains? budget.labels "http:n2") (= budget.status 200)) (str "a member whose contextBudget the prompt exceeds is skipped for the next: " budget.labels))
       (assert (stringContains? budgetFits.labels "http:n1") (str "a prompt inside the budget is sent to that member: " budgetFits.labels))
       (assert (and (stringContains? emptySys.labels "http:n1") (not (stringContains? emptySys.labels "\"system\"")) (stringContains? emptySys.labels "\"user\"")) (str "an empty system message is dropped before sending and the user message stays: " emptySys.labels))

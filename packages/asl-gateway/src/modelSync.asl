@@ -289,7 +289,7 @@ fn ! liveProbes! pv: c/GatewayProvider key: String env: (List String) names: (Li
 
 fn syncProviders table: c/GatewayTable only: String -> (List c/GatewayProvider)
   (filter (fn [(pv c/GatewayProvider)] -> Bool (and (= pv.kind "openai") (or (stringEmpty? only) (= only pv.id))))
-          (map (fn [(k String)] -> c/GatewayProvider (optionOr (mapGet table.providers k) (c/GatewayProvider :rpmShared false :dropEmptyTools false :id k :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+          (map (fn [(k String)] -> c/GatewayProvider (optionOr (mapGet table.providers k) (c/GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id k :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                (listSortBy (fn [(k String)] -> String k) (mapKeys table.providers))))
 
 fn ! writeOut! path: String text: String -> Bool

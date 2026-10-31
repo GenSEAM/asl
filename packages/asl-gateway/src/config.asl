@@ -219,8 +219,10 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f rpm Float64)
   ; (:m :ref GW-PROVIDER-BUCKET :do "provider :rpmShared true makes :rpm the provider's own budget: every model of the provider draws from one rate bucket keyed on the provider, whatever rpm a model names")
   (:f rpmShared Bool)
-  ; (:m :ref GW-IFM-EMPTY-TOOLS :do "provider :dropEmptyTools true removes an empty tools array from the body sent to the provider, which some free upstreams reject")
+  ; (:m :ref GW-IFM-EMPTY-TOOLS :do "provider :dropEmptyTools true :assistantReasoning false removes an empty tools array from the body sent to the provider, which some free upstreams reject")
   (:f dropEmptyTools Bool)
+  ; (:m :ref IFM-4XX-20261031 :do "provider :assistantReasoning true adds reasoning_content \"\" to assistant messages that carry no thinking field, which ifm requires in multi-turn history")
+  (:f assistantReasoning Bool)
   (:f pool (Option GatewayPool))
   (:f retry (Option RetryPolicy)))
 
@@ -256,6 +258,8 @@ fn noRetryPolicy -> RetryPolicy
   (:f rpm (Option Float64))
   (:f rpmKey String)
   (:f dropEmptyTools Bool)
+  ; (:m :ref IFM-4XX-20261031 :do "provider :assistantReasoning true adds reasoning_content \"\" to assistant messages that carry no thinking field, which ifm requires in multi-turn history")
+  (:f assistantReasoning Bool)
   (:f pool (Option GatewayPool))
   (:f retry (Option RetryPolicy)))
 
@@ -1158,13 +1162,13 @@ fn defaultProviders! -> (Map String GatewayProvider)
                                    ((none) (none))
                                    ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
                                  300.0))
-        (p1 (GatewayProvider :rpmShared false :dropEmptyTools false :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p2 (GatewayProvider :rpmShared false :dropEmptyTools false :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p3 (GatewayProvider :rpmShared false :dropEmptyTools false :id "claude" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p4 (GatewayProvider :rpmShared false :dropEmptyTools false :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p5 (GatewayProvider :rpmShared false :dropEmptyTools false :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p6 (GatewayProvider :rpmShared false :dropEmptyTools false :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
-        (p7 (GatewayProvider :rpmShared false :dropEmptyTools false :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
+        (p1 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p2 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p3 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "claude" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p4 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p5 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p6 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 45.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
+        (p7 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec ollamaTimeout :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))]
     (mapFromPairs (list (pair "agy" p1) (pair "codex" p2) (pair "claude" p3) (pair "gemini" p4) (pair "groq" p5) (pair "openrouter" p6) (pair "ollama" p7))))
 
 fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map String rd/SExpr)) accErrs: (List String) -> (Pair (List (Map String rd/SExpr)) (List String))
@@ -1279,7 +1283,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
         ((err e) (pair provs (listAppendOne curErrs e)))
         ((ok pid)
           (let [(withKeyErr (if (mapHas? p "key") (listAppendOne curErrs (str "provider " pid ": keys are named by :keyEnv, never stored in the file")) curErrs))
-                (existing (optionOr (mapGet provs pid) (GatewayProvider :rpmShared false :dropEmptyTools false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+                (existing (optionOr (mapGet provs pid) (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                 (kind (match (mapGet p "kind")
                         ((some kExpr) (scalarToString (asn_scalar kExpr)))
                         ((none) existing.kind)))
@@ -1339,7 +1343,14 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                              ((scalarBool b) (pair b (pairSecond rsRes)))
                              (_ (pair existing.dropEmptyTools (listAppendOne (pairSecond rsRes) (str "provider " pid ": :dropEmptyTools must be true or false"))))))))
                 (dropEmptyTools (pairFirst dtRes))
-                (withPckErr (pairSecond dtRes))
+                (arRes (match (mapGet p "assistantReasoning")
+                         ((none) (pair existing.assistantReasoning (pairSecond dtRes)))
+                         ((some arExpr)
+                           (match (asn_scalar arExpr)
+                             ((scalarBool b) (pair b (pairSecond dtRes)))
+                             (_ (pair existing.assistantReasoning (listAppendOne (pairSecond dtRes) (str "provider " pid ": :assistantReasoning must be true or false"))))))))
+                (assistantReasoning (pairFirst arRes))
+                (withPckErr (pairSecond arRes))
                 (sessionHeaderRes (match (mapGet p "sessionHeader")
                                     ((none) (pair existing.sessionHeader withPckErr))
                                     ((some shExpr)
@@ -1401,7 +1412,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (finalErrs (if (and (= kind "gateway") (stringEmpty? secret))
                              (listAppendOne baseErrs (str "provider " pid ": a gateway provider needs :secret naming its bearer token in the secrets file"))
                              baseErrs))
-                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
+                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :assistantReasoning assistantReasoning :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -1838,7 +1849,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                     allErrs1))
         (keyFilesList (gatewayKeyFilesFromProps g))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
-                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :rpmShared false :dropEmptyTools false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
+                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id pid :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))]
                             (if (and (not (stringEmpty? pv.keyEnv)) (and (stringEmpty? pv.secret) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models))))
                               (match (resolveProviderKey! keyFilesList pv.keyEnv)
                                 ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set" (keyFilesSuffix keyFilesList))))
@@ -2012,7 +2023,7 @@ fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                              :firstByteSec 0.0
                              :rpm (none)
                              :rpmKey ""
-                             :dropEmptyTools false
+                             :dropEmptyTools false :assistantReasoning false
                              :pool none
                              :retry (none)))
             (let [(key (optionOr (resolveProviderKey! table.keyFiles pv.keyEnv) ""))
@@ -2043,7 +2054,7 @@ fn gateway_v2_entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                                :firstByteSec fbSec
                                :rpm rpmVal
                                :rpmKey (if (and pv.rpmShared (> pv.rpm 0.0)) (str "provider:" pv.id) "")
-                               :dropEmptyTools pv.dropEmptyTools
+                               :dropEmptyTools pv.dropEmptyTools :assistantReasoning pv.assistantReasoning
                                :pool pv.pool
                                :retry retryVal))))))))
 
