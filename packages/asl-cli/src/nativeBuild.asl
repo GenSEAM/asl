@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main storeCapFor! claimWaitFor! lockGraceFor! claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r)])
+  :x [Build toolchainRootPaths variantKey! main storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
   (:f root String)
@@ -128,11 +128,62 @@ fn ! partsWith ll: String n: Int64 limit: Int64 -> (Result (List String) String)
       ((err e) (err (str "cannot split " ll ": " e)))
       ((ok parts) (writeParts! ll (enumerate parts))))))
 
+; (:m :ref WT-SHARED-CLI-BUILD :do "every clang a native build spawns (a part, a whole-module link) and its asl1 emit hold a token of the node build pool, a jobserver root of its own so tokens an asl test ancestor holds are not inherited: on node2 per-worktree builds ran min(cores,8) -O2 parts of ~1.3 GB each plus a ~1.6 GB emit with no bound, and memory became the writer limit (slots fell to 4 with 123 queued, 2026-10-30). The pool is the :native :buildPool row, ~/.asl/run/jobserver/build when absent; its size is the :native :buildTokens row, 1 to 64, 2 when absent or out of range, kept in the pool's config.asn")
+fn defaultBuildTokens -> Int64
+  2
+
+fn buildTokensValue word: String -> (Option Int64)
+  (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
+    ((some n) (if (and (>= n 1) (<= n 64)) (some n) (none)))
+    ((none) (none)))
+
+fn ! buildPoolFor! dir: String -> String
+  (let [(pool (match (configured! dir ":buildPool")
+                ((some word) (let [(p (stringTrim (stringReplace word "\"" "")))] (if (stringEmpty? p) (str (js/rootDir "") "/build") p)))
+                ((none) (str (js/rootDir "") "/build"))))
+        (tokens (match (configured! dir ":buildTokens")
+                  ((some word) (optionOr (buildTokensValue word) (defaultBuildTokens)))
+                  ((none) (defaultBuildTokens))))
+        (cfg (str pool "/config.asn"))
+        (want (str "(:jobserver :tokens " (stringFromInt64 tokens) ")\n"))
+        (_ (dirCreate (parentDir pool)))
+        (_ (dirCreate pool))
+        (_ (if (= (resultOr (fileReadString cfg) "") want) (ok ()) (fileWrite cfg want)))]
+    pool)
+
+; (:m :ref WT-SHARED-CLI-BUILD :do "the first token is waited for until the build deadline, after which the build runs holding nothing and says so on stderr; more, up to want, are taken only while free (a one-millisecond ticket that expires and is removed), so two builds never deadlock holding one token each; a pool the jobserver cannot use (unwritable, ps failed, a token held by an ancestor) runs with want slots and holds nothing")
+fn ! takeSlots! dir: String want: Int64 waitMs: Int64 -> (Pair Int64 (List Int64))
+  (let [(g (js/acquire dir "writer" (str "build" (procSelf)) (max 1 waitMs)))]
+    (cond
+      ((= g.state "ready") (let [(held (moreSlots! dir want g.idxs))] (pair (listLength held) held)))
+      ((= g.state "expired") (let [(_ (say! (str "(:buildPool :note waitExpired :pool \"" dir "\" :waitMs " (stringFromInt64 waitMs) " :proceeding true)")))] (pair want (list))))
+      (else (pair want (list)))))
+
+fn ! moreSlots! dir: String want: Int64 held: (List Int64) -> (List Int64)
+  (if (>= (listLength held) want) held
+    (let [(g (tryToken! dir (monotonicNs)))]
+      (if (listEmpty? g) held (moreSlots! dir want (listAppend held g)))))
+
+fn ! tryToken! dir: String startNs: Int64 -> (List Int64)
+  (let [(g (js/want dir "writer" (str "more" (procSelf)) 1))]
+    (cond
+      ((= g.state "ready") g.idxs)
+      ((= g.state "wait") (if (> (- (monotonicNs) startNs) 50000000) (list) (do (sleepMs 2) (tryToken! dir startNs))))
+      (else (list))))
+
+fn ! withSlots! b: Build want: Int64 body: (fn [Int64] -> T) -> T
+  (let [(dir (buildPoolFor! b.root))
+        (slots (takeSlots! dir want (/ (- b.deadlineNs (monotonicNs)) 1000000)))
+        (r (body (pairFirst slots)))
+        (_ (js/releaseIdxs dir (pairSecond slots)))]
+    r)
+
+
 ; (:m :ref BUILDPAR :do "one parts link for every clang shell-out that takes a whole module: split the .ll into up to n parts (irSplit keeps alwaysinline and small internal bodies available in every part), compile them through the bounded job pool and link the objects; one part, or a split that fails, links the whole .ll in one clang call. Returns the part count and, for a whole link, why")
 fn ! compileWith! b: Build clang: String flags: (List String) ll: String paths: (List String) n: Int64 -> (Result (List String) String)
   (let [(jobs (map (fn [(p String)] -> run/Job (run/job (listAppend (cons clang flags) (list "-Wno-override-module" "-x" "ir" p "-c" "-o" (str p ".o"))) b.root (run/childEnv (list))))
                    paths))
-        (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (run/runPoolLimited jobs n (run/limits (remainingS b) b.maxDesc))))
+        (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (withSlots! b n (fn [(slots Int64)] -> (List run/Done) (run/runPoolLimited jobs slots (run/limits (remainingS b) b.maxDesc))))))
         (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))]
     (cond
       ((!= (listLength done) (listLength paths)) (err (str "clang -c of the parts of " ll " did not run: " (if (ownerAlive? b) "deadline" "owner-gone"))))
@@ -154,7 +205,7 @@ fn inlineFor flags: (List String) -> Int64
 
 fn ! linkParts! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
   (let [(whole (fn [(why String)] -> (Result (Pair Int64 String) String)
-                 (match (linkObjs! b clang flags (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (sys/baseName ll) out)
+                 (match (withSlots! b 1 (fn [(slots Int64)] -> (Result String String) (linkObjs! b clang flags (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (sys/baseName ll) out)))
                    ((err e) (err e))
                    ((ok _) (ok (pair 1 why))))))]
     (if (<= n 1) (whole "")
@@ -532,7 +583,7 @@ fn ! install! b: Build name: String tag: String entry: String key: String dir: S
 fn ! compile! b: Build name: String compiler: String tag: String entry: String dir: String deps: (List String) key: String -> (Result String String)
   (let [(ll (str b.tmp "/" name ".ll"))
         (start (monotonicNs))
-        (built (child! b (list compiler "build" entry "-o" ll "--rc" "notrace")))
+        (built (withSlots! b 1 (fn [(slots Int64)] -> run/Done (child! b (list compiler "build" entry "-o" ll "--rc" "notrace")))))
         (_ (say! (str "asl: native build: build " entry " " (stringFromInt64 (/ (- (monotonicNs) start) 1000000)) " ms")))
         (failed (fn [(why String)] -> (Result String String)
                   (do (if (transientFailure? why) (ok ()) (fileWrite (str dir ".failed") (str why "\n"))) (err why))))]

@@ -15,6 +15,8 @@
 (:cfgKey :grp native :name storeMinAge :kind age :default "60m" :status live :ref BIN-NO-PERSIST-20261026 :doc "a store entry used within this age is never swept, digits in minutes or with an m or h suffix")
 (:cfgKey :grp native :name claimWaitS :kind int :lo 1 :hi 86400 :default "900" :status live :ref NT-CLAIM-WAIT-CFG :doc "seconds a nativeTest process waits for another process compiling the same module or prelude key before it compiles unclaimed")
 (:cfgKey :grp native :name lockGraceS :kind int :lo 1 :hi 3600 :default "10" :status live :ref NT-CLAIM-WAIT-CFG :doc "seconds a nativeTest lock file with no pid in it must have been idle before it is broken as dead")
+(:cfgKey :grp native :name buildPool :kind path :default "~/.asl/run/jobserver/build" :status live :ref WT-SHARED-CLI-BUILD :doc "jobserver root of the node build pool every native build clang and asl1 emit takes a token of")
+(:cfgKey :grp native :name buildTokens :kind int :lo 1 :hi 64 :default "2" :status live :ref WT-SHARED-CLI-BUILD :doc "tokens of the node build pool: how many native build clang or asl1 emit children run at once node-wide")
 (:cfgKey :grp native :name sweep :kind bool :default "true" :status live :ref BIN-NO-PERSIST-20261026 :doc "false turns the sweep of the native CLI store off")
 (:cfgKey :grp nativeCli :name buildWaitS :kind int :lo 1 :hi 604800 :default "3600" :status live :ref NATIVE-STALE-CONVERGE :doc "seconds bin/asl waits for a rebuild of a stale native CLI; ASL_NATIVE_BUILD_WAIT overrides it")
 (:cfgKey :grp nativeCli :name relayPin :kind bool :default "false" :status planned :ref RELAY-CLIENT-PINNED :doc "true keeps the last good native CLI answering the relay client while a toolchain root edit rebuilds")
