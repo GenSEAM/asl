@@ -18,7 +18,8 @@
 
 (schema Limits
   (:f timeoutMs Int64)
-  (:f maxDesc Int64))
+  (:f maxDesc Int64)
+  (:f owner Int64 :default 0))
 
 (schema Proc
   (:f pid Int64)
@@ -276,13 +277,15 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
 
+; (:m :ref BUILD-DETACHED-ESCAPE :do "a run whose Limits names an owner pid ends, tree and all, at the first check after that owner is gone: a killed bin/asl left its cold aslNativeBuild orphaned under init spawning -O2 clang parts of ~1.2 GB each (node2, 2026-10-31)")
 fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: Running -> Running
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
         (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
         (groups (pairSecond tree))
         (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
-        (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
+        (ownerGone (and checked (and (> lim.owner 1) (not (resultOr (procAlive? lim.owner) false)))))
+        (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (ownerGone "owner-gone") (else "")))]
     (if (stringEmpty? verdict)
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
                :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)

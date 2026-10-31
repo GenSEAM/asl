@@ -251,7 +251,8 @@ native_cli() {
     printf '%s\n' "$rel"
   done > "$stamp/deps" || { echo "build.sh: no native CLI: the source stamp was not copied" >&2; return 1; }
   printf '%s\n' "$clang_version" > "$stamp/clang-version" && cp "$OUT/aslNativeBuild" "$stamp/bin" && chmod +x "$stamp/bin" || { echo "build.sh: no native CLI: the stamp binary was not copied" >&2; return 1; }
-  "$OUT/aslNativeBuild" "$root" --if-cold >&2 || { echo "build.sh: the native CLI build failed" >&2; return 1; }
+  # (:m :why "BUILD-DETACHED-ESCAPE: the caller (bin/asl) is the build owner, so a killed caller ends the build and its clang parts instead of leaving them under init")
+  "$OUT/aslNativeBuild" "$root" --if-cold --lock-owner "$PPID" >&2 || { echo "build.sh: the native CLI build failed" >&2; return 1; }
 }
 # (:m :why "HOSTBUILD-EXIT-MASK: every failed step makes the script exit 1 and names the step last on stderr; native_cli runs in an || list, where set -e does not apply, so each of its steps checks its own status and returns 1")
 CLI_OK=1

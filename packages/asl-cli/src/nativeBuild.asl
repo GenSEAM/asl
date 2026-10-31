@@ -55,10 +55,14 @@ fn ! ownerAlive? b: Build -> Bool
   (if (stringEmpty? b.owner) true
     (and (> (optionOr (stringToInt64 b.owner) 0) 1) (nc/alive? (optionOr (stringToInt64 b.owner) 0))))
 
+; (:m :ref BUILD-DETACHED-ESCAPE :do "every child of a build carries the build owner pid in its limits, so the pool kills a running clang or asl1 emit as soon as the owner is gone instead of only refusing the next one")
+fn ! ownedLimits b: Build -> run/Limits
+  (run/Limits :timeoutMs (* (remainingS b) 1000) :maxDesc b.maxDesc :owner (optionOr (stringToInt64 b.owner) 0))
+
 fn ! child! b: Build argv: (List String) -> run/Done
   (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b)))
     (run/Done :idx 0 :exit 1 :out "" :ms 0 :verdict (if (ownerAlive? b) "deadline" "owner-gone"))
-    (run/runOneLimited (run/job argv b.root (run/childEnv (list (str "ASL_PRELUDE=" b.root "/asl/prelude/prelude.asl")))) (run/limits (remainingS b) b.maxDesc)))
+    (run/runOneLimited (run/job argv b.root (run/childEnv (list (str "ASL_PRELUDE=" b.root "/asl/prelude/prelude.asl")))) (ownedLimits b)))
 
 fn lastLines text: String -> String
   (let [(lines (stringLines (stringTrim text)))]
@@ -183,7 +187,7 @@ fn ! withSlots! b: Build want: Int64 body: (fn [Int64] -> T) -> T
 fn ! compileWith! b: Build clang: String flags: (List String) ll: String paths: (List String) n: Int64 -> (Result (List String) String)
   (let [(jobs (map (fn [(p String)] -> run/Job (run/job (listAppend (cons clang flags) (list "-Wno-override-module" "-x" "ir" p "-c" "-o" (str p ".o"))) b.root (run/childEnv (list))))
                    paths))
-        (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (withSlots! b n (fn [(slots Int64)] -> (List run/Done) (run/runPoolLimited jobs slots (run/limits (remainingS b) b.maxDesc))))))
+        (done (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b))) (list) (withSlots! b n (fn [(slots Int64)] -> (List run/Done) (run/runPoolLimited jobs slots (ownedLimits b))))))
         (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))]
     (cond
       ((!= (listLength done) (listLength paths)) (err (str "clang -c of the parts of " ll " did not run: " (if (ownerAlive? b) "deadline" "owner-gone"))))
