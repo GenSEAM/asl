@@ -1,7 +1,6 @@
 (module ws/asl/tools/obs/archive
   :x [octalText Member archiveDir indexPath readIndex! parseMember renderMember memberBytes! verify! extractText! tarHeader gzipLevel monthOf]
   :i [(ws/asl/tools/obs/sx :a sx)
-      (asl-zip/gzipWriter :a gw)
       (asl-zip/gzip :a gz)])
 
 ; (:m :ref OBSCORPUS :do "archive layout: <home>/.asl/run/archive/YYYY-MM.tar.gz holds ustar members, each header, data and zero padding as its own gzip member (concatenated gzip is one valid gzip stream, so tar xzf reads it); index.asn has one row per member with the byte offset and length of its data member, so one member is read back with a ranged read and one gunzip, never the whole month")
