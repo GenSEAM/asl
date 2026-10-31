@@ -164,9 +164,6 @@ fn ! waitPort! path: String attempts: Int64 -> Int64
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
-fn ! nativeCliCacheEnvRow! -> String
-  (str "ASL_NATIVE_CLI_CACHE=" (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")))
-
 fn gatewayConfig base: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id retryProv :kind openai :base \"" base "\" :timeoutSec 30"
        " :retry (:max 2 :baseMs 100 :capMs 5000)))"
@@ -187,8 +184,8 @@ fn ! runTests -> Bool
         (readyPath (str temp "/ready"))
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "both fds redirected to files at the shell level, before exec; fr/spawn's own stdout/stderr pipes (opened on the outer /bin/sh -c process, before the exec replaces its image) end up with their write end re-pointed at these files instead, so the pipes this test never drains stay empty for the gateway's whole life -- no backpressure risk")
         (command (str "exec " host " run " server " serve --port 0 --upstream " base " --ready " readyPath " 1>" temp "/gateway.out 2>" temp "/gateway.err"))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
+        (env (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
+                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn")) (fr/cacheEnv!)))
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))

@@ -1290,10 +1290,11 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
           ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
 ; (:m :ref ORCH-LEON-CLIENT :do "the hub transport is read from HOME/.asl/hub.asn (the home of the gateway config), never from env: a :sock names the unix socket of the one-per-node hub, calls carry X-Asl-Class and X-Asl-Unit, and a refused connection or an HTTP 503 from the hub (its accept limit) is a wait, retried at :backoffMs doubling until :downAfterMs has passed, then ERR_GATEWAY_DOWN for a refused connection and the 503 error itself for a busy hub; with :fallback inProcess the down hub falls back to the in-process link, with no hub.asn the older gateway path is unchanged")
+; (:m :ref GW-BASE-RED-5 :do "an in-process call whose config is not HOME-shaped has no hub: the refusal ERR_CONFIG_PATH stands instead of the process HOME's hub.asn silently taking the call to the live hub and ignoring the named config")
 fn hubAsnPath cfg: VendorConfig -> String
   (match (configHome cfg.env.gatewayConfig)
     ((some home) (str home "/.asl/hub.asn"))
-    (none (str (envOr! "HOME" "") "/.asl/hub.asn")))
+    (none (if cfg.env.inProcess "" (str (envOr! "HOME" "") "/.asl/hub.asn"))))
 
 fn hubAsnString text: String key: String fallback: String -> String
   (match (stringIndexOf text (str ":" key " \""))
