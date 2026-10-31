@@ -17,7 +17,7 @@
 
 (schema Snap (:f path String) (:f prior (Option String)) (:f disk (Option String)) (:f fd Int64))
 
-(schema TxnRun (:f snaps (List Snap)) (:f lines (List String)) (:f failedAt String))
+(schema TxnRun (:f snaps (List Snap)) (:f lines (List String)) (:f failedAt String) (:f forced (List String)))
 
 
 fn stepHead id: Int64 op: String -> String
@@ -816,6 +816,27 @@ fn snapTake! vs: v/Vfs held: (List String) st: TxnRun path: String -> (Result Tx
             ((ok disk)
               (ok (with st :snaps (listAppend st.snaps (list (Snap :path path :prior (v/stagedContent! vs path) :disk disk :fd fd)))))))))))
 
+fn deferForm op: String kw: (Map String String) fs: String -> String
+  (if (and (or (= op "write") (= op "edit")) (not (flagOn? kw "force")))
+    (let [(t (stringTrim fs))]
+      (str (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) " :force true)"))
+    fs)
+
+fn noteForced st: TxnRun op: String kw: (Map String String) path: String -> TxnRun
+  (if (and (or (= op "write") (= op "edit")) (flagOn? kw "force")) (with st :forced (cons path st.forced)) st)
+
+fn recheckStaged! vs: v/Vfs ch: Checkers st: TxnRun -> String
+  (fold (fn [(bad String) (s Snap)] -> String
+          (if (or (not (stringEmpty? bad)) (not (aslFile? s.path)) (listContains? st.forced s.path))
+            bad
+            (match (v/stagedContent! vs s.path)
+              ((none) bad)
+              ((some c)
+                (let [(vd (validateStaged! ch s.path s.disk c false))]
+                  (if (stringEmpty? vd.code) "" (str (k/relToRoot vs.root s.path) ": " vd.message)))))))
+        ""
+        st.snaps)
+
 fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) owns: (List String) st: TxnRun k: Int64 fs: String -> TxnRun
   (let [(p (k/parseStep fs))
         (op p.op)
@@ -833,7 +854,7 @@ fn txnInner! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) h
             (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_OWNS\" :file " (quoted target) (msgTail (if (stringEmpty? ierr) (str target " is outside :owns") ierr)))) here)
             (match (snapTake! vs held st ipath)
               ((err e) (abortWith st (innerLine k op (str " :status \"rejected\" :error-code \":ERR_LOCK\" :file " (quoted target) (msgTail e))) here))
-              ((ok st2) (runInner vs run held st2 k op fs)))))
+              ((ok st2) (runInner vs run held (noteForced st2 op kw ipath) k op (deferForm op kw fs))))))
         (if (not (stepReadOnly op kw))
           (abortWith st (innerLine k (k/escapeAsnVal op) " :status \"rejected\" :error-code \":ERR_TXN_FORBIDDEN\" :message \"only edit, write, fix and read-only steps may run inside a txn; the txn flushes or restores itself\"") here)
           (runInner vs run held st k op fs)))))
@@ -879,14 +900,16 @@ fn flushSnaps! vs: v/Vfs held: (List String) snaps: (List Snap) todo: (List Snap
 fn relList vs: v/Vfs paths: (List String) -> String
   (stringJoin (map (fn [(p String)] -> String (quoted (k/relToRoot vs.root p))) paths) " ")
 
-fn txnFinish! vs: v/Vfs held: (List String) id: Int64 owns: (List String) st: TxnRun -> k/EditOutcome
+fn txnFinish! vs: v/Vfs ch: Checkers held: (List String) id: Int64 owns: (List String) st: TxnRun -> k/EditOutcome
   (let [(snaps st.snaps)
         (touched (relList vs (map (fn [(s Snap)] -> String s.path) snaps)))
         (ownsAsn (stringJoin (map quoted owns) " "))
-        (steps (stringJoin (listReverse st.lines) " "))]
-    (if (not (stringEmpty? st.failedAt))
+        (steps (stringJoin (listReverse st.lines) " "))
+        (bad (if (stringEmpty? st.failedAt) (recheckStaged! vs ch st) ""))
+        (failedAt (if (stringEmpty? bad) st.failedAt (str "recheck " bad)))]
+    (if (not (stringEmpty? failedAt))
       (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
-        (failStep id "txn" ":ERR_TXN_ABORTED" (str " :failedAt " (quoted st.failedAt) " :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs))))
+        (failStep id "txn" ":ERR_TXN_ABORTED" (str " :failedAt " (quoted failedAt)" :owns [" ownsAsn "] :restored [" touched "] :flushed [] :steps [" steps "]" (errTail errs))))
       (match (scopePathList! vs.root (optionOr (envGet "ASL_UNIT") "") (txnPending! vs snaps))
         ((err refusal)
           (let [(errs (listAppend (restoreStaged! vs snaps) (releaseAll! vs snaps)))]
@@ -909,16 +932,16 @@ fn txnCommit! vs: v/Vfs held: (List String) id: Int64 ownsAsn: String steps: Str
           (okStep id "txn" (str " :owns [" ownsAsn "] :flushed [" (relList vs flushed) "] :steps [" steps "]"))
           (failStep id "txn" ":ERR_LOCK" (str " :owns [" ownsAsn "] :flushed [" (relList vs flushed) "] :steps [" steps "]" (errTail errs)))))))
 
-fn txnStep! vs: v/Vfs run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
+fn txnStep! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/EditOutcome) held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
   (let [(owns (parseOwns (k/kwOr kw "owns" "")))
         (inner (filter (fn [(a String)] -> Bool (stringStartsWith? a "(")) args))]
     (if (or (listEmpty? owns) (listEmpty? inner))
       (failStep id "txn" ":ERR_MISSING_ARG" " :message \"txn needs :owns (paths) and at least one nested form\"")
       (let [(st (fold (fn [(acc (Pair TxnRun Int64)) (fs String)] -> (Pair TxnRun Int64)
                         (pair (txnInner! vs run held owns (pairFirst acc) (pairSecond acc) fs) (+ (pairSecond acc) 1)))
-                      (pair (TxnRun :snaps (list) :lines (list) :failedAt "") 1)
+                      (pair (TxnRun :snaps (list) :lines (list) :failedAt "" :forced (list)) 1)
                       inner))]
-        (txnFinish! vs held id owns (pairFirst st)))))
+        (txnFinish! vs ch held id owns (pairFirst st)))))
 
 fn scopePathList! root: String unit: String paths: (List String) -> (Result Unit String)
   (match (listHead paths)
@@ -962,5 +985,5 @@ fn editOp! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/Edi
         ((some refusal) (some (failStep id "flush" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal))))
         ((none) (some (flushStep! vs held id kw args)))))
     ((= op "discard") (some (discardStep! vs held id kw args)))
-    ((= op "txn") (some (txnStep! vs run held id kw args)))
+    ((= op "txn") (some (txnStep! vs ch run held id kw args)))
     (else (none)))
