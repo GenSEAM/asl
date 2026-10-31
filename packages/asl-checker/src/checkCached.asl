@@ -1,5 +1,5 @@
 (module asl-checker/checkCached
-  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached!]
+  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn!]
   :i [(types :a ty) (resolve :a r) (ast :a a) (check :a chk)])
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "bodies maps the real path of each module whose body this process checked to its diagnostics, so a sweep checks a shared dependency once and every later importer counts it as summarised")
@@ -103,12 +103,12 @@ fn ! bodyStep! paths: (List String) roots: (List String) known: (Map String r/Mo
                   (bodyStep! rest roots known (Tally :diags (listAppend t.diags ds) :checked (+ t.checked 1) :summarised t.summarised :cache (Cache :index (pairSecond r) :bodies (mapSet t.cache.bodies p ds) :stampDir t.cache.stampDir :checkerId t.cache.checkerId)))))))))))
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "a closure stamped clean under this checker and these dependency digests is summarised without checking its bodies; a clean check writes the stamp, also when this run had every body already, a dirty one never does")
-fn ! closureVerdict! path: String src: String forms: (List a/TopForm) roots: (List String) cl: r/ModuleClosure deps: (Map String r/ModuleSummary) cache: Cache -> (Pair (Result Verdict String) Cache)
+fn ! closureVerdict! base: String path: String src: String forms: (List a/TopForm) roots: (List String) cl: r/ModuleClosure deps: (Map String r/ModuleSummary) cache: Cache -> (Pair (Result Verdict String) Cache)
   (let [(self (resultOr (realPath path) path))
         (own (chk/checkModuleSource forms deps path src))
         (depPaths (filter (fn [(p String)] -> Bool (and (!= p self) (stringEndsWith? p ".asl"))) cl.paths))
         (fresh (filter (fn [(p String)] -> Bool (not (mapHas? cache.bodies p))) depPaths))
-        (key (if (or (listEmpty? depPaths) (stringEmpty? cache.checkerId)) (none) (stampKey! cache.checkerId depPaths)))
+        (key (if (or (listEmpty? depPaths) (stringEmpty? cache.checkerId)) (none) (stampKeyIn! base cache.checkerId depPaths)))
         (start (Cache :index cl.index :bodies (mapSet cache.bodies self own) :stampDir cache.stampDir :checkerId cache.checkerId))]
     (if (and (not (listEmpty? fresh)) (match key ((some k) (stampHit! cache.stampDir k)) ((none) false)))
       (pair (ok (Verdict :diags own :checked 1 :summarised (listLength depPaths))) start)
@@ -118,6 +118,10 @@ fn ! closureVerdict! path: String src: String forms: (List a/TopForm) roots: (Li
         (pair (ok (Verdict :diags t.diags :checked t.checked :summarised t.summarised)) t.cache))))
 
 fn ! checkFileCached! path: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
+  (checkFileCachedIn! (resultOr (realPath ".") ".") path roots cache)
+
+; (:m :ref RELAY-FORMS-SLOW :do "base is the tree stampKeyIn! labels the closure's deps from; a check of a byte-identical copy (asl-forms' staged overlay) passes the copy's root, so its deps match the workspace stamp instead of being labelled by their absolute copy paths and re-checked")
+fn ! checkFileCachedIn! base: String path: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
   (match (fileReadString path)
     ((err ioErr) (pair (err ioErr) cache))
     ((ok src)
@@ -131,4 +135,4 @@ fn ! checkFileCached! path: String roots: (List String) cache: Cache -> (Pair (R
                 (nextCache (with cache :index cl.index))]
             (match (classify cl)
               ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))
-              ((ok deps) (closureVerdict! path src forms allRoots cl deps cache))))))))
+              ((ok deps) (closureVerdict! base path src forms allRoots cl deps cache))))))))
