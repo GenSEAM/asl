@@ -1,5 +1,5 @@
 (module asl-tools/coverageRatchet
-  :x [Count Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
+  :x [Count readTokens! Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
   :i [])
 
 (schema Count
