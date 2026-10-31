@@ -815,10 +815,10 @@ fn isNullaryBuiltinType? resolved: String -> Bool
   (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle" "Handle") resolved))
 
 fn isKnownBuiltinType? name: String -> Bool
-  (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (or (= resolved "HashMap") (= resolved "Pair"))))))
+  (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (or (= resolved "HashMap") (or (= resolved "Pair") (= resolved "Buf")))))))
 
 fn builtinTypeArity name: String -> (Option Int64)
-  (let [(resolved (ty/resolveTypeAlias name))] (cond ((= resolved "List") (some 1)) ((= resolved "Option") (some 1)) ((= resolved "Result") (some 2)) ((= resolved "Map") (some 2)) ((= resolved "HashMap") (some 2)) ((= resolved "Pair") (some 2)) ((isNullaryBuiltinType? resolved) (some 0)) (else (none))))
+  (let [(resolved (ty/resolveTypeAlias name))] (cond ((= resolved "List") (some 1)) ((= resolved "Option") (some 1)) ((= resolved "Result") (some 2)) ((= resolved "Map") (some 2)) ((= resolved "HashMap") (some 2)) ((= resolved "Pair") (some 2)) ((= resolved "Buf") (some 1)) ((isNullaryBuiltinType? resolved) (some 0)) (else (none))))
 
 fn checkTypeTrees ts: (List ty/Type) bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (checkTypeTreeIx item bound mod deps where path a)) acc ts)
@@ -950,7 +950,7 @@ fn effectfulValueBuiltin? name: String -> Bool
 
 ; (:m :ref HLFIXB :do "partial is a lowering-stage special form (asl-ir/lower.asl nameArity treats it as arity -1, variadic, not a regular call) with no fixed-shape type: (partial f a1 .. an) fixes the first n params of f and returns a function over the rest, a shape builtinSig's fixed param-list/single-return format cannot express; recognized here as a special form like try/do/when so it is not flagged unbound, paired with check.asl's genericSig giving it a fresh any-kind metavariable result instead of a false signature")
 fn isSpecialForm? name: String -> Bool
-  (or (or (= name "let") (or (= name "with") (or (= name "if") (= name "cond")))) (or (or (= name "try") (or (= name "fn") (= name "match"))) (or (or (= name "module") (or (= name "defun") (= name "defschema"))) (or (= name "defenum") (or (= name "do") (or (= name "some") (or (= name "none") (or (= name "assert") (or (= name "refute") (or (= name "when") (or (= name "unless") (= name "partial"))))))))))))
+  (or (or (= name "let") (or (= name "with") (or (= name "if") (= name "cond")))) (or (or (= name "try") (or (= name "fn") (= name "match"))) (or (or (= name "module") (or (= name "defun") (= name "defschema"))) (or (= name "defenum") (or (= name "do") (or (= name "some") (or (= name "none") (or (= name "assert") (or (= name "refute") (or (= name "when") (or (= name "unless") (or (= name "partial") (or (= name "Buf") (or (= name "wrap") (= name "clamp")))))))))))))))
 
 fn isPreludeTag? name: String -> Bool
   (or (or (= name "some") (or (= name "none") (= name "ok"))) (or (or (= name "err") (or (= name "list") (= name "cons"))) (or (= name "pair") (or (or (= name "notFound") (or (= name "permissionDenied") (= name "alreadyExists"))) (or (or (= name "invalidPath") (= name "interrupted")) (= name "other"))))))
@@ -1126,8 +1126,9 @@ fn closedEnumFamily? family: String -> Bool
 fn checkMatchExhaustiveness heads: (List String) mod: ModuleSummary deps: DepIndex path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (if (listEmpty? heads) acc (let [(firstHead (match (listHead heads) ((some h) h) ((none) ""))) (uFirst (unionForTag firstHead mod deps))] (match uFirst ((none) acc) ((some u1) (let [(u1Name (pairFirst u1)) (u1Cases (pairSecond u1)) (mixDiags (fold (fn [(a (List ty/Diagnostic)) (h String)] -> (List ty/Diagnostic) (match (unionForTag h mod deps) ((none) a) ((some uh) (if (not (= (pairFirst uh) u1Name)) (cons (makeDiag "rule-4" (str "arms mix unions: " u1Name ", " (pairFirst uh)) path) a) a)))) (list) heads))] (if (not (listEmpty? mixDiags)) (listAppend mixDiags acc) (let [(bareHeads (map (fn [(h String)] -> String (if (stringContains? h "/") (let [(p (stringSplit h "/"))] (match (listGet p 1) ((some m) m) ((none) h))) h)) heads)) (missing (filter (fn [(c String)] -> Bool (not (listContains? bareHeads c))) u1Cases))] (if (and (not (listEmpty? missing)) (closedEnumFamily? u1Name)) (cons (makeDiag "rule-4" (str "match over enum " u1Name " misses variant(s): " (stringJoin missing " ")) path) acc) acc))))))))
 
+; (:m :ref LL-SIZED-CHECK-2 :do "clamp has two shapes: the three-argument builtin and the two-argument integer conversion (clamp T x), which check.asl#convForm types")
 fn hostOperatorArity? head: String given: Int64 -> Bool
-  (cond ((or (= head "+") (= head "*")) (>= given 1)) ((= head "-") (= given 1)) (else false))
+  (cond ((or (= head "+") (= head "*")) (>= given 1)) ((= head "-") (= given 1)) ((= head "clamp") (= given 2)) (else false))
 
 fn builtinVariadic? name: String -> Bool
   (match (ty/builtinSig (ty/genericSigName name))
@@ -1144,7 +1145,7 @@ fn fnHead? h: String mod: ModuleSummary deps: DepIndex -> Bool
 
 ; (:m :ref LL-SIZED-CHECK :do "a head that has a builtin signature is a call, not a record constructor: the sized conversions (U8 x) (I64 x) (F64 x) are PascalCase but build no record")
 fn isCtorHead? h: String -> Bool
-  (if (some? (ty/builtinSig h)) false (if (isPascalName? h) true (if (isQualifiedName? h) (isPascalName? (pairSecond (splitQual h))) false)))
+  (if (or (= h "Buf") (some? (ty/builtinSig h))) false (if (isPascalName? h) true (if (isQualifiedName? h) (isPascalName? (pairSecond (splitQual h))) false)))
 
 fn findUnqualifiedSchemaInDeps head: String mod: ModuleSummary deps: DepIndex -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
   (fold (fn [(acc (Pair (Option SchemaSummary) (Option ty/Diagnostic))) (mpath String)] -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))

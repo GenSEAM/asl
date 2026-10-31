@@ -1,4 +1,4 @@
-(module asl-checker/lowLevelSigs :x [lowLevelSig sizedIntNames conversionTarget loweredNames unroutedName?] :i [])
+(module asl-checker/lowLevelSigs :x [lowLevelSig sizedIntNames conversionTarget loweredNames unroutedName? formNames bitOperatorNames] :i [])
 
 ; (:m :ref LL-SIZED-CHECK :do "signatures of the low-level surface in one place, hooked once into types.asl#builtinSig: sized integer conversions, Wrap Clamp Checked arithmetic, integral bit operators and intrinsics, Buf operations and atomics; I is an integer-kind type variable, J a second one for shift amounts and indexes, so any sized integral type unifies and two different sized types do not")
 
@@ -66,8 +66,14 @@ fn lowLevelSig name: String -> (Option (Pair (List String) (Pair Bool String)))
       (sig (list "N") target)))
 
 ; (:m :ref LL-SIZED-LOWER-GAP :do "names the native target lowers today: only the integral operators, which reuse the Int64 ops; every other low-level name has a signature but no lowering until its lowering unit adds the name here, and check reports a call to it as ERR_LOWLEVEL_UNROUTED instead of leaving the build to fail")
-fn loweredNames -> (List String)
+fn bitOperatorNames -> (List String)
   (list "&" "|" "^" "~" "<<" ">>")
+
+fn loweredNames -> (List String)
+  (bitOperatorNames)
 
 fn unroutedName? name: String -> Bool
   (and (some? (lowLevelSig name)) (not (listContains? (loweredNames) name)))
+
+fn formNames -> (List String)
+  (list "Buf" "wrap" "clamp")

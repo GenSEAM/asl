@@ -269,7 +269,8 @@ fn genericRows -> (List (Pair String String))
         (pair "indexOf/String" "stringIndexOf") (pair "indexOf/List" "listIndexOf") (pair "reverse/String" "stringReverse") (pair "reverse/List" "listReverse")
         (pair "append/String" "stringConcat") (pair "append/List" "listAppend")
         (pair "sum/List" "listSum") (pair "sum/I64Array" "i64ArraySum") (pair "sum/I8Array" "i8ArraySum") (pair "sum/F64Array" "f64ArraySum")
-        (pair "countEq/I64Array" "i64ArrayCountEq") (pair "countEq/I8Array" "i8ArrayCountEq") (pair "countEq/F64Array" "f64ArrayCountEq"))
+        (pair "countEq/I64Array" "i64ArrayCountEq") (pair "countEq/I8Array" "i8ArrayCountEq") (pair "countEq/F64Array" "f64ArrayCountEq")
+        (pair "length/Buf" "bufLength") (pair "get/Buf" "bufGet") (pair "set/Buf" "bufSet") (pair "slice/Buf" "bufSlice"))
 
 fn genericMulti? name: String -> Bool
   (listContains? (list "length" "empty?" "get" "set" "slice" "contains?" "indexOf" "reverse" "append" "sum" "countEq") name)
@@ -316,6 +317,10 @@ fn genericConcrete name: String over: String -> String
       ((= key "length/I64Array") "i64ArrayLen")
       ((= key "length/I8Array") "i8ArrayLen")
       ((= key "length/F64Array") "f64ArrayLen")
+      ((= key "length/Buf") "bufLength")
+      ((= key "get/Buf") "bufGet")
+      ((= key "set/Buf") "bufSet")
+      ((= key "slice/Buf") "bufSlice")
       ((= key "empty?/String") "stringEmpty?")
       ((= key "empty?/List") "listEmpty?")
       ((= key "get/List") "listGet")
@@ -355,7 +360,7 @@ fn genericCandidates name: String -> String
 fn receiverOver t: Type -> String
   (match t
     ((tyVar _ _) "")
-    ((tyCon name _ _ _) (if (listContains? (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array") name) name "?"))
+    ((tyCon name _ _ _) (if (listContains? (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array" "Buf") name) name "?"))
     (_ "?"))
 
 fn isTyVar? t: Type -> Bool

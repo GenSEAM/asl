@@ -100,5 +100,49 @@ fn testUnrouted -> Bool
         (assert (not (ll/unroutedName? "notALowLevelName")) "a name without a signature is not flagged here")
         true))
 
+; (:m :ref LL-SIZED-CHECK-2 :do "Buf is a one-argument type and (Buf T n) builds one; get length set slice resolve to the Buf operations by the receiver; every use also reports the missing lowering until bufRt routes it")
+fn codesOfAll body: String -> String
+  (stringJoin (map (fn [(d ty/Diagnostic)] -> String d.code) (diagsAll body)) " ")
+
+fn testBuf -> Bool
+  (do (clean? "fn f -> (Buf U32)\n  (Buf U32 4)\n" "Buf constructor")
+      (clean? "fn f n: U8 -> (Buf U8)\n  (Buf U8 n)\n" "Buf with a sized length")
+      (clean? "fn f b: (Buf U32) -> U32\n  (get b 0)\n" "generic get over Buf")
+      (clean? "fn f b: (Buf U8) -> Int64\n  (length b)\n" "generic length over Buf")
+      (clean? "fn ! f b: (Buf I16) -> Unit\n  (set b 0 5)\n" "generic set over Buf")
+      (clean? "fn f b: (Buf U8) -> (Buf U8)\n  (slice b 0 2)\n" "generic slice over Buf")
+      (rejected? "fn f b: (Buf U32) -> U8\n  (get b 0)\n" "U8" "get over (Buf U32) is not U8")
+      (rejected? "fn f -> (Buf Bool)\n  (Buf Bool 4)\n" "Buf element type" "Bool elements")
+      (rejected? "fn f -> (Buf U8)\n  (Buf U8)\n" "Buf takes" "Buf without a length")
+      (rejected? "fn f b: (Buf) -> Int64\n  0\n" "Buf" "Buf without an element type")
+      (assert (stringContains? (codesOfAll "fn f b: (Buf U8) -> Int64\n  (length b)\n") "ERR_LOWLEVEL_UNROUTED") "a generic length over Buf reports the missing lowering")
+      (assert (stringContains? (codesOfAll "fn f -> (Buf U8)\n  (Buf U8 4)\n") "ERR_LOWLEVEL_UNROUTED") "the Buf constructor reports the missing lowering")
+      true)
+
+; (:m :ref LL-SIZED-CHECK-2 :do "(wrap T x) and (clamp T x) convert between integer types; a module function of the same name wins; the second shift operand is integer-kinded")
+fn testWrapClamp -> Bool
+  (do (clean? "fn f a: Int64 -> U8\n  (wrap U8 a)\n" "wrap to U8")
+      (clean? "fn f a: U32 -> I16\n  (clamp I16 a)\n" "clamp to I16")
+      (clean? "fn f a: Int64 -> Int32\n  (wrap I32 a)\n" "wrap through the I32 alias")
+      (rejected? "fn f a: Int64 -> U16\n  (wrap U8 a)\n" "U8" "wrap U8 is not U16")
+      (rejected? "fn f a: Float64 -> U8\n  (wrap U8 a)\n" "wrap" "wrap from a float")
+      (rejected? "fn f a: Int64 -> Float64\n  (clamp Float64 a)\n" "integer type name" "clamp to a non-integer type")
+      (rejected? "fn f a: Int64 -> U8\n  (wrap U8)\n" "wrap takes" "wrap without a value")
+      (assert (stringContains? (codesOfAll "fn f a: Int64 -> U8\n  (clamp U8 a)\n") "ERR_LOWLEVEL_UNROUTED") "clamp reports the missing lowering")
+      (assert (= (codesOfAll "fn clamp a: Int64 b: Int64 -> Int64\n  a\n\nfn g -> Int64\n  (clamp 1 2)\n") "") "a module function named clamp is an ordinary call")
+      (assert (= (codesOfAll "enum Mark\n  (fence a: Int64)\n  (plain)\n\nfn f -> Mark\n  (fence 1)\n") "") "an enum constructor named fence is the modules own, not a low-level builtin")
+      (assert (= (codesOfAll "fn f a: Float64 b: Float64 c: Float64 -> Float64\n  (clamp a b c)\n") "") "the three-argument value clamp is an ordinary call")
+      (rejected? "fn f a: U32 -> U32\n  (<< a 1.5)\n" "expected an integer" "a float shift count")
+      (clean? "fn f a: U32 b: U8 -> U32\n  (<< a b)\n" "a sized shift count")
+      true)
+
+; (:m :ref LL-SIZED-CHECK-2 :do "bit operators over a sized operand report the missing sized lowering; over Int64 they stay lowered")
+fn testSizedBitOps -> Bool
+  (do (assert (stringContains? (codesOfAll "fn f a: U8 b: U8 -> U8\n  (& a b)\n") "ERR_LOWLEVEL_UNROUTED") "& over U8 reports the missing sized lowering")
+      (assert (stringContains? (codesOfAll "fn f a: U32 -> U32\n  (<< a 1)\n") "ERR_LOWLEVEL_UNROUTED") "<< over U32 reports it")
+      (assert (stringContains? (codesOfAll "fn f a: I16 -> I16\n  (~ a)\n") "ERR_LOWLEVEL_UNROUTED") "~ over I16 reports it")
+      (assert (= (codesOfAll "fn f a: Int64 b: Int64 -> Int64\n  (| a b)\n") "") "| over Int64 stays lowered")
+      true)
+
 fn ! runTests -> Bool
-  (do (testTypes) (testLiterals) (testArithmetic) (testBitOps) (testOverflowOps) (testConversions) (testSigTable) (testUnrouted) true)
+  (do (testTypes) (testLiterals) (testArithmetic) (testBitOps) (testOverflowOps) (testConversions) (testSigTable) (testUnrouted) (testBuf) (testWrapClamp) (testSizedBitOps) true)
