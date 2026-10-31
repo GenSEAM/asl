@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath toolchainRootPaths rootsText pinned? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -233,6 +233,47 @@ fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bo
         (and (not (listEmpty? deps))
           (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (<= (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
 
+; (:m :ref RELAY-CLIENT-PINNED :do "run tools/remote/vps.asl also keeps the current CLI when a toolchain root moved, as long as the relay client's own sources (.asl.config.asn :nativeCli :relayPaths, tests directories skipped) are no newer than the head file and :nativeCli :relayPin is true: the relay tool is read from the tree at run time, so a CLI built before the toolchain edit still runs it; a moved relay source, a missing path, an absent head or the knob off is not pinned and the call rebuilds first; nativeGate then starts the new build in the background")
+fn configWord text: String key: String -> String
+  (match (stringIndexOf text (str ":" key " "))
+    ((none) "")
+    ((some i) (let [(rest (stringTrim (optionOr (stringSlice text (+ i (+ (stringLength key) 2)) (stringLength text)) "")))]
+                (optionOr (listHead (stringSplit (optionOr (listHead (stringLines rest)) "") " ")) ""))))
+
+fn configStrings text: String key: String -> (List String)
+  (match (stringIndexOf text (str ":" key " ["))
+    ((none) (list))
+    ((some i) (let [(rest (optionOr (stringSlice text (+ i (+ (stringLength key) 3)) (stringLength text)) ""))
+                    (body (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "]") (stringLength rest))) ""))]
+                (filter (fn [(p String)] -> Bool (not (stringEmpty? (stringTrim p)))) (stringSplit body "\"")))))
+
+fn ! newestSource! path: String -> Int64
+  (match (fileLstat path)
+    ((err _) 4611686018427387904)
+    ((ok st) (if (and st.isDir (not st.isSymlink))
+               (if (= (sys/baseName path) "tests")
+                 0
+                 (fold (fn [(acc Int64) (n String)] -> Int64 (max acc (newestSource! (str path "/" n)))) 0 (resultOr (dirList path) (list))))
+               st.mtimeNs)))
+
+fn ! relayPinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
+        (paths (configStrings text "relayPaths"))
+        (stamp (mtimeOf stampPath))]
+    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
+      (and (= (configWord text "relayPin") "true")
+        (and (not (listEmpty? paths))
+          (and (> stamp 0) (and (fileExists? (str dir "/roots"))
+            (and (sys/executable? (str dir "/bin"))
+              (listAll? (fn [(p String)] -> Bool (<= (newestSource! (str root "/" p)) stamp)) paths))))))))
+
+fn ! relayRefresh! ctx: sys/Context -> Bool
+  (let [(native (str ctx.root "/asl/host/out/aslNativeBuild"))]
+    (if (and (sys/executable? native) (fresh? ctx.root (str ctx.root "/asl/host/out/aslNativeBuild-fresh")))
+      (do (eprintln (str "asl: native CLI kept for the relay client; its refresh runs in the background: " (startBuild! ctx (cacheDir!) 2 ""))) true)
+      false))
+
+
 fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
@@ -240,6 +281,7 @@ fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
       ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
       ((pinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
+      ((relayPinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (do (relayRefresh! ctx) (none)))
       (else (some (awaitStaleRebuild! ctx dir args)))))
 
 fn leadingDigitsAt s: String n: Int64 i: Int64 -> String

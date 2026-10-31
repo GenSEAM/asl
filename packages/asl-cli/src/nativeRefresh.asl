@@ -60,8 +60,8 @@ fn ! installHead! cache: String root: String dir: String -> Bool
 
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
 fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
-  (if (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd)
-    (do (eprintln "asl: native CLI pinned: every moved source lies outside its roots") 0)
+  (if (or (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd))
+    (do (eprintln "asl: native CLI pinned: kept for this command") 0)
   (let [head (nc/headPath cache root)
         dir0 (headDir cache root)
         waitS (envInt "ASL_NATIVE_BUILD_WAIT" 3600)
