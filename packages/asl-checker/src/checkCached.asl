@@ -1,5 +1,5 @@
 (module asl-checker/checkCached
-  :x [Cache emptyCache stampCacheAt stampedCache! Verdict countsText checkFileCached!]
+  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached!]
   :i [(types :a ty) (resolve :a r) (ast :a a) (check :a chk)])
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "bodies maps the real path of each module whose body this process checked to its diagnostics, so a sweep checks a shared dependency once and every later importer counts it as summarised")
@@ -26,8 +26,15 @@ fn ! stampedCache! -> Cache
 fn stampText key: String -> String
   (str "aslBodyStamp 1\n" key "\n")
 
+fn stampLabel base: String p: String -> String
+  (if (stringStartsWith? p (str base "/")) (optionOr (stringSlice p (+ (stringLength base) 1) (stringLength p)) p) p)
+
 fn ! stampKey! checkerId: String paths: (List String) -> (Option String)
-  (let [(lines (map (fn [(p String)] -> String (match (fileReadBytes p) ((ok b) (str p "=" (bytesSha256 b))) ((err _) ""))) (listSort paths)))]
+  (stampKeyIn! (resultOr (realPath ".") ".") checkerId paths)
+
+; (:m :ref LEONSERVE-COLD-START :do "a dependency inside the base (the workspace the run starts in) is named in the stamp key by its path from the base, with its content digest: a worktree at another path with the same sources reuses the clean-closure stamps instead of checking the whole closure again (leonServe: about 400 s in a fresh worktree); a file outside the base keeps its absolute path")
+fn ! stampKeyIn! base: String checkerId: String paths: (List String) -> (Option String)
+  (let [(lines (map (fn [(p String)] -> String (match (fileReadBytes p) ((ok b) (str (stampLabel base p) "=" (bytesSha256 b))) ((err _) ""))) (listSort paths)))]
     (if (listAny? (fn [(l String)] -> Bool (stringEmpty? l)) lines)
       (none)
       (some (bytesSha256 (stringToBytes (str (stampText checkerId) (stringJoin lines "\n")))))))
