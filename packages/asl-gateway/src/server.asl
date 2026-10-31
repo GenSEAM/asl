@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
+      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -980,6 +980,15 @@ fn ! settledFailure! srv: GatewayLoop slot: String provider: String intent: Stri
 fn loopEnv srv: GatewayLoop env: (Map String String) -> GatewayLoop
   (with srv :env env)
 
+; (:m :ref GW-LEARN-RPM :do "the loaded table with the ramped per-model rpm buckets swapped in when :learnRamp is on")
+fn ! rampedWorldTable! home: String table: (Result c/GatewayTable String) -> (Result c/GatewayTable String)
+  (match table
+    ((err e) (err e))
+    ((ok t)
+      (let [(path (c/gatewayProfilesPath home))
+            (text (if (fileExists? path) (resultOr (fileReadString path) "") ""))]
+        (ok (ln/rampedTableFor! home text t)))))
+
 fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld String))
   (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
         (srv0 (loopState srv srv.breaker srv.buckets (pairFirst loaded)))
@@ -987,7 +996,7 @@ fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld Strin
     (match (u/upstreamSettings srv1.env)
       ((err e) (pair srv1 (err e)))
       ((ok settings) (pair (wired! srv1 (pairSecond loaded) settings) (ok (ch/ChatWorld :env srv1.env :rootDir srv.rootDir :settings settings
-                                      :agyPromptMaxBytes srv.promptMaxBytes :table (pairSecond loaded)))))))
+                                      :agyPromptMaxBytes srv.promptMaxBytes :table (rampedWorldTable! srv.home (pairSecond loaded))))))))
 
 ; (:m :ref GW-KEYFILES-SEND :do "a provider key held only in a (:gateway :keyFiles) file reaches the provider call: the world env the chat effects read is the process env overlaid, per provider row with a keyEnv, by the key file value, the file winning as GW-KEYSTORE-20261019 orders it; values are never logged")
 fn ! keyFilesWorldEnv! table: (Result c/GatewayTable String) env: (Map String String) -> (Map String String)

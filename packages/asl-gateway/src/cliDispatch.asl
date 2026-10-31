@@ -462,6 +462,12 @@ fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
            ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
            ((ok text) (do (sys/say! text) (ok 0))))))))
 
+; (:m :ref GW-LEARN-RPM :do "the stored ramped rpm rows after one more ramp step over the configured models; the stored ones unchanged when the config does not parse")
+fn ! gatewayRpmStep configText: String configPath: String learned: (List ln/LearnedRow) stored: (List ln/RpmRow) pct: Int64 -> (List ln/RpmRow)
+  (match (cfg/gatewayConfigParse! configText configPath "")
+    ((err _) stored)
+    ((ok t) (ln/rpmPass t.models t.providers learned stored pct)))
+
 ; (:m :ref GW-LIMIT-LEARN :do "gateway learn [--dry] [--ramp]: reads every kept ledger generation, folds the learned peaks into learned.asn (a stored peak is never lowered), takes one ramp step into learnedCaps.asn with --ramp or :learnRamp true, and prints own refusals against provider answers per provider and the stored caps; --dry writes nothing")
 fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
   (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
@@ -482,16 +488,22 @@ fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
             ((ok caps)
              (let [(merged (ln/mergeLearned stored (ln/learnRows rows (ln/learnWindowsFromText configText))))
                    (newCaps (if ramp (ln/rampPass (cfg/gatewayLimitsFromText configText) merged caps (ln/learnRampPctFromText configText)) caps))
+                   (rpmStored (resultOr (ln/readRpm! (ln/learnedRpmPath home)) (list)))
+                   (newRpms (if ramp (gatewayRpmStep configText configPath merged rpmStored (ln/learnRampPctFromText configText)) rpmStored))
                    (wrote (if dry
                             (ok true)
                             (match (ln/writeLearned! (ln/learnedPath home) merged)
                               ((err e) (err e))
-                              ((ok _) (if ramp (ln/writeCaps! (ln/learnedCapsPath home) newCaps) (ok true))))))]
+                              ((ok _) (if ramp
+                                         (match (ln/writeCaps! (ln/learnedCapsPath home) newCaps)
+                                           ((err e) (err e))
+                                           ((ok _) (ln/writeRpm! (ln/learnedRpmPath home) newRpms)))
+                                         (ok true))))))]
                (match wrote
                  ((err e) (do (sys/sayErr! (str "gateway learn: " e)) (ok 1)))
                  ((ok _)
                   (do (sys/say! (stringJoin (cons (str "(:learn :rows " (stringFromInt64 (listLength rows)) " :learned " (stringFromInt64 (listLength merged)) " :caps " (stringFromInt64 (listLength newCaps)) " :ramp " (if ramp "true" "false") " :dry " (if dry "true" "false") ")")
-                                                    (listAppend (map ln/refusalLine (ln/refusalsOf rows)) (map ln/capLine newCaps))) "\n"))
+                                                    (listAppend (listAppend (map ln/refusalLine (ln/refusalsOf rows)) (map ln/capLine newCaps)) (map ln/rpmLine newRpms))) "\n"))
                       (ok 0))))))))))))
 
 fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
