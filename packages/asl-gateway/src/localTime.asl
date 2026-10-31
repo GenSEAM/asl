@@ -397,10 +397,10 @@ fn httpDateMonthNumber abbr: String -> (Option Int64)
 fn httpDateClockOk? hour: Int64 minute: Int64 sec: Int64 -> Bool
   (and (>= hour 0) (and (<= hour 23) (and (>= minute 0) (and (<= minute 59) (and (>= sec 0) (<= sec 60))))))
 
-; (:m :tags (retry) :do "RFC 7231's preferred HTTP-date, e.g. \"Wed, 21 Oct 2026 07:28:00 GMT\": weekday and zone are read as the fixed field count they occupy but not validated against the date (a misreported weekday or a zone other than GMT is not this parser's problem, HTTP-date is always UTC regardless of the trailing token); the two obsolete formats (RFC 850, asctime) are not accepted -- RFC 7231 requires senders to use this form and only recommends recipients also accept the others, and no upstream in this gateway's fleet has ever been seen to send them")
+; (:m :tags (retry) :do "RFC 7231's preferred HTTP-date, e.g. \"Wed, 21 Oct 2026 07:28:00 GMT\": weekday and zone are read as the fixed field count they occupy but not validated against the date (a misreported weekday is not this parser's problem), and the zone must be GMT: IMF-fixdate is GMT only, so any other trailing zone is none; the two obsolete formats (RFC 850, asctime) are not accepted -- RFC 7231 requires senders to use this form and only recommends recipients also accept the others, and no upstream in this gateway's fleet has ever been seen to send them")
 fn parseHttpDateEpochSeconds text: String -> (Option Float64)
   (let [(parts (stringSplit (stringTrim text) " "))]
-    (if (!= (listLength parts) 6) none
+    (if (or (!= (listLength parts) 6) (!= (optionOr (listGet parts 5) "") "GMT")) none
       (let [(clockParts (stringSplit (optionOr (listGet parts 4) "") ":"))]
         (if (!= (listLength clockParts) 3) none
           (match (stringToInt64 (optionOr (listGet parts 1) ""))

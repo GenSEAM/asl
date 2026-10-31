@@ -76,8 +76,18 @@ fn testUnknownZoneIsUtc! -> Bool
       (assert (not (= (showIn! "Europe/Berlin" t) utc)) "a real zone still differs from UTC")
       true))
 
+; (:m :tags (retry) :do "the HTTP-date parser accepts only IMF-fixdate with the GMT zone (RFC 9110); a date in another zone is none, so no caller takes a non-GMT date as an epoch")
+fn testHttpDateZoneIsGmt -> Bool
+  (let [(gmt (lt/parseHttpDateEpochSeconds "Thu, 01 Jan 2026 00:00:10 GMT"))
+        (pst (lt/parseHttpDateEpochSeconds "Thu, 01 Jan 2026 00:00:10 PST"))]
+    (do
+      (assert (= gmt (some 1767225610.0)) (str "a GMT IMF-fixdate parses to its epoch: " gmt))
+      (assert (none? pst) (str "a PST date is not an IMF-fixdate, so no epoch: " pst))
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testCivilDays!) "testCivilDays")
     (assert (testUnknownZoneIsUtc!) "testUnknownZoneIsUtc")
+    (assert (testHttpDateZoneIsGmt) "testHttpDateZoneIsGmt")
     true)
