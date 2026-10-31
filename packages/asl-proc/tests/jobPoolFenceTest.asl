@@ -36,6 +36,16 @@ fn testPinBits -> Bool
         (refute (listContains? (pairFirst wide) 950) "a known pid of 2^23+950 never aliases to pid 950 born a second later")
         true))
 
+; (:m :ref KILLTREE-NO-PINS :do "taken at second 1000000: the job 740's daemon 950 did setsid and was adopted by the subreaper 19144 (systemd --user, not a row), so its ppid is neither 1 nor in the lineage; its pin still matches, its group is remembered, and it is killed with its child 951; the pinned foreign sleeper 900 under the same subreaper, older than the job, is spared")
+fn testSubreaperEscapee -> Bool
+  (let [(procs (jp/procsAt "  720   710   700 S 30:00 test\n  740   720   740 S 05:00 sh\n  950 19144   950 S 03:00 daemon\n  951   950   950 S 03:00 worker\n  900 19144   900 S 2-00:00:00 sleep\n  910   900   900 S 2-00:00:00 sleep\n" 1000000))
+        (t (jp/treeOf procs 740 (list 740 950 900) (list (jp/pinOf 950 999820) (jp/pinOf 900 827200)) 720))]
+    (do (assert (listContains? (pairFirst t) 950) (str "a pinned escapee under a subreaper is killed: " (pairFirst t)))
+        (assert (listContains? (pairFirst t) 951) (str "and its child: " (pairFirst t)))
+        (refute (listContains? (pairFirst t) 900) "an older pinned sleeper under the same subreaper is spared")
+        (refute (listContains? (pairSecond t) 900) "nor is its group signalled")
+        true))
+
 fn testFence -> Bool
   (let [(procs (jp/procsOf (nodeSnapshot)))
         (pids (map (fn [(p jp/Proc)] -> Int64 p.pid) procs))
@@ -59,5 +69,6 @@ fn testFence -> Bool
 fn ! runTests -> Bool
   (do (assert (testEscapee) "the package tree killer takes a known escapee younger than the job and spares an older foreign process")
       (assert (testPinBits) "a pid outside the pin bits stays bare and never aliases another pid")
+      (assert (testSubreaperEscapee) "a pinned escapee adopted by a subreaper is still killed, an older one spared")
       (assert (testFence) "the package tree killer never reaches pid 0, itself, its ancestors, a foreign group or a user manager")
       true)

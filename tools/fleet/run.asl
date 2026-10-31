@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -295,9 +295,9 @@ fn treeStep procs: (List Proc) root: Int64 members: (List Int64) groups: (List I
       (pair members gs)
       (treeStep procs root (addNew members more) gs known fence (- rounds 1))))
 
-; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage) and its leader is gone, in the lineage, or known and started no earlier than the root (a setsid escapee); a live leader older than the root (a foreign sleeper or a user manager that ended up in known) never anchors its group")
+; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage, or a pinned pid whose birth still matches: an orphan a subreaper such as systemd --user adopted has a ppid that is neither 1 nor in the lineage) and its leader is gone, in the lineage, or known and started no earlier than the root (a setsid escapee); a live leader older than the root (a foreign sleeper or a user manager that ended up in known) never anchors its group")
 fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) lineage: (List Int64) -> (List Int64)
-  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (knownPid? known p.pid) (or (= p.ppid 1) (listContains? lineage p.ppid)))) procs))
+  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (knownPid? known p.pid) (or (= p.ppid 1) (or (listContains? lineage p.ppid) (pinnedLive? procs known p.pid))))) procs))
         (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))
         (ours (fn [(g Int64)] -> Bool (or (listContains? lineage g) (or (leaderGone? procs g) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))]
     (filter (fn [(g Int64)] -> Bool (or (= g root) (and (listContains? held g) (ours g)))) groups))
@@ -351,6 +351,10 @@ fn ! killTreeWith! root: Int64 groups: (List Int64) known: (List Int64) -> Int64
 
 fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
+
+; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
+fn ! stopGuard! g: Guarded -> Int64
+  (killTreeWith! g.run.pid g.run.groups g.run.known)
 
 fn ! pumpOne r: Running -> (Pair Bool Running)
   (let [(o (readChunk r.outFd r.outOpen))
