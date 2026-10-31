@@ -3,8 +3,7 @@
   :i [(asl-target-llvm/ssa :a ssa)
       (asl-target-llvm/rtError :a rterr)
       (asl-target-llvm/sysRoute :a route)
-      (asl-target-llvm/rtValue :a valrt)
-      (asl-ir/types :a irTy)])
+      (asl-target-llvm/rtValue :a valrt)])
 
 ; (:m :ref TEXTPASS :do "line-based references of the passes that now cut the module text at their markers instead of at every line; the module is built from every shape the passes read: marker at text start, at end, twice in one run, no trailing newline, no match")
 fn refInternalLine wanted: (Map String Bool) line: String -> String
