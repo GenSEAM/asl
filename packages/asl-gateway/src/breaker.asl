@@ -56,7 +56,7 @@
       decTripped
       decDownFor
       decSnapshot]
-  :i [])
+  :i [(aslGateway/localTime :a lt)])
 
 (schema ProviderStatus
   (:f down Bool)
@@ -214,8 +214,15 @@ fn headerText headers: (List (Pair String String)) name: String -> String
     ((none) ""))
 
 ; (:m :ref GW-429-WINDOW-WAIT :do "the wait a 429's headers name: Retry-After delta seconds first, else the longest of x-ratelimit-reset-requests, x-ratelimit-reset-tokens and x-ratelimit-reset; 0 when none parses (an HTTP-date Retry-After included), so the window or the base applies")
-fn quotaHintSec headers: (List (Pair String String)) -> Int64
-  (let [(retry (hintOfText (headerText headers "retry-after")))]
+fn retryAfterHintSec text: String nowSec: Float64 -> Int64
+  (let [(delta (hintOfText text))]
+    (if (> delta 0) delta
+      (match (if (stringEndsWith? text " GMT") (lt/parseHttpDateEpochSeconds text) none)
+        ((some epoch) (if (> epoch nowSec) (ceilSec (- epoch nowSec)) 0))
+        ((none) 0))))
+
+fn quotaHintSec headers: (List (Pair String String)) nowSec: Float64 -> Int64
+  (let [(retry (retryAfterHintSec (headerText headers "retry-after") nowSec))]
     (if (> retry 0)
       retry
       (max (hintOfText (headerText headers "x-ratelimit-reset-requests"))

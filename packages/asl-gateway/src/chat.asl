@@ -2000,11 +2000,15 @@ fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (
 
 ; (:m :ref GW-DAILY-PARK :do "a daily-cap 429 asks the clock once so the model is parked until the provider's reset instead of the fixed cooldown; every other failure goes straight on")
 fn httpFailedFinal cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
-  (let [(kind (u/dailyCapKind status body))]
-    (if (stringEmpty? kind)
-      (httpFailedParked cx l a status reason headers body 0)
+  (let [(kind (u/dailyCapKind status body))
+        (retryAfter (u/headerGet headers "retry-after"))]
+    (if (and (stringEmpty? kind) (match retryAfter ((some _) false) ((none) true)))
+      (httpFailedParked cx l a status reason headers body 0 0.0)
       (askFloat (effClock)
-        (fn [(now Float64)] -> ChatStep (httpFailedParked cx l a status reason headers body (u/dailyCapParkSec kind headers body now))))))
+        (fn [(now Float64)] -> ChatStep
+          (if (stringEmpty? kind)
+            (httpFailedParked cx l a status reason headers body 0 now)
+            (httpFailedParked cx l a status reason headers body (u/dailyCapParkSec kind headers body now) now))))))
 
 fn limitWindowSec w: String -> Int64
   (cond ((= w "minute") 60) ((= w "hour") 3600) ((= w "day") 86400) (else 0))
@@ -2020,7 +2024,7 @@ fn memberWindowSec cx: Ctx a: Attempt -> Int64
             (secs (filter (fn [(n Int64)] -> Bool (> n 0)) (cons fromRpm (map (fn [(l c/GatewayLimit)] -> Int64 (limitWindowSec l.window)) own))))]
         (fold (fn [(m Int64) (n Int64)] -> Int64 (if (or (= m 0) (< n m)) n m)) 0 secs))))
 
-fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 -> ChatStep
+fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 now: Float64 -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
         (providerWide (or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))))
@@ -2065,7 +2069,7 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
                                      ((none) (if (> cx.cascadeLen 1) (loopStep cx (advance l1 l1.body)) (relay)))))))))))
                        (else (relay)))))))
         ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 for the spread cooldown, in addition to (never instead of) the existing per-model breaker trip above -- the breaker's own cooldown is fixed and provider/account-scoped, :cooldownSec is per-route and configurable, the two must stay independent")
-        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool (if (stringStartsWith? event "note429") (b/quotaHintSec headers) park))))
+        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool (if (stringStartsWith? event "note429") (b/quotaHintSec headers now) park))))
                 (if (and (= status 429) (not (listEmpty? cx.spread))) (list (effSpreadNote429 alias)) (list))))]
     (if (listEmpty? effs) (after) (tellAll effs after)))
 
