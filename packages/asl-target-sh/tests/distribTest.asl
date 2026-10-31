@@ -147,14 +147,6 @@ fn testBinaryInspectionAndRunnable! -> Bool
     true)
 
 
-fn resolveHost! -> String
-  (let [(envHost (optionOr (envGet "ASL_HOST") ""))
-        (statEnv (if (> (stringLength envHost) 0) (fileStat envHost) (err "none")))]
-    (if (ok? statEnv)
-      envHost
-      (resultOr (realPath "bin/asl")
-                (resultOr (realPath "host/out/asl") "bin/asl"))))
-
 
 fn testPortableEntry! -> Bool
   (let [(sh (dist/generatePortableAsl))
@@ -172,8 +164,8 @@ fn testPortableEntry! -> Bool
     (do
       (cleanAndAssert (stringStartsWith? sh "#!/bin/sh") "generatePortableAsl must start with shebang")
       (cleanAndRefute (stringContains? sh "echo \"asl 0.1.0") "generatePortableAsl must run host for version, not hardcode echo")
-      (cleanAndAssert (stringContains? sh "packages/asl-cli/src/main.asl") "generatePortableAsl must locate CLI main")
-      (cleanAndAssert (stringContains? sh "asl-host") "generatePortableAsl must resolve asl-host")
+      (cleanAndAssert (stringContains? sh "exec \"$HERE/../../bin/asl\" \"$@\"") "generatePortableAsl must delegate to the package's own bin/asl launcher")
+      (cleanAndRefute (stringContains? sh "ASL_HOST") "generatePortableAsl must not search for a host interpreter")
       (cleanAndRefute (stringContains? sh "ls -ld") "generatePortableAsl must resolve symlinks without parsing ls -ld")
       (cleanAndAssert (stringContains? sh "readlink") "generatePortableAsl must use readlink loop")
       (cleanAndAssert (stringContains? sh "CDPATH=") "generatePortableAsl must guard cd with CDPATH=")
@@ -213,131 +205,43 @@ fn testAnswersAgainstRealCli! -> Bool
       (assert (not (dist/answersOp? bin "ins2DefinitelyMissing" home dir)) "probe rejects an operation absent from the real CLI registry")
       true))
 
+; (:m :ref BASE-RED-4 :do "the portable entry now only delegates to the package's own bin/asl (HL-DELETE retired asl-host): a stub bin/asl records its arguments and exits 7 on 'fail', and the wrapper must pass arguments with spaces intact, propagate the exit code and work through a symlink")
 fn testPortableWrapperExecution! -> Bool
-  (let [(hostBin (resolveHost!))
-        (tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/portGate." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))
+  (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/portGate." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))
         (pkgDir (str tmp "/repo"))
         (wrapper (str pkgDir "/host/out/asl"))
         (cliDir (str pkgDir "/packages/asl-cli/src"))
-        (cliMain (str cliDir "/main.asl"))
         (shDir (str pkgDir "/packages/asl-target-sh/src"))
-        (shDistrib (str shDir "/distrib.asl"))
-        (testScript (str tmp "/testScript.asl"))
-        (badCheck (str tmp "/badCheck.asl"))
-        (goodCheck (str tmp "/goodCheck.asl"))
+        (binDir (str pkgDir "/bin"))
+        (stub (str binDir "/asl"))
         (symlinkWrapper (str tmp "/symlinkAsl"))
         (cleanUp (fn [] (dist/runArgv! (list "rm" "-rf" tmp) (none) (none) 5000)))
-        (env (some (list (str "ASL_HOST=" hostBin) "PATH=/bin:/usr/bin:/usr/local/bin")))
+        (env (some (list "PATH=/bin:/usr/bin:/usr/local/bin")))
         (st (dist/Inst :tree pkgDir :from "file" :tty "none" :os "linux" :arch "x86_64" :home tmp :installDir (str tmp "/bin")
                        :dry false :autoYes true :filter "" :skip true :purge false :force false :sourceDir "" :entry "" :prebuilt false :links (list) :answeredOps ""))
-        (cleanAndAssert (fn [cond msg] (if cond (assert cond msg) (do (cleanUp) (assert cond msg)))))
-        (cleanAndRefute (fn [cond msg] (if (not cond) (refute cond msg) (do (cleanUp) (refute cond msg)))))]
+        (cleanAndAssert (fn [cond msg] (if cond (assert cond msg) (do (cleanUp) (assert cond msg)))))]
     (do
       (dirCreate cliDir)
       (dirCreate shDir)
-      (fileWrite shDistrib "(module mock/dist)\n")
-      (fileWrite cliMain "(module asl-cli/main :x [main] :i [])\nfn main args: (List String) -> (Result Unit String)\n  (let [(first (optionOr (listHead args) \"\"))]\n    (cond\n      ((stringContains? first \"unsupported\") (err \"ERR_UNIMPLEMENTED\"))\n      ((stringContains? first \"unimplemented_zero\") (do (println \"ERR_UNIMPLEMENTED\") (ok ())))\n      ((stringContains? first \"not_implemented\") (do (println \"ERR_NOT_IMPLEMENTED\") (ok ())))\n      ((stringContains? first \"unknown_cmd\") (do (println \"unknown command\") (ok ())))\n      ((stringContains? first \"missing_arg\") (do (println \"ERR_MISSING_ARG\") (err \"ERR_MISSING_ARG\")))\n      (else (do (println (str \"CLI_ARGS=\" (stringJoin args \"|\"))) (ok ())))))\n")
-      (fileWrite testScript "(module test/script :x [main] :i [])\nfn main args: (List String) -> (Result Unit String)\n  (do (println (str \"RUN_ARGS=\" (stringJoin args \"|\"))) (ok ()))\n")
-      (fileWrite badCheck "(module bad/check")
-      (fileWrite goodCheck "(module good/check)\n")
-
+      (dirCreate binDir)
+      (fileWrite (str shDir "/distrib.asl") "(module mock/dist)\n")
+      (fileWrite (str cliDir "/main.asl") "(module asl-cli/main)\n")
+      (fileWrite stub "#!/bin/sh\nargs=\"\"\nfor a in \"$@\"; do args=\"$args|$a\"; done\necho \"STUB_ARGS$args\"\nif [ \"${1:-}\" = fail ]; then exit 7; fi\nexit 0\n")
+      (dist/runArgv! (list "chmod" "+x" stub) (none) (none) 5000)
       (dist/emitPortableEntry! pkgDir st)
       (cleanAndAssert (dist/isRegular! wrapper) "wrapper file must be emitted")
-
-      (let [(resCli (dist/runArgv! (list wrapper "echo" "hello world with spaces" "another space arg") (some tmp) env 10000))
-            (outCli (match resCli ((ok r) (str r.out r.errText)) ((err _) "")))]
+      (let [(resEcho (dist/runArgv! (list wrapper "echo" "hello world with spaces" "another space arg") (some tmp) env 10000))
+            (outEcho (match resEcho ((ok r) (str r.out r.errText)) ((err _) "")))
+            (resFail (dist/runArgv! (list wrapper "fail") (some tmp) env 10000))
+            (symRes (dist/runArgv! (list "ln" "-s" wrapper symlinkWrapper) (none) (none) 5000))
+            (resSym (dist/runArgv! (list symlinkWrapper "sym pass") (some tmp) env 10000))
+            (outSym (match resSym ((ok r) (str r.out r.errText)) ((err _) "")))]
         (do
-          (cleanAndAssert (ok? resCli) "CLI exec wrapper invocation must succeed")
-          (cleanAndAssert (stringContains? outCli "CLI_ARGS=echo|hello world with spaces|another space arg") "wrapper CLI exec must pass through arguments with spaces intact (Mutant 1 killed)")))
-
-      (let [(resRun (dist/runArgv! (list wrapper "run" testScript "run first" "run second with spaces") (some tmp) env 10000))
-            (outRun (match resRun ((ok r) (str r.out r.errText)) ((err _) "")))]
-        (do
-          (cleanAndAssert (ok? resRun) "wrapper run invocation must succeed")
-          (cleanAndAssert (= (match resRun ((ok r) r.code) ((err _) 1)) 0) "wrapper run exit code must be 0")
-          (cleanAndAssert (stringContains? outRun "RUN_ARGS=run first|run second with spaces") "wrapper run must pass through arguments with spaces intact (Mutant 2 killed)")))
-
-      (let [(resBad (dist/runArgv! (list wrapper "check" badCheck) (some tmp) env 10000))
-            (resGood (dist/runArgv! (list wrapper "check" goodCheck) (some tmp) env 10000))]
-        (do
-          (cleanAndAssert (ok? resBad) "wrapper check bad invocation must return result")
-          (cleanAndAssert (!= (match resBad ((ok r) r.code) ((err _) 0)) 0) "failing check must exit non-zero (exit code propagation)")
-          (cleanAndAssert (ok? resGood) "wrapper check good invocation must return result")
-          (cleanAndAssert (= (match resGood ((ok r) r.code) ((err _) 1)) 0) "passing check must exit 0")))
-
-      (let [(symRes (dist/runArgv! (list "ln" "-s" wrapper symlinkWrapper) (none) (none) 5000))
-            (resSym (dist/runArgv! (list symlinkWrapper "run" testScript "sym pass") (some tmp) env 10000))]
-        (do
+          (cleanAndAssert (ok? resEcho) "wrapper invocation must succeed")
+          (cleanAndAssert (stringContains? outEcho "STUB_ARGS|echo|hello world with spaces|another space arg") "wrapper must pass arguments with spaces intact to bin/asl")
+          (cleanAndAssert (= (match resFail ((ok r) r.code) ((err _) 0)) 7) "the exit code of bin/asl must propagate")
           (cleanAndAssert (ok? symRes) "symlink creation must succeed")
-          (cleanAndAssert (ok? resSym) "symlinked wrapper invocation must succeed")
-          (cleanAndAssert (= (match resSym ((ok r) r.code) ((err _) 1)) 0) "symlinked wrapper must exit 0")
-          (cleanAndAssert (stringContains? (match resSym ((ok r) (str r.out r.errText)) ((err _) "")) "RUN_ARGS=sym pass") "symlinked wrapper must pass arguments through")))
-
-      (let [(resVer (dist/runArgv! (list wrapper "--version") (some tmp) env 10000))
-            (outVer (match resVer ((ok r) (str r.out r.errText)) ((err _) "")))]
-        (do
-          (cleanAndAssert (ok? resVer) "wrapper --version must succeed")
-          (cleanAndAssert (= (match resVer ((ok r) r.code) ((err _) 1)) 0) "wrapper --version exit code 0")
-          (cleanAndAssert (stringContains? outVer "CLI_ARGS=--version") "wrapper --version must run host to invoke CLI main")))
-
-      (let [(cloneDir (str tmp "/.asl/repo"))
-            (srcDir (str tmp "/src"))
-            (i1 (dist/runArgv! (list "git" "init" srcDir) (none) (none) 5000))
-            (c1 (dist/runArgv! (list "git" "-C" srcDir "-c" "user.name=test" "-c" "user.email=test@test.com" "commit" "--allow-empty" "-m" "init") (none) (none) 5000))
-            (cl1 (dist/runArgv! (list "git" "clone" srcDir cloneDir) (none) (none) 5000))
-            (pkgSh (str cloneDir "/packages/asl-target-sh/src"))
-            (pkgCli (str cloneDir "/packages/asl-cli/src"))
-            (dSh (dirCreate pkgSh))
-            (dCli (dirCreate pkgCli))
-            (wSh (fileWrite (str pkgSh "/distrib.asl") "(module mock/sh)\n"))
-            (wCli (fileWrite (str pkgCli "/main.asl") "(module mock/cli)\n"))
-            (stCloneDry (dist/Inst :tree (str tmp "/empty") :from "pipe" :tty "none" :os "linux" :arch "x86_64" :home tmp :installDir (str tmp "/bin")
-                                   :dry true :autoYes true :filter "" :skip true :purge false :force false :sourceDir "" :entry "" :prebuilt false :links (list) :answeredOps ""))
-            (resDry (dist/stepClone! stCloneDry))
-            (stCloneReal (dist/Inst :tree (str tmp "/empty") :from "pipe" :tty "none" :os "linux" :arch "x86_64" :home tmp :installDir (str tmp "/bin")
-                                    :dry false :autoYes true :filter "" :skip true :purge false :force false :sourceDir "" :entry "" :prebuilt false :links (list) :answeredOps ""))
-            (resReal (dist/stepClone! stCloneReal))]
-        (do
-          (cleanAndAssert (match resDry ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone dry run must wire portable wrapper entry (Mutant 4 killed)")
-          (cleanAndAssert (match resReal ((dist/go s) (= s.entry (str cloneDir "/host/out/asl"))) ((dist/stop _) false)) "stepClone real must wire portable wrapper entry")
-          (cleanAndAssert (dist/isRegular! (str cloneDir "/host/out/asl")) "stepClone real must emit wrapper to disk")
-
-          (let [(envNoHost (some (list "PATH=/bin:/usr/bin:/usr/local/bin")))
-                (hostLink (str pkgDir "/host/out/asl-host"))
-                (hRes (dist/runArgv! (list "ln" "-s" hostBin hostLink) (none) (none) 5000))
-                (binDir (str pkgDir "/bin"))
-                (dBin (dirCreate binDir))
-                (binWrapper (str binDir "/asl"))
-                (cpRes (dist/runArgv! (list "cp" wrapper binWrapper) (none) (none) 5000))]
-            (do
-              (cleanAndAssert (ok? hRes) "host symlink creation in host/out must succeed")
-              (cleanAndAssert (ok? cpRes) "wrapper copy to installed location bin/asl must succeed")
-
-              (let [(resA (dist/runArgv! (list binWrapper "echo" "fallback host lookup" "with spaces") (some tmp) envNoHost 10000))
-                    (outA (match resA ((ok r) (str r.out r.errText)) ((err _) "")))]
-                (do
-                  (cleanAndAssert (ok? resA) "wrapper at installed location with ../host/out fallback must succeed")
-                  (cleanAndAssert (= (match resA ((ok r) r.code) ((err _) 1)) 0) "wrapper at installed location exit code must be 0")
-                  (cleanAndAssert (stringContains? outA "CLI_ARGS=echo|fallback host lookup|with spaces") "wrapper at installed location must locate host via ../host/out fallback and pass arguments (Mutant corrupt ../host/out killed)")))
-
-              (let [(resB (dist/runArgv! (list wrapper "echo" "here host lookup" "with spaces") (some tmp) envNoHost 10000))
-                    (outB (match resB ((ok r) (str r.out r.errText)) ((err _) "")))]
-                (do
-                  (cleanAndAssert (ok? resB) "wrapper next to asl-host must succeed without ASL_HOST")
-                  (cleanAndAssert (= (match resB ((ok r) r.code) ((err _) 1)) 0) "wrapper next to asl-host exit code must be 0")
-                  (cleanAndAssert (stringContains? outB "CLI_ARGS=echo|here host lookup|with spaces") "wrapper must locate host via $HERE/asl-host and pass arguments (Mutant corrupt $HERE/asl-host killed)")))
-
-              (let [(resRunNoHost (dist/runArgv! (list binWrapper "run" testScript "run no host") (some tmp) envNoHost 10000))
-                    (outRunNoHost (match resRunNoHost ((ok r) (str r.out r.errText)) ((err _) "")))
-                    (resVerNoHost (dist/runArgv! (list wrapper "--version") (some tmp) envNoHost 10000))
-                    (outVerNoHost (match resVerNoHost ((ok r) (str r.out r.errText)) ((err _) "")))]
-                (do
-                  (cleanAndAssert (ok? resRunNoHost) "wrapper run without ASL_HOST must succeed")
-                  (cleanAndAssert (= (match resRunNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper run without ASL_HOST exit code must be 0")
-                  (cleanAndAssert (stringContains? outRunNoHost "RUN_ARGS=run no host") "wrapper run must pass arguments without ASL_HOST")
-                  (cleanAndAssert (ok? resVerNoHost) "wrapper --version without ASL_HOST must succeed")
-                  (cleanAndAssert (= (match resVerNoHost ((ok r) r.code) ((err _) 1)) 0) "wrapper --version without ASL_HOST exit code must be 0")
-                  (cleanAndAssert (stringContains? outVerNoHost "CLI_ARGS=--version") "wrapper --version without ASL_HOST must invoke CLI main")))))
+          (cleanAndAssert (stringContains? outSym "STUB_ARGS|sym pass") "a symlinked wrapper must resolve its own directory and reach bin/asl")
           (cleanUp)
           true))))
 
