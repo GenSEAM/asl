@@ -383,3 +383,5 @@
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#ensureIndex!" :text "the module index for a root, reused when already built for that root and otherwise built by walking the directory")
 (:doc :symbol "asl/packages/asl-checker/src/hints.asl#Hint" :text "one fixed repair hint: the diagnostic code it answers, the message text it applies to (empty for any) and the advice line")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#IdxMod" :text "one module of the module index: its name and the path of its source file")
+(:doc :symbol "asl/packages/asl-checker/src/lowLevelSigs.asl#formNames" :text "the low-level form heads the checker knows (Buf, wrap, clamp): a call of one reports ERR_LOWLEVEL_UNROUTED until a lowering exists")
+(:doc :symbol "asl/packages/asl-checker/src/lowLevelSigs.asl#bitOperatorNames" :text "the bit operators (& | ^ ~ << >>) whose use on a sized integer operand reports ERR_LOWLEVEL_UNROUTED until sized lowering exists")
