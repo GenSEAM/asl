@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -763,9 +763,13 @@ fn unitFailed path: String e: String -> UnitStep
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the key holds the unit name: an implicit script module is named by its path as seen from the cwd (greet from its own dir, asl/packages/.../greet from the root), and an object compiled under one name linked under the other left greet.main undefined once run binaries stopped being reused")
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the entry wrapper is keyed by its text, imports and inits, not its path: an ephemeral run writes it under a per-run name, and the same text lowers to the same object wherever it sits, so a warm run reuses the wrapper object instead of compiling it again")
+; (:m :ref LEONSERVE-COLD-START :do "a module inside the workspace is keyed by its path from the workspace root, not the absolute one: the object holds the module name and root-relative loci only, so a worktree at another path with the same source and imports reuses the objects instead of compiling the whole closure again (226 modules, 529 s for leonServe in a fresh worktree)")
 fn ! unitKey fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (moduleCacheKey fp (if isEntry "@entry" u.path) (fileDigest u.path)
-                  (listAppend (map (fn [(imp (Pair String String))] -> String (str (pairSecond imp) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
+  (unitKeyIn (selfRoot) fp u ifaceMap isEntry inits)
+
+fn ! unitKeyIn root: String fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+  (moduleCacheKey fp (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
+                  (listAppend (map (fn [(imp (Pair String String))] -> String (str (relativeTo root (pairSecond imp)) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
                               (cons (str "@name " u.name) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list)))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "an ephemeral slot keeps only the objects of transient text (-e, -, eval) and of an entry whose closure holds such text; a script's entry object goes to the shared module cache, content-addressed and swept like any other")
