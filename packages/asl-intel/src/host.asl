@@ -111,11 +111,11 @@ fn findTree! ctx: Ctx root: String prune: Bool names: (List String) -> (Result T
   (let [(pre (if prune (pruneArgs) (list)))]
     (match (findLines! ctx (cons root (listAppend pre (list "-type" "d" "-print"))))
       ((err e) (err e))
-      ((ok dirs)
+      ((ok dirs0)
         (match (findLines! ctx (cons root (listAppend pre (listAppend (list "!" "-type" "d") (listAppend (nameArgs names) (list "-print"))))))
           ((err e) (err e))
           ((ok files)
-            (ok (Tree :dirs dirs :files (filter (fn [(f String)] -> Bool (not (isDir? f))) files))))))))
+            (ok (Tree :dirs (listSort dirs0) :files (listSort (filter (fn [(f String)] -> Bool (not (isDir? f))) files)))))))))
 
 fn walkFiles! tree: Tree -> (List String)
   (let [(idx (fold (fn [(tab tb/Strtab) (d String)] -> tb/Strtab (pairFirst (tb/internStr! tab d)))

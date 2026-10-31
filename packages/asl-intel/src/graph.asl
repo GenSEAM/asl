@@ -1,5 +1,5 @@
 (module asl-intel/graph
-  :x [GraphNode Graph Rated GraphSummary resolveWorkspace! buildGraph! analyzeGraph! analyzeGraphAt! ratedJson runGraph! fl flag]
+  :x [GraphNode Graph Rated GraphSummary pickByRank resolveWorkspace! buildGraph! analyzeGraph! analyzeGraphAt! ratedJson runGraph! fl flag]
   :i [(asl-intel/text :a t)
       (asl-intel/pats :a p)
       (asl-intel/json :a j)
@@ -210,15 +210,20 @@ fn finalRecs! recsOldFirst: (List Rec) nodeCount: Int64 -> (List Rec)
   (:f cacheFile Bytes)
   (:f cacheVal Bytes)
   (:f symCount Bytes)
-  (:f symFirst Bytes))
+  (:f symFirst Bytes)
+  (:f modRank Bytes))
+
+; (:m :ref INTEL-PARITY-RED-20261031 :do "candidates are (node rank) pairs; the lowest module rank wins, the first on a tie, a negative node never")
+fn pickByRank cands: (List (Pair Int64 Int64)) -> Int64
+  (pairFirst (fold (fn [(best (Pair Int64 Int64)) (c (Pair Int64 Int64))] -> (Pair Int64 Int64)
+                     (if (and (>= (pairFirst c) 0) (or (< (pairFirst best) 0) (< (pairSecond c) (pairSecond best)))) c best))
+                   (pair -1 0) cands))
 
 fn resolve! lk: Link keys: tb/Strtab buf: Bytes imports: (List Int64) fi: Int64 mid: Int64 sym: Int64 -> Int64
   (if (= (tb/ivGet lk.cacheFile sym) (+ fi 1)) (tb/ivGet lk.cacheVal sym)
     (let [(own (nodeOf! keys buf mid sym))
           (target (if (>= own 0) own
-                    (let [(m (fold (fn [(best Int64) (im Int64)] -> Int64
-                                     (let [(x (nodeOf! keys buf im sym))] (if (and (>= x 0) (or (< best 0) (< x best))) x best)))
-                                   -1 imports))]
+                    (let [(m (pickByRank (map (fn [(im Int64)] -> (Pair Int64 Int64) (pair (nodeOf! keys buf im sym) (tb/ivGet lk.modRank im))) imports)))]
                       (cond
                         ((>= m 0) m)
                         ((= (tb/ivGet lk.symCount sym) 1) (tb/ivGet lk.symFirst sym))
@@ -235,8 +240,15 @@ fn buildGraph! ctx: h/Ctx root: String keepLinks: Bool -> (Result Graph String)
             (nSyms (tb/strtabCount sc.syms))
             (finals (finalRecs! recs nNodes))
             (impCsr (importTable! (listReverse sc.imports) sc.files))
+            (modRank (tb/ivNew (tb/strtabCount sc.mods)))
+            (_mr (fold (fn [(prev (Pair String Int64)) (p (Pair String Int64))] -> (Pair String Int64)
+                         (let [(rank (if (= (pairFirst p) (pairFirst prev)) (pairSecond prev) (+ (pairSecond prev) 1)))]
+                           (do (tb/ivSet! modRank (tb/lookupStr sc.mods (pairFirst p)) rank) (pair (pairFirst p) rank))))
+                       (pair "" -1)
+                       (tb/sortWith (fn [(a (Pair String Int64)) (b (Pair String Int64))] -> Bool (< (pairFirst a) (pairFirst b)))
+                                    (map (fn [(rec Rec)] -> (Pair String Int64) (pair rec.modName 0)) recs))))
             (lk (Link :fanIn (tb/ivNew nNodes) :testCallers (tb/ivNew nNodes) :cacheFile (tb/ivNew nSyms) :cacheVal (tb/ivNew nSyms)
-                      :symCount (tb/ivNew nSyms) :symFirst (tb/ivNew nSyms)))
+                      :symCount (tb/ivNew nSyms) :symFirst (tb/ivNew nSyms) :modRank modRank))
             (_c (map (fn [(rec Rec)] -> Unit
                        (do (if (= (tb/ivGet lk.symCount rec.symId) 0) (tb/ivSet! lk.symFirst rec.symId rec.node) ())
                            (tb/ivAdd! lk.symCount rec.symId 1)))
