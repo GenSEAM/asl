@@ -10,8 +10,15 @@
       callRowLine
       callRowParse
       rotateIfNeeded!
+      defaultLedgerKeep
+      generations!
+      rotateWith!
       appendCallRow!
+      appendCallRowWith!
       readRows!
+      readRowsSince!
+      windowRead!
+      redactReason
       rowsInWindow
       filterByTag
       paramNames
@@ -64,7 +71,10 @@
   (:f session (Option String))
   (:f turn (Option Int64))
   (:f consumer (Option String))
-  (:f cacheWriteTokens (Option Int64)))
+  (:f cacheWriteTokens (Option Int64))
+  ; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "the HTTP status the upstream answered (0 when there was no answer: a skip, a timeout, a transport error) and, for a failed attempt, the upstream's own reason, redacted by callRowLine; both optional on read so older rows still parse")
+  (:f status Int64)
+  (:f reason (Option String)))
 
 ; (:m the effective request parameters actually sent upstream, read back out of the outgoing request body rather than guessed from config, so a parameter the provider ignored is still recorded as sent)
 (schema CallParams
@@ -134,7 +144,45 @@ fn attribAsn row: CallRow -> String
   (str (match row.session ((some s) (str " :session " (asnStr s))) ((none) ""))
        (match row.turn ((some n) (str " :turn " (stringFromInt64 n))) ((none) ""))
        (match row.consumer ((some c) (str " :consumer " (asnStr c))) ((none) ""))
-       (match row.cacheWriteTokens ((some n) (str " :cacheWrite " (stringFromInt64 n))) ((none) "")))
+       (match row.cacheWriteTokens ((some n) (str " :cacheWrite " (stringFromInt64 n))) ((none) ""))
+       (if (> row.status 0) (str " :status " (stringFromInt64 row.status)) "")
+       (match row.reason ((some r) (str " :reason " (asnStr (redactReason r)))) ((none) "")))
+
+fn redactChar? c: String -> Bool
+  (stringContains? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_." c)
+
+fn keyShaped? run: String -> Bool
+  (let [(n (stringLength run))
+        (letter (fn [(c String)] -> Bool (stringContains? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" c)))
+        (digit (fn [(c String)] -> Bool (stringContains? "0123456789" c)))
+        (chars (map (fn [(i Int64)] -> String (optionOr (stringSlice run i (+ i 1)) "")) (range 0 n)))]
+    (or (and (stringStartsWith? run "sk-") (>= n 12))
+        (and (>= n 24) (and (listAny? letter chars) (listAny? digit chars)))))
+
+fn labelRun? run: String -> Bool
+  (let [(u (stringUpper run))]
+    (listAny? (fn [(l String)] -> Bool (stringEndsWith? u l)) (list "KEY" "TOKEN" "SECRET" "AUTHORIZATION" "PASSWORD")))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :tags (secrets) :do "a reason is upstream text and may echo a credential: the run after Bearer, the run after a key, token, secret, authorization or password label joined by : or =, and every key-shaped run (24 or more letters, digits, dash, underscore or dot holding a letter and a digit, or sk- and 9 more) become [redacted]; newlines become spaces and the result keeps at most 200 characters")
+fn redactReason text: String -> String
+  (let [(flat (stringReplace (stringReplace (stringReplace (optionOr (stringSlice text 0 600) text) "\n" " ") "\r" " ") "\t" " "))
+        (n (stringLength flat))
+        (flush (fn [(st (List String))] -> (List String)
+                 (let [(out (optionOr (listGet st 0) "")) (run (optionOr (listGet st 1) "")) (pending (optionOr (listGet st 2) "")) (sep (optionOr (listGet st 3) ""))]
+                   (if (stringEmpty? run)
+                     st
+                     (let [(hide (or (keyShaped? run) (or (= pending "bearer") (and (= pending "label") (or (stringContains? sep ":") (stringContains? sep "="))))))
+                           (next (cond ((= (stringUpper run) "BEARER") "bearer") ((labelRun? run) "label") (else "")))]
+                       (list (str out (if hide "[redacted]" run)) "" next ""))))))
+        (step (fn [(st (List String)) (i Int64)] -> (List String)
+                (let [(c (optionOr (stringSlice flat i (+ i 1)) ""))]
+                  (if (redactChar? c)
+                    (list (optionOr (listGet st 0) "") (str (optionOr (listGet st 1) "") c) (optionOr (listGet st 2) "") (optionOr (listGet st 3) ""))
+                    (let [(f (flush st))]
+                      (list (str (optionOr (listGet f 0) "") c) "" (optionOr (listGet f 2) "") (str (optionOr (listGet f 3) "") c)))))))
+        (done (flush (fold step (list "" "" "" "") (range 0 n))))
+        (out (optionOr (listGet done 0) ""))]
+    (optionOr (stringSlice out 0 200) out))
 
 fn callRowLine row: CallRow -> String
   (str "(:call :at " (stringFromInt64 row.atMs)
@@ -238,28 +286,73 @@ fn callRowParse line: String -> (Result CallRow String)
                    :effort (optionOr effort none) :api (optionOr api "") :stream (optionOr stream false)
                    :toolCount (optionOr toolCount 0) :promptBytes (optionOr promptBytes 0) :sysHash (optionOr sysHash "")
                    :session (optionOr (fieldOptStr props "session") none) :turn (optionOr (fieldOptInt props "turn") none)
-                   :consumer (optionOr (fieldOptStr props "consumer") none) :cacheWriteTokens (optionOr (fieldOptInt props "cacheWrite") none)))))))))
+                   :consumer (optionOr (fieldOptStr props "consumer") none) :cacheWriteTokens (optionOr (fieldOptInt props "cacheWrite") none)
+                   :status (optionOr (fieldInt props "status") 0) :reason (optionOr (fieldOptStr props "reason") none)))))))))
 
-fn ! rotateIfNeeded! path: String -> (Result Bool String)
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "a full ledger is renamed to path.N with N one above the highest kept generation, so a generation keeps its name until it is pruned and a reader never sees a file change name under it; only the newest keep generations survive (default 8, (:gateway :ledgerKeep N)); the rename and prune run under path.rotate's lock, re-checking the size, so two writers never rotate twice nor overwrite a generation; before, path.1 was overwritten on every rotation and a 24 h window lost everything older than one 10 MB file")
+fn defaultLedgerKeep -> Int64
+  8
+
+fn generationSeq base: String name: String -> (Option Int64)
+  (if (and (stringStartsWith? name (str base ".")) (> (stringLength name) (+ (stringLength base) 1)))
+    (let [(rest (optionOr (stringSlice name (+ (stringLength base) 1) (stringLength name)) ""))]
+      (match (stringToInt64 rest) ((some k) (if (= (stringFromInt64 k) rest) (some k) none)) ((none) none)))
+    none)
+
+fn ! generations! path: String -> (List Int64)
+  (let [(base (optionOr (listLast (stringSplit path "/")) path))]
+    (listSort (fold (fn [(acc (List Int64)) (name String)] -> (List Int64) (match (generationSeq base name) ((some k) (cons k acc)) ((none) acc)))
+                    (list) (resultOr (dirList (g/posixDirname path)) (list)))))
+
+fn ! pruneGenerations! path: String gens: (List Int64) keep: Int64 -> Bool
+  (listAll? (fn [(k Int64)] -> Bool (ok? (pathRemove (str path "." (stringFromInt64 k))))) (listTake gens (max 0 (- (listLength gens) (max 1 keep)))))
+
+fn ! shiftUnderLock! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String)
   (match (fileStat path)
     ((err _) (ok false))
     ((ok st)
-     (if (and st.isFile (>= st.size (maxLedgerBytes)))
-       (match (pathRename path (str path ".1"))
-         ((ok _) (ok true))
-         ((err e) (err (str "rotate " path ": " e))))
-       (ok false))))
+     (if (or (not st.isFile) (< st.size maxBytes))
+       (ok false)
+       (let [(gens (generations! path))
+             (next (+ (fold (fn [(a Int64) (b Int64)] -> Int64 (max a b)) 0 gens) 1))]
+         (match (pathRename path (str path "." (stringFromInt64 next)))
+           ((err e) (err (str "rotate " path ": " e)))
+           ((ok _) (do (pruneGenerations! path (listAppend gens (list next)) keep) (ok true))))))))
 
-fn ! appendCallRow! path: String row: CallRow -> (Result Bool String)
+fn ! rotateWith! path: String maxBytes: Int64 keep: Int64 -> (Result Bool String)
+  (match (fileStat path)
+    ((err _) (ok false))
+    ((ok st)
+     (if (not (and st.isFile (>= st.size maxBytes)))
+       (ok false)
+       (match (fileLock (str path ".rotate") true)
+         ((err e) (if (= e "busy") (ok false) (err (str "rotate lock " path ": " e))))
+         ((ok fd)
+          (let [(res (shiftUnderLock! path maxBytes keep))
+                (closed (fdClose fd))]
+            res))))))
+
+fn ! rotateIfNeeded! path: String -> (Result Bool String)
+  (rotateWith! path (maxLedgerBytes) (defaultLedgerKeep))
+
+fn ! appendCallRowWith! path: String row: CallRow maxBytes: Int64 keep: Int64 -> (Result Bool String)
   (match (dirCreate (g/posixDirname path))
     ((err e) (err (str "ledger dir " (g/posixDirname path) ": " e)))
     ((ok _)
-     (match (rotateIfNeeded! path)
+     (match (rotateWith! path maxBytes keep)
        ((err e) (err e))
        ((ok _) (g/appendFile! path (callRowLine row) 200)))))
 
+fn ! appendCallRow! path: String row: CallRow -> (Result Bool String)
+  (appendCallRowWith! path row (maxLedgerBytes) (defaultLedgerKeep))
+
 fn nonEmptyLines text: String -> (List String)
   (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit text "\n"))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "a reader does not take the append lock, so the last row may be half written; only text up to the last newline counts and the cut row is read on the next pass, never as a corrupt file")
+fn completeLines text: String -> (List String)
+  (let [(parts (stringSplit text "\n"))]
+    (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (listTake parts (max 0 (- (listLength parts) 1)))))
 
 fn parseRowsLoop lines: (List String) acc: (List CallRow) -> (Result (List CallRow) String)
   (match (listHead lines)
@@ -269,16 +362,54 @@ fn parseRowsLoop lines: (List String) acc: (List CallRow) -> (Result (List CallR
        ((err e) (err e))
        ((ok row) (parseRowsLoop (optionOr (listTail lines) (list)) (cons row acc))))))
 
-; (:m reads only the live ledger file: a rotated .1 predecessor is not folded in, so a window wider than the time since the last rotation under-counts)
-fn ! readRows! path: String -> (Result (List CallRow) String)
-  (match (fileStat path)
+fn ! fileRows! file: String -> (Result (List CallRow) String)
+  (match (fileStat file)
     ((err _) (ok (list)))
     ((ok st)
      (if st.isDir
-       (err (str path " is a directory"))
-       (match (fileReadString path)
-         ((err e) (err (str "read " path ": " e)))
-         ((ok raw) (parseRowsLoop (nonEmptyLines raw) (list)))))))
+       (err (str file " is a directory"))
+       (match (fileReadString file)
+         ((err e) (err (str "read " file ": " e)))
+         ((ok raw) (parseRowsLoop (completeLines raw) (list)))))))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "the live file read between two listings of the generations: when a rotation renamed it in between, the read repeats, so a row is never counted both in the live text and in the generation it moved to")
+fn ! liveSnapshot! path: String tries: Int64 -> (Result (Pair (List Int64) (List CallRow)) String)
+  (let [(before (generations! path))
+        (live (fileRows! path))
+        (after (generations! path))]
+    (if (and (not (= before after)) (> tries 0))
+      (liveSnapshot! path (- tries 1))
+      (match live ((err e) (err e)) ((ok rows) (ok (pair after rows))))))
+
+fn reachesBack? rows: (List CallRow) sinceMs: Int64 -> Bool
+  (match (listHead rows) ((some r) (<= r.atMs sinceMs)) ((none) false))
+
+fn ! olderUntil! path: String newestFirst: (List Int64) sinceMs: Int64 files: (List String) rows: (List CallRow) -> (Result (Pair (List String) (List CallRow)) String)
+  (match (listHead newestFirst)
+    ((none) (ok (pair files rows)))
+    ((some k)
+     (if (reachesBack? rows sinceMs)
+       (ok (pair files rows))
+       (let [(file (str path "." (stringFromInt64 k)))]
+         (match (fileRows! file)
+           ((err e) (err e))
+           ((ok older) (olderUntil! path (optionOr (listTail newestFirst) (list)) sinceMs (listAppend files (list file)) (listAppend older rows))))))))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "rows at or after sinceMs and the files read for them: the live file always, then generations newest first only until a file's first row is at or before sinceMs, so a minute window opens the live file alone and only a day, week or month window reaches older generations")
+fn ! windowRead! path: String sinceMs: Int64 -> (Result (Pair (List String) (List CallRow)) String)
+  (match (liveSnapshot! path 3)
+    ((err e) (err e))
+    ((ok snap)
+     (match (olderUntil! path (listReverse (pairFirst snap)) sinceMs (list path) (pairSecond snap))
+       ((err e) (err e))
+       ((ok got) (ok (pair (pairFirst got) (filter (fn [(r CallRow)] -> Bool (>= r.atMs sinceMs)) (pairSecond got))))))))
+
+fn ! readRowsSince! path: String sinceMs: Int64 -> (Result (List CallRow) String)
+  (match (windowRead! path sinceMs) ((ok got) (ok (pairSecond got))) ((err e) (err e)))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "every kept row, oldest generation first then the live file; before, only the live file was read, so after a rotation a 24 h window came back empty")
+fn ! readRows! path: String -> (Result (List CallRow) String)
+  (match (windowRead! path (- 0 1)) ((ok got) (ok (pairSecond got))) ((err e) (err e)))
 
 fn windowMsOf text: String -> (Result Int64 String)
   (cond

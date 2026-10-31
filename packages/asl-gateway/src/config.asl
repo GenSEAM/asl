@@ -400,12 +400,15 @@ fn topIntOf g: (Map String rd/SExpr) key: String -> (Option Int64)
 
 ; (:m :ref GW-429-WINDOW-WAIT :do "config check ranges for the 429 cooldown rows: :cooldown429Sec 1..3600, :cooldown429MaxSec 1..90000 and not under :cooldown429Sec, :cooldownSlackSec 0..30; a present value that is not an integer is an error too, while serve falls back to the default")
 fn cooldownErrorOf g: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 -> (List String)
+  (rangeErrorOf g key lo hi "seconds")
+
+fn rangeErrorOf g: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 unit: String -> (List String)
   (match (mapGet g key)
     ((none) (list))
     ((some _)
       (match (topIntOf g key)
-        ((some n) (if (and (>= n lo) (<= n hi)) (list) (list (str ":" key " must be an integer from " lo " to " hi " seconds"))))
-        ((none) (list (str ":" key " must be an integer number of seconds"))))))
+        ((some n) (if (and (>= n lo) (<= n hi)) (list) (list (str ":" key " must be an integer from " lo " to " hi " " unit))))
+        ((none) (list (str ":" key " must be an integer number of " unit))))))
 
 fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
   (let [(base (topIntOf g "cooldown429Sec"))
@@ -414,7 +417,8 @@ fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
                  ((some b) (match top ((some m) (if (< m b) (list ":cooldown429MaxSec must not be under :cooldown429Sec") (list))) ((none) (list))))
                  ((none) (list))))]
     (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
-                (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800)) order)))
+                (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800))
+                            (listAppend (listAppend (rangeErrorOf g "ledgerMaxBytes" 65536 1073741824 "bytes") (rangeErrorOf g "ledgerKeep" 1 64 "files")) order))))
 
 ; (:m :ref GW-SESSION-AFFINITY :do "config check for the affinity rows: :affinity is true or false, :affinityStickSec 1..86400, :affinityForgetSec 1..604800 and not under :affinityStickSec, :affinitySwitch dropReasoning or keep")
 fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)

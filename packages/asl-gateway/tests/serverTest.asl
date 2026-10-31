@@ -125,7 +125,7 @@ fn ! testEffUsageNoteRecordsProfile -> Bool
         (clearedShared (pathRemove sharedPath))
         (statsPath (ul/defaultLedgerPath home))
         (clearedStats (pathRemove statsPath))
-        (pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "freeBulk"))
+        (pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "freeBulk" :status 0 :reason ""))
         (loop0 (srv/GatewayLoop :listener -1 :upstreamPort 0 :env (mapEmpty) :home home :rootDir home :registryPath "/tmp/absent.asn"
                  :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                  :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
@@ -136,7 +136,7 @@ fn ! testEffUsageNoteRecordsProfile -> Bool
         (rows (resultOr rowsRes (list)))
         (fallbackRow (ul/CallRow :atMs 0 :profile "" :intent "" :alias "" :provider "" :model "" :inTokens 0 :cachedTokens 0 :outTokens 0
                        :reasoningTokens 0 :ttftMs none :ms none :outcome "" :charge 0 :tag none :temperature none :topP none :maxTokens none
-                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none))
+                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none))
         (row (optionOr (listHead rows) fallbackRow))
         (cleanedShared (pathRemove sharedPath))
         (cleanedStats (pathRemove statsPath))]
@@ -156,7 +156,7 @@ fn ! testBudgetRefusalBlocksOverBudgetProfile -> Bool
         (seeded (ul/appendCallRow! sharedPath
                   (ul/CallRow :atMs atMs :profile "freeBulk" :intent "coder" :alias "mA" :provider "fixp" :model "m"
                     :inTokens 60 :cachedTokens 0 :outTokens 60 :reasoningTokens 0 :ttftMs none :ms none :outcome "ok" :charge 0
-                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)))
+                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)))
         (overBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 100)))")
         (underBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 1000)))")
         (noBudgetText "(:gateway :v 2)")

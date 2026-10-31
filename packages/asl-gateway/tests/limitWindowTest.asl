@@ -14,7 +14,7 @@ fn row at: Int64 provider: String alias: String outcome: String inTok: Int64 out
   (ul/CallRow :atMs at :profile "" :intent "" :alias alias :provider provider :model alias
               :inTokens inTok :cachedTokens 0 :outTokens outTok :reasoningTokens 0 :ttftMs none :ms none
               :outcome outcome :charge 0 :tag none :temperature none :topP none :maxTokens none
-              :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
+              :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)
 
 fn okRow at: Int64 alias: String -> ul/CallRow
   (row at "nim" alias "ok" 10 10)

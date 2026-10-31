@@ -7,7 +7,7 @@
 fn baseRow -> ul/CallRow
   (ul/CallRow :atMs 1000 :profile "p" :intent "construct" :alias "a" :provider "pv" :model "m" :inTokens 10 :cachedTokens 0 :outTokens 2
     :reasoningTokens 0 :ttftMs none :ms none :outcome "ok" :charge 0 :tag none :temperature none :topP none :maxTokens none :effort none
-    :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
+    :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)
 
 ; (:m LEON-ATTRIB: a row carrying session, turn, consumer and cache write round-trips, and a row carrying none of them writes none of the four keys)
 fn ! rowChecks -> Bool
@@ -48,7 +48,7 @@ fn ! loopAt home: String pending: srv/PendingCall -> srv/GatewayLoop
     :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0)
 
 fn ! settle! home: String tag: String usage: j/Json -> Bool
-  (let [(pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag tag :params (ul/defaultCallParams) :profile "freeBulk"))
+  (let [(pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag tag :params (ul/defaultCallParams) :profile "freeBulk" :status 0 :reason ""))
         (ran (srv/runEffect! (loopAt home pending) (ch/effUsageNote "fixp" "mAlias" "ok" usage)))]
     true)
 

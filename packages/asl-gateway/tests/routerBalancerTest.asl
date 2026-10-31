@@ -165,7 +165,7 @@ fn ! testTwinAliasesChargedApart base: String -> Bool
         (made (dirCreate home))
         (sharedPath (ul/defaultSharedUsagePath home))
         (cleared (pathRemove sharedPath))
-        (pending (srv/PendingCall :intent "any" :model "chat-b" :latencyMs 5 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "default"))]
+        (pending (srv/PendingCall :intent "any" :model "chat-b" :latencyMs 5 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "default" :status 0 :reason ""))]
     (match (wiringFor (twinConfig base))
       ((err e) (do (assert false (str "twin wiring builds: " e)) false))
       ((ok w)
