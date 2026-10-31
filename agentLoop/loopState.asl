@@ -8,6 +8,7 @@
       (asl/agentLoop/runOps :a ro) (asl/agentLoop/txn :a tx)
       (asl-json/json :a j)])
 
+; (:m :ref COMMIT-REQUEST-EXPLICIT :do "a commit is requested only by an explicit (:commit true) field of the agent form, never by a word in the task prose")
 schema LoopEnv
   (:f provider (fn [String String] -> pv/Turn))
   (:f task String) (:f modeHint (Option String)) (:f owns (List String)) (:f gates (List String))
@@ -15,6 +16,7 @@ schema LoopEnv
   (:f sessionId (Option String)) (:f base (Option String)) (:f contextTokens (Option Int64))
   (:f model (Option String)) (:f gateTimeout (Option Int64)) (:f wallBudget (Option Int64))
   (:f resume (Option j/Json)) (:f intent (Option String)) (:f plan Bool) (:f specCheck Bool)
+  (:f commit Bool)
   (:f next (fn [String String] -> pv/Turn))
   (:f advise (fn [String String] -> (Result (Option String) String)))
   (:f review (fn [String String] -> (Result (Option String) String)))

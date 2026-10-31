@@ -47,14 +47,18 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
   (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns (list) :gates gates
     :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
-    :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false
+    :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false :commit false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+
+; (:m :ref COMMIT-REQUEST-EXPLICIT :do "a commit is requested only by the explicit :commit field, so the fixtures that exercise the commit path set it and every other fixture, whatever its task prose says, does not")
+fn makeEnvCommit id: String task: String root: String journal: String budget: Int64 wall: (Option Int64) gates: (List String) resume: (Option j/Json) -> s/LoopEnv
+  (with (makeEnv id task root journal budget wall gates resume) :commit true)
 
 fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: String journal: String -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task "context window check" :modeHint (some "implement") :owns (list) :gates (list)
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens contextTokens :model (some model)
-    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 ; (:m :ref PREFETCH-WIRE)
@@ -62,7 +66,7 @@ fn makeEnvOwns id: String task: String root: String journal: String owns: (List 
   (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns owns :gates (list)
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
-    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 ; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "a dedicated fixture for the cumulative input-token cap, separate from makeEnv's unbounded default, so existing tests keep their original unconfigured-budget behaviour")
@@ -70,7 +74,7 @@ fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: 
   (s/LoopEnv :provider fakeTurn :task "token budget check" :modeHint (some "implement") :owns (list) :gates (list)
     :rootDir root :budget 4 :inputTokenBudget inputTokenBudget :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
-    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 schema Final
@@ -473,8 +477,18 @@ fn ! finishPathTests tmp: String -> Bool
       (assert (= killResult.status "ok") "killing a leftover process keeps the run ok")
       true))
 
+; (:m :ref COMMIT-REQUEST-EXPLICIT :do "the loop state asks for a commit only when the env says so: a task whose prose says commit, committing or a commit message does not, and the explicit :commit field does, whatever the prose")
+fn testCommitRequestExplicit -> Bool
+  (let [(prose (list "fix the commit message validator" "Please commit the fixture change" "nothing to commit" "recommit the file" "commit"))
+        (all (map (fn [(t String)] -> Bool (rl/stateFor (makeEnv "commitReq" t "." "j.asn" 2 none (list) none)).commitRequested) prose))
+        (explicit (rl/stateFor (makeEnvCommit "commitReq" "fix the validator" "." "j.asn" 2 none (list) none)))]
+    (do (assert (listAll? (fn [(b Bool)] -> Bool (not b)) all) (str "no task prose requests a commit: " (stringJoin (map (fn [(b Bool)] -> String (if b "true" "false")) all) " ")))
+        (assert explicit.commitRequested "the explicit :commit field requests one even when the prose never says commit")
+        true))
+
 fn ! runTests -> Bool
   (do
+    (assert (testCommitRequestExplicit) "commitRequested comes from the explicit field")
     (let [tmp (tempRoot)
         budgetJournal (str tmp "/loopRunTest-budget0.asn")
         preflightJournal (str tmp "/loopRunTest-preflight.asn")

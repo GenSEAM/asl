@@ -87,32 +87,6 @@ fn ! emptyResultWith env: s/LoopEnv sid: String status: String error: (Option St
     :queueWaitSec none :execSec none :usage none :signal none :ownsRejected (list)
     :planSummary none :coreHost (if (= status "escalated") (coreZero) (j/jobj (list))) :openPossible (list) :gatePreflight preflight :message message :vacuousGates vacuous :specCheck none)
 
-fn taskByte bs: Bytes n: Int64 i: Int64 -> Int64
-  (if (and (>= i 0) (< i n)) (bytesGet bs i) -1)
-
-fn taskWordByte b: Int64 -> Bool
-  (or (or (and (>= b 65) (<= b 90)) (and (>= b 97) (<= b 122)))
-    (or (and (>= b 48) (<= b 57)) (or (= b 95) (> b 127))))
-
-fn taskCommitAt bs: Bytes n: Int64 i: Int64 -> Bool
-  (and (= (taskByte bs n i) 99)
-    (and (= (taskByte bs n (+ i 1)) 111)
-      (and (= (taskByte bs n (+ i 2)) 109)
-        (and (= (taskByte bs n (+ i 3)) 109)
-          (and (= (taskByte bs n (+ i 4)) 105)
-            (and (= (taskByte bs n (+ i 5)) 116)
-              (and (not (taskWordByte (taskByte bs n (- i 1))))
-                (not (taskWordByte (taskByte bs n (+ i 6)))))))))))
-
-fn taskCommitScan bs: Bytes n: Int64 i: Int64 -> Bool
-  (if (>= i n)
-    false
-    (or (taskCommitAt bs n i) (taskCommitScan bs n (+ i 1))))
-
-fn taskRequestsCommit task: String -> Bool
-  (let [bs (stringToBytes (stringLower task))]
-    (taskCommitScan bs (bytesLength bs) 0))
-
 fn stateFor env: s/LoopEnv -> s/LoopState
   (let [tokens (ctx/contextTokensFor env.model (match env.contextTokens ((some n) (j/jint n)) ((none) (j/jnull))) false)
         resumeTurn (match env.resume ((some resume) (intField resume "turn" 0)) ((none) 0))]
@@ -130,7 +104,7 @@ fn stateFor env: s/LoopEnv -> s/LoopState
       :needsConfirmList (list) :escalateReceipt none :findingsList (list) :possibleOpen (mapEmpty)
       :possibleNotices 0 :status "ok" :error none :totalQueueWaitSec 0.0 :totalExecSec 0.0
       :usageTotals (j/jobj (list)) :batching (j/jobj (list (pair "ops" (j/jint 0)) (pair "single" (j/jint 0)) (pair "turns" (j/jint 0)))) :hasTiming false :basePrompt ""
-      :briefCount 0 :code "" :commitRequested (taskRequestsCommit env.task) :declaredOps (list) :fetched (j/jobj (list))
+      :briefCount 0 :code "" :commitRequested env.commit :declaredOps (list) :fetched (j/jobj (list))
       :header "" :history (list) :lastGates (mapEmpty) :missingGateIntro (list) :patchErr none
       :placeholderBriefs (mapEmpty) :prefetch "" :baselineGreen (list) :priorIds (list) :resumePatchPath none
       :retries (j/jobj (list)) :runUnbackedClaims (list) :specChecksDone 0 :startTurn resumeTurn
