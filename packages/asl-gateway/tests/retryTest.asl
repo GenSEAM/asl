@@ -376,6 +376,23 @@ fn testRetryAfterHttpDateFormResolvesAgainstNow -> Bool
             (_ (assert false "effSleepMs must carry an integer ms field")))
           true))))
 
+; (:m :tags (retry) :do "RFC 9110 IMF-fixdate is GMT only: a Retry-After date in another zone (PST) is no hint, so it does not become the 3000 ms wait the same instant gives in GMT")
+fn testRetryAfterNonGmtDateIsNoHint -> Bool
+  (let [(tbl (tableWithRetry 1))
+        (cx (testCtx (some tbl)))
+        (a (testAttempt "openrouter" "{}"))
+        (step0 (ch/httpFailed cx (testLoop) a 429 "Too Many Requests" (list (pair "Retry-After" "Thu, 01 Jan 2026 00:00:10 PST")) "Upstream model provider is temporarily unavailable"))]
+    (do
+      (assert (= (opOf step0) "clock") "a non-GMT Retry-After still asks the clock first")
+      (let [(step1 (feedFloat step0 1767225607.0))
+            (step2 (feedDone step1))
+            (step3 (feedDone step2))]
+        (do
+          (match (fieldOf step3 "ms")
+            ((j/jint ms) (assert (not (= ms 3000)) (str "a PST date is no Retry-After hint, so it is not the 3000 ms wait: got " ms)))
+            (_ (assert false "effSleepMs must carry an integer ms field")))
+          true))))
+
 fn ! runTests -> Bool
   (do
     (assert (testTransientTextClassification) "testTransientTextClassification passed")
@@ -395,4 +412,5 @@ fn ! runTests -> Bool
     (assert (testTransportRetryClassification) "testTransportRetryClassification passed")
     (assert (testRetryAfterHeaderSetsExactWait) "testRetryAfterHeaderSetsExactWait passed")
     (assert (testRetryAfterHttpDateFormResolvesAgainstNow) "testRetryAfterHttpDateFormResolvesAgainstNow passed")
+    (assert (testRetryAfterNonGmtDateIsNoHint) "testRetryAfterNonGmtDateIsNoHint passed")
     true)

@@ -1981,7 +1981,7 @@ fn retryAfterSecondsFromNow headerText: (Option String) now: Float64 -> (Option 
      (let [(s (u/pyStrip raw))]
        (match (u/pyFloat s)
          ((ok f) (if (>= f 0.0) (some f) none))
-         ((err _) (match (lt/parseHttpDateEpochSeconds s)
+         ((err _) (match (if (stringEndsWith? s " GMT") (lt/parseHttpDateEpochSeconds s) none)
                     ((some epoch) (some (- epoch now)))
                     ((none) none)))))))
 
