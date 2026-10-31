@@ -17,26 +17,17 @@
       defaultBreakerState
       touchSeen
       breakerDownFor
-      breaker_down_for
       breakerMarkDown
       breakerMarkDownFor
-      breaker_mark_down
       breakerClear
-      breaker_clear
       breakerNote503
-      breaker_note_503
       breakerReset503
-      breaker_reset_503
       breakerNoteTimeout
-      breaker_note_timeout
       breakerResetTimeout
-      breaker_reset_timeout
       breakerIsQuotaError
-      breaker_is_quota_error
       breakerIsProviderWideQuota
       breakerScope
       breakerSnapshot
-      breaker_snapshot
       formatBreakerSnapshotAsn
       stepBreaker
       stepBreakerResult
@@ -140,9 +131,6 @@ fn breakerIsQuotaError text: String -> Bool
     (or (stringContains? t "429")
       (or (stringContains? t "RESOURCE_EXHAUSTED")
         (stringContains? t "QUOTA"))))
-
-fn breaker_is_quota_error text: String -> Bool
-  (breakerIsQuotaError text)
 
 ; (:m :ref GW-429-BODY-SAMPLES :do "copy of upstream.modelScopedQuota?: a body naming one model's own limit is not provider-wide; keep in sync")
 fn breakerModelScopedQuota text: String -> Bool
@@ -258,9 +246,6 @@ fn breakerDownFor st: BreakerState provider: String now: Int64 -> (Pair BreakerS
                (pair pruned 0))
              (pair stSeen left)))))))
 
-fn breaker_down_for st: BreakerState provider: String now: Int64 -> (Pair BreakerState Int64)
-  (breakerDownFor st provider now)
-
 fn breakerMarkDown st: BreakerState provider: String now: Int64 -> BreakerState
   (breakerMarkDownFor st provider now 0)
 
@@ -271,16 +256,10 @@ fn breakerMarkDownFor st: BreakerState provider: String now: Int64 parkSec: Int6
     (let [(until (+ now (if (> parkSec 0) parkSec st.cooldownSec)))]
       (with st :breakers (mapSet st.breakers provider until) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true))))
 
-fn breaker_mark_down st: BreakerState provider: String now: Int64 -> BreakerState
-  (breakerMarkDown st provider now)
-
 fn breakerClear st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
     (with st :breakers (mapRemove st.breakers provider) :count429 (mapSet st.count429 provider 0) :count503 (mapSet st.count503 provider 0) :countTimeout (mapSet st.countTimeout provider 0) :seen (mapSet st.seen provider true)))
-
-fn breaker_clear st: BreakerState provider: String -> BreakerState
-  (breakerClear st provider)
 
 fn breakerNote503 st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
   (if (stringEmpty? provider)
@@ -309,16 +288,10 @@ fn breakerNote503 st: BreakerState provider: String now: Int64 -> (Pair BreakerS
                         :count429 stSeen.count429))]
           (pair nextSt false)))))
 
-fn breaker_note_503 st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
-  (breakerNote503 st provider now)
-
 fn breakerReset503 st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
     (with st :count503 (mapSet st.count503 provider 0)))
-
-fn breaker_reset_503 st: BreakerState provider: String -> BreakerState
-  (breakerReset503 st provider)
 
 fn breakerNoteTimeout st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
   (if (stringEmpty? provider)
@@ -347,16 +320,10 @@ fn breakerNoteTimeout st: BreakerState provider: String now: Int64 -> (Pair Brea
                         :count429 stSeen.count429))]
           (pair nextSt false)))))
 
-fn breaker_note_timeout st: BreakerState provider: String now: Int64 -> (Pair BreakerState Bool)
-  (breakerNoteTimeout st provider now)
-
 fn breakerResetTimeout st: BreakerState provider: String -> BreakerState
   (if (stringEmpty? provider)
     st
     (with st :countTimeout (mapSet st.countTimeout provider 0)))
-
-fn breaker_reset_timeout st: BreakerState provider: String -> BreakerState
-  (breakerResetTimeout st provider)
 
 fn breakerSnapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String ProviderStatus))
   (let [(breakerKeys (mapKeys st.breakers))
@@ -379,9 +346,6 @@ fn breakerSnapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String
               (pair nextSt nextMap)))
           initPair
           sortedNames))
-
-fn breaker_snapshot st: BreakerState now: Int64 -> (Pair BreakerState (Map String ProviderStatus))
-  (breakerSnapshot st now)
 
 fn formatBreakerSnapshotAsn snapshot: (Map String ProviderStatus) -> String
   (let [(keys (mapKeys snapshot))

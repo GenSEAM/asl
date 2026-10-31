@@ -12,9 +12,9 @@ fn emptyBody -> j/Json
   (j/jobj (list (pair "model" (j/jstr "m")) (pair "tools" (j/jarr (list)))))
 
 fn ! runTests -> Bool
-  (let [(off (cfg/gateway_params (mapFromPairs (list (pair "nativeTools" (rd/sexprAtom "false")))) "rowOff"))
-        (bad (cfg/gateway_params (mapFromPairs (list (pair "nativeTools" (rd/sexprAtom "maybe")))) "rowBad"))
-        (plain (cfg/gateway_params (mapFromPairs (list)) "rowPlain"))
+  (let [(off (cfg/gatewayParams (mapFromPairs (list (pair "nativeTools" (rd/sexprAtom "false")))) "rowOff"))
+        (bad (cfg/gatewayParams (mapFromPairs (list (pair "nativeTools" (rd/sexprAtom "maybe")))) "rowBad"))
+        (plain (cfg/gatewayParams (mapFromPairs (list)) "rowPlain"))
         (sentOff (j/jsonEmit (ch/upstreamTools (pairFirst off) false (body))))
         (sentPlain (j/jsonEmit (ch/upstreamTools (pairFirst plain) false (body))))
         (sentEmpty (j/jsonEmit (ch/upstreamTools (pairFirst plain) true (emptyBody))))]

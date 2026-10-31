@@ -19,7 +19,7 @@ fn ! runTests -> Bool
         (p (str dir "/secrets.asn"))
         (_ (fileWrite p "(:secret :id macToken :value \"tok-WIRE-5b7c19e0\")\n(:secret :id gatewayServeToken :value \"tok-SERVE-77aa\")\n"))
         (_2 (fileChmod p 384))
-        (parsed (cfg/gateway_config_parse! (configText) "wireCfg" ".asl/mem/calibration/index.asn"))
+        (parsed (cfg/gatewayConfigParse! (configText) "wireCfg" ".asl/mem/calibration/index.asn"))
         (bare (mapFromPairs (list (pair "PATH" "/usr/bin"))))
         (overlaid (f/secretsEnvOverlay! p bare))
         (absent (f/secretsEnvOverlay! (str dir "/none.asn") bare))

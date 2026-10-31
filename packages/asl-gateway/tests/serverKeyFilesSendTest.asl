@@ -113,7 +113,7 @@ fn countOf rows: (List String) prefix: String -> Int64
   (listLength (filter (fn [(r String)] -> Bool (stringStartsWith? r prefix)) rows))
 
 fn ! tableOf! keyFile: String -> (Result cfg/GatewayTable String)
-  (cfg/gateway_config_parse! (str "(:gateway :v 2 :keyFiles (\"" keyFile "\") :providers ((:provider :id kfp :kind openai :base \"http://127.0.0.1:1/v1\" :keyEnv KF_KEY)) :models ((:model :id mK :provider kfp :name \"m-k\" :tier free)) :profiles ((:profile :id default :routes ((:intent any :chain (mK))))) :uses ((:use :for default :profile default)))") "keySend" "absent.asn")
+  (cfg/gatewayConfigParse! (str "(:gateway :v 2 :keyFiles (\"" keyFile "\") :providers ((:provider :id kfp :kind openai :base \"http://127.0.0.1:1/v1\" :keyEnv KF_KEY)) :models ((:model :id mK :provider kfp :name \"m-k\" :tier free)) :profiles ((:profile :id default :routes ((:intent any :chain (mK))))) :uses ((:use :for default :profile default)))") "keySend" "absent.asn")
 
 fn ! testOverlay! -> Bool
   (let [(dir (scratch!))

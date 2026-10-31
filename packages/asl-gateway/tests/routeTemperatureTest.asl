@@ -15,7 +15,7 @@ fn entryTemps entries: (List cfg/GatewayResolvedEntry) -> (List (Option Float64)
        entries)
 
 fn temps! text: String intent: String exact: Bool -> (Result (List (Option Float64)) String)
-  (match (cfg/gateway_config_parse! text "routeTemperature" ".asl/mem/calibration/index.asn")
+  (match (cfg/gatewayConfigParse! text "routeTemperature" ".asl/mem/calibration/index.asn")
     ((err e) (err e))
     ((ok tbl)
       (match (if exact (cfg/gatewayRouteEntriesExact! tbl (list) (none) intent) (cfg/gatewayRouteEntries! tbl (list) (none) intent))
@@ -28,7 +28,7 @@ fn ! runTests -> Bool
         (overExact (temps! (cfgText ":temperatureOverride 0.9") "sweep" true))
         (overAny (temps! (cfgText ":temperatureOverride 0.9") "any" false))
         (overInt (temps! (cfgText ":temperatureOverride 1") "sweep" false))
-        (bad (cfg/gateway_config_parse! (cfgText ":temperatureOverride hot") "routeTemperatureBad" ".asl/mem/calibration/index.asn"))]
+        (bad (cfg/gatewayConfigParse! (cfgText ":temperatureOverride hot") "routeTemperatureBad" ".asl/mem/calibration/index.asn"))]
     (do
       (assert (= plain (ok (list (some 0.2) none))) (str "ROUTETEMP: without an override the model row temperature is the default and a row-less model stays unset, got " plain))
       (assert (= over (ok (list (some 0.9) (some 0.9)))) (str "ROUTETEMP: a route :temperatureOverride wins over the model row and reaches a row-less model, got " over))

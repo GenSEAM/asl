@@ -10,22 +10,15 @@
       cliProviderBin!
       cliProviderHealth!
       defaultDispatchOptions
-      resolve_cli_bin!
       resolveCliBin!
       resolveCliBinFromLocations!
-      cli_versions!
       cliVersions!
-      cli_message_text
       cliMessageText
-      cli_agy_tools!
       cliAgyTools!
-      cli_write_prompt_dir!
       cliWritePromptDir!
       cliWritePromptDirAt!
       cliWritePromptDirFrom!
-      cli_json_object
       cliJsonObject
-      cli_parse_result
       cliParseResult
       dispatch_codex_fallback!
       dispatchCodexFallback!
@@ -541,9 +534,6 @@ fn resolveCliBin! envName: String name: String legacy: String -> String
       ((none)
        (resolveCliBinAfterEnv! name legacy))))
 
-fn resolve_cli_bin! envName: String name: String legacy: String -> String
-  (resolveCliBin! envName name legacy)
-
 fn probeCliVersion! name: String binPath: String -> CliVersionInfo
   (if (not (fileExists? binPath))
     (CliVersionInfo :name name :bin binPath :version (str "error: FileNotFoundError: [Errno 2] No such file or directory: '" binPath "'"))
@@ -557,9 +547,6 @@ fn probeCliVersion! name: String binPath: String -> CliVersionInfo
 
 fn cliVersions! -> (List CliVersionInfo)
   (map (fn [(row CliProvider)] -> CliVersionInfo (probeCliVersion! row.id (cliProviderBin! row))) (cliProviders))
-
-fn cli_versions! -> (List CliVersionInfo)
-  (cliVersions!)
 
 fn extractTextFromParts parts: (List j/Json) -> (List String)
   (if (listEmpty? parts) (list)
@@ -587,9 +574,6 @@ fn cliMessageText content: j/Json -> String
      (let [(parts (extractTextFromParts xs))]
        (stringJoin parts "\n")))
     ((j/jobj _) ""))
-
-fn cli_message_text content: j/Json -> String
-  (cliMessageText content)
 
 fn parseAgyToolsFromText text: String -> (Result (List String) String)
   (let [(idIdx (stringIndexOf text ":id agy"))]
@@ -624,9 +608,6 @@ fn cliAgyToolsIn! rootDir: String -> (Result (List String) String)
     (match readRes
       ((ok content) (parseAgyToolsFromText content))
       ((err e) (err (str "could not read " path ": " e)))))
-
-fn cli_agy_tools! -> (Result (List String) String)
-  (cliAgyTools!)
 
 fn agyToolsYaml tools: (List String) noTools: Bool -> String
   (if noTools
@@ -679,9 +660,6 @@ fn cliWritePromptDir! client: String systemPrompt: String noTools: Bool -> (Resu
     (match mkRes
       ((err e) (err (str "failed to create temp dir " tmpDir ": " e)))
       ((ok _) (cliWritePromptDirAt! client systemPrompt noTools tmpDir))))
-
-fn cli_write_prompt_dir! client: String systemPrompt: String noTools: Bool -> (Result CliPromptDir String)
-  (cliWritePromptDir! client systemPrompt noTools)
 
 fn findFirstBrace text: String idx: Int64 len: Int64 -> (Option Int64)
   (if (>= idx len) none
@@ -755,9 +733,6 @@ fn cliJsonObject text: String -> (Result j/Json String)
                (match val
                  ((j/jobj kvs) (ok val))
                  (_ (err "JSON output is not an object")))))))))))
-
-fn cli_json_object text: String -> (Result j/Json String)
-  (cliJsonObject text)
 
 fn jsonIntField obj: j/Json key: String -> Int64
   (match (j/jsonGet obj key)
@@ -931,9 +906,6 @@ fn cliParseResult client: String stdout: String -> CliParseResult
   (match (cliProviderNamed client)
     ((some row) (row.parse stdout))
     ((none) (parseAgyResult stdout)))
-
-fn cli_parse_result client: String stdout: String -> CliParseResult
-  (cliParseResult client stdout)
 
 fn codexBuildCmd codexBin: String ws: String promptPath: String noTools: Bool effort: (Option String) model: (Option String) -> (List String)
   (let [(base (list codexBin "exec" "-C" ws "-" "--json" "--ephemeral" "--skip-git-repo-check" "-c" (str "model_instructions_file=" promptPath)))

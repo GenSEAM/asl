@@ -6,7 +6,7 @@ fn textWith provider: String -> String
   (str "(:gateway :v 2 :providers (" provider ") :models ((:model :id m :provider mac :name \"agyFlash\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))")
 
 fn ! parseText! text: String -> (Result cfg/GatewayTable String)
-  (cfg/gateway_config_parse! text "secretsCfg" ".asl/mem/calibration/index.asn")
+  (cfg/gatewayConfigParse! text "secretsCfg" ".asl/mem/calibration/index.asn")
 
 fn errOf r: (Result cfg/GatewayTable String) -> String
   (match r ((err e) e) ((ok _) ""))

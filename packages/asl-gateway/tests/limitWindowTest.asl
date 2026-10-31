@@ -55,7 +55,7 @@ fn cfg limits: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default))" limits ")")
 
 fn ! parsed limits: String -> (Result c/GatewayTable String)
-  (c/gateway_config_parse! (cfg limits) "default" ".asl/mem/calibration/index.asn")
+  (c/gatewayConfigParse! (cfg limits) "default" ".asl/mem/calibration/index.asn")
 
 fn ! run! limits: String -> String
   (match (parsed limits)

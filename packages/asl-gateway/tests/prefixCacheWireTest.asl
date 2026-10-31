@@ -61,7 +61,7 @@ fn testAnthropicSystemAndToolsStable -> Bool
       true))
 
 fn ! tableWith! -> (Option cfg/GatewayTable)
-  (match (cfg/gateway_config_parse! "(:gateway :v 2 :providers ((:provider :id openai :kind openai :base \"http://127.0.0.1:1\" :promptCacheKey true) (:provider :id deepseek :kind openai :base \"http://127.0.0.1:1\")) :models ((:model :id m :provider openai :name \"x\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))" "prefixCacheCfg" ".asl/mem/calibration/index.asn")
+  (match (cfg/gatewayConfigParse! "(:gateway :v 2 :providers ((:provider :id openai :kind openai :base \"http://127.0.0.1:1\" :promptCacheKey true) (:provider :id deepseek :kind openai :base \"http://127.0.0.1:1\")) :models ((:model :id m :provider openai :name \"x\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))" "prefixCacheCfg" ".asl/mem/calibration/index.asn")
     ((ok t) (some t))
     ((err _) none))
 

@@ -55,7 +55,7 @@ fn statusOf resp: ch/ChatResponse -> Int64
   (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (match h ((ch/headStatus c) c) (_ acc))) 0 resp.head)
 
 fn ! worldOf! text: String -> (Option ch/ChatWorld)
-  (match (c/gateway_config_parse! text "freePool" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! text "freePool" ".asl/mem/calibration/index.asn")
     ((err _) none)
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))

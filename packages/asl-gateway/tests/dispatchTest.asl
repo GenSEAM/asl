@@ -85,7 +85,7 @@ fn ! wiringFor text: String -> (Result dp/Wiring String)
 
 fn ! testRowsFromTableIncludesGeminiProvider -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id testGeminiRow :kind gemini :base \"https://example.test/v1\" :keyEnv TESTGEMINIROW_API_KEY))\n  :models ((:model :id testGeminiRowModel :provider testGeminiRow :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testGeminiRowModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gatewayConfigParse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
@@ -97,7 +97,7 @@ fn ! testRowsFromTableIncludesGeminiProvider -> Bool
 ; (:m :do "GW-OPENROUTER-PLUGIN-20261018: rowsFromTable's some-tbl branch excludes any id defaultRowNamed already knows (gemini/groq/ollama/openrouter/cli ids) from configured, then appends only upstreamProviders(), which itself excludes the openrouter catch-all row (upstreamFallback is a separate function, listed beside, not inside, upstreamProviders()); so once a real config table exists (every live gateway), the openrouter row never reaches rows/plugins and any model wired to provider openrouter gets ERR_NO_UPSTREAM no plugin for provider openrouter")
 fn ! testRowsFromTableIncludesOpenrouterProvider -> Bool
   (let [(text "(:gateway :v 2\n  :models ((:model :id testOpenrouterModel :provider openrouter :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testOpenrouterModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gatewayConfigParse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)

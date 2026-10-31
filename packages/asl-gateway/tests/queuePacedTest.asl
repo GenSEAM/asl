@@ -37,7 +37,7 @@ fn ! run! chain: String headers: (List (Pair String String)) extraBody: String g
   (runWith! chain "" headers extraBody granted)
 
 fn ! runWith! chain: String extra: String headers: (List (Pair String String)) extraBody: String granted: (List String) -> String
-  (match (c/gateway_config_parse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -56,7 +56,7 @@ fn ! runTests -> Bool
         (served (run! "m1" (list) ",\"queue_timeout\":9" (list "n1")))
         (down (run! "m1" (list) "" (list "breakerDown")))
         (tuned (runWith! "m1" " :queueBudgetSec 4" (list) "" (list)))
-        (bad (c/gateway_config_parse! (cfg "m1" " :queueBudgetSec 0") "default" ".asl/mem/calibration/index.asn"))
+        (bad (c/gatewayConfigParse! (cfg "m1" " :queueBudgetSec 0") "default" ".asl/mem/calibration/index.asn"))
         (chkQ (c/gatewayConfigCheckText! (cfg "m1" " :queueBudgetSec 0") "src" ".asl/mem/calibration/index.asn"))
         (chkB (c/gatewayConfigCheckText! (cfg "m1" " :bucketWaitSec -1") "src" ".asl/mem/calibration/index.asn"))
         (chkOk (c/gatewayConfigCheckText! (cfg "m1" " :queueBudgetSec 4 :bucketWaitSec 2") "src" ".asl/mem/calibration/index.asn"))]

@@ -39,7 +39,7 @@ fn testMessageTextParity -> Bool
     (assert (= (cli/cliMessageText (j/jint 42)) "42") "msg_int parity")
     (assert (= (cli/cliMessageText (j/jbool true)) "True") "msg_bool_true parity")
     (assert (= (cli/cliMessageText (j/jbool false)) "False") "msg_bool_false parity")
-    (assert (= (cli/cli_message_text (j/jstr "alias test")) "alias test") "cli_message_text alias parity")
+    (assert (= (cli/cliMessageText (j/jstr "alias test")) "alias test") "cli_message_text alias parity")
     true)
 
 fn testAgyToolsParity! -> Bool
@@ -50,7 +50,7 @@ fn testAgyToolsParity! -> Bool
         (assert (= (listLength tools) 5) "tools list length must be 5")
         (assert (= (optionOr (listHead tools) "") "run_command") "first tool is run_command")
         (assert (= (optionOr (listHead (optionOr (listTail tools) (list))) "") "invoke_subagent") "second tool is invoke_subagent")
-        (assert (= (resultOr (cli/cli_agy_tools!) (list)) tools) "cli_agy_tools alias parity"))
+        (assert (= (resultOr (cli/cliAgyTools!) (list)) tools) "cli_agy_tools alias parity"))
       true))
 
 fn testWritePromptDirParity! -> Bool
@@ -89,7 +89,7 @@ fn testJsonObjectParity -> Bool
     (assert (err? (cli/cliJsonObject "error: something went wrong without json")) "json_obj_no_json must err")
     (assert (err? (cli/cliJsonObject "[1, 2, 3]")) "json_obj_array_only must err")
     (assert (err? (cli/cliJsonObject "{\"unclosed\": 1")) "json_obj_malformed must err")
-    (assert (= (resultOr (cli/cli_json_object "{\"a\": 1}") (j/jnull))
+    (assert (= (resultOr (cli/cliJsonObject "{\"a\": 1}") (j/jnull))
                (resultOr (cli/cliJsonObject "{\"a\": 1}") (j/jnull))) "cli_json_object alias parity")
     true)
 

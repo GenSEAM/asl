@@ -9,7 +9,7 @@ fn getPropStr props: (Map String rd/SExpr) key: String fallback: String -> Strin
   (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (match (cfg/asn_scalar expr)
+      (match (cfg/asnScalar expr)
         ((cfg/scalarStr s) s)
         (_ fallback))))
 
@@ -17,7 +17,7 @@ fn getPropBool props: (Map String rd/SExpr) key: String fallback: Bool -> Bool
   (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (match (cfg/asn_scalar expr)
+      (match (cfg/asnScalar expr)
         ((cfg/scalarBool b) b)
         (_ fallback))))
 
@@ -25,12 +25,12 @@ fn getPropInt props: (Map String rd/SExpr) key: String fallback: Int64 -> Int64
   (match (mapGet props key)
     ((none) fallback)
     ((some expr)
-      (match (cfg/asn_scalar expr)
+      (match (cfg/asnScalar expr)
         ((cfg/scalarInt n) n)
         (_ fallback))))
 
 fn testOneVariant! vForm: rd/SExpr -> Bool
-  (match (cfg/asn_props vForm (some ":variant"))
+  (match (cfg/asnProps vForm (some ":variant"))
     ((err e) (do (assert false (str "Failed to parse variant props: " e)) false))
     ((ok vProps)
       (let [(vid (getPropStr vProps "id" ""))
@@ -41,7 +41,7 @@ fn testOneVariant! vForm: rd/SExpr -> Bool
             (expectedProfs (getPropInt vProps "numProfiles" 0))
             (expectedMods (getPropInt vProps "numModels" 0))
             (expectedErr (getPropStr vProps "error" ""))
-            (parsed (cfg/gateway_config_parse! text vid ".asl/mem/calibration/index.asn"))]
+            (parsed (cfg/gatewayConfigParse! text vid ".asl/mem/calibration/index.asn"))]
         (if expectedValid
           (do
             (refute (err? parsed) (str vid ": valid variant must not fail"))
@@ -81,16 +81,16 @@ fn testVariantsLoop! vs: (List rd/SExpr) -> Bool
         (and ok1 (testVariantsLoop! rest)))))
 
 fn testAsnScalarAndFigure -> Bool
-  (let [(sb (cfg/asn_scalar (rd/sexprAtom "true")))
-        (sf (cfg/asn_scalar (rd/sexprAtom "false")))
-        (si (cfg/asn_scalar (rd/sexprAtom "123")))
-        (sneg (cfg/asn_scalar (rd/sexprAtom "-456")))
-        (sflt (cfg/asn_scalar (rd/sexprAtom "3.14")))
-        (sstr (cfg/asn_scalar (rd/sexprAtom "\"quoted string\"")))
-        (skw (cfg/asn_scalar (rd/sexprAtom ":my-keyword")))
-        (sident (cfg/asn_scalar (rd/sexprAtom "bareSymbol")))
-        (figAtom (cfg/asn_figure (rd/sexprAtom "999")))
-        (figList (cfg/asn_figure (rd/sexprList (list (rd/sexprAtom ":v") (rd/sexprAtom "888")))))]
+  (let [(sb (cfg/asnScalar (rd/sexprAtom "true")))
+        (sf (cfg/asnScalar (rd/sexprAtom "false")))
+        (si (cfg/asnScalar (rd/sexprAtom "123")))
+        (sneg (cfg/asnScalar (rd/sexprAtom "-456")))
+        (sflt (cfg/asnScalar (rd/sexprAtom "3.14")))
+        (sstr (cfg/asnScalar (rd/sexprAtom "\"quoted string\"")))
+        (skw (cfg/asnScalar (rd/sexprAtom ":my-keyword")))
+        (sident (cfg/asnScalar (rd/sexprAtom "bareSymbol")))
+        (figAtom (cfg/asnFigure (rd/sexprAtom "999")))
+        (figList (cfg/asnFigure (rd/sexprList (list (rd/sexprAtom ":v") (rd/sexprAtom "888")))))]
     (do
       (match sb ((cfg/scalarBool b) (assert b "true atom is scalarBool true")) (_ (assert false "sb wrong")))
       (match sf ((cfg/scalarBool b) (assert (not b) "false atom is scalarBool false")) (_ (assert false "sf wrong")))
@@ -112,13 +112,13 @@ fn testGatewayParams -> Bool
                                         (pair "timeoutSec" (rd/sexprAtom "120.0"))
                                         (pair "reasoning" (rd/sexprAtom "true"))
                                         (pair "rpm" (rd/sexprAtom "60.0")))))
-        (resValid (cfg/gateway_params propsValid "testValid"))
+        (resValid (cfg/gatewayParams propsValid "testValid"))
         (pValid (pairFirst resValid))
         (errsValid (pairSecond resValid))
         (propsInvalid (mapFromPairs (list (pair "effort" (rd/sexprAtom "superfast"))
                                           (pair "maxTokens" (rd/sexprAtom "-10"))
                                           (pair "reasoning" (rd/sexprAtom "yes")))))
-        (resInvalid (cfg/gateway_params propsInvalid "testInvalid"))
+        (resInvalid (cfg/gatewayParams propsInvalid "testInvalid"))
         (errsInvalid (pairSecond resInvalid))]
     (do
       (assert (listEmpty? errsValid) "valid gateway params produce no errors")
@@ -144,9 +144,9 @@ fn testGatewayParams -> Bool
 
 fn ! testSessionHeaderParse -> Bool
   (let [(withHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\" :sessionHeader \"x-opencode-session\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (withHeaderRes (cfg/gateway_config_parse! withHeaderText "sessionHeaderPresent" ".asl/mem/calibration/index.asn"))
+        (withHeaderRes (cfg/gatewayConfigParse! withHeaderText "sessionHeaderPresent" ".asl/mem/calibration/index.asn"))
         (withoutHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (withoutHeaderRes (cfg/gateway_config_parse! withoutHeaderText "sessionHeaderAbsent" ".asl/mem/calibration/index.asn"))]
+        (withoutHeaderRes (cfg/gatewayConfigParse! withoutHeaderText "sessionHeaderAbsent" ".asl/mem/calibration/index.asn"))]
     (and
       (match withHeaderRes
         ((err e) (do (assert false (str "OCSESSION: provider with :sessionHeader failed to parse: " e)) false))
@@ -171,9 +171,9 @@ fn ! testSessionHeaderParse -> Bool
 ; (:m :tags (anthropic) :do "GW-ANTHROPIC-KIND: a provider with :kind anthropic parses like openai (needs :base) and gateway_v2_entry! propagates the real provider kind onto the resolved GatewayEntry instead of a hardcoded openai literal; a :kind anthropic provider missing :base is rejected the same way an openai one would be")
 fn testAnthropicKindParsesAndResolvesEntry -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id commandCodeMsg :kind anthropic :base \"https://api.commandcode.ai/provider/v1\" :keyEnv COMMANDCODE_API_KEY))\n  :models ((:model :id ccHaiku :provider commandCodeMsg :name \"claude-haiku-5-5\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (ccHaiku)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "anthropicKind" ".asl/mem/calibration/index.asn"))
+        (res (cfg/gatewayConfigParse! text "anthropicKind" ".asl/mem/calibration/index.asn"))
         (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badAnthropic :kind anthropic))\n  :models ((:model :id m1 :provider badAnthropic :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (missingBaseRes (cfg/gateway_config_parse! missingBaseText "anthropicKindNoBase" ".asl/mem/calibration/index.asn"))]
+        (missingBaseRes (cfg/gatewayConfigParse! missingBaseText "anthropicKindNoBase" ".asl/mem/calibration/index.asn"))]
     (do
       (match res
         ((err e) (assert false (str "ANTHROPICKIND: a well-formed :kind anthropic provider must parse: " e)))
@@ -183,7 +183,7 @@ fn testAnthropicKindParsesAndResolvesEntry -> Bool
             ((some pv)
               (do
                 (assert (= pv.kind "anthropic") "ANTHROPICKIND: :kind anthropic is parsed onto GatewayProvider")
-                (match (cfg/gateway_v2_entry! tbl "ccHaiku")
+                (match (cfg/gatewayV2Entry! tbl "ccHaiku")
                   ((cfg/entryResolved e)
                    (do
                      (assert (= e.kind "anthropic") "ANTHROPICKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
@@ -197,9 +197,9 @@ fn testAnthropicKindParsesAndResolvesEntry -> Bool
 
 fn testGeminiKindParsesAndResolvesEntry -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id opencodeGemini :kind gemini :base \"https://opencode.ai/inference/go/v1\" :keyEnv OPENCODE_GO_API_KEY :sessionHeader \"x-opencode-session\"))\n  :models ((:model :id gemini4Argon :provider opencodeGemini :name \"gemini-4-argon-contributor\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (gemini4Argon)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "geminiKind" ".asl/mem/calibration/index.asn"))
+        (res (cfg/gatewayConfigParse! text "geminiKind" ".asl/mem/calibration/index.asn"))
         (missingBaseText "(:gateway :v 2\n  :providers ((:provider :id badGemini :kind gemini))\n  :models ((:model :id m1 :provider badGemini :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (missingBaseRes (cfg/gateway_config_parse! missingBaseText "geminiKindNoBase" ".asl/mem/calibration/index.asn"))]
+        (missingBaseRes (cfg/gatewayConfigParse! missingBaseText "geminiKindNoBase" ".asl/mem/calibration/index.asn"))]
     (do
       (match res
         ((err e) (assert false (str "GEMINIKIND: a well-formed :kind gemini provider must parse: " e)))
@@ -209,7 +209,7 @@ fn testGeminiKindParsesAndResolvesEntry -> Bool
             ((some pv)
               (do
                 (assert (= pv.kind "gemini") "GEMINIKIND: :kind gemini is parsed onto GatewayProvider")
-                (match (cfg/gateway_v2_entry! tbl "gemini4Argon")
+                (match (cfg/gatewayV2Entry! tbl "gemini4Argon")
                   ((cfg/entryResolved e)
                    (do
                      (assert (= e.kind "gemini") "GEMINIKIND: gateway_v2_entry! propagates the real provider kind, not a hardcoded openai literal")
@@ -277,23 +277,23 @@ fn testBreakerCooldownSecOverride -> Bool
       true))
 
 fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
-  (let [(lineDesign (cfg/gateway_intent_line tbl "design"))
-        (lineImplement (cfg/gateway_intent_line tbl "implement"))
-        (linePlan (cfg/gateway_intent_line tbl "plan"))
-        (lineUnknown (cfg/gateway_intent_line tbl "unknownIntent"))
+  (let [(lineDesign (cfg/gatewayIntentLine tbl "design"))
+        (lineImplement (cfg/gatewayIntentLine tbl "implement"))
+        (linePlan (cfg/gatewayIntentLine tbl "plan"))
+        (lineUnknown (cfg/gatewayIntentLine tbl "unknownIntent"))
         (pWork (optionOr (mapGet tbl.profiles "work")
                          (cfg/GatewayProfile :id "" :routes (list) :fallback (none))))
-        (routeDesign (cfg/gateway_v2_route pWork lineDesign))
-        (routeImplement (cfg/gateway_v2_route pWork lineImplement))
-        (routeUnknown (cfg/gateway_v2_route pWork lineUnknown))
-        (entriesDesign (cfg/gateway_v2_entries! tbl "work" "design"))
-        (aliasLookupDirect (cfg/gateway_v2_alias_entry! tbl "flashLow"))
-        (aliasLookupProviderName (cfg/gateway_v2_alias_entry! tbl "codex/gpt-6-astra"))
-        (aliasLookupNonexistent (cfg/gateway_v2_alias_entry! tbl "nonexistent/model"))
-        (anyOnlys (cfg/gateway_any_only_intents tbl))
-        (tblWithUndeclared (cfg/gateway_note_intent tbl "customNewIntent"))
-        (tblWithDeclared (cfg/gateway_note_intent tblWithUndeclared "plan"))
-        (undMap (cfg/gateway_undeclared_intents tblWithDeclared))]
+        (routeDesign (cfg/gatewayV2Route pWork lineDesign))
+        (routeImplement (cfg/gatewayV2Route pWork lineImplement))
+        (routeUnknown (cfg/gatewayV2Route pWork lineUnknown))
+        (entriesDesign (cfg/gatewayV2Entries! tbl "work" "design"))
+        (aliasLookupDirect (cfg/gatewayV2AliasEntry! tbl "flashLow"))
+        (aliasLookupProviderName (cfg/gatewayV2AliasEntry! tbl "codex/gpt-6-astra"))
+        (aliasLookupNonexistent (cfg/gatewayV2AliasEntry! tbl "nonexistent/model"))
+        (anyOnlys (cfg/gatewayAnyOnlyIntents tbl))
+        (tblWithUndeclared (cfg/gatewayNoteIntent tbl "customNewIntent"))
+        (tblWithDeclared (cfg/gatewayNoteIntent tblWithUndeclared "plan"))
+        (undMap (cfg/gatewayUndeclaredIntents tblWithDeclared))]
     (do
       (assert (= lineDesign (list "design" "plan")) "design intent line is [design, plan]")
       (refute (!= lineDesign (list "design" "plan")) "design line must not deviate")
@@ -307,14 +307,14 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
       (assert (= routeUnknown (list "flashLow")) "route for unknown falls back to any [flashLow]")
       (assert (not (listEmpty? entriesDesign)) "entries for design is non-empty")
       (let [(firstEntry (optionOr (listHead entriesDesign) (cfg/entryUnresolved "")))]
-        (assert (= (cfg/gateway_entry_label firstEntry) "opus") "first entry label is opus"))
+        (assert (= (cfg/gatewayEntryLabel firstEntry) "opus") "first entry label is opus"))
       (refute (none? aliasLookupDirect) "direct alias lookup must not be none")
       (match aliasLookupDirect
-        ((some e) (assert (= (cfg/gateway_entry_label e) "flashLow") "direct alias lookup succeeds"))
+        ((some e) (assert (= (cfg/gatewayEntryLabel e) "flashLow") "direct alias lookup succeeds"))
         ((none) (assert false "direct alias lookup failed")))
       (refute (none? aliasLookupProviderName) "provider/name lookup must not be none")
       (match aliasLookupProviderName
-        ((some e) (assert (= (cfg/gateway_entry_label e) "astra") "provider/name alias lookup finds astra"))
+        ((some e) (assert (= (cfg/gatewayEntryLabel e) "astra") "provider/name alias lookup finds astra"))
         ((none) (assert false "provider/name lookup failed")))
       (refute (some? aliasLookupNonexistent) "nonexistent alias lookup must not be some")
       (assert (none? aliasLookupNonexistent) "nonexistent alias returns none")
@@ -327,7 +327,7 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
 
 fn testProfilesV1Parse -> Bool
   (let [(v1Text "(:gateway :profile defProfile :profiles ((:profile :id defProfile :routes ((:intent any :models (\"m1\"))))))")
-        (parseRes (cfg/gateway_profiles_parse v1Text))]
+        (parseRes (cfg/gatewayProfilesParse v1Text))]
     (match parseRes
       ((err e) (do (assert false (str "v1 profile parse failed: " e)) false))
       ((ok v1Cfg)
@@ -340,8 +340,8 @@ fn testProfilesV1Parse -> Bool
 fn ! testModelApiParse -> Bool
   (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"responses\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (badText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"bogus\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (okRes (cfg/gateway_config_parse! okText "apiOk" ".asl/mem/calibration/index.asn"))
-        (badRes (cfg/gateway_config_parse! badText "apiBad" ".asl/mem/calibration/index.asn"))]
+        (okRes (cfg/gatewayConfigParse! okText "apiOk" ".asl/mem/calibration/index.asn"))
+        (badRes (cfg/gatewayConfigParse! badText "apiBad" ".asl/mem/calibration/index.asn"))]
     (and
       (match okRes
         ((err e) (do (assert false (str "RESPAPI: :api responses must parse: " e)) false))
@@ -360,8 +360,8 @@ fn ! testModelApiParse -> Bool
 fn ! testRoleCascadeIsConfigOnly -> Bool
   (let [(textA "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :intents ((:intent :id coder))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)) (:intent coder :chain (m1 m2) :temperature 0.0))))\n  :uses ((:use :for default :profile p1)))")
         (textB "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :intents ((:intent :id coder))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)) (:intent coder :chain (m2 m1) :temperature 0.0))))\n  :uses ((:use :for default :profile p1)))")
-        (resA (cfg/gateway_config_parse! textA "cascadeA" ".asl/mem/calibration/index.asn"))
-        (resB (cfg/gateway_config_parse! textB "cascadeB" ".asl/mem/calibration/index.asn"))]
+        (resA (cfg/gatewayConfigParse! textA "cascadeA" ".asl/mem/calibration/index.asn"))
+        (resB (cfg/gatewayConfigParse! textB "cascadeB" ".asl/mem/calibration/index.asn"))]
     (match resA
       ((err e) (do (assert false (str "role-cascade-is-config fixture A failed to parse: " e)) false))
       ((ok tblA)
@@ -375,7 +375,7 @@ fn ! testRoleCascadeIsConfigOnly -> Bool
                   ((err e) (do (assert false (str "role-cascade-is-config: route B failed: " e)) false))
                   ((ok reB)
                     (let [(firstLabel (fn [(re cfg/RouteEntries)] -> String
-                                        (match (listHead re.entries) ((some e) (cfg/gateway_entry_label e)) ((none) ""))))
+                                        (match (listHead re.entries) ((some e) (cfg/gatewayEntryLabel e)) ((none) ""))))
                           (labA (firstLabel reA))
                           (labB (firstLabel reB))]
                       (do
@@ -400,12 +400,12 @@ fn ! testSpreadParsesWeightsAndValidates -> Bool
         (negWeightText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 -2))))))\n  :uses ((:use :for default :profile p1)))")
         (unknownAliasText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((ghost 1))))))\n  :uses ((:use :for default :profile p1)))")
         (badCooldownText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1) :spread ((m1 1)) :cooldownSec 0))))\n  :uses ((:use :for default :profile p1)))")
-        (okRes (cfg/gateway_config_parse! okText "spreadOk" ".asl/mem/calibration/index.asn"))
-        (cooldownRes (cfg/gateway_config_parse! cooldownText "spreadCooldown" ".asl/mem/calibration/index.asn"))
-        (zeroRes (cfg/gateway_config_parse! zeroWeightText "spreadZero" ".asl/mem/calibration/index.asn"))
-        (negRes (cfg/gateway_config_parse! negWeightText "spreadNeg" ".asl/mem/calibration/index.asn"))
-        (unknownRes (cfg/gateway_config_parse! unknownAliasText "spreadUnknown" ".asl/mem/calibration/index.asn"))
-        (badCooldownRes (cfg/gateway_config_parse! badCooldownText "spreadBadCooldown" ".asl/mem/calibration/index.asn"))]
+        (okRes (cfg/gatewayConfigParse! okText "spreadOk" ".asl/mem/calibration/index.asn"))
+        (cooldownRes (cfg/gatewayConfigParse! cooldownText "spreadCooldown" ".asl/mem/calibration/index.asn"))
+        (zeroRes (cfg/gatewayConfigParse! zeroWeightText "spreadZero" ".asl/mem/calibration/index.asn"))
+        (negRes (cfg/gatewayConfigParse! negWeightText "spreadNeg" ".asl/mem/calibration/index.asn"))
+        (unknownRes (cfg/gatewayConfigParse! unknownAliasText "spreadUnknown" ".asl/mem/calibration/index.asn"))
+        (badCooldownRes (cfg/gatewayConfigParse! badCooldownText "spreadBadCooldown" ".asl/mem/calibration/index.asn"))]
     (match okRes
       ((err e) (do (assert false (str "SPREAD: a valid :spread must parse: " e)) false))
       ((ok tbl)
@@ -435,8 +435,8 @@ fn ! testSpreadParsesWeightsAndValidates -> Bool
 fn ! testRouteEntriesCarriesSpread -> Bool
   (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1 m2) :spread ((m1 3) (m2 1)) :cooldownSec 45))))\n  :uses ((:use :for default :profile p1)))")
         (plainText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
-        (okRes (cfg/gateway_config_parse! okText "spreadEntriesOk" ".asl/mem/calibration/index.asn"))
-        (plainRes (cfg/gateway_config_parse! plainText "spreadEntriesPlain" ".asl/mem/calibration/index.asn"))]
+        (okRes (cfg/gatewayConfigParse! okText "spreadEntriesOk" ".asl/mem/calibration/index.asn"))
+        (plainRes (cfg/gatewayConfigParse! plainText "spreadEntriesPlain" ".asl/mem/calibration/index.asn"))]
     (match okRes
       ((err e) (do (assert false (str "SPREADLIVE: a valid config must parse: " e)) false))
       ((ok tbl)
@@ -473,7 +473,7 @@ fn ! runTests -> Bool
             ((err e) (do (assert false (str "Lex/ast error reading fixture: " e.msg)) false))
             ((ok forms)
               (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-                (match (cfg/asn_props top (some ":fixture"))
+                (match (cfg/asnProps top (some ":fixture"))
                   ((err e) (do (assert false (str "Fixture form error: " e)) false))
                   ((ok fProps)
                     (match (mapGet fProps "variants")
@@ -488,7 +488,7 @@ fn ! runTests -> Bool
                               (assert (testAsnScalarAndFigure) "ASN scalar and figure tested")
                               (assert (testGatewayParams) "Gateway params validation tested")
                               (assert (testSessionHeaderParse) "OCSESSION: provider :sessionHeader parsing tested")
-                              (let [(userGtwyRes (cfg/gateway_config_parse! (getPropStr (pairFirst (let [(v0 (optionOr (listHead vList) (rd/sexprAtom "")))] (match (cfg/asn_props v0 (some ":variant")) ((ok p) (pair p (list))) ((err _) (pair (mapEmpty) (list)))))) "text" "") "userGtwy" ".asl/mem/calibration/index.asn"))]
+                              (let [(userGtwyRes (cfg/gatewayConfigParse! (getPropStr (pairFirst (let [(v0 (optionOr (listHead vList) (rd/sexprAtom "")))] (match (cfg/asnProps v0 (some ":variant")) ((ok p) (pair p (list))) ((err _) (pair (mapEmpty) (list)))))) "text" "") "userGtwy" ".asl/mem/calibration/index.asn"))]
                                 (match userGtwyRes
                                   ((err e) (assert false (str "user gateway parse failed: " e)))
                                   ((ok tbl) (assert (testRoutingAndEntries! tbl) "Routing, entries, and labels tested"))))

@@ -25,7 +25,7 @@ fn testAsnEscapeParity -> Bool
     (assert (= (wire/asnEscape "newlines\nand\ttabs\rand\rcarriage") "newlines\\nand\\ttabs\\rand\\rcarriage") "esc_newline_tab parity")
     (assert (= (wire/asnEscape "unicode: café ★ 日本語 ☃") "unicode: café ★ 日本語 ☃") "esc_unicode parity")
     (assert (= (wire/asnEscape "\"quote\" \\ \n \r \t ★") "\\\"quote\\\" \\\\ \\n \\r \\t ★") "esc_combo parity")
-    (assert (= (wire/asn_escape "plain text") "plain text") "asn_escape alias parity")
+    (assert (= (wire/asnEscape "plain text") "plain text") "asn_escape alias parity")
     true)
 
 fn testIsBalancedAsnFormParity -> Bool
@@ -40,7 +40,7 @@ fn testIsBalancedAsnFormParity -> Bool
     (refute (wire/isBalancedAsnForm? "hello world") "bal_no_parens parity")
     (refute (wire/isBalancedAsnForm? "") "bal_empty parity")
     (refute (wire/isBalancedAsnForm? "   \n\t  ") "bal_spaces parity")
-    (assert (wire/is_balanced_asn_form "(:test 1 2 3)") "is_balanced_asn_form alias parity")
+    (assert (wire/isBalancedAsnForm "(:test 1 2 3)") "is_balanced_asn_form alias parity")
     true)
 
 fn testAsnNumberParity -> Bool
@@ -53,7 +53,7 @@ fn testAsnNumberParity -> Bool
     (assert (none? (wire/asnNumber (j/jbool false))) "num_bool_false parity")
     (assert (none? (wire/asnNumber (j/jstr "42"))) "num_str parity")
     (assert (none? (wire/asnNumber (j/jnull))) "num_null parity")
-    (assert (= (wire/asn_number (j/jint 42)) (some "42")) "asn_number alias parity")
+    (assert (= (wire/asnNumber (j/jint 42)) (some "42")) "asn_number alias parity")
     true)
 
 fn testWantsAsnParity -> Bool
@@ -67,7 +67,7 @@ fn testWantsAsnParity -> Bool
     (refute (wire/wantsAsn (list "Accept: text/plain" "X-ASL-Wire: json")) "wants_unrelated parity")
     (refute (wire/wantsAsn (list)) "wants_empty parity")
     (assert (wire/wantsAsnPairs? (list (pair "Accept" "application/asn+sexpr"))) "wantsAsnPairs? parity")
-    (assert (wire/wants_asn (list "X-ASL-Wire: asn")) "wants_asn alias parity")
+    (assert (wire/wantsAsn (list "X-ASL-Wire: asn")) "wants_asn alias parity")
     true)
 
 fn testChatReplyUsageParity -> Bool
@@ -92,7 +92,7 @@ fn testChatReplyUsageParity -> Bool
       (assert (none? (wire/chatReplyUsage u8)) "usage_non_dict parity")
       (assert (= (wire/chatReplyUsage u9) (some "(:input 50 :cached 0 :output 20)")) "usage_not_dict parity")
       (assert (none? (wire/chatReplyUsage u10)) "usage_not_dict_no_standard parity")
-      (assert (= (wire/chat_reply_usage u1) (some "(:input 100 :cached 0 :output 50)")) "chat_reply_usage alias parity")
+      (assert (= (wire/chatReplyUsage u1) (some "(:input 100 :cached 0 :output 50)")) "chat_reply_usage alias parity")
       true))
 
 fn testServedByParity -> Bool
@@ -113,7 +113,7 @@ fn testServedByParity -> Bool
       (assert (= (j/jsonGet s6 "alias") (some (j/jstr "pro"))) "served_full alias")
       (assert (= (j/jsonGet s6 "effort") (some (j/jstr "medium"))) "served_full effort")
       (assert (= (j/jsonGet s6 "temperature") (some (j/jfloat 0.0))) "served_full temperature")
-      (let [(s1Alias (wire/served_by (parseJsonUnsafe "{\"alias\": \"fast-model\"}") true "default" none none))]
+      (let [(s1Alias (wire/servedBy (parseJsonUnsafe "{\"alias\": \"fast-model\"}") true "default" none none))]
         (assert (= (j/jsonGet s1Alias "alias") (some (j/jstr "fast-model"))) "served_by alias parity"))
       true))
 
@@ -143,7 +143,7 @@ fn testChatReplyAsnParity -> Bool
       (assert (= (wire/chatReplyAsn rNonAscii) "(:reply :model \"\" :content \"{\\\"greeting\\\": \\\"caf\\\\u00e9\\\", \\\"chinese\\\": \\\"\\\\u4e2d\\\\u6587\\\"}\" :finish \"stop\")\n") "reply_content_non_ascii parity")
       (assert (= (wire/chatReplyAsn rUsageNotDict) "(:reply :model \"\" :content \"ok\" :finish \"stop\" :usage (:input 50 :cached 0 :output 20))\n") "reply_usage_not_dict parity")
       (assert (= (wire/chatReplyAsn rPool) "(:reply :model \"\" :content \"ok\" :finish \"stop\" :asl (:pool \"101\"))\n") "reply_pool_non_string parity")
-      (assert (= (wire/chat_reply_asn r1) "(:reply :model \"gpt-4o\" :content (:solution :code 42) :finish \"stop\")\n") "chat_reply_asn alias parity")
+      (assert (= (wire/chatReplyAsn r1) "(:reply :model \"gpt-4o\" :content (:solution :code 42) :finish \"stop\")\n") "chat_reply_asn alias parity")
       true))
 
 fn testUpstreamErrorReasonParity -> Bool
@@ -162,7 +162,7 @@ fn testUpstreamErrorReasonParity -> Bool
                  "Network connection failed") "err_empty_fallback parity")
       (assert (= (wire/upstreamErrorReason (str "Error log: " longInput) "fallback")
                  longExpected) "err_long_body_500 parity")
-      (assert (= (wire/upstream_error_reason "{\"error\": \"Unauthorized\"}" "fallback") "Unauthorized") "upstream_error_reason alias parity")
+      (assert (= (wire/upstreamErrorReason "{\"error\": \"Unauthorized\"}" "fallback") "Unauthorized") "upstream_error_reason alias parity")
       true))
 
 fn testSanitizeAsnContentParity -> Bool
@@ -176,7 +176,7 @@ fn testSanitizeAsnContentParity -> Bool
       (assert (= (wire/sanitizeAsnContent "I cannot complete this task.") "(:error :reason \"unbalanced_non_asn\" :raw \"I cannot complete this task.\")") "san_conversational parity")
       (assert (= (wire/sanitizeAsnContent "Error: \"failed\"\nNext line") "(:error :reason \"unbalanced_non_asn\" :raw \"Error: \\\"failed\\\" Next line\")") "san_quotes_newline parity")
       (assert (= (wire/sanitizeAsnContent (str "Notice: " longInput)) longExpected) "san_long_non_asn parity")
-      (assert (= (wire/sanitize_asn_content "(:status :ok)") "(:status :ok)") "sanitize_asn_content alias parity")
+      (assert (= (wire/sanitizeAsnContent "(:status :ok)") "(:status :ok)") "sanitize_asn_content alias parity")
       true))
 
 fn testExtractOutermostSexprParity -> Bool
@@ -191,7 +191,7 @@ fn testExtractOutermostSexprParity -> Bool
                (some "(:msg \"brackets [here] and (parens)\")")) "ext_nested_brackets parity")
     (assert (none? (wire/extractOutermostSexpr "(:bad [1 2 3))")) "ext_unbalanced parity")
     (assert (none? (wire/extractOutermostSexpr "Plain prose with no sexprs at all.")) "ext_none parity")
-    (assert (= (wire/extract_outermost_sexpr "Computed: (:ok)") (some "(:ok)")) "extract_outermost_sexpr alias parity")
+    (assert (= (wire/extractOutermostSexpr "Computed: (:ok)") (some "(:ok)")) "extract_outermost_sexpr alias parity")
     true)
 
 fn testFixtureCorpusVerification! -> Bool

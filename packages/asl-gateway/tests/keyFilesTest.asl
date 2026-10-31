@@ -93,7 +93,7 @@ fn testGatewayKeyFilesFromPropsParsesList -> Bool
       ((err e) (do (assert false (str "fixture text must parse: " e)) false))
       ((ok forms)
         (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-          (match (cfg/asn_props top (some ":gateway"))
+          (match (cfg/asnProps top (some ":gateway"))
             ((err e) (do (assert false (str "fixture props must parse: " e)) false))
             ((ok g)
               (let [(got (cfg/gatewayKeyFilesFromProps g))]
@@ -107,7 +107,7 @@ fn testGatewayKeyFilesFromPropsAbsentIsEmpty -> Bool
       ((err e) (do (assert false (str "fixture text must parse: " e)) false))
       ((ok forms)
         (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-          (match (cfg/asn_props top (some ":gateway"))
+          (match (cfg/asnProps top (some ":gateway"))
             ((err e) (do (assert false (str "fixture props must parse: " e)) false))
             ((ok g)
               (let [(got (cfg/gatewayKeyFilesFromProps g))]
@@ -120,7 +120,7 @@ fn ! testMissingKeyNamesFilesAndEnv! -> Bool
                     "  :models ((:model :id probeModel :provider probe :name \"probe-model\"))\n"
                     "  :profiles ((:profile :id p1 :routes ((:intent any :chain (probeModel)))))\n"
                     "  :uses ((:use :for default :profile p1)))\n"))
-        (parsed (cfg/gateway_config_parse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
+        (parsed (cfg/gatewayConfigParse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
     (match parsed
       ((err e) (do (assert false (str "a missing key is a warning on the parsed table, not a hard parse failure: " e)) false))
       ((ok tbl)
@@ -138,7 +138,7 @@ fn ! testFileSatisfiesConfigCheck! root: String -> Bool
                     "  :models ((:model :id probeModel :provider probe :name \"probe-model\"))\n"
                     "  :profiles ((:profile :id p1 :routes ((:intent any :chain (probeModel)))))\n"
                     "  :uses ((:use :for default :profile p1)))\n"))
-        (parsed (cfg/gateway_config_parse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
+        (parsed (cfg/gatewayConfigParse! text "keyFilesTest" ".asl/mem/calibration/index.asn"))]
     (match parsed
       ((err e) (do (assert false (str "a key present in a listed key file must satisfy the config check: " e)) false))
       ((ok tbl)

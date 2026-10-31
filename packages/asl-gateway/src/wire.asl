@@ -7,32 +7,24 @@
       demuxRawAsnTurn
       findBalancedParen
       asnEscape
-      asn_escape
       isBalancedAsnForm?
       isBalancedAsnForm
-      is_balanced_asn_form
       asnNumber
-      asn_number
       asnNumberOpt
       wantsAsn?
       wantsAsn
-      wants_asn
       wantsAsnPairs?
       chatReplyUsage
-      chat_reply_usage
       chatReplyUsageStr
       servedBy
-      served_by
       servedBySimple
       chatReplyAsn
-      chat_reply_asn
       chatReplyAsnStr
       upstreamErrorReason
-      upstream_error_reason
       sanitizeAsnContent
       sanitize_asn_content
       extractOutermostSexpr
-      extract_outermost_sexpr]
+      ]
   :i [(asl-json/json :a j)])
 
 fn formatWireHeaders -> (List Str)
@@ -141,9 +133,6 @@ fn asnEscape s: String -> String
       "\r" "\\r")
     "\t" "\\t")
 
-fn asn_escape s: String -> String
-  (asnEscape s)
-
 fn isBalancedAsnFormLoop text: String idx: Int64 len: Int64 depth: Int64 inStr: Bool esc: Bool -> Bool
   (if (>= idx len)
     false
@@ -179,18 +168,12 @@ fn isBalancedAsnForm? text: String -> Bool
 fn isBalancedAsnForm text: String -> Bool
   (isBalancedAsnForm? text)
 
-fn is_balanced_asn_form text: String -> Bool
-  (isBalancedAsnForm? text)
-
 fn asnNumber j: j/Json -> (Option String)
   (match j
     ((j/jint i) (some (stringFromInt64 i)))
     ((j/jfloat f) (some (stringFromFloat64 f)))
     ((j/jnum n) (some (stringFromFloat64 n)))
     (_ none))
-
-fn asn_number j: j/Json -> (Option String)
-  (asnNumber j)
 
 fn asnNumberOpt opt: (Option j/Json) -> (Option String)
   (match opt
@@ -218,9 +201,6 @@ fn wantsAsn? headers: (List String) -> Bool
     (or (stringContains? acceptVal "application/asn+sexpr") (= wireVal "asn")))
 
 fn wantsAsn headers: (List String) -> Bool
-  (wantsAsn? headers)
-
-fn wants_asn headers: (List String) -> Bool
   (wantsAsn? headers)
 
 fn getPairValLoop pairs: (List (Pair String String)) targetLower: String -> (Option String)
@@ -317,9 +297,6 @@ fn chatReplyUsage respJson: j/Json -> (Option String)
        ((none) (chatReplyUsageStandard respJson))))
     ((none) (chatReplyUsageStandard respJson)))
 
-fn chat_reply_usage respJson: j/Json -> (Option String)
-  (chatReplyUsage respJson)
-
 fn chatReplyUsageStr jsonStr: String -> (Option String)
   (match (j/jsonParse jsonStr)
     ((ok parsed) (chatReplyUsage parsed))
@@ -356,9 +333,6 @@ fn servedBy entry: j/Json v2Entry: Bool fallbackModel: String body: (Option j/Js
                        ((none) kvsWithEffort)))
                     ((none) kvsWithEffort)))]
     (j/jobj finalKvs))
-
-fn served_by entry: j/Json v2Entry: Bool fallbackModel: String body: (Option j/Json) sentEffort: (Option String) -> j/Json
-  (servedBy entry v2Entry fallbackModel body sentEffort)
 
 fn servedBySimple entryAlias: String v2Entry: Bool fallbackModel: String body: (Option j/Json) sentEffort: (Option String) -> j/Json
   (servedBy (j/jstr entryAlias) v2Entry fallbackModel body sentEffort)
@@ -557,9 +531,6 @@ fn chatReplyAsn respJson: j/Json -> String
                           (listAppend partUsage partAsl))))))]
     (str "(:reply " (stringJoin allParts " ") ")\n"))
 
-fn chat_reply_asn respJson: j/Json -> String
-  (chatReplyAsn respJson)
-
 fn chatReplyAsnStr jsonStr: String -> String
   (match (j/jsonParse jsonStr)
     ((ok parsed) (chatReplyAsn parsed))
@@ -593,9 +564,6 @@ fn upstreamErrorReason errData: String fallbackErr: String -> String
           ((none) (fallbackErrorText errData fallbackErr))))
        ((none) (fallbackErrorText errData fallbackErr))))
     ((err _) (fallbackErrorText errData fallbackErr)))
-
-fn upstream_error_reason errData: String fallbackErr: String -> String
-  (upstreamErrorReason errData fallbackErr)
 
 fn extractOutermostSexpLoop text: String idx: Int64 len: Int64 start: Int64 depth: Int64 inStr: Bool esc: Bool -> (Option String)
   (if (>= idx len)
@@ -738,5 +706,3 @@ fn extractOutermostSexpr text: String -> (Option String)
          (extractOutermostSexprLoop text start (stringLength text) start (list) false false))
         ((none) none))))
 
-fn extract_outermost_sexpr text: String -> (Option String)
-  (extractOutermostSexpr text)
