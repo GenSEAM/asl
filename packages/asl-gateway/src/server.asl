@@ -456,6 +456,8 @@ fn attribConsumer packed: String -> (Option String)
   ; (:m :ref LIMITS-LEDGER-COST :do "rows the provider limit windows count over, and when they were last read from the shared ledger (0 = never)")
   (:f limitRows (List ul/CallRow))
   (:f limitSeededMs Int64)
+  ; (:m :ref GW-LIMIT-SCOPES :do "concurrency slots held by calls in flight: taken when a call passes its limit check, freed by the sent usage row of its provider and alias or when the lease runs out")
+  (:f leases (List lim/Lease) :default (list))
   (:f startMs Int64))
 
 fn omniZeroKey -> om/Word64
@@ -644,16 +646,35 @@ fn ! limitSeeded! srv: GatewayLoop text: String limits: (List c/GatewayLimit) no
           (rows (resultOr (ul/readRowsSince! sharedPath (lim/longestStartMs limits nowMs)) (list)))]
       (with srv :limitRows (lim/keepRows rows (lim/longestStartMs limits nowMs)) :limitSeededMs nowMs)))
 
+; (:m :ref GW-LIMIT-SCOPES :do "a call that passed its windows takes a slot in every concurrency limit covering it; when any is full the answer is park with the poll interval and nothing is taken; leases older than :concurrencyLeaseSec (default 600) are dropped first")
+fn limitConcurrency srv: GatewayLoop text: String sc: c/LimitScope limits: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Pair GatewayLoop ch/ChatOutcome)
+  (let [(lims (lim/concurrencyOf sc limits provider alias))
+        (leaseSec (inRangeOr (c/gatewayTopIntOverride text "concurrencyLeaseSec") 10 86400 (c/defaultConcurrencyLeaseSec)))
+        (pollMs (inRangeOr (c/gatewayTopIntOverride text "concurrencyPollMs") 10 5000 (c/defaultConcurrencyPollMs)))
+        (live (lim/liveLeases srv.leases now (* 1000 leaseSec)))]
+    (cond
+      ((listEmpty? lims) (pair (with srv :leases live) (ch/outStrings (list))))
+      ((lim/full? lims live) (pair (with srv :leases live) (ch/outStrings (list "park" "provider concurrency limit full" (stringFromInt64 pollMs)))))
+      (else (pair (with srv :leases (lim/admit live lims provider alias now)) (ch/outStrings (list))))))
+
+fn inRangeOr v: (Option Int64) lo: Int64 hi: Int64 d: Int64 -> Int64
+  (match v
+    ((some n) (if (and (>= n lo) (<= n hi)) n d))
+    ((none) d))
+
 fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/ChatOutcome)
   (match eff
     ; (:m :ref GW-LIMIT-WINDOWS :do "counts the shared usage ledger against the config's limit rows for this provider and alias; empty means go ahead")
     ((ch/effLimit provider alias)
       (let [(text (optionOr srv.wiringText ""))
             (limits (c/gatewayLimitsFromText text))
+            (sc (c/gatewayLimitScopeFromText text))
             (now (/ (nowNs) 1000000))
             (srv1 (limitSeeded! srv text limits now))
-            (verdict (lim/decide limits srv1.limitRows provider alias now))]
-        (pair srv1 (ch/outStrings (match verdict ((some v) (list v.outcome v.reason)) ((none) (list)))))))
+            (verdict (lim/decideIn sc limits srv1.limitRows provider alias now))]
+        (match verdict
+          ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
+          ((none) (limitConcurrency srv1 text sc limits provider alias now)))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
@@ -700,7 +721,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))
-              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row)) none) ch/outDone))))))
+              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row) :leases (if (lim/sentRow? row) (lim/release srv.leases p alias) srv.leases)) none) ch/outDone))))))
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")

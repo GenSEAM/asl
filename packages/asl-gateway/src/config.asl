@@ -26,6 +26,13 @@
       GatewayLimit
       gatewayLimitsFromProps
       gatewayLimitWarnings
+      gatewayLimitErrors
+      GatewayGroup
+      LimitScope
+      emptyLimitScope
+      gatewayLimitScopeFromText
+      defaultConcurrencyLeaseSec
+      defaultConcurrencyPollMs
       gatewayLimitsFromText
       gatewayLimitWindows
       defaultBucketWaitSec
@@ -354,14 +361,44 @@ fn gatewayKeyFilesFromProps g: (Map String rd/SExpr) -> (List String)
          (map (fn [(it rd/SExpr)] -> String (match (asnScalar it) ((scalarStr s) s) (_ "")))
            items)))))
 
-; (:m :ref GW-LIMIT-WINDOWS :do "one provider limit from (:gateway :limits ((:limit :provider P :scope account|model :model M :window W :calls N :tokens N) ...)); scope account counts every alias of the provider, scope model one alias; calls and tokens are caps over the window, 0 means that measure is not limited; method, verified, date, note, usd and concurrency are documentation or later work and are read past")
+; (:m :ref GW-LIMIT-SCOPES :do "one provider limit from (:gateway :limits ((:limit :scope account|group|model|endpoint ...) ...)): account counts every alias of :provider, model one alias of :provider (:model M), group the aliases of a (:group :id G :provider P :models (...)) row (:group G), endpoint every provider whose :base is :endpoint; the units are :calls, :tokens (in plus out), :tokensIn, :tokensOut, :tokensCached over a :window, :usd over a :window priced by the models' :priceInPerM and :priceOutPerM, and :concurrency (calls in flight, no window); 0 or absent means that unit is not limited; method, verified, date and note are documentation and are read past")
 (schema GatewayLimit
   (:f provider String)
   (:f scope String)
   (:f model String)
   (:f window String)
   (:f calls Int64)
-  (:f tokens Int64))
+  (:f tokens Int64)
+  (:f group String :default "")
+  (:f endpoint String :default "")
+  (:f tokensIn Int64 :default 0)
+  (:f tokensOut Int64 :default 0)
+  (:f tokensCached Int64 :default 0)
+  (:f usd Float64 :default 0.0)
+  (:f concurrency Int64 :default 0))
+
+; (:m :ref GW-LIMIT-SCOPES :do "a (:group :id G :provider P :models (ALIAS ...)) row under (:gateway :groups (...)): the listed aliases of provider P share every limit row that names the group, so one budget spans several models (a plan quota shared across its models, a free-tier daily count across all free models)")
+(schema GatewayGroup
+  (:f id String)
+  (:f provider String)
+  (:f models (List String)))
+
+; (:m :ref GW-LIMIT-SCOPES :do "what a limit row needs beyond the usage rows to say whether a call is inside its scope and what it cost: the groups, each provider's :base (endpoint scope) and each model's :priceInPerM and :priceOutPerM (usd units)")
+(schema LimitScope
+  (:f groups (List GatewayGroup))
+  (:f bases (List (Pair String String)))
+  (:f prices (List (Pair String (Pair Float64 Float64)))))
+
+fn emptyLimitScope -> LimitScope
+  (LimitScope :groups (list) :bases (list) :prices (list))
+
+; (:m :ref GW-LIMIT-SCOPES :do "(:gateway :concurrencyLeaseSec N): a call holding a concurrency slot longer than this is treated as lost and frees it, so a dropped connection never keeps a slot; 10..86400, default 600 adopted")
+fn defaultConcurrencyLeaseSec -> Int64
+  600
+
+; (:m :ref GW-LIMIT-SCOPES :do "(:gateway :concurrencyPollMs N): how often a call parked behind a full :concurrency limit asks again, up to the call's queue budget; 10..5000, default 250 adopted")
+fn defaultConcurrencyPollMs -> Int64
+  250
 
 ; (:m :ref GW-BUCKET-SHORTWAIT :do "how long a chain member before the last waits for its own rpm bucket to refill before the cascade moves on (the last member keeps its 30 s); (:gateway :bucketWaitSec N), default 5 s adopted")
 fn defaultBucketWaitSec -> Float64
@@ -451,8 +488,9 @@ fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
                 (listAppend (listAppend (cooldownErrorOf g "affinityStickSec" 1 86400) (cooldownErrorOf g "affinityForgetSec" 1 604800)) order)))
 
 fn gatewayWaitErrors g: (Map String rd/SExpr) -> (List String)
-  (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
+  (listAppend (listAppend (listAppend (listAppend (waitErrorOf "bucketWaitSec" (bucketWaitValue g)) (waitErrorOf "queueBudgetSec" (queueBudgetValue g))) (gatewayCooldownErrors g))
               (gatewayAffinityErrors g))
+              (gatewayLimitErrors g))
 
 fn gatewayLimitWindows -> (List String)
   (list "minute" "hour" "fiveHour" "day" "week" "month")
@@ -467,10 +505,30 @@ fn limitInt props: (Map String rd/SExpr) key: String -> Int64
     ((none) 0)
     ((some v) (match (asnScalar v) ((scalarInt n) n) (_ -1))))
 
-fn limitItems g: (Map String rd/SExpr) -> (List rd/SExpr)
-  (match (mapGet g "limits")
+fn itemsOf g: (Map String rd/SExpr) key: String -> (List rd/SExpr)
+  (match (mapGet g key)
     ((none) (list))
     ((some value) (match value ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list)))))
+
+fn limitItems g: (Map String rd/SExpr) -> (List rd/SExpr)
+  (itemsOf g "limits")
+
+fn limitFloat props: (Map String rd/SExpr) key: String -> Float64
+  (match (mapGet props key)
+    ((none) 0.0)
+    ((some v) (match (asnScalar v) ((scalarFloat f) f) ((scalarInt n) (int64ToFloat64 n)) (_ -1.0))))
+
+fn limitScopes -> (List String)
+  (list "account" "group" "model" "endpoint")
+
+fn limitMaxConcurrency -> Int64
+  1024
+
+fn limitWho provider: String group: String endpoint: String -> String
+  (cond
+    ((not (stringEmpty? provider)) provider)
+    ((not (stringEmpty? group)) (str "group " group))
+    (else endpoint))
 
 fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
   (match (asnProps item (some ":limit"))
@@ -479,17 +537,30 @@ fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
      (let [(provider (limitStr p "provider"))
            (scope (if (stringEmpty? (limitStr p "scope")) "account" (limitStr p "scope")))
            (model (limitStr p "model"))
+           (group (limitStr p "group"))
+           (endpoint (limitStr p "endpoint"))
            (window (limitStr p "window"))
            (calls (limitInt p "calls"))
-           (tokens (limitInt p "tokens"))]
+           (tokens (limitInt p "tokens"))
+           (tIn (limitInt p "tokensIn"))
+           (tOut (limitInt p "tokensOut"))
+           (tCached (limitInt p "tokensCached"))
+           (usd (limitFloat p "usd"))
+           (conc (limitInt p "concurrency"))
+           (windowed (or (> calls 0) (or (> tokens 0) (or (> tIn 0) (or (> tOut 0) (or (> tCached 0) (> usd 0.0)))))))
+           (who (limitWho provider group endpoint))]
        (cond
-         ((stringEmpty? provider) (err "limit row needs :provider"))
-         ((not (listContains? (gatewayLimitWindows) window)) (err (str "limit " provider ": :window must be one of minute hour fiveHour day week month, found " window)))
-         ((and (!= scope "account") (!= scope "model")) (err (str "limit " provider ": :scope must be account or model, found " scope)))
-         ((and (= scope "model") (stringEmpty? model)) (err (str "limit " provider ": :scope model needs :model")))
-         ((or (< calls 0) (< tokens 0)) (err (str "limit " provider ": :calls and :tokens must be whole numbers")))
-         ((and (= calls 0) (= tokens 0)) (err (str "limit " provider " " window ": needs :calls or :tokens")))
-         (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens)))))))
+         ((not (listContains? (limitScopes) scope)) (err (str "limit " who ": :scope must be account, group, model or endpoint, found " scope)))
+         ((and (or (= scope "account") (= scope "model")) (stringEmpty? provider)) (err "limit row needs :provider"))
+         ((and (= scope "group") (stringEmpty? group)) (err "limit row: :scope group needs :group"))
+         ((and (= scope "endpoint") (stringEmpty? endpoint)) (err "limit row: :scope endpoint needs :endpoint"))
+         ((and (= scope "model") (stringEmpty? model)) (err (str "limit " who ": :scope model needs :model")))
+         ((or (< calls 0) (or (< tokens 0) (or (< tIn 0) (or (< tOut 0) (or (< tCached 0) (< usd 0.0)))))) (err (str "limit " who ": :calls :tokens :tokensIn :tokensOut :tokensCached and :usd must be whole numbers or amounts of zero or more")))
+         ((or (< conc 0) (> conc (limitMaxConcurrency))) (err (str "limit " who ": :concurrency must be a whole number from 1 to 1024")))
+         ((and windowed (not (listContains? (gatewayLimitWindows) window))) (err (str "limit " who ": :window must be one of minute hour fiveHour day week month, found " window)))
+         ((and (not windowed) (= conc 0)) (err (str "limit " who " " window ": needs :calls, :tokens, :tokensIn, :tokensOut, :tokensCached, :usd or :concurrency")))
+         (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens
+                                 :group group :endpoint endpoint :tokensIn tIn :tokensOut tOut :tokensCached tCached :usd usd :concurrency conc)))))))
 
 fn gatewayLimitsFromProps g: (Map String rd/SExpr) -> (List GatewayLimit)
   (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
@@ -512,6 +583,73 @@ fn gatewayLimitWarnings g: (Map String rd/SExpr) -> (List String)
   (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
           (match (limitOfItem it) ((ok _) acc) ((err e) (listAppend acc (list (str "limits: " e))))))
     (list) (limitItems g))
+
+fn rowProps g: (Map String rd/SExpr) key: String tag: String -> (List (Map String rd/SExpr))
+  (fold (fn [(acc (List (Map String rd/SExpr))) (it rd/SExpr)] -> (List (Map String rd/SExpr))
+          (match (asnProps it (some tag)) ((ok p) (listAppend acc (list p))) ((err _) acc)))
+    (list) (itemsOf g key))
+
+fn namesOf v: rd/SExpr -> (List String)
+  (let [(items (match v ((rd/sexprList l) l) ((rd/sexprVect vv) vv) (_ (list))))]
+    (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
+      (map (fn [(it rd/SExpr)] -> String (match (asnScalar it) ((scalarStr s) s) (_ ""))) items)))
+
+fn groupOfProps p: (Map String rd/SExpr) -> GatewayGroup
+  (GatewayGroup :id (limitStr p "id") :provider (limitStr p "provider")
+                :models (match (mapGet p "models") ((none) (list)) ((some v) (namesOf v))))
+
+fn gatewayGroupsFromProps g: (Map String rd/SExpr) -> (List GatewayGroup)
+  (map groupOfProps (rowProps g "groups" ":group"))
+
+fn priceOfProps p: (Map String rd/SExpr) -> (Pair String (Pair Float64 Float64))
+  (pair (limitStr p "id") (pair (limitFloat p "priceInPerM") (limitFloat p "priceOutPerM")))
+
+; (:m :ref GW-LIMIT-SCOPES :do "the group rows, each provider's :base and each model's price per million tokens, read from the config text the server already holds")
+fn gatewayLimitScopeFromProps g: (Map String rd/SExpr) -> LimitScope
+  (LimitScope :groups (gatewayGroupsFromProps g)
+              :bases (map (fn [(p (Map String rd/SExpr))] -> (Pair String String) (pair (limitStr p "id") (limitStr p "base"))) (rowProps g "providers" ":provider"))
+              :prices (map priceOfProps (rowProps g "models" ":model")))
+
+fn gatewayLimitScopeFromText text: String -> LimitScope
+  (match (ast/readForms (lx/tokenize text))
+    ((err _) (emptyLimitScope))
+    ((ok forms)
+     (if (!= (listLength forms) 1)
+       (emptyLimitScope)
+       (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
+         (match (asnProps top (some ":gateway"))
+           ((err _) (emptyLimitScope))
+           ((ok g) (gatewayLimitScopeFromProps g)))))))
+
+fn groupErrors g: (Map String rd/SExpr) -> (List String)
+  (let [(groups (gatewayGroupsFromProps g))
+        (models (map (fn [(p (Map String rd/SExpr))] -> (Pair String String) (pair (limitStr p "id") (limitStr p "provider"))) (rowProps g "models" ":model")))]
+    (fold (fn [(acc (List String)) (gr GatewayGroup)] -> (List String)
+            (let [(dup (> (listLength (filter (fn [(o GatewayGroup)] -> Bool (= o.id gr.id)) groups)) 1))
+                  (bad (filter (fn [(m String)] -> Bool (not (listAny? (fn [(mp (Pair String String))] -> Bool (and (= (pairFirst mp) m) (= (pairSecond mp) gr.provider))) models))) gr.models))]
+              (cond
+                ((stringEmpty? gr.id) (listAppend acc (list "groups: a group row needs :id")))
+                (dup (listAppend acc (list (str "groups: group " gr.id " is declared twice"))))
+                ((stringEmpty? gr.provider) (listAppend acc (list (str "groups: group " gr.id " needs :provider"))))
+                ((listEmpty? gr.models) (listAppend acc (list (str "groups: group " gr.id " needs :models"))))
+                ((not (listEmpty? bad)) (listAppend acc (list (str "groups: group " gr.id " names " (stringJoin bad " ") " that is not a model of provider " gr.provider))))
+                (else acc))))
+      (list) groups))
+
+fn limitGroupErrors g: (Map String rd/SExpr) -> (List String)
+  (let [(groups (gatewayGroupsFromProps g))]
+    (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
+            (match (limitOfItem it)
+              ((err _) acc)
+              ((ok l) (if (and (= l.scope "group") (not (listAny? (fn [(gr GatewayGroup)] -> Bool (= gr.id l.group)) groups)))
+                        (listAppend acc (list (str "limits: group " l.group " is not declared under :groups")))
+                        acc))))
+      (list) (limitItems g)))
+
+; (:m :ref GW-LIMIT-SCOPES :do "config check is strict where the runtime load drops or warns: a malformed limit row, a group that names an unknown model or is declared twice, a limit naming an undeclared group and an out-of-range :concurrencyLeaseSec or :concurrencyPollMs are errors")
+fn gatewayLimitErrors g: (Map String rd/SExpr) -> (List String)
+  (listAppend (listAppend (gatewayLimitWarnings g) (listAppend (groupErrors g) (limitGroupErrors g)))
+              (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds")))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))

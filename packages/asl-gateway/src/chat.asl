@@ -1667,14 +1667,25 @@ fn limitSkipped cx: Ctx l: Loop a: Attempt outcome: String reason: String -> Cha
             (fn [] -> ChatStep (loopStep cx (advance l1 l1.body))))
           (loopStep cx (advance l1 l1.body))))))
 
+; (:m :ref GW-LIMIT-SCOPES :do "a member under a concurrency limit that is full parks: the server answers park with the poll interval, the call sleeps that long and asks again until its queue budget (X-ASL-Queue-Ms, the config's :queueBudgetSec) is used up, then the member is skipped with limit:concurrency and the cascade goes on")
 fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (if (limitedAttempt? cx a)
-    (askStrings (effLimit a.upstream.provider a.alias)
-      (fn [(v (List String))] -> ChatStep
-        (match (listHead v)
-          ((none) (httpAttemptSend cx l a))
-          ((some outcome) (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))))))
+    (askLimit cx l a 0)
     (httpAttemptSend cx l a))
+
+fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
+  (askStrings (effLimit a.upstream.provider a.alias)
+    (fn [(v (List String))] -> ChatStep
+      (match (listHead v)
+        ((none) (httpAttemptSend cx l a))
+        ((some outcome)
+          (if (!= outcome "park")
+            (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))
+            (let [(poll (optionOr (stringToInt64 (optionOr (listGet v 2) "250")) 250))
+                  (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
+              (if (>= (+ waitedMs poll) budgetMs)
+                (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full for the whole queue budget")
+                (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l a (+ waitedMs poll)))))))))))
 
 fn httpAttemptSend cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)
