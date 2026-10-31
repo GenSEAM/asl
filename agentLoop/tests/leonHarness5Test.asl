@@ -17,7 +17,9 @@ fn ! runTests -> Bool
         has (fn [t s] (stringContains? t s))]
     (do
       (assert (not (has full "ERR ")) "the prompt builds from the repo grammar")
-      (assert (has full "(:layer :id breaker") "harness5 row breaker is in Leon's prompt")
+      (assert (has full "(:layer :id evidence") "harness5 row evidence is in Leon's prompt")
+      (assert (not (has full "(:layer :id breaker")) "the shell-only breaker row, with its (:witness) literal no op runs, is not in Leon's prompt")
+      (assert (has full "(:exit (:done :when (written gatesPass))") "the leon client rules carry the exit row")
       (assert (has full "(:layer :id attractors (:mode implement") "harness5 attractors are bound to mode implement")
       (assert (has full "(:layer :id clientRules (:is reply asnForms)") "the leon client rules of clients.asn render as the clientRules layer")
       (assert (has full "(:glossary (:term") "the harness5 glossary renders")
@@ -32,7 +34,7 @@ fn ! runTests -> Bool
       (assert (not (has full "never writes a bare except")) "the Python-only restriction is gone")
       (assert (not (has full "Task: ")) "no prose Task line")
       (assert (not (has small "(:plan :first")) "a run without plan carries no plan row")
-      (assert (has small "(:layer :id breaker") "a small context still gets the harness rows")
-      (assert (not (has bare "(:layer :id breaker")) "an absent context budget renders no harness layers")
+      (assert (has small "(:layer :id evidence") "a small context still gets the harness rows")
+      (assert (not (has bare "(:layer :id evidence")) "an absent context budget renders no harness layers")
       (assert (has bare "(:batch :example") "the dynamic loop rows stay without a budget")
       true))

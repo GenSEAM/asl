@@ -48,7 +48,7 @@
       (:needs notDone (:each (stub deadFlag missingDependency)))
       (:needs verdictNo (:each blocker))
       (:needs claim anchor :from toolResult))
-    (:layer :id reply
+    (:layer :id reply :when (shell)
       (:splitsInto reply (done claimed unverified))
       (:has reply (command exitCode executedAsserts))
      
@@ -67,11 +67,11 @@
       (:needs ruledOutSite siteName)
       (:not (:dominates signalOverNoise completeness))
       (:refutedBy generalization counterexample))
-    (:layer :id abstain
+    (:layer :id abstain :when (shell)
       (:prefers abstain guess :when evidenceDeficit)
       (:has abstention (evidenceDeficit unresolvedHypotheses escalationTarget) :lit abstainForm)
       (:not edit :when gateUnrunnable))
-    (:layer :id breaker
+    (:layer :id breaker :when (shell)
       (:yields sameFailure3 witness :lit witnessForm)
       (:yields witness (newHypothesis escalate))
       (:has escalate (seen tried fork resolves))

@@ -22,7 +22,7 @@
         (:needs windowCut (:copy editLines workingNote))
         (:after windowCut (:reread editLines :once))
         (:keeps workingNote whole :in everyMessage)
-        (:isA (:escalate :reason s) finishedAnswer :when (cause outsideOwns) :names (file receiptId))
+        (:exit (:done :when (written gatesPass)) (:escalate :reason s :seen s :tried s :when (blocked gateUnrunnable outsideOwns sameFailure3 evidenceDeficit noProgress) :names (file receiptId)) (:prefers escalate guess) (:is progress newEvidence))
         (:covers (:evidence (:receipt id)) citation :runs nothing)
         (:holdsWhen exit evidence :via (run gate))
         (:ends run (done findings escalate))
