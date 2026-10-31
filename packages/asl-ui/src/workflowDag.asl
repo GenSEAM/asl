@@ -1,4 +1,4 @@
-(module asl-ui/workflowDag :x [WorkflowStepStatus stepStatusPending stepStatusRunning stepStatusSuccess stepStatusFailed stepStatusBlocked WorkflowDagNode makeWorkflowDagNode layoutWorkflowDagNodes formatDagStepStatus renderWorkflowDagNode renderWorkflowDag] :i [(asl-ui/vnode :a ui) (asl-ui/theme :a theme)])
+(module asl-ui/workflowDag :x [WorkflowStepStatus stepStatusPending stepStatusRunning stepStatusSuccess stepStatusFailed stepStatusBlocked WorkflowDagNode makeWorkflowDagNode layoutWorkflowDagNodes formatDagStepStatus renderWorkflowDagNode renderWorkflowDag] :i [(asl-ui/vnode :a ui)])
 
 (enum WorkflowStepStatus
   (:c stepStatusPending [] "Step waiting on dependencies")

@@ -1,4 +1,4 @@
-(module asl-ui/blastRadiusHeatmap :x [DependencyClassification classifyDependencyEdge BlastRadiusNode makeBlastRadiusNode renderBlastRadiusTile calculateMaxBlastRadius] :i [(asl-ui/vnode :a ui) (asl-ui/theme :a theme)])
+(module asl-ui/blastRadiusHeatmap :x [DependencyClassification classifyDependencyEdge BlastRadiusNode makeBlastRadiusNode renderBlastRadiusTile calculateMaxBlastRadius] :i [(asl-ui/vnode :a ui)])
 
 (enum DependencyClassification (:c edgeRuntimeCycle [] "Critical runtime cyclic dependency") (:c edgeTypeAlias [] "Benign type alias or contract dependency") (:c edgeCausalBlast [] "Direct downstream causal blast dependency"))
 
