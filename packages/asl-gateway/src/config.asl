@@ -73,6 +73,7 @@
       gatewayBreakerCooldownSecOverride
       gatewayTopIntOverride
       gatewayTopScalarOverride
+      JudgeRules judgeDefault gatewayProfileMode gatewayProfileJudge
       expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
@@ -176,10 +177,23 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f spread (List (Pair String Int64)))
   (:f cooldownSec Int64))
 
+; (:m :ref GW-MODES :do "a judge-mode profile's static reply checks: an empty answer (message content, before any reasoning salvage, with no tool calls), a truncated one (finish_reason length), and for the intents in stepIntents an answer holding none of stepHeads; a failed check moves to the next member")
+(schema JudgeRules
+  (:f empty Bool)
+  (:f truncated Bool)
+  (:f stepIntents (List String))
+  (:f stepHeads (List String)))
+
+fn judgeDefault -> JudgeRules
+  (JudgeRules :empty true :truncated true :stepIntents (list) :stepHeads (list "(:step"))
+
 (schema GatewayProfile
   (:f id String)
   (:f routes (List GatewayRoute))
-  (:f fallback (Option String)))
+  (:f fallback (Option String))
+  ; (:m :ref GW-MODES :do "pin: the route's first member only, its failure relayed as is; route (default): chain, spread, limits, breakers; judge: route plus the judge checks")
+  (:f mode String)
+  (:f judge JudgeRules))
 
 (schema GatewayModel
   (:f id String)
@@ -1694,6 +1708,63 @@ fn detectProfileFallbackCycles profiles: (Map String GatewayProfile) keys: (List
           ((some path) (some (str "profile fallback cycle: " (stringJoin path " -> "))))
           ((none) (detectProfileFallbackCycles profiles (optionOr (listTail keys) (list))))))))
 
+fn profileModes -> (List String)
+  (list "pin" "route" "judge")
+
+; (:m :ref GW-MODES :do "a profile's :mode, route when absent; any other word than pin, route or judge is a config error")
+fn profileModeOf p: (Map String rd/SExpr) pid: String -> (Pair String (List String))
+  (match (mapGet p "mode")
+    ((none) (pair "route" (list)))
+    ((some e)
+      (match (asnScalar e)
+        ((scalarStr s) (if (listContains? (profileModes) s) (pair s (list)) (pair "route" (list (str "profile " pid ": :mode must be pin, route or judge")))))
+        (_ (pair "route" (list (str "profile " pid ": :mode must be pin, route or judge")))))))
+
+fn stringItems e: rd/SExpr -> (Option (List String))
+  (match e
+    ((rd/sexprList xs) (some (map (fn [(x rd/SExpr)] -> String (scalarToString (asnScalar x))) xs)))
+    ((rd/sexprVect xs) (some (map (fn [(x rd/SExpr)] -> String (scalarToString (asnScalar x))) xs)))
+    (_ none))
+
+fn judgeBool props: (Map String rd/SExpr) key: String d: Bool pid: String -> (Pair Bool (List String))
+  (match (mapGet props key)
+    ((none) (pair d (list)))
+    ((some e) (match (asnScalar e)
+                ((scalarBool b) (pair b (list)))
+                (_ (pair d (list (str "profile " pid ": :judge :" key " must be true or false")))))))
+
+fn judgeList props: (Map String rd/SExpr) key: String d: (List String) pid: String -> (Pair (List String) (List String))
+  (match (mapGet props key)
+    ((none) (pair d (list)))
+    ((some e) (match (stringItems e)
+                ((some xs) (pair xs (list)))
+                ((none) (pair d (list (str "profile " pid ": :judge :" key " must be a list")))))))
+
+; (:m :ref GW-MODES :do "a profile's (:judge :empty B :truncated B :stepIntents (INTENT ...) :stepHeads (\"TEXT\" ...)) rows over judgeDefault; an unknown key or a wrong type is a config error")
+fn profileJudgeOf p: (Map String rd/SExpr) pid: String -> (Pair JudgeRules (List String))
+  (let [(d (judgeDefault))]
+    (match (mapGet p "judge")
+      ((none) (pair d (list)))
+      ((some e)
+        (match (asnProps e (none))
+          ((err msg) (pair d (list (str "profile " pid " :judge: " msg))))
+          ((ok props)
+            (let [(unknown (filter (fn [(k String)] -> Bool (not (listContains? (list "empty" "truncated" "stepIntents" "stepHeads") k))) (mapKeys props)))
+                  (em (judgeBool props "empty" d.empty pid))
+                  (tr (judgeBool props "truncated" d.truncated pid))
+                  (si (judgeList props "stepIntents" d.stepIntents pid))
+                  (sh (judgeList props "stepHeads" d.stepHeads pid))]
+              (pair (JudgeRules :empty (pairFirst em) :truncated (pairFirst tr) :stepIntents (map stringLower (pairFirst si)) :stepHeads (pairFirst sh))
+                    (listAppend (map (fn [(k String)] -> String (str "profile " pid ": unknown :judge key :" k)) unknown)
+                                (listAppend (listAppend (pairSecond em) (pairSecond tr)) (listAppend (pairSecond si) (pairSecond sh)))))))))))
+
+; (:m :ref GW-MODES :do "the mode and judge rules of a named profile; an unknown profile is route with the default rules")
+fn gatewayProfileMode table: GatewayTable name: String -> String
+  (match (mapGet table.profiles name) ((some p) p.mode) ((none) "route"))
+
+fn gatewayProfileJudge table: GatewayTable name: String -> JudgeRules
+  (match (mapGet table.profiles name) ((some p) p.judge) ((none) (judgeDefault)))
+
 (schema ProfileAccumulator
   (:f profiles (Map String GatewayProfile))
   (:f order (List String))
@@ -1728,9 +1799,12 @@ fn applyOneProfile acc: ProfileAccumulator p: (Map String rd/SExpr) intents: (Ma
                            (match (asnName fbExpr (str "profile " pid " :fallback"))
                              ((err e) (err e))
                              ((ok fb) (ok (some fb)))))))
-                (errs2 (match fbRes ((err e) (listAppendOne errs1 e)) ((ok _) errs1)))
+                (errs2a (match fbRes ((err e) (listAppendOne errs1 e)) ((ok _) errs1)))
                 (fallback (resultOr fbRes (none)))
-                (profile (GatewayProfile :id pid :routes routes :fallback fallback))]
+                (modeRes (profileModeOf p pid))
+                (judgeRes (profileJudgeOf p pid))
+                (errs2 (listAppend errs2a (listAppend (pairSecond modeRes) (pairSecond judgeRes))))
+                (profile (GatewayProfile :id pid :routes routes :fallback fallback :mode (pairFirst modeRes) :judge (pairFirst judgeRes)))]
             (ProfileAccumulator
               :profiles (mapSet acc.profiles pid profile)
               :order (listAppendOne acc.order pid)
@@ -1882,7 +1956,7 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
 
 fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) -> GatewayTable
   (let [(profilesMap (fold (fn [(acc (Map String GatewayProfile)) (pairEntry (Pair String (List GatewayRoute)))] -> (Map String GatewayProfile)
-                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none))))
+                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none) :mode "route" :judge (judgeDefault))))
                            (mapEmpty)
                            (mapPairs v1.profiles)))
         (profileOrder (mapKeys v1.profiles))]

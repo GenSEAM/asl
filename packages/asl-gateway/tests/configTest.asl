@@ -282,7 +282,7 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
         (linePlan (cfg/gatewayIntentLine tbl "plan"))
         (lineUnknown (cfg/gatewayIntentLine tbl "unknownIntent"))
         (pWork (optionOr (mapGet tbl.profiles "work")
-                         (cfg/GatewayProfile :id "" :routes (list) :fallback (none))))
+                         (cfg/GatewayProfile :id "" :routes (list) :fallback (none) :mode "route" :judge (cfg/judgeDefault))))
         (routeDesign (cfg/gatewayV2Route pWork lineDesign))
         (routeImplement (cfg/gatewayV2Route pWork lineImplement))
         (routeUnknown (cfg/gatewayV2Route pWork lineUnknown))

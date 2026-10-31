@@ -187,7 +187,10 @@
   ; (:m :ref GW-SESSION-AFFINITY :do "the caller session key (cliCallerKey), the member that last answered it (empty when none) and whether another member gets the transcript without its reasoning")
   (:f session String)
   (:f stuck String)
-  (:f dropOnSwitch Bool))
+  (:f dropOnSwitch Bool)
+  ; (:m :ref GW-MODES :do "the selected profile's mode (pin, route or judge) and judge rules, set by withProfile; route and the default rules before")
+  (:f mode String)
+  (:f judge c/JudgeRules))
 
 (schema Loop
   (:f body j/Json)
@@ -724,7 +727,7 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
                                  :headerEff (u/headerGet hs "X-ASL-Effort") :envEff (mapGet world.env "ASL_EFFORT")
                                  :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60
-                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false))]
+                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault)))]
                     (match world.table
                       ((err e) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG")
                                   (sendError cx (list) 503 e true)
@@ -738,7 +741,8 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "threads the matched route's :spread/:cooldownSec alongside its name, the only place a RouteEntries' routing metadata enters Ctx")
 fn withProfile cx: Ctx re: c/RouteEntries -> Ctx
-  (with cx :profileName re.name :spread re.spread :cooldownSec re.cooldownSec)
+  (with cx :profileName re.name :spread re.spread :cooldownSec re.cooldownSec
+           :mode (c/gatewayProfileMode re.table re.name) :judge (c/gatewayProfileJudge re.table re.name))
 
 fn profileRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> ChatStep
   (match cx.world.table
@@ -881,6 +885,31 @@ fn noteAffinity cx: Ctx alias: String k: (fn [] -> ChatStep) -> ChatStep
 fn switchedBody cx: Ctx alias: String body: j/Json -> j/Json
   (if (and cx.dropOnSwitch (and (not (stringEmpty? cx.stuck)) (!= alias cx.stuck))) (dropReasoning body) body)
 
+; (:m :ref GW-MODES :do "a pin profile tries the first member of its route and nothing after it, so no reroute, spread or fallback profile ever replaces the named model")
+fn pinModels cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (if (= cx.mode "pin") (listTake models 1) models)
+
+fn finishReason resp: j/Json -> String
+  (match (getOr resp "choices" (j/jnull))
+    ((j/jarr xs) (match (listHead xs)
+                   ((some c) (match (getOr c "finish_reason" (j/jnull)) ((j/jstr s) s) (_ "")))
+                   ((none) "")))
+    (_ ""))
+
+; (:m :ref GW-MODES :do "the first judge check a judge-mode reply fails, empty when it passes or the profile is not judge: empty (message content of the raw upstream reply blank, before project copies reasoning into it, and no tool calls), truncated (finish_reason length), noStepForm (an intent of :stepIntents whose answer holds none of :stepHeads)")
+fn judgeFailure cx: Ctx p: Projection raw: String -> String
+  (if (!= cx.mode "judge")
+    ""
+    (let [(r cx.judge)
+          (msg (match (pt/jsonLoads raw) ((ok parsed) (firstMessage parsed)) ((err _) (firstMessage p.resp))))
+          (text (match p.content ((j/jstr s) s) (_ "")))]
+      (cond
+        ((and r.empty (and (emptyContent? (getOr msg "content" (j/jnull))) (not (toolCalls? msg)))) "empty")
+        ((and r.truncated (= (finishReason p.resp) "length")) "truncated")
+        ((and (listContains? r.stepIntents (stringLower cx.intent))
+              (not (listAny? (fn [(h String)] -> Bool (stringContains? text h)) r.stepHeads))) "noStepForm")
+        (else ""))))
+
 
 fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String models: (List c/GatewayResolvedEntry) calibrated: Float64 -> ChatStep
   (let [(world cx.world)
@@ -921,8 +950,8 @@ fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String mod
                   (timeoutExplicit (or (some? (present (u/headerGet hs "X-ASL-Timeout")))
                                        (or (some? (present (u/headerGet hs "X-ASL-Execution-Timeout")))
                                            (or (listContains? keys "timeout") (listContains? keys "execution_timeout")))))
-                  (cx2 (with cx :world world :reqKeys keys :headerEff hEff :envEff eEff :tempExplicit tempExplicit :timeoutExplicit timeoutExplicit :baseBody final :cascadeLen (listLength models)))]
-              (startLoop cx2 final models))))))))
+                  (cx2 (with cx :world world :reqKeys keys :headerEff hEff :envEff eEff :tempExplicit tempExplicit :timeoutExplicit timeoutExplicit :baseBody final :cascadeLen (listLength (pinModels cx models))))]
+              (startLoop cx2 final (pinModels cx models)))))))))
 
 
 fn advance l: Loop body: j/Json -> Loop
@@ -1994,6 +2023,8 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                       (loopStep cx (with l :models (listAppend l.models (list a.entry)) :idx (+ l.idx 1) :emptyRetries (+ l.emptyRetries 1))))))
                  (else (sendError cx l.head 502 (str "ERR_EMPTY_CONTENT: model " m " returned empty content after "
                                                          (stringFromInt64 l.emptyRetries) " retry") true))))))
+         (if (not (stringEmpty? (judgeFailure cx p chatBody)))
+           (judged cx l a p (judgeFailure cx p chatBody))
          (let [(content p.content)
                (sanitized (if cx.sanitize (sanitizeFirst p.resp w/sanitizeAsnContent) p.resp))]
            (telemetry cx content m
@@ -2001,8 +2032,14 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                (let [(withModel (if (has? sanitized "model") sanitized (pt/jset sanitized "model" (j/jstr a.target))))
                      (resp (mergeAsl withModel (servedBy a l.body)))
                      (lb (with l :telBound true))]
-                 (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec)))))))
+                 (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec))))))))
       ((none) (answered cx l a status headers body none none))))
+
+; (:m :ref GW-MODES :do "a reply that fails a judge check is charged to its member with the outcome judge:CHECK and the next member is tried; past the last member the profile's no-model-answered error names the check")
+fn judged cx: Ctx l: Loop a: Attempt p: Projection why: String -> ChatStep
+  (tellAll (list (effUsageNote a.upstream.provider a.alias (str "judge:" why) (getOr p.resp "usage" (j/jnull)))
+                 (effLog (str "[Gateway Judge] Model " a.model " failed the " why " check. Trying the next member...\n")))
+    (fn [] -> ChatStep (loopStep cx (advance (failed l (str "judge " why ": " a.alias)) l.body))))
 
 ; (:m :tags (breaker pool) :do "a success clears both the model pool and the provider pool: it proves the account and this model both work, so any stale account-wide trip (from a sibling model's 401/402) is cleared too")
 fn clearBreakerPools pools: (List String) k: (fn [] -> ChatStep) -> ChatStep
@@ -2124,6 +2161,8 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
                  (tell (usageNote prov alias (g/usageHttpError status))
                    (fn [] -> ChatStep
                      (cond
+                       ; (:m :ref GW-MODES :do "a pin profile relays its member's HTTP error with its own status and headers (Retry-After included) instead of trying anything else")
+                       ((= cx.mode "pin") (relay))
                        (cx.profileRouted
                         (tellAll (list (effLog (str "[Gateway Profile] Model " alias " returned HTTP " (stringFromInt64 status) ". Trying the next profile model...\n"))
                                        (effUsageFallback prov alias))
