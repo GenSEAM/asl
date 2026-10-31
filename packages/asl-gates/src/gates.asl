@@ -1,4 +1,4 @@
-(module asl-gates/gates :x [verifySourceSyntax verifyFileSemantic verifyForeignExt verifyBalance verifyManifestString verifyManifests collectDirectoryFiles findForeignFilesInPaths allowlistedPaths isForeignFile? auditPackageTreeZeroForeignAt auditPackageTreeZeroForeign runSuite main] :i [(asl-parser/ast :a a) (asl-compiler/compiler :a comp) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-gates/manifestGate :a mg) (asl-gates/auditForeign :a af)])
+(module asl-gates/gates :x [verifySourceSyntax verifyFileSemantic verifyForeignExt verifyBalance verifyManifestString verifyManifests collectDirectoryFiles findForeignFilesInPaths allowlistedPaths isForeignFile? auditPackageTreeZeroForeignAt auditPackageTreeZeroForeign runSuite main] :i [(asl-parser/ast :a a) (asl-checker/check :a chk) (asl-gates/manifestGate :a mg) (asl-gates/auditForeign :a af)])
 
 fn verifySourceSyntax src: Str -> Bool
   (match (a/parse src) ((ok _) true) ((err _) false))

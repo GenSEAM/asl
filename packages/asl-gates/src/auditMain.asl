@@ -1,8 +1,7 @@
 (module asl-gates/auditMain
   :x [runAudit! main]
   :i [(asl-gates/auditGates :a ag)
-      (asl-gates/auditForeign :a af)
-      (asl-proc/coreProcess :a p)])
+      (asl-gates/auditForeign :a af)])
 
 fn identLoop bs: Bytes n: Int64 i: Int64 -> Bool
   (if (>= i n)
