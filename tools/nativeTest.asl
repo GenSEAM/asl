@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [takeLock! lockLive? unparsableStale? runTests main failLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -2021,6 +2021,12 @@ fn failText root: String rel: String path: String shown: String reason: String -
     (let [(name (if (inlineStaged? rel) (inlineName rel) shown))]
       (str "FAIL " name ": " (fold (fn [(acc String) (p String)] -> String (stringReplace acc p name)) reason (list (str root "/" rel) (str root "/" (stemOf rel)) rel (stemOf rel)))))
     (str "FAIL " path ": " reason))
+
+; (:m :ref PAREN-OUTSIDE-PATH :do "a checker-rejected suite staged from outside the workspace (outside/ or outsidePkg/) is named by the path the user gave in its FAIL line, diagnostics and :indentFix hint, as run --as and asl check name it; an in-root suite keeps its root-relative name")
+fn suiteFailLine root: String rel: String path: String reason: String -> String
+  (if (stringStartsWith? rel ".asl/cache/nativeTest/outside")
+    (str (failText root rel path path (failReason reason rel)) " (after 0 asserts)")
+    (failLine rel reason))
 
 ; (:m :ref INTEG9-F1 :do "a script that was prepared on purpose (nativeTest prepare FILE leaves a binary in the store) runs from that binary when its sources still match, so a tool that must start where fork is gone (fleet guard) needs no compile; a script nobody prepared still builds into an ephemeral slot and leaves nothing")
 fn ! keptRun root: String rel: String fp: String -> (Option String)

@@ -533,7 +533,7 @@ fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
               (if (= v.exit 0) (println v.line) (eprintln v.line))
               v.exit)))
       ((none) (if (= built.cache "checker-reject")
-                (do (eprintln (nt/failLine rel built.reason)) 1)
+                (do (eprintln (nt/suiteFailLine ctx.root rel path built.reason)) 1)
                 (hostSuite! ctx path built.reason)))))
 
 fn ! suites! ctx: sys/Context paths: (List String) -> Int64
