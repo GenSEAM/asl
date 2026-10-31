@@ -9,8 +9,7 @@
       isImportantDeclaration?
       rulesToJson
       declarationsToJson]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/symbols :a sym)
       (asl-syntax/css/lex :a lex)
       (asl-json/json :a j)])

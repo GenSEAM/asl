@@ -26,8 +26,7 @@
       isPendingToken
       stringErrorAt]
   :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
-      (asl-syntax/core/print :a pr)])
+      (asl-syntax/core/tree :a tr)])
 
 fn isWhitespaceToken tok: tr/Token -> Bool
   (= tok.kind "whitespace")

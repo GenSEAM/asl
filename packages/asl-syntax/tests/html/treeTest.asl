@@ -5,7 +5,6 @@
       (asl-syntax/core/print :a pr)
       (asl-syntax/core/symbols :a sym)
       (asl-syntax/core/outline :a out)
-      (asl-syntax/html/lex :a hlx)
       (asl-syntax/html/tree :a htr)])
 
 fn verifyValidHtml text: String -> Bool

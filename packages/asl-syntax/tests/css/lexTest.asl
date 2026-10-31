@@ -1,7 +1,6 @@
 (module asl-syntax/tests/css/lexTest
   :x [runTests]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/core/corpus :a crp)
       (asl-syntax/css/lex :a lex)

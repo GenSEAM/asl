@@ -1,7 +1,6 @@
 (module asl-syntax/tests/core/expectedTest
   :x [runTests]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/asl/paren :a prn)
       (asl-syntax/asl/layout :a lay)])

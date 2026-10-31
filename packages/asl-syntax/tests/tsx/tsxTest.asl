@@ -1,7 +1,6 @@
 (module asl-syntax/tests/tsx/tsxTest
   :x [runTests]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/js/lex :a lx)
       (asl-syntax/tsx :a tsx)

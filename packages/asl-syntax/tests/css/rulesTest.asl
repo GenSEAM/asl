@@ -6,7 +6,6 @@
       (asl-syntax/core/symbols :a sym)
       (asl-syntax/core/outline :a out)
       (asl-syntax/core/corpus :a crp)
-      (asl-syntax/css/lex :a lex)
       (asl-syntax/css/rules :a rules)
       (asl-json/json :a j)])
 
