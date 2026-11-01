@@ -592,10 +592,20 @@ fn limitOfItem item: rd/SExpr -> (Result GatewayLimit String)
          (else (ok (GatewayLimit :provider provider :scope scope :model model :window window :calls calls :tokens tokens
                                  :group group :endpoint endpoint :tokensIn tIn :tokensOut tOut :tokensCached tCached :usd usd :concurrency conc)))))))
 
+; (:m :ref GW-DAILY-SHORTHAND :do "a provider row (:provider :id P ... :dailyCalls N) is the account limit row (:limit :provider P :scope account :window day :calls N); a missing, zero or invalid N makes no row")
+fn dailyCallsLimit p: (Map String rd/SExpr) -> (List GatewayLimit)
+  (let [(n (limitInt p "dailyCalls"))]
+    (if (> n 0)
+      (list (GatewayLimit :provider (limitStr p "id") :scope "account" :model "" :window "day" :calls n :tokens 0
+                          :group "" :endpoint "" :tokensIn 0 :tokensOut 0 :tokensCached 0 :usd 0.0 :concurrency 0))
+      (list)))
+
 fn gatewayLimitsFromProps g: (Map String rd/SExpr) -> (List GatewayLimit)
-  (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
-          (match (limitOfItem it) ((ok l) (listAppend acc (list l))) ((err _) acc)))
-    (list) (limitItems g))
+  (listAppend
+    (fold (fn [(acc (List GatewayLimit)) (it rd/SExpr)] -> (List GatewayLimit)
+            (match (limitOfItem it) ((ok l) (listAppend acc (list l))) ((err _) acc)))
+      (list) (limitItems g))
+    (listFlatMap (fn [(it rd/SExpr)] -> (List GatewayLimit) (match (asnProps it (some ":provider")) ((ok p) (dailyCallsLimit p)) ((err _) (list)))) (itemsOf g "providers")))
 
 fn gatewayLimitsFromText text: String -> (List GatewayLimit)
   (match (ast/readForms (lx/tokenize text))
@@ -612,7 +622,14 @@ fn gatewayLimitsFromText text: String -> (List GatewayLimit)
 fn gatewayLimitWarnings g: (Map String rd/SExpr) -> (List String)
   (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
           (match (limitOfItem it) ((ok _) acc) ((err e) (listAppend acc (list (str "limits: " e))))))
-    (list) (limitItems g))
+    (fold (fn [(acc (List String)) (it rd/SExpr)] -> (List String)
+            (match (asnProps it (some ":provider"))
+              ((err _) acc)
+              ((ok p) (if (and (some? (mapGet p "dailyCalls")) (<= (limitInt p "dailyCalls") 0))
+                        (listAppend acc (list (str "limits: provider " (limitStr p "id") ": :dailyCalls must be a whole number of 1 or more")))
+                        acc))))
+      (list) (itemsOf g "providers"))
+    (limitItems g))
 
 fn rowProps g: (Map String rd/SExpr) key: String tag: String -> (List (Map String rd/SExpr))
   (fold (fn [(acc (List (Map String rd/SExpr))) (it rd/SExpr)] -> (List (Map String rd/SExpr))
