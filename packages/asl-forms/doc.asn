@@ -731,7 +731,7 @@
 (:doc :symbol "asl/packages/asl-forms/src/gate.asl#runGate!" :text "route one gate op; run answers doctor probes")
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#" :text "The staged edit store of aslForms.py: workspace-local blobs and JSON metas keyed by path, per-path file locks, atomic writes")
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#vfsContextFrom!" :text "vfs_root: ASL_VFS_DIR, workspace .asl, else home cache")
-(:doc :symbol "asl/packages/asl-forms/src/vfs.asl#readText!" :text "open(newline=None): CRLF and CR read as LF")
+(:doc :symbol "asl/packages/asl-forms/src/vfs.asl#readText!" :text "the file's text as written: CRLF and lone CR bytes are kept (FORMS-FLUSH-CR), so an edit and flush leave bytes outside the edited span unchanged")
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#charLength" :text "Python len: code points, not bytes")
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#atomicWrite!" :text "true renamed; false: no chmod, wrote in place")
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#isLink?" :text "os.path.islink without lstat: realpath moves or entry dangles")

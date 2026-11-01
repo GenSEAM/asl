@@ -334,7 +334,7 @@
 (:sym "vfsContext!" :mod "asl-forms/vfs" :sig "vfsContext! root: String -> (Result Vfs String)" :pit (result effect))
 (:sym "vfsContextFrom!" :mod "asl-forms/vfs" :sig "vfsContextFrom! root: String given: String session: String home: String -> (Result Vfs String)" :doc "vfs_root: ASL_VFS_DIR, workspace .asl, else home cache" :pit (result effect))
 (:sym "storeDir" :mod "asl-forms/vfs" :sig none)
-(:sym "readText!" :mod "asl-forms/vfs" :sig "readText! p: String -> (Result String String)" :doc "open(newline=None): CRLF and CR read as LF" :pit (result effect))
+(:sym "readText!" :mod "asl-forms/vfs" :sig "readText! p: String -> (Result String String)" :doc "the file's text as written: CRLF and lone CR bytes are kept" :pit (result effect))
 (:sym "charLength" :mod "asl-forms/vfs" :sig "charLength s: String -> Int64" :doc "Python len: code points, not bytes")
 (:sym "shaText" :mod "asl-forms/vfs" :sig "shaText s: String -> String")
 (:sym "atomicWrite!" :mod "asl-forms/vfs" :sig "atomicWrite! path: String content: String -> (Result Bool String)" :doc "true renamed; false: no chmod, wrote in place" :pit (result effect))
