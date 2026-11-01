@@ -1,6 +1,7 @@
 (module aslGateway/health
-  :x [HealthRow healthRows providerRows pruneCandidates neverServed attemptsPerTurnX100 requestsText healthRowText healthReport defaultHealthHours pruneMinCalls pruneOkPercent healthDir healthFileName]
-  :i [(aslGateway/usageLedger :a ul)
+  :x [HealthRow healthRows providerRows pruneCandidates neverServed attemptsPerTurnX100 requestsText healthRowText healthReport defaultHealthHours pruneMinCalls pruneOkPercent healthDir healthFileName healthKeepFromText staleHealthFiles pruneHealthFiles! hoursOfArgs defaultHealthKeep]
+  :i [(aslGateway/config :a c)
+      (aslGateway/usageLedger :a ul)
       (aslGateway/limits :a lim)
       (aslGateway/requestLog :a rq)
       (aslGateway/usage :a g)
@@ -58,12 +59,14 @@ fn groupRows rows: (List ul/CallRow) key: (fn [ul/CallRow] -> String) -> (Map St
     (mapEmpty) rows)
 
 ; (:m :ref GW-HEALTH-REPORT :do "one row per provider and alias seen in rows, busiest first")
+fn healthRowOfGroup group: (List ul/CallRow) -> HealthRow
+  (match (listHead group)
+    ((some r) (healthRowOf r.provider r.alias group))
+    ((none) (healthRowOf "" "" group)))
+
 fn healthRows rows: (List ul/CallRow) -> (List HealthRow)
-  (let [(groups (groupRows rows (fn [(r ul/CallRow)] -> String (str r.provider "|" r.alias))))
-        (hs (map (fn [(k String)] -> HealthRow
-                   (let [(parts (stringSplit k "|"))]
-                     (healthRowOf (optionOr (listHead parts) "") (optionOr (listGet parts 1) "") (optionOr (mapGet groups k) (list)))))
-                 (mapKeys groups)))]
+  (let [(groups (groupRows rows (fn [(r ul/CallRow)] -> String (str (stringFromInt64 (stringLength r.provider)) ":" r.provider r.alias))))
+        (hs (map (fn [(k String)] -> HealthRow (healthRowOfGroup (optionOr (mapGet groups k) (list)))) (mapKeys groups)))]
     (listReverse (listSortBy (fn [(h HealthRow)] -> Int64 h.calls) hs)))
 
 ; (:m :ref GW-HEALTH-REPORT :do "one row per provider summing its aliases (alias empty)")
@@ -102,7 +105,7 @@ fn outcomeCount reqs: (List rq/ReqRow) outcome: String -> Int64
 fn requestsText reqs: (List rq/ReqRow) sinceMs: Int64 nowMs: Int64 deadlineSec: Int64 -> String
   (let [(inWin (filter (fn [(r rq/ReqRow)] -> Bool (>= r.atMs sinceMs)) reqs))
         (outcomes (list "ok" "limit" "noRoute" "timeout" "upstreamError" "gatewayError" "clientGone" "lost"))]
-    (str "(:requests :accepted " (stringFromInt64 (listLength (filter (fn [(r rq/ReqRow)] -> Bool (= r.phase "accepted")) inWin)))
+    (str "(:requests :accepted " (stringFromInt64 (+ (listLength (filter (fn [(r rq/ReqRow)] -> Bool (= r.phase "done")) inWin)) (listLength (rq/unresolvedRows inWin))))
          " :done " (stringFromInt64 (listLength (filter (fn [(r rq/ReqRow)] -> Bool (= r.phase "done")) inWin)))
          " :lost " (stringFromInt64 (outcomeCount inWin "lost"))
          " :stuck " (stringFromInt64 (listLength (rq/stuckRows reqs nowMs deadlineSec)))
@@ -124,6 +127,38 @@ fn healthReport rows: (List ul/CallRow) reqs: (List rq/ReqRow) configured: (List
          "  :prune (" (stringJoin (map healthRowText (pruneCandidates models)) "\n    ") ")\n"
          "  :neverServed (" (listText (neverServed configured models)) ")\n"
          "  :attemptsPerTurnX100 " (stringFromInt64 (attemptsPerTurnX100 inWin)) ")\n"))
+
+fn defaultHealthKeep -> Int64
+  60
+
+; (:m :ref GW-HEALTH-REPORT :do "(:gateway ... :healthKeep N): how many health-<ms>.asn files --write keeps, newest first; default 60, only 1..10000 is taken")
+fn healthKeepFromText text: String -> Int64
+  (match (c/gatewayTopIntOverride text "healthKeep")
+    ((some n) (if (and (>= n 1) (<= n 10000)) n (defaultHealthKeep)))
+    ((none) (defaultHealthKeep)))
+
+; (:m :ref GW-HEALTH-REPORT :do "the health report files among names that are older than the newest keep, oldest first; other files are never listed")
+fn staleHealthFiles names: (List String) keep: Int64 -> (List String)
+  (let [(mine (listSort (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "health-") (stringEndsWith? n ".asn"))) names)))]
+    (listTake mine (max 0 (- (listLength mine) keep))))
+
+; (:m :ref GW-HEALTH-REPORT :do "removes the stale health report files of dir and returns how many it removed")
+fn ! pruneHealthFiles! dir: String keep: Int64 -> Int64
+  (match (dirList dir)
+    ((err _) 0)
+    ((ok names) (listLength (filter (fn [(n String)] -> Bool (ok? (pathRemove (g/posixJoin dir n)))) (staleHealthFiles names keep)))))
+
+; (:m :ref GW-HEALTH-REPORT :do "--hours of gateway health: absent is the default 24, a whole number 1..720 is taken, anything else is an error")
+fn hoursOfArgs args: (List String) -> (Result Int64 String)
+  (match (listIndexOf args "--hours")
+    ((none) (ok (defaultHealthHours)))
+    ((some i)
+      (match (listGet args (+ i 1))
+        ((none) (err "--hours needs a number of hours (1..720)"))
+        ((some a)
+          (match (stringToInt64 a)
+            ((none) (err (str "--hours takes a whole number of hours (1..720), got " a)))
+            ((some n) (if (and (>= n 1) (<= n 720)) (ok n) (err (str "--hours takes 1..720, got " a)))))))))
 
 fn healthDir home: String -> String
   (g/posixJoin home ".asl/run/usage/health")

@@ -696,7 +696,7 @@ fn limitGroupErrors g: (Map String rd/SExpr) -> (List String)
 ; (:m :ref GW-LIMIT-SCOPES :do "config check is strict where the runtime load drops or warns: a malformed limit row, a group that names an unknown model or is declared twice, a limit naming an undeclared group and an out-of-range :concurrencyLeaseSec or :concurrencyPollMs are errors")
 fn gatewayLimitErrors g: (Map String rd/SExpr) -> (List String)
   (listAppend (listAppend (gatewayLimitWarnings g) (listAppend (groupErrors g) (limitGroupErrors g)))
-              (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds"))))
+              (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (listAppend (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds") (rangeErrorOf g "healthKeep" 1 10000 "files")))))
 
 fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
