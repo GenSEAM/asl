@@ -1,5 +1,5 @@
 (module asl/agentLoop/leonServe
-  :x [openRun! serveLoop! hubSockOf main]
+  :x [openRun! serveLoop! hubSockOf freeCtl! cfgInt lockCtl! bindCtl! probeCtl! ctlStaleError? main]
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/leonPool :a lp) (asl/agentLoop/poolServe :a ps)
       (asl/agentLoop/sessionPool :a sp) (asl/agentLoop/providers :a pv)])
 
@@ -30,10 +30,69 @@ fn argOr args: (List String) key: String fallback: String -> String
     ((some i) (optionOr (listGet args (+ i 1)) fallback))
     ((none) fallback))
 
+; (:m :ref LEONSERVE-STALE-SOCKET :do "a killed pool leaves its control socket file behind and the next start failed at unixListen with io:98 (address in use), so the service restarted forever and no run was pooled. Only a connect that is refused (ECONNREFUSED: 111 Linux, 61 macOS) or finds no file (ENOENT: 2) proves the file stale; any other error (a listener whose backlog is full answers EAGAIN, EINTR, EMFILE) is retried 5 times 100 ms apart and then the start is refused with the file left in place")
+fn ctlStaleError? e: String -> Bool
+  (listAny? (fn [(c String)] -> Bool (= e c)) (list "io:111" "io:61" "io:2" "ECONNREFUSED" "ENOENT"))
+
+; (:m :ref LEONSERVE-STALE-SOCKET :do "retry count and delay come from .asl.config.asn :leonPool (:ctlProbeRetries :ctlProbeDelayMs), overridable by --probe-retries and --probe-delay-ms")
+fn cfgToken text: String key: String -> String
+  (match (stringIndexOf text (str ":" key " "))
+    ((none) "")
+    ((some i) (let [(rest (stringTrim (optionOr (stringSlice text (+ i (+ (stringLength key) 2)) (stringLength text)) "")))]
+                (stringReplace (optionOr (listHead (stringSplit (optionOr (listHead (stringLines rest)) "") " ")) "") ")" ""))))
+
+fn cfgInt text: String key: String fallback: Int64 -> Int64
+  (optionOr (stringToInt64 (cfgToken text key)) fallback)
+
+fn ! probeCtl! ctl: String tries: Int64 delayMs: Int64 -> String
+  (match (unixConnect ctl)
+    ((ok fd) (do (fdClose fd) "live"))
+    ((err e) (cond
+               ((ctlStaleError? e) "stale")
+               ((<= tries 1) "busy")
+               (else (do (sleepMs delayMs) (probeCtl! ctl (- tries 1) delayMs))))))
+
+; (:m :ref LEONSERVE-STALE-SOCKET :do "the path must be a socket (lstat mode type 0xC000, never followed, never a directory or a regular file) before anything is removed, and what is removed is logged; a live peer is refused, never taken over")
+fn ! freeCtl! ctl: String tries: Int64 delayMs: Int64 -> (Result Unit String)
+  (match (fileLstat ctl)
+    ((err _) (ok ()))
+    ((ok st)
+      (if (!= (/ st.mode 4096) 12)
+        (err (str "(:ctlNotSocket " ctl ")"))
+        (let [(verdict (probeCtl! ctl tries delayMs))]
+          (cond
+            ((= verdict "live") (err (str "another pool answers on " ctl)))
+            ((= verdict "busy") (err (str "control socket busy, not taken over: " ctl)))
+            (else (match (pathRemove ctl)
+                    ((err e) (err e))
+                    ((ok _) (do (eprintln (str "leonServe: removed stale control socket " ctl)) (ok ()))))))))))
+
+; (:m :ref LEONSERVE-STALE-SOCKET :do "two pools started together would both pass the stale check: a lock file beside the socket, created exclusively with the starter's pid, spans check and listen. A lock whose pid is gone or unreadable is a crashed starter's and is replaced once; a live holder refuses this start")
+fn ! lockCtl! ctl: String -> (Result String String)
+  (let [(lock (str ctl ".lock"))]
+    (match (fileCreateExclusive lock (str (stringFromInt64 (procSelf)) "\n"))
+      ((ok _) (ok lock))
+      ((err _)
+        (let [(held (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString lock) ""))) 0))]
+          (if (and (> held 1) (resultOr (procAlive? held) false))
+            (err (str "another pool is starting on " ctl " (pid " (stringFromInt64 held) ")"))
+            (do (pathRemove lock)
+                (match (fileCreateExclusive lock (str (stringFromInt64 (procSelf)) "\n"))
+                  ((ok _) (ok lock))
+                  ((err e) (err (str "cannot take " lock ": " e))))))))))
+
+fn ! bindCtl! ctl: String tries: Int64 delayMs: Int64 -> (Result Int64 String)
+  (match (lockCtl! ctl)
+    ((err e) (err e))
+    ((ok lock) (let [(bound (match (freeCtl! ctl tries delayMs) ((err e) (err e)) ((ok _) (unixListen ctl))))
+                     (_ (pathRemove lock))]
+                 bound)))
+
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(home (optionOr (envGet "HOME") ""))
         (ctl (argOr args "--ctl" ""))
         (rdir (argOr args "--receipts" ""))
+        (cfg (resultOr (fileReadString (argOr args "--config" ".asl.config.asn")) ""))
         (spill (argOr args "--spill" (str rdir "/spill")))
         (slots (optionOr (stringToInt64 (argOr args "--slots" "8")) 8))
         (deadline (optionOr (stringToInt64 (argOr args "--deadline" "3600")) 3600))
@@ -42,7 +101,7 @@ fn ! main args: (List String) -> (Result Int64 String)
       ((or (stringEmpty? ctl) (stringEmpty? rdir)) (err "usage: leonServe --ctl SOCK --receipts DIR [--slots N] [--deadline SEC] [--hub SOCK] [--spill DIR]"))
       ((stringEmpty? hub) (err "no hub socket: pass --hub or name :sock in HOME/.asl/hub.asn"))
       (else
-        (match (unixListen ctl)
+        (match (bindCtl! ctl (optionOr (stringToInt64 (argOr args "--probe-retries" (stringFromInt64 (cfgInt cfg "ctlProbeRetries" 5)))) 5) (optionOr (stringToInt64 (argOr args "--probe-delay-ms" (stringFromInt64 (cfgInt cfg "ctlProbeDelayMs" 100)))) 100))
           ((err e) (err (str "control socket: " e)))
           ((ok listener)
             (let [(made (and (ok? (dirCreate rdir)) (ok? (dirCreate spill))))

@@ -22,6 +22,7 @@ fn validText -> String
     "  :fleet (:drainBytes 1048576 :drainMs 300)"
     "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/agentLoop/leonServe.asl\"])"
+    "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"
     "") "\n")
 
