@@ -1,5 +1,5 @@
 (module aslGateway/requestLog
-  :x [ReqRow ReqInfo defaultRequestDeadlineSec reqPath reqAcceptLine reqDoneLine reqParse readReqs! noteAccept! noteDone! unresolvedRows recoverLost! statusOfWire outcomeOfWire stuckRows lostSince requestDeadlineFromText]
+  :x [ReqRow ReqInfo defaultRequestDeadlineSec reqPath reqAcceptLine reqDoneLine reqParse readReqs! noteAccept! noteDone! unresolvedRows recoverLost! tornTail! quarantineCorrupt! completeLines statusOfWire outcomeOfWire stuckRows lostSince requestDeadlineFromText]
   :i [(aslGateway/usage :a g)
       (aslGateway/config :a c)
       (aslGateway/chat :a ch)
@@ -68,12 +68,34 @@ fn reqAll lines: (List String) acc: (List ReqRow) -> (Result (List ReqRow) Strin
         ((err e) (err e))
         ((ok row) (reqAll (optionOr (listTail lines) (list)) (cons row acc)))))) 
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "a reader does not take the append lock, so the last row may be half written: only text up to the last newline counts")
+fn completeLines text: String -> (List String)
+  (let [(parts (stringSplit text "\n"))]
+    (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (listTake parts (max 0 (- (listLength parts) 1)))))
+
+; (:m :ref GW-REQUEST-ACCOUNTING :do "true when the request log ends in a half written row (text that does not end in a newline)")
+fn ! tornTail! path: String -> Bool
+  (if (not (fileExists? path))
+    false
+    (match (fileReadString path)
+      ((err _) false)
+      ((ok text) (and (not (stringEmpty? text)) (not (stringEndsWith? text "\n"))))))
+
 fn ! readReqs! path: String -> (Result (List ReqRow) String)
   (if (not (fileExists? path))
     (ok (list))
     (match (fileReadString path)
       ((err e) (err (str "read " path ": " e)))
-      ((ok text) (reqAll (filter (fn [(s String)] -> Bool (not (stringEmpty? (stringTrim s)))) (stringSplit text "\n")) (list))))) 
+      ((ok text) (reqAll (completeLines text) (list))))) 
+
+; (:m :ref GW-REQUEST-ACCOUNTING :do "a request log with a corrupt row in the middle is renamed to gatewayRequests.asn.corrupt-<ms> and the log starts fresh, so one bad row cannot stop the recovery on every start; returns the new name, none when the log reads clean")
+fn ! quarantineCorrupt! home: String nowMs: Int64 -> (Option String)
+  (let [(path (reqPath home))]
+    (match (readReqs! path)
+      ((ok _) none)
+      ((err _)
+        (let [(to (str path ".corrupt-" (stringFromInt64 nowMs)))]
+          (match (pathRename path to) ((ok _) (some to)) ((err _) none))))))
 
 fn ! appendReq! home: String line: String -> (Result Bool String)
   (let [(path (reqPath home))]
@@ -123,7 +145,7 @@ fn ! recoverLost! home: String nowMs: Int64 retentionMs: Int64 -> (Result Int64 
       (let [(lost (map (fn [(r ReqRow)] -> ReqRow (lostRow r nowMs)) (unresolvedRows rows)))
             (kept (filter (fn [(r ReqRow)] -> Bool (and (= r.phase "done") (>= r.atMs (- nowMs retentionMs)))) rows))
             (text (stringJoin (map doneText (listAppend kept lost)) ""))]
-        (if (and (listEmpty? lost) (= (listLength kept) (listLength (filter (fn [(r ReqRow)] -> Bool (= r.phase "done")) rows))) (= (listLength rows) (listLength kept)))
+        (if (and (not (tornTail! (reqPath home))) (listEmpty? lost) (= (listLength kept) (listLength (filter (fn [(r ReqRow)] -> Bool (= r.phase "done")) rows))) (= (listLength rows) (listLength kept)))
           (ok 0)
           (match (replaceFile! (reqPath home) text)
             ((err e) (err e))

@@ -1059,6 +1059,11 @@ fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> Ga
 fn ! acceptReq! srv: GatewayLoop fd: Int64 -> GatewayLoop
   (let [(now (nowMs!))
         (id (str "r" (stringFromInt64 now) "-" (stringFromInt64 fd) "-" (stringFromInt64 (monotonicNs))))
+        (open (filter (fn [(r rq/ReqInfo)] -> Bool (= r.fd fd)) srv.reqs))
+        (_ (map (fn [(r rq/ReqInfo)] -> Bool
+                  (do (logLine! (str "(:gateway :requests :fdReused \"" r.id "\")"))
+                      (match (rq/noteDone! srv.home r.id now "gatewayError" r.status (- now r.startMs)) ((ok _) true) ((err _) false))))
+                open))
         (noted (rq/noteAccept! srv.home id now))]
     (do (match noted
           ((err e) (logLine! (str "(:gateway :requests :acceptNoteFailed \"" (wire/asnEscape e) "\")")))
@@ -1404,6 +1409,10 @@ fn ! secretsOverlayAt! home: String env: (Map String String) -> (Result (Map Str
 fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) env: (Map String String) -> (Result Int64 String)
   (let [        (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") (resultOr (realPath ".") "."))))
         (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
+        (quarantined (match (rq/quarantineCorrupt! (optionOr (mapGet env "HOME") root) (nowMs!))
+                       ((some to) (logLine! (str "(:gateway :requests :corrupt \"" (wire/asnEscape to) "\")")))
+                       ((none) true)))
+        (torn (if (rq/tornTail! (rq/reqPath (optionOr (mapGet env "HOME") root))) (logLine! "(:gateway :requests :tornTail 1)") true))
         (recovered (rq/recoverLost! (optionOr (mapGet env "HOME") root) (nowMs!) 604800000))
         (logged (match recovered
                   ((ok n) (logLine! (str "(:gateway :requests :lost " (stringFromInt64 n) ")")))
