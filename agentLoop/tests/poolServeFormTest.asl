@@ -28,7 +28,7 @@ fn ! runTests -> Bool
         (s (ps/newServe -1 (sp/newPool (str temp "/hub.sock") 2 64 300000 (str temp "/spill")) (str temp "/receipts")))
         (handled (ps/handleLine! s line "" (openHook)))
         (received (pairSecond (pairFirst handled)))
-        (expectedTask (str (taskText) (fp/commitInstruction (list "subject.txt"))))
+        (expectedTask (taskText))
         (big (stringJoin (map (fn [(i Int64)] -> String (str "line " (stringFromInt64 i) " \"q\" \\ \t\r end")) (range 0 5000)) "\n"))
         (row (ps/receiptRow "u9" 2 big))
         (cleaned (ok? (pathRemove temp)))]
@@ -37,7 +37,7 @@ fn ! runTests -> Bool
       (assert (= (listLength (stringLines line)) 1) "the control line is one line")
       (assert (stringStartsWith? (pairSecond handled) "(:queued ") (str "the run is accepted: " (pairSecond handled)))
       (assert (= received form) "the form handed to open equals the conductor's form byte for byte")
-      (assert (= (taskOf received) expectedTask) (str "the parsed :task equals the task plus the commit instruction, newlines, CR and tab included: " (taskOf received)))
+      (assert (= (taskOf received) expectedTask) (str "the parsed :task equals the task (no commit instruction since FREEPOOL-NO-SHELL-COMMIT), newlines, CR and tab included: " (taskOf received)))
       (assert (= (listLength (stringLines (stringTrim row))) 1) "a receipt row with a multi-line result is one line")
       (assert (= (lc/receiptResult row) big) "the client reads the 100 KB multi-line result back whole")
       (assert cleaned "scratch removed")
