@@ -1,5 +1,5 @@
 (module asl-cli/nativeRefresh
-  :x [refresh! suspect? staleFail]
+  :x [refresh! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
   :i [(asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref BIN-ASL-ASL :do "the slow half of bin/asl, moved out of the shell: a native CLI whose deps list names a source that is missing or newer than the head is suspect and never runs before this refresh has taken the shared build lock (lock/pid, created exclusively, dead holders cleared), verified the binary byte for byte or rebuilt it through the builder closure, rewritten the head and checked the sources did not move again; a failure is one ERR_NATIVE_STALE line on stdout and exit 2, progress goes to stderr")
@@ -58,8 +58,28 @@ fn ! installHead! cache: String root: String dir: String -> Bool
         part (str head ".part." (stringFromInt64 (procSelf)))]
     (and (ok? (fileWrite part (str dir "\n"))) (ok? (pathRename part head))))
 
+; (:m :ref WT-MAIN-HOME-REBUILD :do "a rebuild starts only in the caller's own tree: ASL_NATIVE_CLI_CACHE names the pin store explicitly, or the tree lives under the caller's HOME (so the pin path resolves under it), or the caller's cwd is inside the tree; otherwise (bin/asl run with HOME overridden against another user's or another agent's worktree) the answer is one (:err :code rebuildRefused :tree :home) receipt and exit 2, nothing is built")
+fn under? path: String dir: String -> Bool
+  (and (not (stringEmpty? dir)) (or (= path dir) (stringStartsWith? path (str dir "/"))))
+
+fn rebuildAllowed? root: String home: String cwd: String explicitCache: Bool -> Bool
+  (or explicitCache (or (under? root home) (under? cwd root)))
+
+fn refusalReceipt root: String home: String -> String
+  (str "(:err :code rebuildRefused :tree \"" (stringReplace root "\"" "\\\"") "\" :home \"" (stringReplace home "\"" "\\\"") "\")")
+
+fn ! guard! root: String cache: String -> Int64
+  (let [(rootReal (resultOr (realPath root) root))
+        (home (optionOr (envGet "HOME") ""))
+        (homeReal (if (stringEmpty? home) "" (resultOr (realPath home) home)))
+        (cwdReal (resultOr (realPath ".") "."))
+        (explicit (not (stringEmpty? (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))))]
+    (if (rebuildAllowed? rootReal homeReal cwdReal explicit)
+      0
+      (do (println (refusalReceipt rootReal homeReal)) 2)))
+
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
-fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
+fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
   (if (or (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd))
     (do (eprintln "asl: native CLI pinned: kept for this command") 0)
   (let [head (nc/headPath cache root)
@@ -88,3 +108,9 @@ fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String S
                       ((not (installHead! cache root dir2)) (do (pathRemove lock) (staleFail cache dir2 (str "cannot rewrite " head))))
                       ((suspect? root dir2 head) (do (pathRemove lock) (staleFail cache dir2 "its sources moved again during the rebuild")))
                       (else (do (pathRemove lock) 0)))))))))))))
+fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
+  (let [(head (nc/headPath cache root))
+        (pinned (or (nc/pinned? root (headDir cache root) head cmd) (nc/relayPinned? root (headDir cache root) head cmd)))
+        (refused (if pinned 0 (guard! root cache)))]
+    (if (!= refused 0) refused (refreshBody! root cache cmd build)))
+
