@@ -1,5 +1,5 @@
 (module asl/agentLoop/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles vacuousForm gateVacuousRounds vacuousRetry]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry]
   :i [(asl/agentLoop/gates :a g) (asl/agentLoop/gitOps :a io) (asl/agentLoop/context :a ctx) (asl/agentLoop/loop :a lp) (asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl/agentLoop/agentConfig :a ac)])
 
 enum Claim
@@ -152,23 +152,35 @@ fn implFiles changed: (List String) gates: (List String) -> (List String)
 fn quotedList xs: (List String) -> String
   (c/joinSep (map (fn [(x String)] -> String (str "\"" (c/escapeAsn x) "\"")) xs) " ")
 
-; (:m :ref WRITER-GATE-VACUOUS :do "a failed revert check as the one ASN form the writer gets: the gates that stayed green with the change reverted to HEAD and the reverted files, parsed from gateRevertVerdict's message; none when the check passed or failed for another cause (no asserts, restore failed)")
+fn askText -> String
+  ":passesOnRevert true :do \"each gate stays green with the files reverted to HEAD, so it does not test the change; change the test so it fails with them reverted, run it, then finish\")"
+
+fn vacuousText gates: (List String) files: (List String) -> String
+  (str "(:gateVacuous :gates (" (quotedList gates) ") :files (" (quotedList files) ") " (askText))
+
+fn passedOnRevert results: (List g/GateResult) verdicts: (List String) -> (List String)
+  (match (listHead results)
+    ((none) (list))
+    ((some r)
+      (let [rest (passedOnRevert (optionOr (listTail results) (list)) (optionOr (listTail verdicts) (list)))]
+        (if (= (listHead verdicts) (some "passesOnRevert")) (cons (g/gateCmd r) rest) rest))))
+
+; (:m :ref WRITER-GATE-VACUOUS :do "gateRevertVerdict, and when no gate failed on revert and some passed its message gains a second line, the (:gateVacuous ...) form built from the results themselves, so a gate command or path holding '; ', ', ', a quote or a backslash reaches the writer whole")
+fn revertVerdict reverted: (List g/GateResult) verdicts: (List String) impl: (List String) newFiles: (List String) -> (Pair Bool String)
+  (let [v (g/gateRevertVerdict reverted verdicts impl newFiles)
+        green (passedOnRevert reverted verdicts)]
+    (if (or (pairFirst v) (listEmpty? green))
+      v
+      (pair false (str (pairSecond v) "\n" (vacuousText green impl)))))
+
+; (:m :ref WRITER-GATE-VACUOUS :do "the (:gateVacuous ...) line revertVerdict added to a failed revert check, the one form the writer gets; none when the check passed or failed for another cause (no asserts, restore failed)")
 fn vacuousForm integrity: (Pair Bool String) -> (Option String)
-  (let [msg (pairSecond integrity)
-        lead "no gate reports a failed assertion with "
-        mid " reverted to HEAD: "]
-    (if (or (pairFirst integrity) (not (stringStartsWith? msg lead)))
+  (let [msg (pairSecond integrity)]
+    (if (pairFirst integrity)
       none
-      (match (stringIndexOf msg mid)
+      (match (stringIndexOf msg "\n(:gateVacuous ")
         ((none) none)
-        ((some at)
-          (let [files (stringSplit (optionOr (stringSlice msg (stringLength lead) at) "") ", ")
-                items (stringSplit (optionOr (stringSlice msg (+ at (stringLength mid)) (stringLength msg)) "") "; ")
-                gates (map (fn [(i String)] -> String (optionOr (stringSlice i 0 (optionOr (stringIndexOf i " :passesOnRevert ") 0)) ""))
-                           (filter (fn [(i String)] -> Bool (stringContains? i " :passesOnRevert ")) items))]
-            (if (listEmpty? gates)
-              none
-              (some (str "(:gateVacuous :gates (" (quotedList gates) ") :files (" (quotedList files) ") :passesOnRevert true :do \"each gate stays green with the files reverted to HEAD, so it does not test the change; change the test so it fails with them reverted, run it, then finish\")"))))))))
+        ((some at) (stringSlice msg (+ at 1) (stringLength msg))))))
 
 fn defaultGateVacuousRounds -> Int64
   2
@@ -212,13 +224,13 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               wroteHead (writeTexts! root existing)
               bumped (fold (fn [ok p] (and ok (bumpMtime! (str root "/" (pairFirst p))))) wroteHead existing)
               firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root timeout env watch) (list))
-              firstDecision (g/gateRevertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
+              firstDecision (revertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
               answer (if (and bumped (pairFirst firstDecision))
                 firstDecision
                 (let [headRestored (and (writeTexts! root existing) (bumpTexts! root existing))
                       removedNew (removeNames! root newFiles)
                       secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env watch) (list))]
-                  (g/gateRevertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
+                  (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]

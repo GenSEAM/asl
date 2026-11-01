@@ -8,7 +8,7 @@
 (:case :id "vacuous" :want "false\ngate \"sh gate.sh\" is :vacuous: it reports no (:gate ... :asserts n :failed 0) with n > 0")
 (:case :id "onlyGateFiles" :want "true\nrevertCheck skipped: the change is only the gate files")
 (:case :id "redOnHead" :want "true\nrevertCheck: sh gate.sh :failsOnRevert :exit 1")
-(:case :id "newFileRevert" :want "false\nno gate reports a failed assertion with added.txt reverted to HEAD: sh gate.sh :passesOnRevert :exit 0")
+(:case :id "newFileRevert" :want "false\nno gate reports a failed assertion with added.txt reverted to HEAD: sh gate.sh :passesOnRevert :exit 0\n(:gateVacuous :gates (\"sh gate.sh\") :files (\"added.txt\") :passesOnRevert true :do \"each gate stays green with the files reverted to HEAD, so it does not test the change; change the test so it fails with them reverted, run it, then finish\")")
 (:case :id "mixedKeptNew" :want "true\nrevertCheck (kept added.txt): sh gate.sh :failsOnRevert :exit 1")
 (:case :id "gateNeedsNewFile" :want "true\nrevertCheck: sh gate.sh :failsOnRevert :exit 1")
 (:case :id "scanSwallowed" :want "3")
