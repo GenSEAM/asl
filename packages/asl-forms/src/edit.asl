@@ -292,24 +292,71 @@ fn lastIndex text: String b: Bytes needle: String from: Int64 last: Int64 -> Int
   (let [(at (k/findFrom text b needle from))]
     (if (< at 0) last (lastIndex text b needle (+ at 1) at)))
 
-fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String old: String new: String -> k/EditOutcome
+; (:m :ref FORMS-FLUSH-CR :do "line ends are matched on an LF view of the file and written on its raw bytes: crlfLfIndexes lists the view index of every LF that was a CRLF, rawAt maps a view offset back to a raw offset, spliceRaw copies the raw bytes outside each matched span; a lone CR stays a byte")
+fn crlfLfIndexes b: Bytes n: Int64 i: Int64 removed: Int64 acc: (List Int64) -> (List Int64)
+  (if (>= (+ i 1) n)
+    (listReverse acc)
+    (if (and (= (bytesGet b i) 13) (= (bytesGet b (+ i 1)) 10))
+      (crlfLfIndexes b n (+ i 2) (+ removed 1) (cons (- i removed) acc))
+      (crlfLfIndexes b n (+ i 1) removed acc)))
+
+fn rawAt lfs: (List Int64) v: Int64 -> Int64
+  (+ v (listLength (filter (fn [(l Int64)] -> Bool (< l v)) lfs)))
+
+fn firstBreakEnding raw: String from: Int64 to: Int64 -> String
+  (let [(seg (optionOr (stringSlice raw from to) ""))]
+    (match (stringIndexOf seg "\n")
+      ((none) "")
+      ((some i) (if (and (> i 0) (= (optionOr (stringSlice seg (- i 1) i) "") "\r")) "\r\n" "\n"))))
+
+; (:m :ref FORMS-FLUSH-CR :do "the new text takes the line ending of the span it replaces (CRLF or LF by its first break); a span with no break takes the file's first break, a file with none LF")
+fn endingFor raw: String rs: Int64 re: Int64 -> String
+  (let [(inSpan (firstBreakEnding raw rs re))]
+    (if (stringEmpty? inSpan)
+      (let [(whole (firstBreakEnding raw 0 (stringLength raw)))] (if (stringEmpty? whole) "\n" whole))
+      inSpan))
+
+fn newFor new: String ending: String -> String
+  (if (= ending "\r\n") (stringReplace (stringReplace new "\r\n" "\n") "\n" "\r\n") new)
+
+fn occAt view: String vb: Bytes old: String from: Int64 acc: (List Int64) -> (List Int64)
+  (let [(at (k/findFrom view vb old from))]
+    (if (< at 0) (listReverse acc) (occAt view vb old (+ at (stringLength old)) (cons at acc))))
+
+fn spliceRaw raw: String lfs: (List Int64) oldLen: Int64 new: String offs: (List Int64) cursor: Int64 outLen: Int64 lastEnd: Int64 acc: (List String) -> (Pair String Int64)
+  (match (listHead offs)
+    ((none) (pair (k/concatAll (listReverse (cons (optionOr (stringSlice raw cursor (stringLength raw)) "") acc))) lastEnd))
+    ((some at)
+      (let [(rs (rawAt lfs at))
+            (re (rawAt lfs (+ at oldLen)))
+            (gap (optionOr (stringSlice raw cursor rs) ""))
+            (nt (newFor new (endingFor raw rs re)))
+            (end (+ (+ outLen (stringLength gap)) (stringLength nt)))]
+        (spliceRaw raw lfs oldLen new (optionOr (listTail offs) (list)) re end end (cons nt (cons gap acc))))))
+
+fn editLocked! vs: v/Vfs ch: Checkers id: Int64 kw: (Map String String) fpath: String oldIn: String new: String -> k/EditOutcome
   (let [(rel (k/relToRoot vs.root fpath))
         (all (flagOn? kw "all"))]
     (match (stagedOrDisk! vs fpath)
       ((err e) (failStep id "edit" ":ERR_EDIT_FAILED" (msgTail e)))
       ((ok found)
         (let [(base (optionOr found ""))
-              (bb (stringToBytes base))
-              (occ (countFrom base bb old 0 0))]
+              (view (stringReplace base "\r\n" "\n"))
+              (vb (stringToBytes view))
+              (old (stringReplace oldIn "\r\n" "\n"))
+              (lfs (crlfLfIndexes (stringToBytes base) (stringLength base) 0 0 (list)))
+              (offs (occAt view vb old 0 (list)))
+              (occ (listLength offs))]
           (cond
             ((= occ 0) (failStep id "edit" ":ERR_NO_MATCH" (msgTail (str "Old target string not found in file: " rel))))
             ((and (> occ 1) (not all))
               (failStep id "edit" ":ERR_AMBIGUOUS" (str " :count " (stringFromInt64 occ) (msgTail (str "Old target string matches " (stringFromInt64 occ) " times in " rel "; widen it or pass :all true")))))
             (else
-              (let [(replaced (replaceFrom base bb old new 0 all (list)))
+              (let [(sp (spliceRaw base lfs (stringLength old) new offs 0 0 0 (list)))
+                    (replaced (pairFirst sp))
                     (lang (languageOf! fpath))
-                    (at (k/findFrom base bb old 0))
-                    (spanEnd (+ (if all (+ (lastIndex base bb old 0 -1) (* (- occ 1) (- (stringLength new) (stringLength old)))) at) (stringLength new)))
+                    (at (rawAt lfs (optionOr (listHead offs) 0)))
+                    (spanEnd (pairSecond sp))
                     (repairing (and (not (autofixOff? kw)) (or (= lang "asl") (= lang "asn")) (some? (delimDiag replaced))))]
                 (if repairing
                   (let [(r (repairRun replaced lang at spanEnd (if all (none) (some old)) (k/kwOr kw "pick" "")))]
