@@ -3,7 +3,7 @@
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
       runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(asl/agentLoop/core :a c)])
+  :i [(asl/agentLoop/core :a c) (asl-tools/fleet/run :a fr)])
 
 enum RVal
   (rStr text: String)
@@ -539,15 +539,41 @@ fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: 
             (rs "message" (str "git " opName " killed after " (itos t) " s")) (pair "timeout" (rBool true)) (ri "seconds" t) (ri "exit" 1))
           (gitRunRec rid opName argv b path base rev rawBase limit start end ctx.readCap)))))
 
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "a gate runs under the fleet guard (fr/guardStart!): its deadline, a descendant limit and a tree kill with the groups and pins the guard recorded, so a test binary in its own process group under the gate CLI dies with it; runBounded!'s SIGKILL of the gate's group alone left such binaries running under systemd --user. A gone watched pid stops the guarded tree like a timeout")
+fn gateMaxDesc -> Int64
+  512
+
+fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> (Pair fr/ProcOut Bool)
+  (let [s (fr/guardAdvance! g)]
+    (match s.out
+      ((some o) (pair o stopped))
+      ((none)
+        (if (and (not stopped) (watchedGone? watch))
+          (do (fr/stopGuard! s.guard) (gateLoop! s.guard watch true))
+          (do (if s.progress () (do (fdPoll (fr/guardFds s.guard) 50) ())) (gateLoop! s.guard watch stopped))))))
+
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard appends its (:fleetRun :verdict ...) note to stderr on a kill; the gate record keeps the gate's own stderr, as before, and says timeout itself")
+fn withoutGuardNote text: String -> String
+  (match (stringIndexOf text "\n(:fleetRun :verdict :") ((some i) (c/sliceOf text 0 i)) ((none) text))
+
+fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
+  (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec (gateMaxDesc)))
+    ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
+    ((ok g)
+      (let [r (gateLoop! g watch false)
+            o (pairFirst r)
+            timedOut (or (pairSecond r) (stringContains? o.stderr "(:fleetRun :verdict :timeout"))]
+        (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines (withoutGuardNote o.stderr)) :timedOut timedOut)))))
+
 fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (runGates! gates root timeoutSec env watch)
 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
-  (let [childEnv (some (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1"))]
+  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")]
     (map (fn [g]
            (let [rid (pairFirst g)
                  cmd (pairSecond g)]
-             (match (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv watch)
+             (match (runGate! cmd root timeoutSec childEnv watch)
                ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
                ((ok b)
                  (listAppend

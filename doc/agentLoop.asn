@@ -852,6 +852,7 @@
 (:doc :symbol "asl/agentLoop/tests/leonRemoteToolsTest.asl#" :text "Leon tool ops routed to a remote unit through remoteOps")
 (:doc :symbol "asl/agentLoop/tests/leonCodeRouteTest.asl#runTests" :text "LEON code route: a code-intent run drives the gateway codeRoute step machine for its model call")
 (:doc :symbol "asl/agentLoop/tests/leonOrphanResidueTest.asl#runTests" :text "the residues of a dead parent: a blocked model call, gate runs, integrity re-runs and baseline runs end when the watched pid is gone")
+(:doc :symbol "asl/agentLoop/tests/gateKillTreeTest.asl#runTests" :text "a timed-out gate leaves no survivor, not even a child in its own process group under the gate CLI")
 (:doc :symbol "asl/agentLoop/tests/leonRemoteToolsTest.asl#runTests" :text "Leon tool ops routed to a remote unit through remoteOps")
 (:doc :symbol "asl/agentLoop/core.asl#echoHeads" :text "the heads of the frames the loop itself sends or journals, which a model reply must never repeat at top level")
 (:doc :symbol "asl/agentLoop/core.asl#isEchoForm" :text "true for a frame whose head is an echo head; a gate frame counts only when it carries the loop-output keys cmd and one of exit, asserts, failed")
