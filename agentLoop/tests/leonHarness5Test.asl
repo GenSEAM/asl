@@ -24,7 +24,7 @@ fn ! runTests -> Bool
       (assert (has full "(:layer :id clientRules (:is reply asnForms)") "the leon client rules of clients.asn render as the clientRules layer")
       (assert (has full "(:glossary (:term") "the harness5 glossary renders")
       (assert (has full "ERR_BOUNDARY_VIOLATION") "the loop protocol row about the workspace boundary is kept")
-      (assert (has full "(:escalate :reason s)") "the escalate form is named in the protocol rows")
+      (assert (has full "(:escalate :reason s") "the escalate form is named in the protocol rows, with or without :seen and :tried")
       (assert (has full "(:plan :first") "a plan run carries the plan row")
       (assert (has full "(:gates :run") "declared gates render as a gates row")
       (assert (not (has full "(:task \"port the loop\")")) "the task is not in the system prompt; the user turn carries it once")
