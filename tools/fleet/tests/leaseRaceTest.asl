@@ -29,6 +29,13 @@ fn ! tidy! pid: Int64 -> Bool
 fn ! alive? pid: Int64 -> Bool
   (resultOr (procAlive? pid) false)
 
+; (:m :ref FR-LEASE-REAPER-RACE :do "a killed child stays a zombie until reaped and procAlive? reads a zombie as alive, so liveness after a reap is asked after a non-blocking wait, a short settle and a second wait")
+fn ! aliveAfterReap! pid: Int64 -> Bool
+  (let [(_ (procWaitPid pid true))
+        (_ (sleepMs 200))
+        (_ (procWaitPid pid true))]
+    (alive? pid))
+
 fn ! row dir: String pid: Int64 -> String
   (str dir "/" pid ".asn")
 
@@ -72,11 +79,11 @@ fn ! testReused -> Bool
         (born (fr/bornIn snap c))
         (_ (fileWrite (row dir c) (leaseText c 2000000000 500 (- born 1000) 0)))
         (other (fr/reapLeasesAt! dir snap me 1000))
-        (otherAlive (alive? c))
+        (otherAlive (aliveAfterReap! c))
         (otherRow (fileExists? (row dir c)))
         (_ (fileWrite (row dir c) (legacyText c 2000000000)))
         (legacy (fr/reapLeasesAt! dir snap me 1000))
-        (legacyAlive (alive? c))
+        (legacyAlive (aliveAfterReap! c))
         (legacyRow (fileExists? (row dir c)))
         (gone (tidy! c))
         (_ (cleanup dir))]

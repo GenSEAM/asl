@@ -24,6 +24,7 @@ fn validText -> String
     "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/agentLoop/leonServe.asl\"])"
     "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
     "  :agentLoop (:parseDefectEscalate 8 :readOutlineBytes 16384 :baseline true :specCheck false :toolMemo false :graderIntent grade :graderProfile \"p\" :gatewayConfig \"/tmp/g.asn\" :wallReserveSec 120 :wallGateMinSec 60 :gateVacuousRounds 2 :gateMaxDescendants 512 :contextKeepTurns 8 :contextToolCapBytes 1500 :contextMaxOlderLines 50 :doc \"d\")"
+    "  :remoteJobs (:claimSweepS 300)"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"
     "") "\n")
 
