@@ -1,10 +1,10 @@
 (module aslGateway/server
   :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable!]
+      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq!]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -140,17 +140,27 @@ fn gatewayUpstreamPort upstream: String -> Int64
               (if (some? query) (optionOr query (stringLength hostPort)) (stringLength hostPort))))]
     (optionOr (stringToInt64 (optionOr (stringSlice hostPort 0 end) "")) 0))
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the request accounting of gateway status, read from gatewayRequests.asn: requests accepted and not finished past :requestDeadlineSec (stuck, up to 5 ids) and requests that ended lost in the last 24 hours")
+fn ! requestsStatusText! -> String
+  (let [(home (optionOr (envGet "HOME") "."))
+        (cfgPath (c/gatewayProfilesPath home))
+        (text (if (fileExists? cfgPath) (resultOr (fileReadString cfgPath) "") ""))
+        (rows (resultOr (rq/readReqs! (rq/reqPath home)) (list)))
+        (now (nowMs!))
+        (stuck (rq/stuckRows rows now (rq/requestDeadlineFromText text)))]
+    (str " :requests (:stuck " (stringFromInt64 (listLength stuck)) " :stuckIds (" (stringJoin (map (fn [(r rq/ReqRow)] -> String (str "\"" r.id "\"")) (listTake stuck 5)) " ") ") :lost24h " (stringFromInt64 (rq/lostSince rows (- now 86400000))) ")"))
+
 fn ! gatewayStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
   (match (fileReadString (gatewayStatePath!))
-    ((err _) (do (sys/say! (str "(:gateway :status :offline :port " requestedPort ")")) (ok 0)))
+    ((err _) (do (sys/say! (str "(:gateway :status :offline :port " requestedPort (requestsStatusText!) ")")) (ok 0)))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
             (pid (pairFirst numbers))
             (port (if (> (pairSecond numbers) 0) (pairSecond numbers) requestedPort))
             (running (and (> pid 1) (gatewayServiceOwnsPid! launch pid)))]
         (do (sys/say! (if running
-                        (str "(:gateway :status :running :port " port " :pid " pid ")")
-                        (str "(:gateway :status :offline :port " port ")")))
+                        (str "(:gateway :status :running :port " port " :pid " pid (requestsStatusText!) ")")
+                        (str "(:gateway :status :offline :port " port (requestsStatusText!) ")")))
           (ok 0)))))
 
 fn ! gatewayLegacyStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
@@ -458,6 +468,8 @@ fn attribConsumer packed: String -> (Option String)
   (:f limitSeededMs Int64)
   ; (:m :ref GW-LIMIT-SCOPES :do "concurrency slots held by calls in flight: taken when a call passes its limit check, freed by the sent usage row of its provider and alias or when the lease runs out")
   (:f leases (List lim/Lease) :default (list))
+  ; (:m :ref GW-REQUEST-ACCOUNTING :do "the accepted requests still open, one per connection fd: id, start, and once the reply is rendered the outcome and status their done row carries")
+  (:f reqs (List rq/ReqInfo) :default (list))
   (:f startMs Int64))
 
 fn omniZeroKey -> om/Word64
@@ -484,12 +496,19 @@ fn loopSpreadState srv: GatewayLoop spreadState: (Map String (Map String Int64))
 fn loopWiring srv: GatewayLoop wiring: dp/Wiring text: (Option String) -> GatewayLoop
   (with srv :pools (pd/poolWithPlugins srv.pools wiring.plugins) :wiring wiring :wiringText text)
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the first rendered reply of an open request fixes the outcome and status its done row will carry; the rest of a partly written reply changes nothing")
+fn reqMark srv: GatewayLoop fd: Int64 data: String -> GatewayLoop
+  (if (= (rq/statusOfWire data) 0)
+    srv
+    (with srv :reqs (map (fn [(r rq/ReqInfo)] -> rq/ReqInfo (if (and (= r.fd fd) (stringEmpty? r.outcome)) (with r :outcome (rq/outcomeOfWire data) :status (rq/statusOfWire data)) r)) srv.reqs)))
+
 fn addConn srv: GatewayLoop fd: Int64 phase: ConnPhase -> GatewayLoop
   (match phase
     ((connWriting data)
-      (if (<= fd (linkFd))
-        (with srv :outbox (listAppend srv.outbox (list (pair fd data))))
-        (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase phase))))))
+      (let [(marked (reqMark srv fd data))]
+        (if (<= fd (linkFd))
+          (with marked :outbox (listAppend marked.outbox (list (pair fd data))))
+          (loopConns marked (listAppend marked.conns (list (GatewayConn :fd fd :input "" :phase phase)))))))
     (_ (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase phase))))))
 
 fn linkFd -> Int64
@@ -1036,10 +1055,20 @@ fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> Ga
     (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 200) (ch/headField "Content-Type" "application/asn+sexpr")) :body "(:health :status ok)\n"))))
     (dispatchGuarded! srv fd raw request)))
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "an authenticated request is accepted: it gets an id, an accepted row in gatewayRequests.asn and an entry in srv.reqs; a failed note is logged and the request goes on")
+fn ! acceptReq! srv: GatewayLoop fd: Int64 -> GatewayLoop
+  (let [(now (nowMs!))
+        (id (str "r" (stringFromInt64 now) "-" (stringFromInt64 fd) "-" (stringFromInt64 (monotonicNs))))
+        (noted (rq/noteAccept! srv.home id now))]
+    (do (match noted
+          ((err e) (logLine! (str "(:gateway :requests :acceptNoteFailed \"" (wire/asnEscape e) "\")")))
+          ((ok _) true))
+        (with srv :reqs (cons (rq/ReqInfo :fd fd :id id :startMs now :outcome "" :status 0) (filter (fn [(r rq/ReqInfo)] -> Bool (!= r.fd fd)) srv.reqs)))))
+
 fn ! dispatchGuarded! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (match (fed/serveAuthError srv.env request.headers)
     ((some e) (addConn srv fd (connWriting (errorResponse 401 e))))
-    ((none) (dispatchAuthed! srv fd raw request)))
+    ((none) (dispatchAuthed! (acceptReq! srv fd) fd raw request)))
 
 fn ! dispatchAuthed! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (if (and (= request.method "POST") (chatPath? request.path))
@@ -1098,6 +1127,8 @@ fn ! hubStatusText! srv: GatewayLoop -> String
     (str "(:hub :uptimeSec " (stringFromInt64 (/ (- now srv.startMs) 1000))
          " :streams " (stringFromInt64 (listLength flying))
          " :waiting " (stringFromInt64 (listLength (filter hubParked? flying)))
+         " :requests " (stringFromInt64 (listLength srv.reqs))
+         " :stuck " (stringFromInt64 (listLength (filter (fn [(r rq/ReqInfo)] -> Bool (> (- now r.startMs) (* 1000 (rq/requestDeadlineFromText (optionOr srv.wiringText ""))))) srv.reqs)))
          " :buckets (" (stringJoin (map (fn [(p (Pair String u/TokenBucket))] -> String (hubBucketRow (pairFirst p) (pairSecond p) nowSec)) srv.buckets.buckets) " ") ")"
          " :admitWait (:n " (stringFromInt64 (listLength waits)) " :p50 " (stringFromInt64 (hubPercentile waits 50)) " :p95 " (stringFromInt64 (hubPercentile waits 95)) "))"))
 
@@ -1116,6 +1147,20 @@ fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option Gatew
 
 fn ! closeConn! conn: GatewayConn -> Bool
   (do (fdClose conn.fd) true)
+
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the one terminal row of an open request, written where its connection closes: gone true when the write to the client failed (clientGone), else the outcome the reply carried; a connection with no open request just closes")
+fn ! finishReq! srv: GatewayLoop conn: GatewayConn gone: Bool -> GatewayLoop
+  (match (listHead (filter (fn [(r rq/ReqInfo)] -> Bool (= r.fd conn.fd)) srv.reqs))
+    ((none) (do (closeConn! conn) srv))
+    ((some r)
+      (let [(now (nowMs!))
+            (outcome (if gone "clientGone" (if (stringEmpty? r.outcome) "gatewayError" r.outcome)))
+            (noted (rq/noteDone! srv.home r.id now outcome r.status (- now r.startMs)))]
+        (do (match noted
+              ((err e) (logLine! (str "(:gateway :requests :doneNoteFailed \"" (wire/asnEscape e) "\")")))
+              ((ok _) true))
+            (closeConn! conn)
+            (with srv :reqs (filter (fn [(x rq/ReqInfo)] -> Bool (!= x.fd conn.fd)) srv.reqs))))))
 
 fn ! stepReading! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
@@ -1146,10 +1191,10 @@ fn ! stepProxy! srv: GatewayLoop conn: GatewayConn upstreamFd: Int64 pending: St
 fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
     (match (fdWrite conn.fd data)
-      ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (do (closeConn! conn) srv)))
+      ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (finishReq! srv conn true)))
       ((ok n)
         (let [(rest (optionOr (stringSlice data n (stringLength data)) ""))]
-          (if (stringEmpty? rest) (do (closeConn! conn) srv)
+          (if (stringEmpty? rest) (finishReq! srv conn false)
             (addConn srv conn.fd (connWriting rest)))))))
 
 fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
@@ -1358,7 +1403,11 @@ fn ! secretsOverlayAt! home: String env: (Map String String) -> (Result (Map Str
 
 fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) env: (Map String String) -> (Result Int64 String)
   (let [        (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") (resultOr (realPath ".") "."))))
-        (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))]
+        (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
+        (recovered (rq/recoverLost! (optionOr (mapGet env "HOME") root) (nowMs!) 604800000))
+        (logged (match recovered
+                  ((ok n) (logLine! (str "(:gateway :requests :lost " (stringFromInt64 n) ")")))
+                  ((err e) (logLine! (str "(:gateway :requests :recoverFailed \"" (wire/asnEscape e) "\")")))))]
     (gatewayEventLoop! (GatewayLoop :listener listenerFd :upstreamPort upstreamPort :env env :home (optionOr (mapGet env "HOME") root)
       :rootDir root :registryPath (if (stringEmpty? registryEnv) (str root "/.asl/mem/calibration/index.asn") registryEnv)
       :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)

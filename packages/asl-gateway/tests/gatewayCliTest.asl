@@ -140,7 +140,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
       (gatewayLifecycleTest! root temp host runner)
       (let [(run (cliInvoke (str runner " status --port " offlinePort)))]
         (assert (= run.exitCode 0) "offline status exits zero")
-        (assert (stringContains? run.stdout (str "(:gateway :status :offline :port " offlinePort ")")) "offline status is an ASL receipt"))
+        (assert (stringContains? run.stdout (str "(:gateway :status :offline :port " offlinePort " :requests (:stuck ")) "offline status is an ASL receipt carrying the request accounting"))
       (let [(run (cliInvoke (str "ASL_GATEWAY_PORT=" offlinePort " " runner)))]
         (assert (= run.exitCode 0) "no-argument status exits zero")
         (assert (= run.stdout (str "ASL Cognitive Gateway: OFFLINE (Port: " offlinePort ")\n")) "no-argument status preserves the legacy output exactly"))
