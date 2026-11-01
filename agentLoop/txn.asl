@@ -855,7 +855,7 @@ fn balanceHealed res: heal/HealResult -> (Option (Pair String (Pair String Strin
     (some (pair res.text (pair res.receipt (checkField res))))
     none)
 
-; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal); a checker abort (clean) is accepted only when nothing is left over; a balance refusal through balanceHealed, and when heal! cannot load the text's imports (a module the same reply writes, not yet on disk) through the text-only healSource stages; an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances")
+; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal); a checker abort (clean) is accepted only when nothing is left over; a balance refusal through balanceHealed, which also lands the parse-level repair heal! keeps when the text's imports do not load yet (importsUnloaded left); an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances")
 fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (Option (Pair String (Pair String String)))
   (match cur
     ((none) none)
@@ -868,7 +868,7 @@ fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (O
               ((ok res) (if clean
                           (if (and res.changed (listEmpty? res.left)) (some (pair res.text (pair res.receipt (checkField res)))) none)
                           (balanceHealed res)))
-              ((err _) (if clean none (balanceHealed (heal/healSource t (joinPath root tf))))))
+              ((err _) none))
             (let [res (rep/repairAtSite t lang)]
               (if (and (listEmpty? (rep/repairResultLeft res)) (none? (balanceAid (rep/repairResultText res))))
                 (some (pair (rep/repairResultText res) (pair (rep/repairResultReceipt res) "")))

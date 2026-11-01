@@ -680,6 +680,7 @@ fn ! preludeVocab! path: String -> (List String)
     ((ok src) (vocabFromSource src (list))))
 
 ; (:m :do "the effectful entry: a text that does not parse first gets the parse-level rules alone, then the imports load the way checkFileCached! (asl check) loads them, the vocabulary comes from the prelude at preludePath, and maxRounds caps the rule applications over both phases")
+; (:m :ref HEAL-KEEP-STAGE1 :do "imports that do not load (a module the same reply writes, not on disk yet) keep the parse-level repair: the stage-1 text comes back with one importsUnloaded diagnostic left instead of an err that drops it")
 fn ! heal! path: String text: String roots: (List String) preludePath: String maxRounds: Int64 -> (Result HealResult String)
   (let [(t0 (spellNormal text (healRuleNames)))
         (vocab (vocabFromSource t0 (preludeVocab! preludePath)))
@@ -695,4 +696,4 @@ fn ! heal! path: String text: String roots: (List String) preludePath: String ma
           (if (and (listEmpty? cl.unresolved) (listEmpty? cl.errors))
             (let [(second (healLoop first.text (healDiags first.text cl.deps path) cl.deps path vocab ex (healRuleNames) false (- maxRounds (listLength first.repaired)) (list)))]
               (ok (finish second.text second.left (listReverse (listAppend first.repaired second.repaired)))))
-            (err (str "heal: cannot load the imports of " path ": " (stringJoin (listAppend cl.unresolved cl.errors) "; "))))))))
+            (ok (finish first.text (list (diagOf "importsUnloaded" (str "cannot load the imports of " path ": " (stringJoin (listAppend cl.unresolved cl.errors) "; ")) 1 1 path)) (listReverse first.repaired))))))))
