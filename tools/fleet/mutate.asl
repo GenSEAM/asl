@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mutate
-  :x [Mutant MutantOut mutant defaultScratch mutantDirs! sweep! mutantRun!]
+  :x [Mutant MutantOut mutant defaultScratch mutantDirs! sweep! mutantRun! mutantRunIn! verdictOf cacheDir! headFile seedable depHit? pinOf! depsOf!]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref MUTANT-IN-COPY :do "a mutant runs in a detached throwaway worktree of the writer's HEAD plus its uncommitted diff and untracked files, never in the writer's tree: a mutant job stopped mid-gate once left its edit in the writer's worktree and the next edits stacked on it (ESC-LADDER escRun4/5); the copy is removed on every exit of mutantRun!, and one left by a killed run is swept at the next start")
@@ -14,7 +14,10 @@
   (:f exit Int64)
   (:f executed Int64)
   (:f out String)
-  (:f wt String))
+  (:f wt String)
+  (:f verdict String)
+  (:f red Bool)
+  (:f cli String))
 
 fn mutant file: String old: String new: String -> Mutant
   (Mutant :file file :old old :new new)
@@ -41,6 +44,7 @@ fn ! dropCopy! path: String -> Bool
 ; (:m :ref MUTANT-IN-COPY :do "a copy whose owner pid is gone was left by a killed run; it is removed and its worktree registration pruned; a live run's copy is kept")
 fn ! sweep! scratch: String repo: String -> Int64
   (let [(stale (filter (fn [(n String)] -> Bool (not (resultOr (procAlive? (ownerPid n)) false))) (mutantDirs! scratch)))
+        (_ (map (fn [(n String)] -> Bool (dropHead! scratch n)) stale))
         (gone (filter (fn [(n String)] -> Bool (dropCopy! (str scratch "/" n))) stale))
         (_ (git repo (list "worktree" "prune")))]
     (listLength gone))
@@ -74,15 +78,68 @@ fn ! applyMutant! path: String m: Mutant -> (Result Unit String)
         ((ok _) (ok ()))
         ((err e) (err (str "mutant write failed: " e))))))
 
+; (:m :ref MUTANT-SHARED-CLI :do "a copy whose changed files (the mutated file and the writer's uncommitted ones) are all outside the deps of the native CLI the writer's worktree is pinned to reuses that CLI: the copy gets a head pointer in the CLI cache naming the same build dir, read from the writer's pointer and never rebuilt into the writer's tree; a changed CLI input, an absent pointer or an absent deps list leaves the copy to build its own; the pointer is removed with the copy and a killed run's pointer by the next sweep")
+fn ! cacheDir! -> String
+  (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
+
+fn headFile cache: String root: String -> String
+  (str cache "/head" (stringReplace root "/" "_"))
+
+fn ! pinOf! cache: String wt: String -> String
+  (let [(first (stringTrim (optionOr (listHead (stringLines (resultOr (fileReadString (headFile cache (resultOr (realPath wt) wt))) ""))) "")))]
+    (if (and (not (stringEmpty? first)) (fileExists? (str first "/bin"))) first ""))
+
+fn ! depsOf! pin: String -> (List String)
+  (if (stringEmpty? pin) (list)
+    (filter (fn [(d String)] -> Bool (not (stringEmpty? d))) (map stringTrim (stringLines (resultOr (fileReadString (str pin "/deps")) "")))))
+
+fn depHit? deps: (List String) f: String -> Bool
+  (listAny? (fn [(d String)] -> Bool (or (= d f) (stringStartsWith? f (str d "/")))) deps)
+
+fn seedable pin: String deps: (List String) files: (List String) -> Bool
+  (and (not (stringEmpty? pin)) (and (not (listEmpty? deps)) (not (listAny? (fn [(f String)] -> Bool (depHit? deps f)) files))))
+
+fn ! changedFiles! wt: String -> (List String)
+  (let [(a (git wt (list "diff" "--name-only" "HEAD")))
+        (u (git wt (list "ls-files" "--others" "--exclude-standard")))]
+    (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (listAppend (stringLines a.out) (stringLines u.out)))))
+
+fn markerPath scratch: String name: String -> String
+  (str scratch "/heads/" name)
+
+fn ! seedHead! cache: String pin: String scratch: String name: String path: String -> Bool
+  (let [(head (headFile cache (resultOr (realPath path) path)))
+        (_ (dirCreate cache))
+        (_ (dirCreate (str scratch "/heads")))]
+    (and (ok? (fileWrite (markerPath scratch name) head)) (ok? (fileWrite head (str pin "\n")))))
+
+fn ! dropHead! scratch: String name: String -> Bool
+  (let [(m (markerPath scratch name))
+        (head (stringTrim (resultOr (fileReadString m) "")))
+        (_ (if (stringEmpty? head) false (ok? (pathRemove head))))
+        (_ (pathRemove m))]
+    true)
+
+; (:m :ref MUTANT-INVALID :do "a nonzero exit counts as red only when the gate ran assertions or failed one; a mutant that does not load or check (or a gate killed by its limits before an assertion ran) is invalid and never red")
+fn verdictOf exit: Int64 executed: Int64 out: String -> String
+  (cond
+    ((= exit 0) "pass")
+    ((or (> executed 0) (stringContains? out "ERR_ASSERT")) "red")
+    (else "invalid"))
+
 fn notRun wt: String why: String -> MutantOut
-  (MutantOut :applied false :exit -1 :executed 0 :out why :wt wt)
+  (MutantOut :applied false :exit -1 :executed 0 :out why :wt wt :verdict "notApplied" :red false :cli "")
 
 ; (:m :ref MUTANT-IN-COPY :do "one mutant: sweep stale copies, add the copy at the writer's HEAD, fill it, apply the mutant, run the gate there under lim, remove the copy; :applied false when the mutant text is not found exactly once")
 fn ! mutantRun! wt: String scratch: String m: Mutant gate: String lim: fr/Limits -> MutantOut
+  (mutantRunIn! wt scratch (cacheDir!) m gate lim)
+
+fn ! mutantRunIn! wt: String scratch: String cache: String m: Mutant gate: String lim: fr/Limits -> MutantOut
   (let [(_ (dirCreate scratch))
         (_ (sweep! scratch wt))
         (head (stringTrim (git wt (list "rev-parse" "HEAD")).out))
-        (path (str scratch "/mut-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (name (str "mut-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (path (str scratch "/" name))
         (added (git wt (list "worktree" "add" "--detach" "--quiet" path head)))]
     (if (!= added.exit 0)
       (notRun "" (str "worktree add failed: " (stringTrim added.out)))
@@ -90,7 +147,13 @@ fn ! mutantRun! wt: String scratch: String m: Mutant gate: String lim: fr/Limits
             (res (match ready
                    ((err e) (notRun path e))
                    ((ok _)
-                     (let [(d (fr/runShell! gate path (fr/childEnv (list)) lim))]
-                       (MutantOut :applied true :exit d.exit :executed (optionOr (fr/executedOf d.out) 0) :out d.out :wt path)))))
+                     (let [(pin (pinOf! cache wt))
+                           (files (cons m.file (changedFiles! wt)))
+                           (pinned (and (seedable pin (depsOf! pin) files) (seedHead! cache pin scratch name path)))
+                           (d (fr/runShell! gate path (fr/childEnv (list)) lim))
+                           (ex (optionOr (fr/executedOf d.out) 0))
+                           (v (verdictOf d.exit ex d.out))]
+                       (MutantOut :applied true :exit d.exit :executed ex :out d.out :wt path :verdict v :red (= v "red") :cli (if pinned "pinned" "cold"))))))
+            (_ (dropHead! scratch name))
             (_ (dropCopy! path))]
         res)))
