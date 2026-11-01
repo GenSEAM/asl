@@ -1,5 +1,5 @@
 (module aslGateway/requestLog
-  :x [ReqRow ReqInfo defaultRequestDeadlineSec reqPath reqAcceptLine reqDoneLine reqParse readReqs! noteAccept! noteDone! unresolvedRows recoverLost! tornTail! quarantineCorrupt! completeLines statusOfWire outcomeOfWire stuckRows lostSince requestDeadlineFromText]
+  :x [ReqRow ReqInfo defaultRequestDeadlineSec reqPath reqAcceptLine reqDoneLine reqParse readReqs! noteAccept! noteDone! unresolvedRows requestKeepRowsFromText defaultRequestKeepRows recoverLost! tornTail! quarantineCorrupt! completeLines statusOfWire outcomeOfWire stuckRows lostSince requestDeadlineFromText]
   :i [(aslGateway/usage :a g)
       (aslGateway/config :a c)
       (aslGateway/wire :a wire)
@@ -74,11 +74,14 @@ fn completeLines text: String -> (List String)
 
 ; (:m :ref GW-REQUEST-ACCOUNTING :do "true when the request log ends in a half written row (text that does not end in a newline)")
 fn ! tornTail! path: String -> Bool
-  (if (not (fileExists? path))
-    false
-    (match (fileReadString path)
-      ((err _) false)
-      ((ok text) (and (not (stringEmpty? text)) (not (stringEndsWith? text "\n"))))))
+  (match (fileStat path)
+    ((err _) false)
+    ((ok st)
+      (if (or (not st.isFile) (<= st.size 0))
+        false
+        (match (fileReadRange path (- st.size 1) 1)
+          ((ok b) (and (= (bytesLength b) 1) (!= (bytesGet b 0) 10)))
+          ((err _) false)))))
 
 fn ! readReqs! path: String -> (Result (List ReqRow) String)
   (if (not (fileExists? path))
@@ -137,16 +140,28 @@ fn replaceFile! path: String text: String -> (Result Bool String)
 fn lostRow r: ReqRow nowMs: Int64 -> ReqRow
   (ReqRow :id r.id :phase "done" :atMs nowMs :outcome "lost" :status 0 :ms (- nowMs r.atMs))
 
+fn newestRows rows: (List ReqRow) keep: Int64 -> (List ReqRow)
+  (listReverse (listTake (listReverse rows) (max 0 keep)))
+
+fn defaultRequestKeepRows -> Int64
+  100000
+
+; (:m :ref GW-REQUEST-ACCOUNTING :do "(:gateway ... :requestKeepRows N): how many done rows recovery at server start keeps, newest first, on top of the 7 day retention; default 100000, only 100..10000000 is taken")
+fn requestKeepRowsFromText text: String -> Int64
+  (match (c/gatewayTopIntOverride text "requestKeepRows")
+    ((some n) (if (and (>= n 100) (<= n 10000000)) n (defaultRequestKeepRows)))
+    ((none) (defaultRequestKeepRows)))
+
 fn doneText r: ReqRow -> String
   (reqDoneLine r.id r.atMs r.outcome r.status r.ms)
 
 ; (:m :ref GW-REQUEST-ACCOUNTING :do "at server start every accepted row with no done row becomes a done row with outcome lost, the accepted rows that are resolved are dropped and done rows older than retentionMs are dropped; returns how many were lost")
-fn ! recoverLost! home: String nowMs: Int64 retentionMs: Int64 -> (Result Int64 String)
+fn ! recoverLost! home: String nowMs: Int64 retentionMs: Int64 keepRows: Int64 -> (Result Int64 String)
   (match (readReqs! (reqPath home))
     ((err e) (err e))
     ((ok rows)
       (let [(lost (map (fn [(r ReqRow)] -> ReqRow (lostRow r nowMs)) (unresolvedRows rows)))
-            (kept (filter (fn [(r ReqRow)] -> Bool (and (= r.phase "done") (>= r.atMs (- nowMs retentionMs)))) rows))
+            (kept (newestRows (filter (fn [(r ReqRow)] -> Bool (and (= r.phase "done") (>= r.atMs (- nowMs retentionMs)))) rows) keepRows))
             (text (stringJoin (map doneText (listAppend kept lost)) ""))]
         (if (and (not (tornTail! (reqPath home))) (listEmpty? lost) (= (listLength kept) (listLength (filter (fn [(r ReqRow)] -> Bool (= r.phase "done")) rows))) (= (listLength rows) (listLength kept)))
           (ok 0)

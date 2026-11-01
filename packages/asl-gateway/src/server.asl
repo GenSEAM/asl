@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq!]
+      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -1413,7 +1413,7 @@ fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/
                        ((some to) (logLine! (str "(:gateway :requests :corrupt \"" (wire/asnEscape to) "\")")))
                        ((none) true)))
         (torn (if (rq/tornTail! (rq/reqPath (optionOr (mapGet env "HOME") root))) (logLine! "(:gateway :requests :tornTail 1)") true))
-        (recovered (rq/recoverLost! (optionOr (mapGet env "HOME") root) (nowMs!) 604800000))
+        (recovered (rq/recoverLost! (optionOr (mapGet env "HOME") root) (nowMs!) 604800000 (rq/requestKeepRowsFromText (resultOr (fileReadString (c/gatewayProfilesPath (optionOr (mapGet env "HOME") root))) ""))))
         (logged (match recovered
                   ((ok n) (logLine! (str "(:gateway :requests :lost " (stringFromInt64 n) ")")))
                   ((err e) (logLine! (str "(:gateway :requests :recoverFailed \"" (wire/asnEscape e) "\")")))))]
