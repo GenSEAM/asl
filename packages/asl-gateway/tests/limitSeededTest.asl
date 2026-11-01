@@ -3,6 +3,7 @@
   :i [(aslGateway/chat :a ch)
       (aslGateway/config :a c)
       (aslGateway/usageLedger :a ul)
+      (aslGateway/limits :a lim)
       (aslGateway/server :a srv)
       (aslGateway/poolDispatch :a pd)
       (aslGateway/breaker :a b)
@@ -48,7 +49,8 @@ fn ! ask! s: srv/GatewayLoop -> (Pair srv/GatewayLoop String)
     (pair (pairFirst r) (answerOf (pairSecond r))))
 
 fn ! runTests -> Bool
-  (let [(home "/tmp/limitSeededTest")
+  (let [(tag (str (stringFromInt64 (procSelf)) "-" (stringFromInt64 (monotonicNs))))
+        (home (str "/tmp/limitSeededTest" tag))
         (_ (pathRemove home))
         (made (dirCreate home))
         (path (ul/defaultSharedUsagePath home))
@@ -58,7 +60,7 @@ fn ! runTests -> Bool
         (firstSrv (pairFirst first))
         (cached (ask! firstSrv))
         (fresh (ask! (loopAt home)))
-        (home2 "/tmp/limitSeededTestOld")
+        (home2 (str "/tmp/limitSeededTestOld" tag))
         (_ (pathRemove home2))
         (made2 (dirCreate home2))
         (path2 (ul/defaultSharedUsagePath home2))
@@ -69,6 +71,7 @@ fn ! runTests -> Bool
         (_ (pathRemove home))
         (_ (pathRemove home2))]
     (do
+      (assert (and (>= (lim/seedTtlMs) 60000) (<= (lim/seedTtlMs) 3600000)) (str "the seed ttl stays between a minute and an hour, so the cached ask in this test is inside it: " (stringFromInt64 (lim/seedTtlMs))))
       (assert (= (pairSecond first) "") (str "two sent calls in the ledger leave a limit of three open: " (pairSecond first)))
       (assert (= (listLength firstSrv.limitRows) 2) "the first ask seeded both rows from the file")
       (assert (> firstSrv.limitSeededMs 0) "and marked the loop seeded")
