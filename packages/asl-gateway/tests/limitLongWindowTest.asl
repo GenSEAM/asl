@@ -231,5 +231,35 @@ fn ! configChecks -> Bool
     (assert (refusedWith "" " :ledgerRollupPath 7" "ledgerRollupPath") "config check refuses a :ledgerRollupPath that is not a quoted path")
     true)
 
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "fix round: a prune whose removal fails after the rollup was written is retried without counting the generation twice, even when its newest row is an unsent pace row; a rollup line that is not a day row is counted, not lost silently")
+fn ! pruneChecks! -> Bool
+  (let [(home (str "/tmp/limitLongWindowTestPrune-" (stringFromInt64 (procSelf))))
+        (gdir (str home "/gens"))
+        (_ (dirCreate home))
+        (_2 (dirCreate gdir))
+        (path (str gdir "/calls.asn"))
+        (ru (ul/Rollup :path (str home "/calls.days") :keepDays 62))
+        (d0 (* 20750 (dayMs)))
+        (_3 (fileWrite (str path ".1") (str (ul/callRowLine (okAt (+ d0 1))) (ul/callRowLine (okAt (+ d0 2))) (ul/callRowLine (row (+ d0 3) "nim" "a1" "pace:day")))))
+        (_4 (fileWrite (str path ".2") (ul/callRowLine (okAt (+ d0 10)))))
+        (_5 (fileChmod gdir 365))
+        (first (ul/pruneGenerations! path (list 1 2) 1 ru))
+        (days1 (resultOr (ul/readDays! ru.path) (list)))
+        (_6 (fileChmod gdir 493))
+        (second (ul/pruneGenerations! path (list 1 2) 1 ru))
+        (days2 (resultOr (ul/readDays! ru.path) (list)))
+        (gone (not (fileExists? (str path ".1"))))
+        (_7 (map (fn [(f String)] -> Bool (ok? (pathRemove f))) (list (str path ".1") (str path ".2") ru.path gdir home)))
+        (read (ul/dayRowsOf (str (ul/dayRowLine (dayRow 20755 4 1)) "junk\n(:call :at 1)\n")))]
+    (do
+      (assert (match first ((err e) (stringContains? e "prune")) ((ok _) false)) "the removal fails while the directory is read-only")
+      (assert (= (dayCalls days1) 2) (str "the rollup was written before it: " (stringFromInt64 (dayCalls days1))))
+      (assert (ok? second) "the retried prune succeeds")
+      (assert (= (dayCalls days2) 2) (str "and the generation is not folded twice: " (stringFromInt64 (dayCalls days2))))
+      (assert gone "the generation is removed on the retry")
+      (assert (= (ul/generationThrough (list (okAt 5) (row 9 "nim" "a1" "pace:day"))) 5) "the mark is the newest sent call")
+      (assert (and (= (listLength (pairFirst read)) 1) (= (pairSecond read) 2)) "two non-day lines are counted as dropped")
+      true))
+
 fn ! runTests -> Bool
-  (and (countChecks) (and (resetChecks) (and (remainingChecks) (and (rollingChecks) (and (rollupChecks) (and (rowChecks) (and (serverChecks!) (configChecks))))))))
+  (and (countChecks) (and (resetChecks) (and (remainingChecks) (and (rollingChecks) (and (rollupChecks) (and (rowChecks) (and (serverChecks!) (and (configChecks) (pruneChecks!)))))))))

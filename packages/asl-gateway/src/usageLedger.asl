@@ -29,6 +29,9 @@
       keptDays
       daysThrough
       readDays!
+      dayRowsOf
+      generationThrough
+      pruneGenerations!
       writeDays!
       readRows!
       readRowsSince!
@@ -392,6 +395,13 @@ fn keptDays days: (List DayRow) keepDays: Int64 -> (List DayRow)
 fn daysThrough days: (List DayRow) -> Int64
   (fold (fn [(m Int64) (d DayRow)] -> Int64 (max m d.lastMs)) 0 days)
 
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "the day rows of a rollup text and how many non-empty lines were not day rows")
+fn dayRowsOf raw: String -> (Pair (List DayRow) Int64)
+  (fold (fn [(acc (Pair (List DayRow) Int64)) (l String)] -> (Pair (List DayRow) Int64)
+          (match (dayRowParse l) ((some d) (pair (listAppend (pairFirst acc) (list d)) (pairSecond acc))) ((none) (pair (pairFirst acc) (+ (pairSecond acc) 1)))))
+        (pair (list) 0) (nonEmptyLines raw))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a rollup line that is not a day row is left out and named in one (:gwLedger :status :dayRowsDropped ...) row per read, never dropped silently")
 fn ! readDays! path: String -> (Result (List DayRow) String)
   (if (stringEmpty? path)
     (ok (list))
@@ -400,8 +410,10 @@ fn ! readDays! path: String -> (Result (List DayRow) String)
       ((ok _)
        (match (fileReadString path)
          ((err e) (err (str "read " path ": " e)))
-         ((ok raw) (ok (fold (fn [(acc (List DayRow)) (l String)] -> (List DayRow) (match (dayRowParse l) ((some d) (listAppend acc (list d))) ((none) acc)))
-                             (list) (nonEmptyLines raw))))))))
+         ((ok raw)
+          (let [(read (dayRowsOf raw))]
+            (do (if (> (pairSecond read) 0) (eprintln (str "(:gwLedger :status :dayRowsDropped :path " (asnStr path) " :count " (stringFromInt64 (pairSecond read)) ")")) ())
+                (ok (pairFirst read)))))))))
 
 fn ! writeDays! path: String days: (List DayRow) -> (Result Bool String)
   (let [(tmp (str path ".tmp"))]
@@ -419,6 +431,11 @@ fn ! generationCalls! file: String -> (Result (List CallRow) String)
     ((ok raw) (ok (fold (fn [(acc (List CallRow)) (l String)] -> (List CallRow) (match (callRowParse l) ((ok r) (cons r acc)) ((err _) acc)))
                         (list) (nonEmptyLines raw)))))
 
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "the newest sent call of a generation, 0 when it has none: the mark a rollup compares with the day rows' :last")
+fn generationThrough rows: (List CallRow) -> Int64
+  (fold (fn [(m Int64) (r CallRow)] -> Int64 (if (sentOutcome? r.outcome) (max m r.atMs) m)) 0 rows)
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a generation whose newest sent call is at or before the day rows' :last was folded already (its removal failed after the rollup was written) and is not folded again, so a retried prune never counts it twice")
 fn ! rollUp! file: String ru: Rollup -> (Result Bool String)
   (if (stringEmpty? ru.path)
     (ok true)
@@ -427,7 +444,11 @@ fn ! rollUp! file: String ru: Rollup -> (Result Bool String)
       ((ok rows)
        (match (readDays! ru.path)
          ((err e) (err e))
-         ((ok days) (writeDays! ru.path (keptDays (foldCalls days rows) ru.keepDays)))))))
+         ((ok days)
+          (let [(mark (generationThrough rows))]
+            (if (and (> mark 0) (<= mark (daysThrough days)))
+              (ok true)
+              (writeDays! ru.path (keptDays (foldCalls days rows) ru.keepDays)))))))))
 
 ; (:m :ref GW-LIMIT-LONG-WINDOW :do "a generation is removed only after its calls are in the day rows; one that cannot be rolled up stays on disk, is retried at the next rotation and its error is returned")
 fn ! pruneGenerations! path: String gens: (List Int64) keep: Int64 ru: Rollup -> (Result Bool String)
