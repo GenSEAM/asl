@@ -241,7 +241,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 ; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session, models and subs (models sync and subs refresh reach cliDispatch)")
 fn gatewayCliMode? mode: String -> Bool
-  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "session" "models" "subs") mode)
+  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs") mode)
 
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))

@@ -2,7 +2,6 @@
   :x [ReqRow ReqInfo defaultRequestDeadlineSec reqPath reqAcceptLine reqDoneLine reqParse readReqs! noteAccept! noteDone! unresolvedRows recoverLost! tornTail! quarantineCorrupt! completeLines statusOfWire outcomeOfWire stuckRows lostSince requestDeadlineFromText]
   :i [(aslGateway/usage :a g)
       (aslGateway/config :a c)
-      (aslGateway/chat :a ch)
       (aslGateway/wire :a wire)
       (asl-parser/reader :a rd)])
 
@@ -163,7 +162,7 @@ fn statusOfWire data: String -> Int64
 ; (:m :ref GW-REQUEST-ACCOUNTING :do "the outcome of a rendered reply: 2xx ok; from the gateway itself 429 limit, 503 noRoute, 504 timeout, any other gatewayError; from an upstream 504 or 408 timeout, any other upstreamError")
 fn outcomeOfWire data: String -> String
   (let [(status (statusOfWire data))
-        (gw (or (stringContains? data (str (ch/gatewayOriginHeader) ": gateway")) (stringContains? data "(:error :status ")))]
+        (gw (or (stringContains? data "X-ASL-Origin: gateway") (stringContains? data "(:error :status ")))]
     (cond
       ((and (>= status 200) (< status 300)) "ok")
       ((and gw (= status 429)) "limit")
