@@ -40,7 +40,8 @@ fn placeholder work: String v: String -> String
   (cond
     ((= v "@NOHOST@") (str work "/noHost"))
     ((= v "@NOBIN@") (str work "/emptyBin"))
-    ((= v "@NOTOOLS@") "/usr/bin:/bin")
+    ; (:m :ref BASE-RED-GATESPARITY :do "cases 41 and 131 record 'no node on PATH'; /usr/bin:/bin holds node on node2, so the no-tools PATH is the empty dir, the same on every host")
+    ((= v "@NOTOOLS@") (str work "/emptyBin"))
     (else v))
 
 fn caseEnv! repo: String work: String c: Case text: String -> (List String)
