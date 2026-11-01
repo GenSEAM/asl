@@ -1335,7 +1335,7 @@ fn ! settleWatch t0: Int64 w: WorkerWatch -> WorkerWatch
       (WorkerWatch :proc w.proc :outOpen false :errOpen false :errText w.errText :groups w.groups :known w.known
                    :verdict w.verdict :exit exit :done true)))
 
-; (:m :ref NT-KNOWN-ADDNEW :do "a breach kills with the groups and pins this watch recorded, so a setsid child seen in the tree and then orphaned out of the lineage dies with the worker; fr/killTree! started from nothing and missed it")
+; (:m :ref NT-KNOWN-ADDNEW :do "a breach kills with this check's tree: its groups and the pins of its members, found with the pins carried from the previous check, so a setsid child seen in the tree and then orphaned out of the lineage dies with the worker; fr/killTree! started from nothing and missed it")
 fn ! judgeWatch lim: fr/Limits now: Int64 t0: Int64 snap: (List fr/Proc) self: Int64 checked: Bool w: WorkerWatch -> WorkerWatch
   (if w.done w
     (let [(overTime (> (/ (- now t0) 1000000) lim.timeoutMs))
