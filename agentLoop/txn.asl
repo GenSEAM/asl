@@ -840,8 +840,23 @@ fn langForPath path: String -> (Option String)
     ((stringEndsWith? path ".asl") (some "asl"))
     (else none))
 
-; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal) and is accepted only when it changed and, for a checker abort (clean), nothing is left over, for a balance refusal the healed text balances; an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances; yields the repaired text and its (:repaired ... :left ...) receipt")
-fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (Option (Pair String String))
+; (:m :ref REFUSE-AUTOREPAIR :do "the checker verdict a landed repair carries: ok, or the count and the first three diagnostics with line:col, so the writer sees them in the turn the write lands")
+fn checkField res: heal/HealResult -> String
+  (if (listEmpty? res.left)
+    "ok"
+    (str "(:diags " (stringFromInt64 (listLength res.left)) " :first (" (stringJoin (map (fn [d] (str "\"" (c/escapeAsn (heal/diagText d)) "\"")) (listTake res.left 3)) " ") "))"))
+
+fn parseLeft? res: heal/HealResult -> Bool
+  (listAny? (fn [d] (= d.code "parse")) res.left)
+
+; (:m :ref REFUSE-AUTOREPAIR :do "a balance-refusal heal lands when it changed the text, balances it and left no parse error; diagnostics such as an import the same reply writes next are expected mid multi-file edit and ride along as :check")
+fn balanceHealed res: heal/HealResult -> (Option (Pair String (Pair String String)))
+  (if (and res.changed (and (none? (balanceAid res.text)) (not (parseLeft? res))))
+    (some (pair res.text (pair res.receipt (checkField res))))
+    none)
+
+; (:m :ref G4 :tags (repair) :do "an .asl text goes through the one heal pipeline (asl-forms/heal); a checker abort (clean) is accepted only when nothing is left over; a balance refusal through balanceHealed, and when heal! cannot load the text's imports (a module the same reply writes, not yet on disk) through the text-only healSource stages; an .asn text through asl-forms/repair, accepted only when nothing is left and the result balances")
+fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (Option (Pair String (Pair String String)))
   (match cur
     ((none) none)
     ((some t)
@@ -850,20 +865,24 @@ fn tryRepairText! cur: (Option String) tf: String root: String clean: Bool -> (O
         ((some lang)
           (if (= lang "asl")
             (match (heal/heal! (joinPath root tf) t (list root) (joinPath root "asl/prelude/prelude.asl") 24)
-              ((ok res) (if (and res.changed (if clean (listEmpty? res.left) (none? (balanceAid res.text)))) (some (pair res.text res.receipt)) none))
-              ((err _) none))
+              ((ok res) (if clean
+                          (if (and res.changed (listEmpty? res.left)) (some (pair res.text (pair res.receipt (checkField res)))) none)
+                          (balanceHealed res)))
+              ((err _) (if clean none (balanceHealed (heal/healSource t (joinPath root tf))))))
             (let [res (rep/repairAtSite t lang)]
               (if (and (listEmpty? (rep/repairResultLeft res)) (none? (balanceAid (rep/repairResultText res))))
-                (some (pair (rep/repairResultText res) (rep/repairResultReceipt res)))
+                (some (pair (rep/repairResultText res) (pair (rep/repairResultReceipt res) "")))
                 none)))))))
 
-fn repairedReceipt rid: String txnOwns: (List String) tf: String receipt: String cmd: String -> (List (Pair String RVal))
-  (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok"))
-    (pair "owns" (rList txnOwns)) (pair "flushed" (rList (list tf)))
-    (pair "error" (rNone)) (pair "message" (rNone))
-    (pair "cmd" (rStr cmd))
-    (pair "repaired" (rStr receipt))
-    (pair "exit" (rInt 0)) (pair "stdout" (rStr "")) (pair "persisted" (rBool true)))
+fn repairedReceipt rid: String txnOwns: (List String) tf: String receipt: String check: String cmd: String -> (List (Pair String RVal))
+  (listAppend
+    (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok"))
+      (pair "owns" (rList txnOwns)) (pair "flushed" (rList (list tf)))
+      (pair "error" (rNone)) (pair "message" (rNone))
+      (pair "cmd" (rStr cmd))
+      (pair "repaired" (rStr receipt)))
+    (listAppend (if (stringEmpty? check) (list) (list (pair "check" (rStr check))))
+      (list (pair "exit" (rInt 0)) (pair "stdout" (rStr "")) (pair "persisted" (rBool true)))))
 
 fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List TxnStep) root: String cmd: String okRun: Bool err: String msg: String balance: (Option String) code: Int64 out: String errText: String -> (List (Pair String RVal))
   (let [extra (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? msg "the delimiters ( ) [ ] { } and quotes do not balance")) (largeFileHint) "")
@@ -884,6 +903,31 @@ fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List T
           (listAppend
             (match aid ((some x) (match x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
             (opt "hint" hint))))))
+
+fn lineOfAid aid: String -> (Option Int64)
+  (if (stringStartsWith? aid "line ") (stringToInt64 (optionOr (listGet (stringSplit aid " ") 1) "")) none)
+
+fn numbered lines: (List String) i: Int64 -> (List String)
+  (match (listHead lines)
+    ((none) (list))
+    ((some l) (cons (str (stringFromInt64 i) ": " l) (numbered (optionOr (listTail lines) (list)) (+ i 1)))))
+
+; (:m :ref REFUSE-AUTOREPAIR :do "the content lines around the line a balance aid names, numbered, so the writer sees the unmatched delimiter in place; empty when the aid names no line")
+fn aroundLines text: String aid: String -> String
+  (match (lineOfAid aid)
+    ((none) "")
+    ((some k)
+      (let [lines (stringSplit text "\n")
+            from (max 1 (- k 1))
+            to (min (listLength lines) (+ k 1))]
+        (stringJoin (numbered (listTake (listDrop lines (- from 1)) (+ (- to from) 1)) from) "\n"))))
+
+fn withAround r: (List (Pair String RVal)) cur: (Option String) balance: (Option String) -> (List (Pair String RVal))
+  (match balance
+    ((none) r)
+    ((some aid)
+      (let [around (aroundLines (optionOr cur "") aid)]
+        (if (stringEmpty? around) r (listAppend r (list (pair "around" (rStr around))))))))
 
 ; (:m :ref G4 :tags (repair txn) :do "a balance-flagged refusal, and for an .asl target a checker abort, is retried once through the repair pipeline before it reaches the model; only a payload repair cannot fix still refuses")
 fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (Pair String RVal))
@@ -911,9 +955,9 @@ fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (
             (match repaired
               ((some fix)
                 (match (fileWrite (joinPath root tf) (pairFirst fix))
-                  ((ok _) (repairedReceipt rid txnOwns tf (pairSecond fix) cmd))
-                  ((err _) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))
-              ((none) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))))))
+                  ((ok _) (repairedReceipt rid txnOwns tf (pairFirst (pairSecond fix)) (pairSecond (pairSecond fix)) cmd))
+                  ((err _) (withAround (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText) cur balance))))
+              ((none) (withAround (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText) cur balance))))))))
 
 fn ! snapAll snap: (fn [String] -> Bool) targets: (List String) -> String
   (cond
