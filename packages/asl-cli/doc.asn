@@ -397,3 +397,4 @@
 (:doc :symbol "asl/packages/asl-cli/src/verify.asl#balanceReceipt!" :text "Balance receipt line of one file, with the indentation fix fields of indentFields! added when it is unbalanced; empty when it balances.")
 (:doc :symbol "asl/packages/asl-cli/src/verify.asl#diagHints!" :text "One indentation fix hint line for each file that has an unbalanced-read diagnostic, one per path.")
 (:doc :symbol "asl/packages/asl-cli/src/verify.asl#formatDiagsHinted!" :text "Diagnostics rendered as text with their hint lines appended.")
+(:doc :symbol "asl/packages/asl-cli/tests/checkTestParityTest.asl#runTests" :text "asl check and asl test agree on one suite in a foreign workspace: an unresolved import, an unknown symbol and a type the imported module does not export each fail both with the same code, and test names the suite path:line:col; the asl-* package import that check rejects and test accepts is still open")
