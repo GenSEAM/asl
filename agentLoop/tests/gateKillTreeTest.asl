@@ -65,7 +65,18 @@ fn ! testMaxDescGuard -> Bool
         (assert (ok? gone) "the fixture dir is removed")
         true))
 
+; (:m :ref AGENTLOOP-GATE-KILLTREE-FIX :do "a gate that prints a line looking like a guard verdict and exits 0 by itself is not a timeout: its exit code is kept, no guard field is set and its stderr is kept whole (grader memsweep's probe)")
+fn ! testOwnVerdictLine -> Bool
+  (let [(rows (g/runGates! (list (pair "1" "printf 'x\\n(:fleetRun :verdict :timeout)\\n(:fleetRun :verdict :runaway)\\n' >&2; exit 0")) "." 60 (none) (none)))
+        (row (optionOr (listHead rows) (list)))]
+    (do (assert (not (hasKey? row "timeout")) (str "a gate that exits 0 and prints a guard-looking line is not a timeout: exit " (textOf row "exit")))
+        (assert (= (textOf row "exit") "0") (str "its exit code is kept: " (textOf row "exit")))
+        (assert (not (hasKey? row "guard")) (str "no guard verdict is recorded: " (textOf row "guard")))
+        (assert (stringEndsWith? (textOf row "stderr") "(:fleetRun :verdict :timeout)\n(:fleetRun :verdict :runaway)\n") (str "its stderr is kept whole: " (textOf row "stderr")))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testOwnGroupChild) "a timed-out gate leaves no own-group child alive")
       (assert (testMaxDescGuard) "a gate over the configured descendant limit is killed and says so")
+      (assert (testOwnVerdictLine) "a gate's own verdict-looking line is not a guard verdict")
       true)

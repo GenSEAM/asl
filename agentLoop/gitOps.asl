@@ -547,10 +547,15 @@ fn ! gateMaxDesc! root: String -> Int64
     ((some v) (optionOr (ac/positiveInt v) 512))
     ((none) 512))
 
-fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> (Pair fr/ProcOut Bool)
+(schema GateEnd
+  (:f out fr/ProcOut)
+  (:f stopped Bool)
+  (:f killed String))
+
+fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> GateEnd
   (let [s (fr/guardAdvance! g)]
     (match s.out
-      ((some o) (pair o stopped))
+      ((some o) (GateEnd :out o :stopped stopped :killed s.guard.run.killed))
       ((none)
         (if (and (not stopped) (watchedGone? watch))
           (do (fr/stopGuard! s.guard) (gateLoop! s.guard watch true))
@@ -564,31 +569,28 @@ fn lastNoteAt text: String from: Int64 found: (Option Int64) -> (Option Int64)
     ((some i) (lastNoteAt text (+ from (+ i 1)) (some (+ from i))))
     ((none) found))
 
-; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard appends its (:fleetRun :verdict ...) note to stderr on a kill, after whatever the gate printed (which may contain such a line itself); the gate record keeps the gate's own stderr, as before, and says timeout or maxDesc in its own fields")
-fn withoutGuardNote text: String -> String
-  (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text 0 i)) ((none) text))
+; (:m :ref AGENTLOOP-GATE-KILLTREE-FIX :do "the guard appends its (:fleetRun :verdict ...) note to stderr only when it killed the gate; the note is stripped only then (its last occurrence, after whatever the gate printed), so a gate that prints such a line itself keeps its stderr whole")
+fn withoutGuardNote text: String killed: String -> String
+  (if (stringEmpty? killed) text
+    (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text 0 i)) ((none) text)))
 
-fn guardNote text: String -> String
-  (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text i (stringLength text))) ((none) ""))
-
-; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard verdict of a killed gate: timeout, maxDesc for the descendant limit (fr's runaway), \"\" for a gate that ended by itself or was stopped for a gone watched pid")
-fn guardVerdict text: String -> String
-  (let [note (guardNote text)]
-    (cond
-      ((stringContains? note "(:fleetRun :verdict :timeout") "timeout")
-      ((stringContains? note "(:fleetRun :verdict :runaway") "maxDesc")
-      (else "")))
+; (:m :ref AGENTLOOP-GATE-KILLTREE-FIX :do "the guard verdict comes from the guard's own kill record (fr RunningSep killed: timeout or runaway), never from the gate's stderr: timeout, maxDesc for the descendant limit, \"\" for a gate that ended by itself or was stopped for a gone watched pid")
+fn guardVerdict killed: String -> String
+  (cond
+    ((= killed "timeout") "timeout")
+    ((= killed "runaway") "maxDesc")
+    (else ""))
 
 fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
   (let [maxDesc (gateMaxDesc! root)]
     (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec maxDesc))
       ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
       ((ok g)
-        (let [r (gateLoop! g watch false)
-              o (pairFirst r)
-              verdict (guardVerdict o.stderr)
-              timedOut (or (pairSecond r) (= verdict "timeout"))
-              own (withoutGuardNote o.stderr)
+        (let [e (gateLoop! g watch false)
+              o e.out
+              verdict (guardVerdict e.killed)
+              timedOut (or e.stopped (= verdict "timeout"))
+              own (withoutGuardNote o.stderr e.killed)
               errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
           (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))))))
 
