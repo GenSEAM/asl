@@ -1,6 +1,6 @@
 (module aslGateway/server
   :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest]
+      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
@@ -663,7 +663,7 @@ fn ! cliRunSync! srv: GatewayLoop client: String args: (List (Pair String j/Json
 ; (:m :ref GW-LIMIT-LONG-WINDOW :do "the day rollup of the shared ledger: (:gateway :ledgerRollupPath P) or the ledger path with .days, keeping (:gateway :ledgerRollupKeepDays N) days, 62 by default")
 fn sharedRollup text: String sharedPath: String -> ul/Rollup
   (ul/Rollup :path (match (c/gatewayTopScalarOverride text "ledgerRollupPath") ((some (c/scalarStr s)) (if (stringEmpty? s) (ul/defaultRollupPath sharedPath) s)) (_ (ul/defaultRollupPath sharedPath)))
-             :keepDays (optionOr (c/gatewayTopIntOverride text "ledgerRollupKeepDays") (ul/defaultRollupKeepDays)))
+             :keepDays (inRangeOr (c/gatewayTopIntOverride text "ledgerRollupKeepDays") 62 3660 (ul/defaultRollupKeepDays)))
 
 ; (:m :ref GW-LIMIT-LONG-WINDOW :do "rows at or before the rollup's :last are in its day rows, so a seed reads the ledger only from there, never later than 24 h back, the longest trailing window (rollingDay)")
 fn seedSinceMs limits: (List c/GatewayLimit) days: (List ul/DayRow) nowMs: Int64 -> Int64

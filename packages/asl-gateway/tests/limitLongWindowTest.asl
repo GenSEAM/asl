@@ -141,7 +141,7 @@ fn rollRow i: Int64 -> ul/CallRow
 
 ; (:m :ref GW-LIMIT-LONG-WINDOW :do "rotation at three rows per file with keep 1 prunes generations; every sent call is then in a day row or a live row after :last, exactly once, and pace rows are in neither")
 fn ! rollupChecks -> Bool
-  (let [(home "/tmp/limitLongWindowTestRoll")
+  (let [(home (str "/tmp/limitLongWindowTestRoll-" (stringFromInt64 (procSelf))))
         (_ (pathRemove home))
         (made (dirCreate home))
         (path (str home "/calls.asn"))
@@ -261,5 +261,51 @@ fn ! pruneChecks! -> Bool
       (assert (and (= (listLength (pairFirst read)) 1) (= (pairSecond read) 2)) "two non-day lines are counted as dropped")
       true))
 
+fn keepDaysOf extra: String -> Int64
+  (srv/sharedRollup (str "(:gateway :v 2" extra ")") "/x/calls.asn").keepDays
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "fix round: :ledgerRollupKeepDays is taken at runtime only inside 62..3660, anything else falls back to 62, so 0, -1 or 7 never prune the day rows a month window needs")
+fn keepDaysChecks -> Bool
+  (do
+    (assert (= (keepDaysOf "") 62) "no row: 62 days")
+    (assert (and (= (keepDaysOf " :ledgerRollupKeepDays 62") 62) (= (keepDaysOf " :ledgerRollupKeepDays 3660") 3660) (= (keepDaysOf " :ledgerRollupKeepDays 365") 365)) "62, 365 and 3660 are taken")
+    (assert (and (= (keepDaysOf " :ledgerRollupKeepDays 0") 62) (= (keepDaysOf " :ledgerRollupKeepDays -1") 62) (= (keepDaysOf " :ledgerRollupKeepDays 7") 62) (= (keepDaysOf " :ledgerRollupKeepDays 61") 62) (= (keepDaysOf " :ledgerRollupKeepDays 3661") 62)) "0, -1, 7, 61 and 3661 fall back to 62")
+    true)
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "fix round: the seed reads from the rollup's :last, but never later than 24 h back, so a rollingDay row beside a month row still sees the last 24 h of calls")
+fn seedChecks -> Bool
+  (let [(limits (list (capped "month" 100 0) (capped "rollingDay" 2 0)))
+        (hour 3600000)
+        (recent (list (dayRow (today) 3 (- (nowMs) hour))))
+        (old (list (dayRow 20751 3 (- (nowMs) (* 72 hour)))))
+        (sinceRecent (srv/seedSinceMs limits recent (nowMs)))
+        (sinceOld (srv/seedSinceMs limits old (nowMs)))
+        (kept (lim/keepRows (list (okAt (- (nowMs) (* 23 hour))) (okAt (- (nowMs) (* 25 hour)))) sinceRecent))]
+    (do
+      (assert (= sinceRecent (- (nowMs) (* 24 hour))) (str "a rollup written an hour ago still seeds 24 h of live rows: " (stringFromInt64 (- (nowMs) sinceRecent))))
+      (assert (= sinceOld (+ (- (nowMs) (* 72 hour)) 1)) "an older rollup seeds from just after its :last")
+      (assert (= (listLength kept) 1) "the cap sees the call 23 h ago, not the one 25 h ago")
+      true))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "fix round: when the rotation fails the row is still appended to the live file and the rotation error is returned")
+fn ! rotateErrorChecks! -> Bool
+  (let [(home (str "/tmp/limitLongWindowTestRotErr-" (stringFromInt64 (procSelf))))
+        (gdir (str home "/gens"))
+        (_ (dirCreate home))
+        (_2 (dirCreate gdir))
+        (path (str gdir "/calls.asn"))
+        (ru (ul/Rollup :path (str home "/calls.days") :keepDays 62))
+        (maxBytes (* 2 (stringLength (ul/callRowLine (rollRow 0)))))
+        (_3 (fileWrite path (stringJoin (map (fn [(i Int64)] -> String (ul/callRowLine (rollRow i))) (range 0 4)) "")))
+        (_4 (fileChmod gdir 365))
+        (r (ul/appendCallRowRolled! path (rollRow 20) maxBytes 1 ru))
+        (_5 (fileChmod gdir 493))
+        (live (resultOr (ul/readRows! path) (list)))
+        (_6 (pathRemove home))]
+    (do
+      (assert (match r ((err e) (not (stringEmpty? e))) ((ok _) false)) "the rotation error is returned")
+      (assert (= (listLength live) 5) (str "and the row is still appended to the live file: " (stringFromInt64 (listLength live))))
+      true))
+
 fn ! runTests -> Bool
-  (and (countChecks) (and (resetChecks) (and (remainingChecks) (and (rollingChecks) (and (rollupChecks) (and (rowChecks) (and (serverChecks!) (and (configChecks) (pruneChecks!)))))))))
+  (and (countChecks) (and (resetChecks) (and (remainingChecks) (and (rollingChecks) (and (rollupChecks) (and (rowChecks) (and (serverChecks!) (and (configChecks) (and (pruneChecks!) (and (keepDaysChecks) (and (seedChecks) (rotateErrorChecks!))))))))))))

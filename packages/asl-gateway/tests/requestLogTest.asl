@@ -50,6 +50,9 @@ fn ! scenario! lp: srv/GatewayLoop step: ch/ChatStep dropClient: Bool -> srv/Gat
 fn cfgReq n: String -> String
   (str "(:gateway :v 2 :requestDeadlineSec " n " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1))))) :uses ((:use :for default :profile default)))")
 
+fn cfgKeep n: String -> String
+  (str "(:gateway :v 2 :requestKeepRows " n " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1))))) :uses ((:use :for default :profile default)))")
+
 fn countPhase rows: (List rq/ReqRow) id: String phase: String -> Int64
   (listLength (filter (fn [(r rq/ReqRow)] -> Bool (and (= r.id id) (= r.phase phase))) rows))
 
@@ -152,6 +155,7 @@ fn ! keepAndDispatchCases! -> Bool
         (capRows (resultOr (rq/readReqs! (rq/reqPath d)) (list)))
         (capIds (stringJoin (map (fn [(r rq/ReqRow)] -> String r.id) capRows) ","))
         (capAgain (rq/recoverLost! d 6500 604800000 3))
+        (capRows2 (resultOr (rq/readReqs! (rq/reqPath d)) (list)))
         (lp0 (emptyLoop d))
         (pr (sockPair!))
         (fd (pairFirst pr))
@@ -169,7 +173,7 @@ fn ! keepAndDispatchCases! -> Bool
         (_ (pathRemove d))]
     (do
       (assert (and (match capRec ((ok n) (= n 0)) ((err _) false)) (= capIds "c3,c4,c5")) (str "recovery keeps the newest three of five done rows: " capIds))
-      (assert (and (match capAgain ((ok n) (= n 0)) ((err _) false)) (= (listLength capRows) 3)) "and a second recovery leaves them")
+      (assert (and (match capAgain ((ok n) (= n 0)) ((err _) false)) (= (stringJoin (map (fn [(r rq/ReqRow)] -> String r.id) capRows2) ",") "c3,c4,c5")) "and a second recovery leaves them")
       (assert (and (= (rq/requestKeepRowsFromText "(:gateway :requestKeepRows 500)") 500) (= (rq/requestKeepRowsFromText "") 100000) (= (rq/requestKeepRowsFromText "(:gateway :requestKeepRows 99)") 100000) (= (rq/requestKeepRowsFromText "(:gateway :requestKeepRows 10000001)") 100000)) "requestKeepRows takes 100..10000000 and defaults to 100000")
       (assert (and (= acceptedNow 1) (= (listLength lp1.reqs) 1)) (str "a request through dispatch gets its accepted row at once: " (stringFromInt64 acceptedNow)))
       (assert (and (= doneNew 1) (listEmpty? lp2.reqs)) (str "and one done row when its reply is written: " (stringFromInt64 doneNew)))
@@ -205,6 +209,11 @@ fn ! runTests -> Bool
         (line (rq/reqParse (rq/reqDoneLine "q\"1" 5 "ok" 200 7)))
         (reqOk (c/gatewayConfigCheckText! (cfgReq "3600") "src" ".asl/mem/calibration/index.asn"))
         (reqBad (c/gatewayConfigCheckText! (cfgReq "0") "src" ".asl/mem/calibration/index.asn"))
+        (keepAt (fn [(n String)] -> (Pair String Int64) (c/gatewayConfigCheckText! (cfgKeep n) "src" ".asl/mem/calibration/index.asn")))
+        (keepLow (keepAt "100"))
+        (keepHigh (keepAt "10000000"))
+        (keepUnder (keepAt "99"))
+        (keepOver (keepAt "10000001"))
         (badLine (rq/reqParse "(:req :id \"a\")"))
         (_ (pathRemove home))]
     (do
@@ -218,6 +227,8 @@ fn ! runTests -> Bool
       (assert (= (listLength rowsB2) (listLength rowsB)) "and leaves the file as it was")
       (assert (and (= (listLength stuck) 1) (match (listHead stuck) ((some r) (= r.id "x")) ((none) false))) "only the unfinished request past the deadline is stuck")
       (assert (match line ((ok r) (and (= r.id "q\"1") (= r.outcome "ok") (= r.status 200) (= r.ms 7))) ((err _) false)) "a done row survives its line, quotes included")
+      (assert (and (= (pairSecond keepLow) 0) (= (pairSecond keepHigh) 0)) (str "requestKeepRows 100 and 10000000 are clean: " (pairFirst keepLow) (pairFirst keepHigh)))
+      (assert (and (= (pairSecond keepUnder) 1) (= (pairSecond keepOver) 1) (stringContains? (pairFirst keepUnder) "requestKeepRows") (stringContains? (pairFirst keepOver) "requestKeepRows")) (str "requestKeepRows 99 and 10000001 are config errors: " (pairFirst keepUnder) (pairFirst keepOver)))
       (assert (and (= (pairSecond reqOk) 0) (= (pairSecond reqBad) 1) (stringContains? (pairFirst reqBad) "requestDeadlineSec")) (str "requestDeadlineSec 3600 is clean, 0 is a config error: " (pairFirst reqBad)))
       (assert (match badLine ((err _) true) ((ok _) false)) "a row without its phase is an error")
       (assert (and (= (rq/requestDeadlineFromText "(:gateway :v 2)") 900) (= (rq/requestDeadlineFromText "(:gateway :requestDeadlineSec 60)") 60) (= (rq/requestDeadlineFromText "(:gateway :requestDeadlineSec 0)") 900)) "the deadline defaults to 900 and takes only 1..86400")
