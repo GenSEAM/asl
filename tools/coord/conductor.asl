@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! repoPath CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! cdErrors repoPath CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -426,11 +426,12 @@ fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
                   (main (if (and woken (not (stringEmpty? (staleField c.sig "main")))) (staleField c.sig "main") (staleField res.sig "main")))
                   (_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :leon " (st/q leon) " :main " (st/q main) " :result blocked :needs rebase)\n")))
                   ; (:m :ref STALE-WAKE :do "still stale after a wake: the lead class gets one (:lead ...) row per unit")
-                  (leadRow (str "(:lead :unit " (st/q c.id) " :needs rebase"))
-                  (_ (if (and woken (not (stringContains? (readOr (escalationsPath ctx.dir)) leadRow)))
+                  (leadRow (staleLeadRow c.id))
+                  (wokenN (listLength (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:stale :unit " (st/q c.id) " :result woken"))) (stringLines (readOr (journalPath ctx.dir))))))
+                  (_ (if (and woken (and (>= wokenN (staleWakeMax ctx.dir)) (not (stringContains? (readOr (escalationsPath ctx.dir)) leadRow))))
                        (ok? (fileAppend (escalationsPath ctx.dir) (str leadRow " :leon " (st/q leon) " :main " (st/q main) ")\n")))
                        false))
-                  (_ (move! ctx (with c :await "rebase" :sig (str "STALE_NEEDS_REBASE leon " leon " main " main)) "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
+                  (_ (move! ctx (with c :await "rebase" :sig (str "STALE_NEEDS_REBASE leon " leon " main " main " head " (unitHead! ctx.dir c.id))) "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
               ())
           (if (vacuousSig? res.sig)
             (let [(_ (dropLease! ctx c))
@@ -1114,13 +1115,46 @@ fn ! providerRequeue! ctx: Ctx c: CUnit res: Res -> Unit
 fn repoPath dir: String -> String
   (str dir "/repo.path")
 
+; (:m :ref COND-REBASE-WAKE-LOOP :do "the lead row a stale unit parks behind; while it stands, a moved main alone never wakes the unit again")
+fn staleLeadRow id: String -> String
+  (str "(:lead :unit " (st/q id) " :needs rebase")
+
+; (:m :ref COND-REBASE-WAKE-LOOP :do "short head of the unit branch sh/ID in the deployed repo, empty when the repo or the branch is absent; a changed head means someone rebased the unit")
+fn ! unitHead! dir: String id: String -> String
+  (let [(repo (stringTrim (readOr (repoPath dir))))]
+    (if (stringEmpty? repo) ""
+      (let [(g (gitOut repo (list "rev-parse" "--short=9" "--verify" "-q" (str "refs/heads/sh/" id))))]
+        (if (= g.exit 0) (stringTrim g.out) ""))))
+
+; (:m :ref COND-REBASE-WAKE-LOOP :do "the (:conductor ...) line of the store's ladder.asn, empty when absent; its only key is :staleWakeMax")
+fn cdRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:conductor ")) (stringLines (readOr (ladderPath dir)))) "")
+
+; (:m :ref COND-REBASE-WAKE-LOOP :do "config check of a (:conductor ...) row: an unknown key or :staleWakeMax outside 1..100 is an error; no error means the row is used")
+fn cdErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (= k ":staleWakeMax"))) keys))
+        (m (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1))]
+    (listAppend
+      (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+      (if (or (< m 1) (> m 100)) (list (str ":staleWakeMax " (n m) " outside 1..100")) (list))))
+
+; (:m :ref COND-REBASE-WAKE-LOOP :do "how many failed wakes a stale unit gets before it parks behind its lead row: (:conductor :staleWakeMax N) in the store's ladder.asn, default 1 (adopted), a row cdErrors rejects means the default")
+fn ! staleWakeMax dir: String -> Int64
+  (let [(row (cdRowOf dir))]
+    (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1) 1))
+
 ; (:m :ref STALE-WAKE :do "a unit blocked :await rebase wakes once the deployed main moved past the head recorded in its stale signature: it goes back to ready for one write retry, lane, fails and esc unchanged, with sig STALE_WOKEN main HEAD; an unchanged or unreadable head leaves it blocked")
 fn ! staleWake! ctx: Ctx c: CUnit -> Unit
   (let [(was (staleField c.sig "main"))
         (repo (stringTrim (readOr (repoPath ctx.dir))))
-        (head (if (stringEmpty? repo) "" (stringTrim (gitOut repo (list "rev-parse" "--short=9" "HEAD")).out)))]
-    (if (or (stringEmpty? head) (= head was)) ()
-      (let [(_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :result woken :from " (st/q was) " :to " (st/q head) ")\n")))
+        (head (if (stringEmpty? repo) "" (stringTrim (gitOut repo (list "rev-parse" "--short=9" "HEAD")).out)))
+        (cur (unitHead! ctx.dir c.id))
+        (moved (and (not (stringEmpty? cur)) (!= cur (staleField c.sig "head"))))
+        (parked (stringContains? (readOr (escalationsPath ctx.dir)) (staleLeadRow c.id)))
+        (mainMoved (and (not (stringEmpty? head)) (and (!= head was) (not parked))))]
+    (if (not (or moved mainMoved)) ()
+      (let [(_ (fileAppend (journalPath ctx.dir) (str "(:stale :unit " (st/q c.id) " :result woken :from " (st/q was) " :to " (st/q head) " :why " (st/q (if moved "branch" "main")) ")\n")))
             (_ (move! ctx (with c :await "" :sig (str "STALE_WOKEN main " head)) "ready" "wake" "" 0 0 "staleWake" 0))]
         ())))
 

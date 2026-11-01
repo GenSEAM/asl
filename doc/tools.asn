@@ -1565,6 +1565,7 @@
 (:doc :symbol "asl/tools/coord/conductor.asl#noEdits?" :text "true when the write has no commit past its base and no changed owned file")
 (:doc :symbol "asl/tools/coord/conductor.asl#offerBacklog!" :text "while the lead heartbeat is fresh, writes one lead row for each unit blocked on a plain escalate, oldest first, at most leadBacklogCap per tick; returns the rows written")
 (:doc :symbol "asl/tools/coord/conductor.asl#ownedChanges!" :text "the changed paths inside the unit's :owns, untracked ones included; debris outside :owns is not an edit")
+(:doc :symbol "asl/tools/coord/conductor.asl#cdErrors" :text "the problems of a (:conductor ...) row: unknown keys and :staleWakeMax outside 1..100")
 (:doc :symbol "asl/tools/coord/conductor.asl#pfBackoffS" :text "the :backoffS of a providerFail row, default 60")
 (:doc :symbol "asl/tools/coord/conductor.asl#pfCfg" :text "the store's providerFail row when it has no errors, otherwise empty")
 (:doc :symbol "asl/tools/coord/conductor.asl#pfDefaultPatterns" :text "the default provider-failure words: err_vendor, err_no_upstream, bad gateway, service unavailable, overloaded, 502, 503, 504, 429, breaker")
