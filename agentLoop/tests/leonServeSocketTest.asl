@@ -17,6 +17,9 @@ fn ! closeAll! fds: (List Int64) -> Bool
 fn errHas? r: (Result Unit String) needle: String -> Bool
   (match r ((err e) (stringContains? e needle)) ((ok _) false))
 
+fn bindErrHas? r: (Result Int64 String) needle: String -> Bool
+  (match r ((err e) (stringContains? e needle)) ((ok _) false))
+
 fn ! residue! path: String -> Bool
   (match (unixListen path) ((ok fd) (do (fdClose fd) (ok? (fileLstat path)))) ((err _) false))
 
@@ -42,7 +45,8 @@ fn ! runTests -> Bool
         (none (ls/freeCtl! ctl 5 100))
         (res1 (residue! ctl))
         (noOwner (ls/freeCtl! ctl 5 100))
-        (kept1 (ok? (fileLstat ctl)))
+        (removed1 (not (ok? (fileLstat ctl))))
+        (res1b (residue! ctl))
         (staleOwn (ls/probeCtl! ctl 1 1 os))
         (t0 (/ (monotonicNs) 1000000))
         (slow (ls/probeCtl! ctl 3 200 cross))
@@ -92,13 +96,30 @@ fn ! runTests -> Bool
         (boundOwner (ls/ownerState! lockPath))
         (_ (match bound ((ok l) (fdClose l)) ((err _) (ok ()))))
         (noRecord (ls/ownerState! (str temp "/never.sock")))
+        (oldSock (str temp "/old.sock"))
+        (oldRes (residue! oldSock))
+        (oldBound (ls/bindCtl! oldSock 5 100))
+        (oldOwner (ls/ownerState! oldSock))
+        (_ (match oldBound ((ok l) (fdClose l)) ((err _) (ok ()))))
+        (liveSock (str temp "/live.sock"))
+        (liveFd (resultOr (unixListen liveSock) -1))
+        (liveBind (ls/bindCtl! liveSock 5 100))
+        (liveKept (ok? (fileLstat liveSock)))
+        (liveNoRec (not (ok? (fileLstat (str liveSock ".pid")))))
+        (liveConn (match (unixConnect liveSock) ((ok f) (do (fdClose f) true)) ((err _) false)))
+        (_ (fdClose liveFd))
+        (failSock (str temp "/fail.sock"))
+        (_ (dirCreate (str failSock ".pid")))
+        (failBind (ls/bindCtl! failSock 5 100))
+        (failLeft (ok? (fileLstat failSock)))
+        (failLock (ok? (fileLstat (str failSock ".lock"))))
         (scoped ":nativeCli (:ctlProbeRetries 9) :leonPool (:ctlProbeRetries 7 :ctlProbeDelayMs 250)")
         (cleaned (ok? (pathRemove temp)))]
     (do
       (assert (and made (ok? none)) "an absent control path needs nothing")
       (assert res1 "the residue of a killed listener exists")
-      (assert (and (errHas? noOwner "ctlNoOwner") kept1) "a refused connect with no owner record is refused and the socket kept")
-      (assert (= staleOwn "stale") "a closed listener's refusal is stale in the platform's own errno")
+      (assert (and (ok? noOwner) removed1) "a refused connect with no owner record is stale: the socket is removed and the path is free")
+      (assert (and res1b (= staleOwn "stale")) "a closed listener's refusal is stale in the platform's own errno")
       (assert (and (= slow "busy") (>= waited 400)) (str "probeCtl! sleeps the delay it is given between its tries: " slow " " (stringFromInt64 waited)))
       (assert (= stOwnerGone "gone") "a recorded pid that does not run is a gone owner")
       (assert (and (ok? freed) gone recGone) "a refused connect with a gone owner removes the socket and the record")
@@ -121,6 +142,9 @@ fn ! runTests -> Bool
       (assert (match second ((err e) (stringContains? e "another pool is starting")) ((ok _) false)) "a live holder refuses a second starter")
       (assert (ok? taken) "a lock held by a dead pid is replaced")
       (assert (and (ok? bound) lockGone (= boundOwner "alive")) "bindCtl! binds, writes the owner record of this process and releases the lock")
+      (assert (and oldRes (ok? oldBound) (= oldOwner "alive")) "a socket file with no owner record and no listener (the pool of before the record) is removed, bound again, and the record is written")
+      (assert (and (bindErrHas? liveBind "another pool answers") liveKept liveNoRec liveConn) "a socket with no owner record but a live listener is refused, the socket untouched and no record written")
+      (assert (and (bindErrHas? failBind "ctlOwnerRecord") (not failLeft) (not failLock)) "a failing owner record write is an error, the socket just bound is removed and the lock released")
       (assert (= noRecord "unknown") "a missing record reads unknown")
       (assert cleaned "scratch removed")
       true))

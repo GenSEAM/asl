@@ -87,7 +87,7 @@ fn ! writeOwner! ctl: String -> Bool
   (let [(me (procSelf))]
     (ok? (fileWrite (ownerPath ctl) (str "(:owner :pid " (stringFromInt64 me) " :start \"" (startOf! me) "\")\n"))))
 
-; (:m :ref LEONSERVE-STALE-SOCKET :do "alive: the recorded pid runs and (when ps answers) has the recorded start time; gone: no such process or another start time; unknown: no readable record. Only gone allows a removal")
+; (:m :ref LEONSERVE-STALE-SOCKET :do "alive: the recorded pid runs and (when ps answers) has the recorded start time; gone: no such process or another start time; unknown: no readable record. Only alive refuses a refused socket")
 fn ! ownerState! ctl: String -> String
   (let [(raw (resultOr (fileReadString (ownerPath ctl)) ""))
         (pid (cfgInt raw "pid" 0))
@@ -98,7 +98,7 @@ fn ! ownerState! ctl: String -> String
       (else (let [(now (startOf! pid))]
               (if (or (stringEmpty? now) (= now start)) "alive" "gone")))))
 
-; (:m :ref LEONSERVE-STALE-SOCKET :do "the path must be a socket (lstat mode type 0xC000, never followed, never a directory or a regular file) before anything is removed; a live peer is refused, and so is a refused connect whose owner is alive or unrecorded; only a refused connect with a gone owner removes the socket and its record, and what is removed is logged")
+; (:m :ref LEONSERVE-STALE-SOCKET :do "the path must be a socket (lstat mode type 0xC000, never followed, never a directory or a regular file) before anything is removed; a live peer is refused, and so is a refused connect whose recorded owner is alive; a refused connect (no listener) whose owner is gone or was never recorded (a pool of before the record, or one that died between listen and record) removes the socket and its record, and what is removed is logged")
 fn ! freeCtl! ctl: String tries: Int64 delayMs: Int64 -> (Result Unit String)
   (match (fileLstat ctl)
     ((err _) (ok ()))
@@ -112,7 +112,6 @@ fn ! freeCtl! ctl: String tries: Int64 delayMs: Int64 -> (Result Unit String)
             (else (let [(owner (ownerState! ctl))]
                     (cond
                       ((= owner "alive") (err (str "(:ctlOwnerAlive " ctl ")")))
-                      ((= owner "unknown") (err (str "(:ctlNoOwner " ctl ") busyOrUnknown: remove it by hand once the pool is known dead")))
                       (else (match (pathRemove ctl)
                               ((err e) (err e))
                               ((ok _) (do (pathRemove (ownerPath ctl)) (eprintln (str "leonServe: removed stale control socket " ctl)) (ok ())))))))))))))
@@ -137,9 +136,10 @@ fn ! bindCtl! ctl: String tries: Int64 delayMs: Int64 -> (Result Int64 String)
   (match (lockCtl! ctl)
     ((err e) (err e))
     ((ok lock) (let [(bound (match (freeCtl! ctl tries delayMs) ((err e) (err e)) ((ok l) (unixListen ctl))))
-                     (_ (match bound ((ok _) (writeOwner! ctl)) ((err _) false)))
+                     (recorded (match bound ((ok _) (writeOwner! ctl)) ((err _) true)))
+                     (_ (if recorded (ok ()) (do (match bound ((ok fd) (fdClose fd)) ((err _) (ok ()))) (pathRemove ctl))))
                      (_ (pathRemove lock))]
-                 bound)))
+                 (if recorded bound (err (str "(:ctlOwnerRecord " (ownerPath ctl) ") cannot write the owner record; socket removed"))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(home (optionOr (envGet "HOME") ""))
