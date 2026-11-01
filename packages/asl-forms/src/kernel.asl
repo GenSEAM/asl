@@ -237,7 +237,7 @@ fn tokenize s: String i: Int64 n: Int64 acc: (List String) -> (List String)
         (tokenize s e n (cons (optionOr (stringSlice s st e) "") acc)))))
 
 fn subArgKey? k: String -> Bool
-  (listContains? (list "mode" "action" "status" "distill" "engine" "op" "stepOp" "direction" "kind" "format" "role" "depth" "service" "type" "profile" "lenses" "target" "model" "subcmd" "tier" "level" "scope" "topic") k)
+  (listContains? (list "mode" "action" "status" "distill" "engine" "op" "stepOp" "direction" "kind" "format" "role" "depth" "service" "type" "profile" "lenses" "target" "model" "subcmd" "tier" "level" "scope" "topic" "by") k)
 
 fn unquote tok: String -> String
   (let [(n (stringLength tok))]
