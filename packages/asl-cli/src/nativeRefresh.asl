@@ -65,10 +65,13 @@ fn under? path: String dir: String -> Bool
 fn rebuildAllowed? root: String home: String cwd: String explicitCache: Bool -> Bool
   (or explicitCache (or (under? root home) (under? cwd root)))
 
-fn refusalReceipt root: String home: String -> String
-  (str "(:err :code rebuildRefused :tree \"" (stringReplace root "\"" "\\\"") "\" :home \"" (stringReplace home "\"" "\\\"") "\")")
+fn escaped s: String -> String
+  (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"")
 
-fn ! guard! root: String cache: String -> Int64
+fn refusalReceipt root: String home: String -> String
+  (str "(:err :code rebuildRefused :tree \"" (escaped root) "\" :home \"" (escaped home) "\")")
+
+fn ! guard! root: String -> Int64
   (let [(rootReal (resultOr (realPath root) root))
         (home (optionOr (envGet "HOME") ""))
         (homeReal (if (stringEmpty? home) "" (resultOr (realPath home) home)))
@@ -111,6 +114,6 @@ fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [Stri
 fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
   (let [(head (nc/headPath cache root))
         (pinned (or (nc/pinned? root (headDir cache root) head cmd) (nc/relayPinned? root (headDir cache root) head cmd)))
-        (refused (if pinned 0 (guard! root cache)))]
+        (refused (if pinned 0 (guard! root)))]
     (if (!= refused 0) refused (refreshBody! root cache cmd build)))
 

@@ -680,7 +680,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (owner (optionOr (flagValue args "--lock-owner") ""))
         (pid (stringFromInt64 (procSelf)))]
     (cond
-      ((= root "guard") (ok (nr/guard! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)))))
+      ((= root "guard") (ok (nr/guard! (optionOr (listGet args 1) ""))))
       ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (coldCode! r c)))))
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
       ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
