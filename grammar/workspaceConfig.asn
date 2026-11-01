@@ -46,4 +46,5 @@
 (:cfgKey :grp agentLoop :name contextKeepTurns :kind int :lo 1 :hi 10000 :default "8" :status live :ref LEON-CONTEXT-RESEND-20261017 :doc "newest turns the transcript keeps whole; older ones become one summary line")
 (:cfgKey :grp agentLoop :name contextToolCapBytes :kind int :lo 1 :hi 16777216 :default "1500" :status live :ref LEON-CONTEXT-RESEND-20261017 :doc "byte cap of a kept turn's tool output in the transcript, past it a pointer to the journal")
 (:cfgKey :grp agentLoop :name contextMaxOlderLines :kind int :lo 1 :hi 100000 :default "50" :status live :ref LEON-CONTEXT-RESEND-20261017 :doc "aged-out turns that keep a summary line at all")
+(:cfgKey :grp agentLoop :name gateMaxDescendants :kind int :lo 1 :hi 1000000 :default "512" :status live :ref AGENTLOOP-GATE-KILLTREE :doc "descendant processes a gate run may hold before the fleet guard kills its whole tree")
 (:cfgKey :grp agentLoop :name doc :kind string :default "none" :status live :ref AGENTLOOP-CONFIG-SCHEMA :doc "free text describing the group for readers of the config")
