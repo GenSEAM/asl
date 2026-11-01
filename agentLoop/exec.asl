@@ -317,6 +317,7 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                 (if (notNone rec "line") (str " :line " (fieldStr rec "line" "")) "")
                 (if (notNone rec "arrived") (str " :arrived \"" (escField rec "arrived") "\"") "")
                 (if (notNone rec "hint") (str " :hint \"" (escField rec "hint") "\"") "")
+                (if (truthyField rec "echoed") " :echoed true" "")
                 (if (notNone rec "balance") (str " :balance \"" (escField rec "balance") "\"") "")
                 (if (truthyField rec "nearest") (str " :nearest \"" (escField rec "nearest") "\"") "")
                 (if (truthyField rec "terminal") (str " :terminal (" (quotedList (field "terminal")) ")") "")
@@ -626,26 +627,29 @@ fn ownsRec rid: String opName: String path: String owns: (List String) -> (List 
   (list (vs "id" rid) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_OWNS") (vs "file" path)
     (pair "owns" (vStrs owns)) (vs "message" (str "'" path "' is outside :owns; nothing in this step was written; the run goes on")))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a plain :content string is written as sent whatever its size and escapes; a :raw field no fenced block bound, or a step that carries an :error code the model copied from a receipt, is answered with the exact accepted shape for its target as :hint, and an echoed code also gets :echoed true, which the loop does not count as a repeated attempt")
+fn rawShape opName: String target: String -> String
+  (if (= opName "edit")
+    (str "(:step :op \"edit\" :file \"" (c/escapeAsn target) "\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```")
+    (str "(:step :op \"write\" :file \"" (c/escapeAsn target) "\" :content :raw)\n```\n<file text>\n```"))
+
 ; (:m :ref LEON-OWNS-ONE-RULE-20261018 :do "no :owns on the session means the session may write anywhere inside :root; c/effectiveOwns is the one place that normalization happens, shared with main.asl's liveExecOps! instead of each keeping its own if-empty-then-** copy")
 fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (Option (List (Pair String Val)))
   (let [target (opStr op "file" "")
-        rawFields (filter (fn [w] (not (stringEmpty? w))) (stringSplit (stringJoin (map (fn [ch] (if (isWs ch) " " ch)) (stringChars (if (opTruthy op "rawFields") (opStr op "rawFields" "") ""))) "") " "))
         field (if (= opName "write") "content" "new")
-        val (opStr op field "")
         form (opStr op "form" "")
-        hasEscapes (and (or (stringContains? val "\"") (stringContains? val "\\"))
-                        (or (stringContains? form "\\\"") (or (stringContains? form "\\\\") (or (stringContains? form "\\n") (stringContains? form "\\t")))))
-        useRaw (and (not (listContains? rawFields field)) (and (opIsStr op field) (and (> (stringLength val) (rawRequiredBytes)) hasEscapes)))
-        isRaw (fn [k] (match (opGet op k) ((some v) (= v (c/kvStr ":raw"))) ((none) false)))
-        rawMissing (or (= (opGet op "error") (some (c/kvStr "ERR_RAW_MISSING"))) (or (isRaw "content") (or (isRaw "old") (isRaw "new"))))
+        isRaw (fn [k] (match (opGet op k)
+                        ((some v) (or (= v (c/kvStr ":raw")) (and (= v (c/kvStr "raw")) (stringContains? form (str ":" k " :raw")))))
+                        ((none) false)))
+        echoed (stringStartsWith? (opStr op "error" "") "ERR_")
+        unbound (or (isRaw "content") (or (isRaw "old") (or (isRaw "new") (and echoed (none? (opGet op field))))))
         owns env.owns
         effOwns (c/effectiveOwns owns)]
     (cond
-      (useRaw
-        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_USE_RAW") (vs "file" target)
-                (vs "message" (str "send this as raw content: (:step :op \"write\" :file \"" target "\" :content :raw) then the code in a fenced block on the next lines, unescaped")))))
-      (rawMissing
-        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target) (vs "message" "missing raw block for :raw"))))
+      (unbound
+        (some (listAppend (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target)
+                (vs "hint" (rawShape opName target)))
+                (if echoed (list (pair "echoed" (vBool true))) (list)))))
       ((not (opTruthy op "file"))
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MISSING_ARG") (vs "message" (str opName " needs :file")))))
       ((not (r/insideRoot! target env.root)) (some (rootRec (newId) opName target)))

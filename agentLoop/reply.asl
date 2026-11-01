@@ -1284,6 +1284,7 @@ fn applyTok s: String reps: (List Repl) -> String
   (fold (fn [acc r] (match r ((repl a b t) (str (sl acc 0 a) t (sl acc b (stringLength acc)))))) s
     (listReverse (listSortBy rStart reps)))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a :raw field binds the next free fenced blocks after its step; when too few follow it and the reply's free blocks are exactly as many as the step needs, those bind wherever they stand; a step left unbound keeps its text as the model sent it, with no :error marker the model would copy back (node2 2026-10-31: 2130 journalled replies in 337 journals carried it, c925fd5ad8167351 sent it back bare)")
 fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pair Int64 Int64) -> BrState
   (match span ((pair fs fe)
     (let [ftext (sl reply fs fe)
@@ -1298,9 +1299,12 @@ fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pai
       (match st ((brState consumed count missing repls)
         (if (or (not (member op (list "write" "edit"))) (listEmpty? raws))
           st
-          (let [avail (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed)) (>= (fStart (pairSecond p)) fe))) fences)]
+          (let [free (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed))
+                                          (or (>= (fStart (pairSecond p)) fe) (<= (fEnd (pairSecond p)) fs)))) fences)
+                after (filter (fn [p] (>= (fStart (pairSecond p)) fe)) free)
+                avail (if (and (< (listLength after) (listLength raws)) (= (listLength free) (listLength raws))) free after)]
             (if (< (listLength avail) (listLength raws))
-              (brState consumed count (cons (pair op file) missing) (cons (repl fs fe (insertBeforeLast ftext " :error \"ERR_RAW_MISSING\"")) repls))
+              (brState consumed count (cons (pair op file) missing) repls)
               (let [used (listTake avail (listLength raws))
                     pairs (zip raws used)
                     tokReps (map (fn [pr] (match pr ((pair r fp) (match r ((rawField _ ns ne) (match (pairSecond fp) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))))) pairs)

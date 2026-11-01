@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(aslHarness/tests/agentLoopRecorderKit :a rk) (asl/agentLoop/main :a m) (asl/agentLoop/core :a c) (asl/agentLoop/tests/gitInitKit :a gk)])
 
-; (:m :ref LEONDELETE :do "a reply that deletes an owned file and then rewrites it with large escaped content (the delete+write idiom): the write is refused ERR_USE_RAW, and the delete used to have run already, leaving the pre-existing file deleted; a delete whose path a later write in the same reply targets is now superseded, so a refused write leaves the original file intact")
+; (:m :ref LEONDELETE :do "a reply that deletes an owned file and then rewrites it (the delete+write idiom) in a write that is refused, once ERR_USE_RAW for large escaped content and since LEON-RAW-PROTOCOL a :raw field with no fenced block, and the delete used to have run already, leaving the pre-existing file deleted; a delete whose path a later write in the same reply targets is now superseded, so a refused write leaves the original file intact")
 
 fn initRepo! root: String initial: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") initial))
@@ -10,9 +10,6 @@ fn initRepo! root: String initial: String -> Bool
 
 fn readText! path: String -> String
   (match (fileReadString path) ((ok t) t) ((err _) "<missing>"))
-
-fn bigEscaped -> String
-  (stringJoin (map (fn [k] "say \\\"hi\\\" and more words here to pad the line") (range 0 12)) " ")
 
 fn driveReply! root: String reply: String -> m/MainResult
   (let [fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
@@ -26,7 +23,7 @@ fn driveReply! root: String reply: String -> m/MainResult
 fn runTests -> Bool
   (let [root (rk/freshRecorderRoot! "deleteThenRejectedWrite")
         ready (initRepo! root "before\n")
-        reply (str "(:step :op \"delete\" :file \"subject.txt\")\n(:step :op \"write\" :file \"subject.txt\" :content \"" (bigEscaped) "\")\n(:done)")
+        reply "(:step :op \"delete\" :file \"subject.txt\")\n(:step :op \"write\" :file \"subject.txt\" :content :raw)\n(:done)"
         res (driveReply! root reply)
         after (readText! (str root "/subject.txt"))
         cleaned (ok? (pathRemove root))]

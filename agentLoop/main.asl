@@ -1126,6 +1126,21 @@ fn repeatFailureCap -> Int64
 fn failedReceipts? receipts: String -> Bool
   (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a rejected write that only answers an :error code the model copied into its step (:echoed true) is not a new attempt, so it does not count toward the repeat cap")
+fn countedFailures? receipts: String -> Bool
+  (failedReceipts? (stringJoin (filter (fn [l] (not (stringContains? l ":echoed true"))) (stringSplit receipts "\n")) "\n"))
+
+; (:m :ref LEON-RAW-PROTOCOL :do "7de069c5874e6633: gates green from turn 1 on owned files a lower rung had changed, (:step :op done) twice, no session write, so patchReady never held and the run looped to a repeatFailure; owned files differing from HEAD or from the session's start commit count as the patch")
+fn ! ownedChanged! owns: (List String) rootDir: String startHead: (Option String) -> Bool
+  (if (listEmpty? owns)
+    false
+    (or (not (listEmpty? (resultOr (go/changedOwnedFiles! owns rootDir none) (list))))
+      (match startHead
+        ((some h) (match (jr/git! rootDir (listAppend (list "diff" "--name-only" h "HEAD" "--") owns))
+          ((ok o) (and (= o.exitCode 0) (not (stringEmpty? (stringTrim o.stdout)))))
+          ((err _) false)))
+        ((none) false))))
+
 ; (:m :ref PER-TURN-GATE :do "a turn whose ops all only read, or only write and edit without persisting a change (an edit whose :old is not in the file), changes nothing the gates see, so it reuses the last verdict instead of rerunning the task gates (a suite gate cost minutes per read turn; one calibration run repeated a failing edit 24 times and gated each); a turn that wrote, any other op, an unnamed form or (:done) still runs them")
 fn readOnlyOps -> (List String)
   (list "read" "query" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe")
@@ -1507,7 +1522,7 @@ fn liveGateSummary gates: (List g/GateResult) -> String
           (c/joinSep (map g/gateCmd (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)) "; ")))))
 
 fn liveDoneOps? ops: (List (List (Pair String c/KvVal))) -> Bool
-  (listAny? (fn [op] (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))) ops)
+  (listAny? (fn [op] (or (= (liveOpName op) "done") (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false)))) ops)
 
 fn liveIntentDeliver ops: (List (List (Pair String c/KvVal))) current: (Option String) -> (Option String)
   (if (listEmpty? ops)
@@ -1832,9 +1847,6 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
                   turnOpFiles (c/joinSep (filter (fn [p] (not (stringEmpty? p))) (map liveOpPath operations)) " ")
                   turnGateSummary (liveGateSummary newGates)
-                  history (listAppend wrapped.history
-                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
-                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
@@ -1857,11 +1869,16 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   writesPersisted (or state.writesPersisted wrote)
                   gatesGreen (and (liveGateResultsGreen? newGates)
                     (or (listEmpty? ra.gates) (not (listEmpty? newGates))))
+                  ownedDone (if (and gatesGreen (and (not writesPersisted) (not (listEmpty? ra.gates))))
+                    (ownedChanged! ra.owns rootDir run.written.startHead) false)
                   patchReady (if (listEmpty? ra.gates)
                     (or (!= (optionOr deliver "") "patch") writesPersisted)
-                    writesPersisted)
+                    (or writesPersisted ownedDone))
                   gatesTerminal (and (not (listEmpty? ra.gates)) (not state.commitRequested))
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
+                  history (listAppend wrapped.history
+                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
+                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
                     (or (liveReviewerAvailable? wrapped.provider) (= (optionOr ra.intent "") "reinforce"))))
                   reviewResult (if reviewInvoked
@@ -1895,7 +1912,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                       "failed" (some "gateIntegrity") (some (pairSecond integrity)) state.runStarted))
                     notedRun)
                   repeatKey (stringTrim normalized)
-                  repeats (if (and (not parseDefect) (and (not wrote) (failedReceipts? opReceipts)))
+                  repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
                     (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
                   counts (if (> repeats 0) (mapSet (mapEmpty) repeatKey repeats) (mapEmpty))
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))

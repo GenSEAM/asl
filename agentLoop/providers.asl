@@ -566,6 +566,29 @@ fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option Str
                                                          (and (!= (bytesGet bs i) 40) (!= (bytesGet bs i) 41))))))]
                   (if (= e v) none (some (sub text v e)))))))))))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a turn's :error is looked up outside its :reply string, so a canned reply that itself carries :error (a model echoing a receipt code) stays a reply instead of becoming a scripted provider failure")
+fn quotedFieldEnd text: String key: String from: Int64 limit: Int64 -> Int64
+  (match (indexFrom text key from)
+    (none from)
+    ((some p)
+      (let [(bs (stringToBytes text))
+            (v (runWhile bs limit (+ p (stringLength key)) isPySpace))]
+        (if (and (< v limit) (= (bytesGet bs v) 34))
+          (match (quotedBodyEnd bs limit (+ v 1))
+            (none from)
+            ((some e) (+ e 1)))
+          from))))
+
+fn fieldOutsideReply text: String key: String from: Int64 limit: Int64 -> (Option String)
+  (match (indexFrom text ":reply" from)
+    (none (fixtureField text key from limit))
+    ((some r)
+      (if (>= r limit)
+        (fixtureField text key from limit)
+        (match (fixtureField text key from r)
+          ((some v) (some v))
+          (none (fixtureField text key (quotedFieldEnd text ":reply" r limit) limit))))))
+
 fn fixtureUsage text: String start: Int64 limit: Int64 -> (Option (List (Pair String j/Json)))
   (let [(input (fixtureField text ":inputTokens" start limit))
         (cached (fixtureField text ":cachedTokens" start limit))
@@ -587,7 +610,7 @@ fn fixtureSteps text: String bs: Bytes n: Int64 from: Int64 acc: (List ScriptSte
           (let [(next (optionOr (indexFrom text ":turn" (+ p 5)) n))
                 (num (fixtureField text ":num" p next))
                 (reply (fixtureField text ":reply" p next))
-                (error (fixtureField text ":error" p next))
+                (error (fieldOutsideReply text ":error" p next))
                 (usage (fixtureUsage text p next))]
             (fixtureSteps text bs n (+ p 5)
               (cons (ScriptStep :num (optionOr (stringToInt64 (optionOr num "0")) 0) :reply reply :error error :usage usage) acc)))))))
