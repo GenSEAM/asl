@@ -1259,3 +1259,4 @@
 (:doc :symbol "asl/packages/asl-gateway/src/wire.asl#isToolCall?" :text "True when a reply text starts with a tool call form, (:call :tool or (call :tool.")
 (:doc :symbol "asl/packages/asl-gateway/src/wire.asl#isDeclarativeAsn?" :text "True when a text starts with a declarative form such as (:struct or (:ast.")
 (:doc :symbol "asl/packages/asl-gateway/src/wire.asl#wantsAsnPairs?" :text "True when the accept header is application/asn+sexpr or the x-asl-wire header is asn.")
+(:doc :symbol "asl/packages/asl-gateway/tests/limitSeededTest.asl#runTests" :text "end-to-end cases for the ledger seeding of the window counts through runEffect! and effLimit on a real ledger file: the first ask seeds the held rows, an ask within the seed ttl does not see a call appended meanwhile, a fresh loop does, and rows outside the window or of another provider do not count")
