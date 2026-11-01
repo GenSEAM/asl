@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/fleet/run :a fr)])
 
-; (:m :ref CHECK-TEST-PARITY :do "asl check and asl test of one suite agree in a foreign workspace: an unresolved import, an unknown symbol and an unexported type fail both with the same code and the suite path:line:col; replays the inbox repros workspace-20261030-checkTestImportParity and workspace-20261028-testRunsWhatCheckRejects")
+; (:m :ref CHECK-TEST-PARITY :do "asl check and asl test of one suite agree in a foreign workspace: a module importing asl-json passes both; an unresolved import, an unknown symbol and an unexported type fail both with the same code and the suite path:line:col; replays the inbox repros workspace-20261030-checkTestImportParity and workspace-20261028-testRunsWhatCheckRejects")
 fn ! fixtureRoot! tag: String -> String
   (str "/tmp/aslCheckTestParity_" tag "_" (stringFromInt64 (monotonicNs)))
 
@@ -52,8 +52,26 @@ fn ! testUnexportedTypeFailsBoth! -> Bool
     (do (assert (bothFail "ERR_NOT_EXPORTED" (pairFirst r) (pairSecond r)) (str "a type the module does not export fails both with the code: " (pairFirst r).out " | " (pairSecond r).out))
         true))
 
+fn ! testAslPackageImportPassesBoth! -> Bool
+  (let [(r (parityOf! "pkg" (bridgeSource "(asl-json/json :a j)" "3") (suiteSource "")))
+        (chk (pairFirst r))
+        (tst (pairSecond r))]
+    (do (assert (= chk.exit 0) (str "asl check resolves an asl-json import from a foreign workspace: " chk.out))
+        (assert (= tst.exit 0) (str "asl test resolves it too: " tst.out))
+        (assert (stringContains? tst.out "1 assertion(s) executed") "the suite ran its assertion")
+        true))
+
+fn ! testCheckNamesTheCallersPath -> Bool
+  (let [(r (parityOf! "path" (bridgeSource "(fx/missing :a m)" "3") (suiteSource "")))
+        (chk (pairFirst r))]
+    (do (assert (stringContains? chk.out "kernel/bridgeTest.asl") (str "check names the path the caller gave: " chk.out))
+        (assert (not (stringContains? chk.out "outsidePkg")) (str "no staged path leaks into check output: " chk.out))
+        true))
+
 fn ! runTests -> Bool
-  (do (assert (testUnresolvedImportFailsBoth!) "unresolved import fails check and test")
+  (do (assert (testAslPackageImportPassesBoth!) "asl-json import passes check and test")
+      (assert (testCheckNamesTheCallersPath) "check output names the caller path, not the staged mirror")
+      (assert (testUnresolvedImportFailsBoth!) "unresolved import fails check and test")
       (assert (testUnknownSymbolFailsBoth!) "unknown symbol fails check and test")
       (assert (testUnexportedTypeFailsBoth!) "unexported type fails check and test")
       true)

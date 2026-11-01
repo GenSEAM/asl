@@ -664,10 +664,35 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
                     ((err e) (changedFailed! (str "ERR_TIMEOUT: " e)))
                     ((ok timeoutS) (sw/changedReport! base changed selected (sweepDone! ctx ws timeoutS 2 selected) frozen))))))))))))
 
+; (:m :ref CHECK-FOREIGN-ASL-PKGS :do "asl check of a .asl file outside the toolchain root checks its staged mirror under the root (stageOutside!, the view asl test checks), where asl-* packages resolve; the caller's path stays in every line; in-root files and other arguments take the old path")
+fn ! outsideAsl? ctx: sys/Context a: String -> Bool
+  (and (stringEndsWith? a ".asl") (and (sys/isFile? a) (not (inRoot? ctx (resultOr (realPath a) a)))))
+
+fn ! stagedPair! ctx: sys/Context a: String -> (Result (Pair String String) String)
+  (match (stageOutside! ctx (resultOr (realPath a) a))
+    ((err e) (err (str a ": cannot stage: " e)))
+    ((ok rel) (ok (pair (str ctx.root "/" rel) a))))
+
+fn ! stagedPairs! ctx: sys/Context files: (List String) -> (Result (List (Pair String String)) String)
+  (fold (fn [(acc (Result (List (Pair String String)) String)) (a String)] -> (Result (List (Pair String String)) String)
+          (match acc
+            ((err e) (err e))
+            ((ok ps) (match (stagedPair! ctx a) ((err e) (err e)) ((ok p) (ok (listAppend ps (list p))))))))
+        (ok (list)) files)
+
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (if (not (listEmpty? args))
-    (cmd/dispatch! ctx "check" args)
-    (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
+  (if (listEmpty? args)
+    (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1)))
+    (let [(outside (filter (fn [(a String)] -> Bool (outsideAsl? ctx a)) args))
+          (others (filter (fn [(a String)] -> Bool (not (outsideAsl? ctx a))) args))]
+      (if (listEmpty? outside)
+        (cmd/dispatch! ctx "check" args)
+        (match (stagedPairs! ctx outside)
+          ((err e) (do (sys/sayErr! e) 1))
+          ((ok pairs)
+            (let [(stagedRc (verify/nativeCheckStaged! pairs))
+                  (otherRc (if (listEmpty? others) 0 (cmd/dispatch! ctx "check" others)))]
+              (if (!= stagedRc 0) stagedRc otherRc)))))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rootedAbs ctx (resultOr (realPath a) a))

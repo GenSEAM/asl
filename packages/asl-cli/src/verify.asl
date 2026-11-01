@@ -1,5 +1,5 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
+  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
@@ -59,17 +59,32 @@ fn ! checkOther! paths: (List String) -> Int64
 fn ! printDiag! d: ty/Diagnostic -> Bool
   (sys/sayErr! (formatDiag d))
 
-fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
+; (:m :ref CHECK-FOREIGN-ASL-PKGS :do "reportOneAs! checks the file at ACTUAL and names it SHOWN in every line: asl check of a file outside the toolchain root reads its staged mirror (where the asl-* packages resolve, as asl test does) and still reports the path the caller gave")
+fn ! reportOneAs! actual: String shown: String verdict: (Result cc/Verdict String) -> Int64
   (match verdict
-    ((err _) (do (sys/sayErr! (str path ":0:0: ERR_IO cannot open file"))
-                 (sys/sayErr! (str "check failed: " path ": 1 error(s)"))
+    ((err _) (do (sys/sayErr! (str shown ":0:0: ERR_IO cannot open file"))
+                 (sys/sayErr! (str "check failed: " shown ": 1 error(s)"))
                  1))
     ((ok v)
       (if (listEmpty? v.diags)
-        (do (sys/say! (str "ok " path ": " (cc/countsText v))) 0)
-        (let [(shown (map printDiag! v.diags))
-              (hinted (map (fn [(l String)] -> Bool (sys/sayErr! l)) (diagHints! v.diags)))]
-          (do (sys/sayErr! (str "check failed: " path ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
+        (do (sys/say! (str "ok " shown ": " (cc/countsText v))) 0)
+        (let [(lines (map (fn [(d ty/Diagnostic)] -> Bool (sys/sayErr! (stringReplace (formatDiag d) actual shown))) v.diags))
+              (hinted (map (fn [(l String)] -> Bool (sys/sayErr! (stringReplace l actual shown))) (diagHints! v.diags)))]
+          (do (sys/sayErr! (str "check failed: " shown ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
+
+fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
+  (reportOneAs! path path verdict)
+
+fn ! nativeCheckStagedStep! pairs: (List (Pair String String)) cache: cc/Cache rc: Int64 -> Int64
+  (match (listHead pairs)
+    ((none) rc)
+    ((some pr)
+      (let [(r (cc/checkFileCached! (pairFirst pr) (checkRoots) cache))
+            (one (reportOneAs! (pairFirst pr) (pairSecond pr) (pairFirst r)))]
+        (nativeCheckStagedStep! (optionOr (listTail pairs) (list)) (pairSecond r) (if (!= one 0) one rc)))))
+
+fn ! nativeCheckStaged! pairs: (List (Pair String String)) -> Int64
+  (nativeCheckStagedStep! pairs (cc/stampedCache!) 0)
 
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
   (match (listHead paths)
