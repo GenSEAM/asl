@@ -23,6 +23,7 @@ fn validText -> String
     "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/agentLoop/leonServe.asl\"])"
     "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
+    "  :agentLoop (:parseDefectEscalate 8 :readOutlineBytes 16384 :baseline true :specCheck false :toolMemo false :graderIntent grade :graderProfile \"p\" :gatewayConfig \"/tmp/g.asn\" :wallReserveSec 120 :wallGateMinSec 60 :gateVacuousRounds 2 :contextKeepTurns 8 :contextToolCapBytes 1500 :contextMaxOlderLines 50 :doc \"d\")"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"
     "") "\n")
 
@@ -31,7 +32,7 @@ fn ! testValid -> Bool
         (c (checkOf (validText)))]
     (do (assert (>= (cs/keyCount rules) 20) (str "the schema holds at least the 20 key rows this test uses, got " (stringFromInt64 (cs/keyCount rules))))
         (assert (listEmpty? c.issues) (str "a config using every key at a sound value is clean: " (stringJoin (codesOf c) " ")))
-        (assert (= c.checked (cs/keyCount rules)) (str "every key of the three strict groups was checked, got " (stringFromInt64 c.checked)))
+        (assert (= c.checked (cs/keyCount rules)) (str "every key of the strict groups was checked, got " (stringFromInt64 c.checked)))
         (assert (= (cs/defaultOf rules "native" "storeCap") (some "2G")) "a key's documented default is readable from its row")
         (assert (= (cs/defaultOf rules "native" "nope") (none)) "an unknown key has no default")
         (let [(repo (checkOf (resultOr (fileReadString ".asl.config.asn") "")))]
@@ -61,7 +62,10 @@ fn ! testRange -> Bool
         (pin (checkOf "(:aslConfig :release (:pin \"v1\"))"))
         (mode (checkOf "(:aslConfig :release (:mode :explode))"))
         (paths (checkOf "(:aslConfig :nativeCli (:relayPaths \"tools\"))"))
-        (path (checkOf "(:aslConfig :native (:clang \"\"))"))]
+        (path (checkOf "(:aslConfig :native (:clang \"\"))"))
+        (turns (checkOf "(:aslConfig :agentLoop (:contextKeepTurns many))"))
+        (rounds (checkOf "(:aslConfig :agentLoop (:gateVacuousRounds 0))"))
+        (typo (checkOf "(:aslConfig :agentLoop (:contextKeepTurn 3))"))]
     (do (assert (= (codesOf hi) (list "outOfRange")) (str "parts 65 is outOfRange: " (stringJoin (codesOf hi) " ")))
         (assert (stringContains? (cs/receipt "f" hi) "1..64") "the message names the range")
         (assert (= (codesOf lo) (list "outOfRange")) "parts 0 is outOfRange")
@@ -76,6 +80,9 @@ fn ! testRange -> Bool
         (assert (= (codesOf mode) (list "outOfRange")) "mode :explode is outOfRange")
         (assert (= (codesOf paths) (list "badType")) "relayPaths as a bare string is badType")
         (assert (= (codesOf path) (list "badType")) "an empty clang path is badType")
+        (assert (= (codesOf turns) (list "badType")) (str ":agentLoop contextKeepTurns many is badType: " (stringJoin (codesOf turns) " ")))
+        (assert (= (codesOf rounds) (list "outOfRange")) (str ":agentLoop gateVacuousRounds 0 is outOfRange: " (stringJoin (codesOf rounds) " ")))
+        (assert (= (codesOf typo) (list "unknownKey")) (str ":agentLoop is closed: a misspelt key is unknownKey: " (stringJoin (codesOf typo) " ")))
         true))
 
 fn ! testShape -> Bool
@@ -84,7 +91,7 @@ fn ! testShape -> Bool
         (str1 (checkOf "(:aslConfig :native (:clang \"a)b\"))"))
         (atom (checkOf "(:aslConfig :native 4)"))
         (none1 (checkOf ""))
-        (other (checkOf "(:aslConfig :agentLoop (:whatever 1) :mesh (:x y))"))]
+        (other (checkOf "(:aslConfig :daemon (:whatever 1) :mesh (:x y))"))]
     (do (assert (= (codesOf dup) (list "duplicateKey")) "a key twice in a group is duplicateKey")
         (assert (= (codesOf open) (list "unbalanced")) "a missing close delimiter is unbalanced")
         (assert (listEmpty? str1.issues) "a delimiter inside a string does not unbalance")

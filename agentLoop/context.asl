@@ -12,7 +12,7 @@
       parseAdvice askAdvisor! adviceNotice progressLine emitProgress!
       pyStr pyTruthy pyRepr pyRound floatRepr pyNormpath pyRelpath pySplitLines pySplitLinesKeep pyStrip sha1Hex jget jgetOr filePatchNew
       specCheckSystem findingsCheckSystem advisorSystem]
-  :i [(asl/agentLoop/core :a c) (asl-json/json :a j) (asl-proc/coreProcess :a cp)])
+  :i [(asl/agentLoop/core :a c) (asl-json/json :a j) (asl-proc/coreProcess :a cp) (asl/agentLoop/agentConfig :a ac)])
 
 enum ContextTooLong
   (contextTooLong message: String)
@@ -635,17 +635,15 @@ fn noWriteTurns -> Int64
 fn parseDefectEscalate -> Int64
   8
 
-fn parseDefectEscalateAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":parseDefectEscalate"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
-; (:m :ref LEON-TURN-RUNAWAY-PARSEDEFECT-CONFIG-20261017 :do "the 165-turn ccBeam incident wasted several minutes before the fix above could even fire at the old literal 20; let a project tune the cap via :agentLoop (:parseDefectEscalate N) in its own .asl.config.asn without a rebuild, same lightweight key-scan style as budgetAt above rather than pulling a full ASN parser into this module")
-fn parseDefectEscalateIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":parseDefectEscalate")
+; (:m :ref AGENTLOOP-CONFIG-SCHEMA :do "a context setting counts only as a top-level key of the :agentLoop group (ac/agentLoopValue): the same name in another group, a nested list or a doc string is not read; a value that is not a positive integer reads as absent, so the caller keeps its default")
+fn configInt text: String key: String -> (Option Int64)
+  (match (ac/agentLoopValue text key)
     ((none) none)
-    ((some k) (parseDefectEscalateAt text k)))
+    ((some v) (ac/positiveInt v)))
+
+; (:m :ref LEON-TURN-RUNAWAY-PARSEDEFECT-CONFIG-20261017 :do "the 165-turn ccBeam incident wasted several minutes before the fix above could even fire at the old literal 20; let a project tune the cap via :agentLoop (:parseDefectEscalate N) in its own .asl.config.asn without a rebuild, read as a top-level key of the :agentLoop group through configInt")
+fn parseDefectEscalateIn text: String -> (Option Int64)
+  (configInt text ":parseDefectEscalate")
 
 fn parseDefectEscalateFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -653,20 +651,12 @@ fn parseDefectEscalateFor! root: String -> Int64
       (optionOr (parseDefectEscalateIn (resultOr (fileReadString cfg) "")) (parseDefectEscalate))
       (parseDefectEscalate)))
 
-; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "renderTranscript's budget (state.transcriptChars) was the model's entire context window, so a run of a few dozen turns never reached it and resent the whole growing history verbatim every call; contextKeepTurns/contextToolCapBytes bound per-call input on turn count instead, same config-driven, key-scan-over-.asl.config.asn style as parseDefectEscalate above")
+; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "renderTranscript's budget (state.transcriptChars) was the model's entire context window, so a run of a few dozen turns never reached it and resent the whole growing history verbatim every call; contextKeepTurns/contextToolCapBytes bound per-call input on turn count instead, same config-driven reader (configInt) as parseDefectEscalate above")
 fn contextKeepTurns -> Int64
   8
 
-fn contextKeepTurnsAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextKeepTurns"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextKeepTurnsIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextKeepTurns")
-    ((none) none)
-    ((some k) (contextKeepTurnsAt text k)))
+  (configInt text ":contextKeepTurns")
 
 fn ! contextKeepTurnsFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -677,16 +667,8 @@ fn ! contextKeepTurnsFor! root: String -> Int64
 fn contextToolCapBytes -> Int64
   1500
 
-fn contextToolCapBytesAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextToolCapBytes"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextToolCapBytesIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextToolCapBytes")
-    ((none) none)
-    ((some k) (contextToolCapBytesAt text k)))
+  (configInt text ":contextToolCapBytes")
 
 fn ! contextToolCapBytesFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -698,16 +680,8 @@ fn ! contextToolCapBytesFor! root: String -> Int64
 fn contextMaxOlderLines -> Int64
   50
 
-fn contextMaxOlderLinesAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextMaxOlderLines"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextMaxOlderLinesIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextMaxOlderLines")
-    ((none) none)
-    ((some k) (contextMaxOlderLinesAt text k)))
+  (configInt text ":contextMaxOlderLines")
 
 fn ! contextMaxOlderLinesFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
