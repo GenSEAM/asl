@@ -93,15 +93,19 @@ fn ! quarantineCorrupt! home: String nowMs: Int64 -> (Option String)
   (let [(path (reqPath home))]
     (match (readReqs! path)
       ((ok _) none)
-      ((err _)
-        (let [(to (str path ".corrupt-" (stringFromInt64 nowMs)))]
-          (match (pathRename path to) ((ok _) (some to)) ((err _) none))))))
+      ((err e)
+        (if (stringStartsWith? e "corrupt request row")
+          (let [(to (str path ".corrupt-" (stringFromInt64 nowMs)))]
+            (match (pathRename path to) ((ok _) (some to)) ((err _) none)))
+          none))))
 
 fn ! appendReq! home: String line: String -> (Result Bool String)
   (let [(path (reqPath home))]
     (match (dirCreate (g/posixDirname path))
       ((err e) (err (str "request log dir: " e)))
-      ((ok _) (g/appendFile! path line 200))))
+      ((ok _) (if (tornTail! path)
+                (err "request log has a torn tail; recovery pending, row not appended")
+                (g/appendFile! path line 200)))))
 
 fn ! noteAccept! home: String id: String atMs: Int64 -> (Result Bool String)
   (appendReq! home (reqAcceptLine id atMs))
