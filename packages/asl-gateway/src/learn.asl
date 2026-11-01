@@ -329,7 +329,9 @@ fn groupBy rows: (List ul/CallRow) keyFn: (fn [ul/CallRow] -> String) -> (Map St
 ; (:m :ref GW-LEARN-RPM :do "a ramped per-model :rpm bucket rate for the model id alias, only ever above the configured :rpm")
 (schema RpmRow
   (:f alias String)
-  (:f rpm Float64))
+  (:f rpm Float64)
+  ; (:m :ref GW-LEARN-RPM :do "the newest ledger time seen when the rate last rose: only throttled rows after it can raise it again")
+  (:f raisedAt Int64 :default 0))
 
 fn maxF a: Float64 b: Float64 -> Float64
   (if (> a b) a b)
@@ -338,7 +340,7 @@ fn minF a: Float64 b: Float64 -> Float64
   (if (< a b) a b)
 
 fn rpmLine r: RpmRow -> String
-  (str "(:rpm :alias \"" (wire/asnEscape r.alias) "\" :rpm " (stringFromFloat64 r.rpm) ")")
+  (str "(:rpm :alias \"" (wire/asnEscape r.alias) "\" :rpm " (stringFromFloat64 r.rpm) " :raisedAt " (stringFromInt64 r.raisedAt) ")")
 
 fn rpmParse line: String -> (Result RpmRow String)
   (match (c/asnProps (rd/parseSexpr (stringTrim line)) (some ":rpm"))
@@ -351,8 +353,8 @@ fn rpmParse line: String -> (Result RpmRow String)
             ((none) (err (str "corrupt rpm row: no rpm in " line)))
             ((some e)
               (match (c/asnScalar e)
-                ((c/scalarFloat f) (ok (RpmRow :alias alias :rpm f)))
-                ((c/scalarInt n) (ok (RpmRow :alias alias :rpm (int64ToFloat64 n))))
+                ((c/scalarFloat f) (ok (RpmRow :alias alias :rpm f :raisedAt (optionOr (propInt p "raisedAt") 0))))
+                ((c/scalarInt n) (ok (RpmRow :alias alias :rpm (int64ToFloat64 n) :raisedAt (optionOr (propInt p "raisedAt") 0))))
                 (_ (err (str "corrupt rpm row: rpm is not a number in " line))))))))))
 
 fn learnedRpmPath home: String -> String
@@ -376,6 +378,9 @@ fn ! readRpm! path: String -> (Result (List RpmRow) String)
 fn ! writeRpm! path: String rows: (List RpmRow) -> (Result Bool String)
   (replaceFile! path (str (stringJoin (map rpmLine rows) "\n") "\n"))
 
+fn rpmRaisedFor rpms: (List RpmRow) alias: String -> Int64
+  (fold (fn [(m Int64) (r RpmRow)] -> Int64 (if (= r.alias alias) (max m r.raisedAt) m)) 0 rpms)
+
 fn rpmCapFor rpms: (List RpmRow) alias: String -> Float64
   (fold (fn [(m Float64) (r RpmRow)] -> Float64 (if (= r.alias alias) (maxF m r.rpm) m)) 0.0 rpms)
 
@@ -385,7 +390,7 @@ fn bucketShared? providers: (Map String c/GatewayProvider) id: String -> Bool
     ((none) false))
 
 ; (:m :ref GW-LEARN-RPM :do "one ramp step for the per-model :rpm buckets: a model with its own :rpm bucket (not a provider's shared one) that our bucket refused (throttled rows in the ledger) and that has never been answered 429 in any window rises by pct percent of its current rate, up to 8 times the configured rate; it never falls and our own refusals only ever raise it")
-fn rpmPass models: (Map String c/GatewayModel) providers: (Map String c/GatewayProvider) learned: (List LearnedRow) rpms: (List RpmRow) pct: Int64 -> (List RpmRow)
+fn rpmPass models: (Map String c/GatewayModel) providers: (Map String c/GatewayProvider) learned: (List LearnedRow) ledger: (List ul/CallRow) rpms: (List RpmRow) pct: Int64 -> (List RpmRow)
   (listFlatMap (fn [(id String)] -> (List RpmRow)
                  (match (mapGet models id)
                    ((none) (list))
@@ -397,11 +402,13 @@ fn rpmPass models: (Map String c/GatewayModel) providers: (Map String c/GatewayP
                            (list)
                            (let [(cur (maxF base (rpmCapFor rpms id)))
                                  (rows (filter (fn [(r LearnedRow)] -> Bool (and (= r.provider m.provider) (= r.alias id))) learned))
-                                 (refused (fold (fn [(n Int64) (r LearnedRow)] -> Int64 (max n r.refused)) 0 rows))
+                                 (since (rpmRaisedFor rpms id))
+                                 (refused (listLength (filter (fn [(r ul/CallRow)] -> Bool (and (= r.provider m.provider) (and (= r.alias id) (and (= r.outcome "throttled") (> r.atMs since))))) ledger)))
+                                 (newest (fold (fn [(n Int64) (r ul/CallRow)] -> Int64 (max n r.atMs)) 0 ledger))
                                  (clean (listAll? (fn [(r LearnedRow)] -> Bool (none? r.first429Calls)) rows))
                                  (rise (and (> refused 0) clean))
                                  (to (if rise (maxF cur (minF (* base 8.0) (* cur (+ 1.0 (/ (int64ToFloat64 pct) 100.0))))) cur))]
-                             (if (> to base) (list (RpmRow :alias id :rpm to)) (list)))))))))
+                             (if (> to base) (list (RpmRow :alias id :rpm to :raisedAt (if rise newest since))) (list)))))))))
                (mapKeys models))
 
 fn paramsWithRpm p: c/GatewayParams rpm: Float64 -> c/GatewayParams
@@ -418,7 +425,7 @@ fn rampedModels models: (Map String c/GatewayModel) rpms: (List RpmRow) -> (Map 
             ((some m)
               (match m.params.rpm
                 ((none) acc)
-                ((some base) (mapSet acc r.alias (modelWithRpm m (maxF base r.rpm))))))))
+                ((some base) (mapSet acc r.alias (modelWithRpm m (maxF base (minF (* base 8.0) r.rpm)))))))))
         models rpms)
 
 ; (:m :ref GW-LEARN-RPM :do "the table a chat is judged against: as loaded, or with :learnRamp true the models' ramped rpm buckets from learnedRpm.asn swapped in; an unreadable file leaves the table as loaded")
@@ -427,4 +434,4 @@ fn ! rampedTableFor! home: String text: String table: c/GatewayTable -> c/Gatewa
     table
     (match (readRpm! (learnedRpmPath home))
       ((ok rpms) (with table :models (rampedModels table.models rpms)))
-      ((err _) table)))
+      ((err e) (with table :warnings (listAppend table.warnings (list (str "learnedRpm.asn unreadable, configured rpm kept: " e)))))))

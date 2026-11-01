@@ -78,7 +78,7 @@ fn rpmCfg providerExtra: String learnExtra: String -> String
 
 fn ! stepOf! text: String learned: (List ln/LearnedRow) stored: (List ln/RpmRow) pct: Int64 -> (List ln/RpmRow)
   (match (c/gatewayConfigParse! text "src" "")
-    ((ok t) (ln/rpmPass t.models t.providers learned stored pct))
+    ((ok t) (ln/rpmPass t.models t.providers learned (ledgerOf learned) stored pct))
     ((err _) (list)))
 
 fn rpmOf rows: (List ln/RpmRow) alias: String -> Float64
@@ -96,6 +96,25 @@ fn ! tableRpm! text: String alias: String rpms: (List ln/RpmRow) -> Float64
 
 fn refusedOf rows: (List ln/LearnedRow) alias: String window: String -> Int64
   (match (learnedOf rows alias window) ((some r) r.refused) ((none) -1))
+
+fn fpRow r: ul/CallRow -> ul/CallRow
+  (with r :provider "fp")
+
+fn ledgerOf learned: (List ln/LearnedRow) -> (List ul/CallRow)
+  (listFlatMap (fn [(l ln/LearnedRow)] -> (List ul/CallRow) (map fpRow (burst l.refused 1000 l.alias "throttled"))) learned)
+
+fn ! stepLedger! text: String learned: (List ln/LearnedRow) ledger: (List ul/CallRow) stored: (List ln/RpmRow) pct: Int64 -> (List ln/RpmRow)
+  (match (c/gatewayConfigParse! text "src" "")
+    ((ok t) (ln/rpmPass t.models t.providers learned ledger stored pct))
+    ((err _) (list)))
+
+fn ! worldWarn! home: String -> Bool
+  (match (c/gatewayConfigParse! (resultOr (fileReadString (c/gatewayProfilesPath home)) "") "src" "")
+    ((err _) false)
+    ((ok t)
+      (match (srv/rampedWorldTable! home (ok t))
+        ((ok r) (listAny? (fn [(w String)] -> Bool (stringContains? w "learnedRpm.asn unreadable")) r.warnings))
+        ((err _) false))))
 
 fn ! worldRpm! home: String -> Float64
   (match (c/gatewayConfigParse! (resultOr (fileReadString (c/gatewayProfilesPath home)) "") "src" "")
@@ -154,6 +173,10 @@ fn ! runTests -> Bool
         (stepCeil (stepOf! cfgRpm (list (lrr "m1" 20 none)) (list (ln/RpmRow :alias "m1" :rpm 1.9)) 100))
         (stepHeld (stepOf! cfgRpm (list (lrr "m1" 0 none)) (list (ln/RpmRow :alias "m1" :rpm 0.5)) 25))
         (stepTwo (stepOf! cfgRpm (list (lrr "m1" 20 none) (lrr "m3" 5 none)) (list) 100))
+        (stepAgain (stepOf! cfgRpm (list (lrr "m1" 20 none)) stepUp 25))
+        (stepAfter (stepLedger! cfgRpm (list (lrr "m1" 20 none)) (listAppend (ledgerOf (list (lrr "m1" 20 none))) (list (fpRow (rowAt 5000 "m1" "throttled")))) stepUp 25))
+        (clampRpm (tableRpm! cfgRpm "m1" (list (ln/RpmRow :alias "m1" :rpm 5.0))))
+        (rawBack (ln/rpmParse (ln/rpmLine (ln/RpmRow :alias "m1" :rpm 0.5 :raisedAt 77))))
         (swapRpm (tableRpm! cfgRpm "m1" (list (ln/RpmRow :alias "m1" :rpm 0.5))))
         (lowRpm (tableRpm! cfgRpm "m1" (list (ln/RpmRow :alias "m1" :rpm 0.1))))
         (noOwnRpm (tableRpm! cfgRpm "m2" (list (ln/RpmRow :alias "m2" :rpm 5.0))))
@@ -171,6 +194,8 @@ fn ! runTests -> Bool
         (offWorld (worldRpm! rpmHome))
         (onFile (fileWrite rpmCfgPath (rpmCfg "" " :learnRamp true")))
         (onWorld (worldRpm! rpmHome))
+        (_ (fileWrite (ln/learnedRpmPath rpmHome) "(:rpm :alias\n"))
+        (warnWorld (worldWarn! rpmHome))
         (_ (pathRemove rpmHome))]
     (do
       (assert (= (peakOf learned "a" "minute") 7) (str "alias a reached 7 sent calls in one minute: " (stringFromInt64 (peakOf learned "a" "minute"))))
@@ -227,6 +252,11 @@ fn ! runTests -> Bool
       (assert (match rpmBad ((err _) true) ((ok _) false)) "an rpm row without a rate is an error")
       (assert (and (ok? rpmWrote) (match rpmRead ((ok rs) (= (rpmOf rs "m1") 0.5)) ((err _) false))) "rpm file written and read back")
       (assert (match rpmNone ((ok rs) (listEmpty? rs)) ((err _) false)) "no rpm file reads as no rows")
+      (assert (= (rpmOf stepAgain "m1") 0.3125) (str "a second pass over the same ledger does not raise again: " (stringFromFloat64 (rpmOf stepAgain "m1"))))
+      (assert (= (rpmOf stepAfter "m1") 0.390625) (str "a throttled row after the last raise raises again: " (stringFromFloat64 (rpmOf stepAfter "m1"))))
+      (assert (= clampRpm 2.0) (str "a stored rate above 8 times the configured one is clamped when applied: " (stringFromFloat64 clampRpm)))
+      (assert (match rawBack ((ok r) (= r.raisedAt 77)) ((err _) false)) "the raise mark survives its line")
+      (assert warnWorld "an unreadable learnedRpm.asn leaves a warning row on the table")
       (assert (= offWorld 0.25) (str "without :learnRamp the chat world keeps the configured rpm: " (stringFromFloat64 offWorld)))
       (assert (= onWorld 0.5) (str "with :learnRamp true the chat world holds the ramped rpm: " (stringFromFloat64 onWorld)))
       true))
