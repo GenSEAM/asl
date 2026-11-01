@@ -1,6 +1,6 @@
 (module asl-cli/binAslColdTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
-; (:m :ref BASE-RED-BINASL-MAC :do "the cold-start contract of bin/asl: an empty cache blocks the first call on one build (asl/host/build.sh --cold takes the CACHE/build.lockd lock) and then answers it natively, with no asl-host fallback line; the lock is released and a head names the new binary, so the next call is served natively. The old host-fallback-with-background-build contract went with HL-DELETE")
+; (:m :ref BASE-RED-BINASL-MAC :do "the cold-start contract of bin/asl: an empty cache blocks the first call on one build (asl/host/build.sh --cold takes the CACHE/build.lockd lock) and then answers it natively, with no asl-host fallback line; the lock is released and a head names the new binary, so the next call is served natively. Requirement: this block-on-build contract is the one bin/asl implements (BIN-ASL, COLDSTART-WAIT-LIVE-HOLDER); the host-fallback-with-background-build contract this test used to pin went with HL-DELETE and was recorded stale as BINASL-COLD-STALE (2026-10-28), so the test follows the stub, not the reverse")
 fn ! envFor cache: String extra: (List String) -> (List String)
   (listAppend (cons (str "SERVED_STOP_PID=" (stringFromInt64 (procSelf))) (cons (str "ASL_NATIVE_CLI_CACHE=" cache) (cons "ASL_NATIVE_CLI_TIMEOUT=3000" extra)))
     (filter (fn [(row String)] -> Bool (not (or (stringStartsWith? row "ASL_HOST=") (or (stringStartsWith? row "ASL_NATIVE_CLI_") (stringStartsWith? row "SERVED_STOP_PID="))))) (run/childEnv (list))))
