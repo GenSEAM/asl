@@ -3,7 +3,8 @@
   :i [(asl-intel :a intel)
       (asl-intel/host :a h)
       (asl-intel/text :a t)
-      (asl-intel/fixture :a fx)])
+      (asl-intel/fixture :a fx)
+      (asl-tools/fleet/run :a fr)])
 
 (schema Case
   (:f id String)
@@ -84,10 +85,10 @@ fn must! ctx: h/Ctx argv: (List String) cwd: String -> (Result Bool String)
     ((err e) (err e))
     ((ok r) (if (= r.code 0) (ok true) (err (str (t/joinWith argv " ") " exited " (t/intStr r.code) ": " r.err)))))
 
-fn caseEnv base: String c: Case -> (List String)
+fn ! caseEnv base: String c: Case -> (List String)
   (let [(stub (t/joinPath base "stub"))
         (path (if (= c.path "nogit") stub (str stub ":/usr/bin:/bin")))
-        (env (list (str "PATH=" path) (str "HOME=" (t/joinPath base "home")) "GIT_CONFIG_NOSYSTEM=1"))]
+        (env (listAppend (list (str "PATH=" path) (str "HOME=" (t/joinPath base "home")) "GIT_CONFIG_NOSYSTEM=1") (fr/cacheEnv!)))]
     (if (stringEmpty? c.aslRoot) env (listAppend env (list (str "ASL_ROOT=" c.aslRoot)))))
 
 fn writeFile! setup: h/Ctx root: String f: TreeFile -> (Result Bool String)
@@ -109,8 +110,8 @@ fn gitState! setup: h/Ctx root: String mode: String -> (Result Bool String)
       (match (must! setup (list "git" "add" "-A") root) ((err e) (err e)) ((ok _)
         (if (= mode "remote") (must! setup (list "git" "remote" "add" "origin" "https://example.invalid/r.git") root) (ok true)))))))
 
-fn materialise! base: String root: String c: Case files: (List TreeFile) -> (Result Bool String)
-  (let [(setup (h/Ctx :home root :cwd root :aslRoot "" :env (some (list "PATH=/usr/bin:/bin" (str "HOME=" (t/joinPath base "home")) "GIT_CONFIG_NOSYSTEM=1"))))]
+fn ! materialise! base: String root: String c: Case files: (List TreeFile) -> (Result Bool String)
+  (let [(setup (h/Ctx :home root :cwd root :aslRoot "" :env (some (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" (t/joinPath base "home")) "GIT_CONFIG_NOSYSTEM=1") (fr/cacheEnv!)))))]
     (match (allOk (map (fn [(f TreeFile)] -> (Result Bool String) (writeFile! setup root f)) files)) ((err e) (err e)) ((ok _)
       (match (dirCreate (t/joinPath base "home")) ((err e) (err e)) ((ok _)
         (match (stubDir! setup base) ((err e) (err e)) ((ok _)
@@ -122,7 +123,7 @@ fn firstDiff want: String got: String -> String
       ((some p) (str "want [" (pairFirst p) "] got [" (pairSecond p) "]"))
       ((none) (str "line counts " (t/intStr (listLength lw)) " vs " (t/intStr (listLength lg))))))
 
-fn replay! base: String forms: (List fx/Asn) c: Case -> Verdict
+fn ! replay! base: String forms: (List fx/Asn) c: Case -> Verdict
   (let [(root (t/joinPath (t/joinPath base c.id) "t"))
         (built (match (treeFiles forms c.tree) ((err e) (err e)) ((ok files) (materialise! base root c files))))]
     (match built

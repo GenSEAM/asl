@@ -1,5 +1,5 @@
 (module asl-intel/host
-  :x [Ctx RunOut Tree Outcome outcome runCapture! gitLsFiles! findTree! walkFiles! globFiles! readText! isDir? isFile? isLink? listSorted!]
+  :x [Ctx RunOut Tree Outcome outcome sortedTree runCapture! gitLsFiles! findTree! walkFiles! globFiles! readText! isDir? isFile? isLink? listSorted!]
   :i [(asl-intel/text :a t)
       (asl-intel/tab :a tb)])
 
@@ -107,6 +107,10 @@ fn splitFastLoop s: String b: Bytes n: Int64 sep: Int64 start: Int64 i: Int64 ac
     ((= (bytesGet b i) sep) (splitFastLoop s b n sep (+ i 1) (+ i 1) (cons (t/sliceStr s start i) acc)))
     (else (splitFastLoop s b n sep start (+ i 1) acc)))
 
+; (:m :ref INTEL-PARITY-RED-20261031 :do "both lists sorted, so the walk never follows find order")
+fn sortedTree dirs: (List String) files: (List String) -> Tree
+  (Tree :dirs (listSort dirs) :files (listSort (filter (fn [(f String)] -> Bool (not (isDir? f))) files)))
+
 fn findTree! ctx: Ctx root: String prune: Bool names: (List String) -> (Result Tree String)
   (let [(pre (if prune (pruneArgs) (list)))]
     (match (findLines! ctx (cons root (listAppend pre (list "-type" "d" "-print"))))
@@ -115,7 +119,7 @@ fn findTree! ctx: Ctx root: String prune: Bool names: (List String) -> (Result T
         (match (findLines! ctx (cons root (listAppend pre (listAppend (list "!" "-type" "d") (listAppend (nameArgs names) (list "-print"))))))
           ((err e) (err e))
           ((ok files)
-            (ok (Tree :dirs (listSort dirs0) :files (listSort (filter (fn [(f String)] -> Bool (not (isDir? f))) files)))))))))
+            (ok (sortedTree dirs0 files)))))))
 
 fn walkFiles! tree: Tree -> (List String)
   (let [(idx (fold (fn [(tab tb/Strtab) (d String)] -> tb/Strtab (pairFirst (tb/internStr! tab d)))

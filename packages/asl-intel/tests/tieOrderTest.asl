@@ -1,4 +1,4 @@
-(module asl-intel/tests/tieOrderTest :x [runTests] :i [(asl-intel/trace :a tr) (asl-intel/graph :a g)])
+(module asl-intel/tests/tieOrderTest :x [runTests] :i [(asl-intel/trace :a tr) (asl-intel/graph :a g) (asl-intel/host :a h)])
 
 fn hit f: String c: Int64 -> tr/FunctionHit
   (tr/FunctionHit :symbol "s" :module "m" :file f :calls c :micros 0 :status "hot" :branches 0 :asserts 0)
@@ -19,4 +19,7 @@ fn runTests -> Bool
     (assert (= (g/pickByRank (list (pair -1 0) (pair 9 5))) 9) "a negative node is skipped")
     (assert (= (g/pickByRank (list (pair -1 0))) -1) "no candidate is -1")
     (assert (= (g/pickByRank (list)) -1) "empty is -1")
+    (assert (= (h/sortedTree (list "r/z" "r/a") (list "r/z.asl" "r/b.asl" "r/a.asl")) (h/sortedTree (list "r/a" "r/z") (list "r/a.asl" "r/b.asl" "r/z.asl"))) "reversed walk input gives the same tree")
+    (assert (= (h/sortedTree (list) (list "r/z.asl" "r/a.asl")) (h/Tree :dirs (list) :files (list "r/a.asl" "r/z.asl"))) "files ascend")
+    (assert (= (h/sortedTree (list "r/z" "r/a") (list)) (h/Tree :dirs (list "r/a" "r/z") :files (list))) "dirs ascend")
     true)
