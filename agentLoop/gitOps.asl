@@ -3,7 +3,7 @@
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
       runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(asl/agentLoop/core :a c) (asl-tools/fleet/run :a fr)])
+  :i [(asl/agentLoop/core :a c) (asl/agentLoop/agentConfig :a ac) (asl-tools/fleet/run :a fr)])
 
 enum RVal
   (rStr text: String)
@@ -26,7 +26,8 @@ enum PumpEnd
   (:f code (Option Int64))
   (:f out String)
   (:f errText String)
-  (:f timedOut Bool))
+  (:f timedOut Bool)
+  (:f guard String :default ""))
 
 (schema GitCtx
   (:f root String)
@@ -540,8 +541,11 @@ fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: 
           (gitRunRec rid opName argv b path base rev rawBase limit start end ctx.readCap)))))
 
 ; (:m :ref AGENTLOOP-GATE-KILLTREE :do "a gate runs under the fleet guard (fr/guardStart!): its deadline, a descendant limit and a tree kill with the groups and pins the guard recorded, so a test binary in its own process group under the gate CLI dies with it; runBounded!'s SIGKILL of the gate's group alone left such binaries running under systemd --user. A gone watched pid stops the guarded tree like a timeout")
-fn gateMaxDesc -> Int64
-  512
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the descendant limit of a gate run is .asl.config.asn :agentLoop :gateMaxDescendants of the run root (a positive integer, checked by ac/configProblems), else 512")
+fn ! gateMaxDesc! root: String -> Int64
+  (match (ac/agentLoopValue (ac/configText! root) ":gateMaxDescendants")
+    ((some v) (optionOr (ac/positiveInt v) 512))
+    ((none) 512))
 
 fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> (Pair fr/ProcOut Bool)
   (let [s (fr/guardAdvance! g)]
@@ -552,18 +556,41 @@ fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> (Pair fr/Pro
           (do (fr/stopGuard! s.guard) (gateLoop! s.guard watch true))
           (do (if s.progress () (do (fdPoll (fr/guardFds s.guard) 50) ())) (gateLoop! s.guard watch stopped))))))
 
-; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard appends its (:fleetRun :verdict ...) note to stderr on a kill; the gate record keeps the gate's own stderr, as before, and says timeout itself")
+fn guardNoteMark -> String
+  "\n(:fleetRun :verdict :"
+
+fn lastNoteAt text: String from: Int64 found: (Option Int64) -> (Option Int64)
+  (match (stringIndexOf (c/sliceOf text from (stringLength text)) (guardNoteMark))
+    ((some i) (lastNoteAt text (+ from (+ i 1)) (some (+ from i))))
+    ((none) found))
+
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard appends its (:fleetRun :verdict ...) note to stderr on a kill, after whatever the gate printed (which may contain such a line itself); the gate record keeps the gate's own stderr, as before, and says timeout or maxDesc in its own fields")
 fn withoutGuardNote text: String -> String
-  (match (stringIndexOf text "\n(:fleetRun :verdict :") ((some i) (c/sliceOf text 0 i)) ((none) text))
+  (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text 0 i)) ((none) text))
+
+fn guardNote text: String -> String
+  (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text i (stringLength text))) ((none) ""))
+
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the guard verdict of a killed gate: timeout, maxDesc for the descendant limit (fr's runaway), \"\" for a gate that ended by itself or was stopped for a gone watched pid")
+fn guardVerdict text: String -> String
+  (let [note (guardNote text)]
+    (cond
+      ((stringContains? note "(:fleetRun :verdict :timeout") "timeout")
+      ((stringContains? note "(:fleetRun :verdict :runaway") "maxDesc")
+      (else "")))
 
 fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
-  (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec (gateMaxDesc)))
-    ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
-    ((ok g)
-      (let [r (gateLoop! g watch false)
-            o (pairFirst r)
-            timedOut (or (pairSecond r) (stringContains? o.stderr "(:fleetRun :verdict :timeout"))]
-        (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines (withoutGuardNote o.stderr)) :timedOut timedOut)))))
+  (let [maxDesc (gateMaxDesc! root)]
+    (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec maxDesc))
+      ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
+      ((ok g)
+        (let [r (gateLoop! g watch false)
+              o (pairFirst r)
+              verdict (guardVerdict o.stderr)
+              timedOut (or (pairSecond r) (= verdict "timeout"))
+              own (withoutGuardNote o.stderr)
+              errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
+          (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))))))
 
 fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (runGates! gates root timeoutSec env watch)
@@ -579,7 +606,8 @@ fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 e
                  (listAppend
                    (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
                      (rs "stdout" b.out) (rs "stderr" b.errText))
-                   (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list)))))))
+                   (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
+                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))
       gates))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))

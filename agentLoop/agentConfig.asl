@@ -133,9 +133,10 @@ fn configProblems text: String -> (List String)
    (listAppend (intProblem text ":wallReserveSec")
    (listAppend (intProblem text ":wallGateMinSec")
    (listAppend (intProblem text ":gateVacuousRounds")
+   (listAppend (intProblem text ":gateMaxDescendants")
     (listAppend (boolProblem text ":baseline")
       (listAppend (boolProblem text ":specCheck")
-        (listAppend (nameProblem text ":graderIntent") (nameProblem text ":graderProfile")))))))))
+        (listAppend (nameProblem text ":graderIntent") (nameProblem text ":graderProfile"))))))))))
 
 fn ! configText! root: String -> String
   (resultOr (fileReadString (str root "/.asl.config.asn")) "")
