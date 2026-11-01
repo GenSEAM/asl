@@ -218,7 +218,7 @@ fn ! runTests -> Bool
         closeFile (readOr (str closeRoot "/subject.txt"))
         taskCommitReady (and extraFixtures (initCommitRepo taskCommitRoot "before\n"))
         taskCommit (runMain taskCommitRoot "fix add and COMMIT" "taskCommit"
-          ":mode \"implement\" :owns (\"subject.txt\") :gates (\"grep -qx green subject.txt\") :budget 5")
+          ":mode \"implement\" :owns (\"subject.txt\") :gates (\"grep -qx green subject.txt\") :budget 5 :commit true")
         taskCommitSession (fieldAfter taskCommit.stdout ":session \"")
         taskCommitJournal (readOr (str taskCommitRoot "/.asl/run/agentLoop/" taskCommitSession ".journal"))
         taskCommitFiles (processRun (str "git -C " (shellQuote taskCommitRoot) " show --pretty=format: --name-only HEAD")).stdout
