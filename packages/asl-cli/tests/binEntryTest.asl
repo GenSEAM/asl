@@ -10,7 +10,7 @@ fn ! refresh! root: String cache: String extra: (List String) -> run/Done
 fn ! headDirOf root: String -> String
   (stringTrim (resultOr (fileReadString (nc/headPath (nc/cacheDir!) root)) ""))
 
-; (:m :ref BIN-ASL-ASL :do "two stubs racing on a stale builder never run build.sh at the same time: a scratch root has a copy of bin/asl, a fake build.sh that logs s, sleeps and logs e, a suspect head and no builder; the log must alternate s e s e, children are bounded by the pool limits and the scratch dir is removed")
+; (:m :ref BIN-ASL-ASL :do "two stubs racing on a stale builder never run build.sh at the same time: a scratch root has a copy of bin/asl, a fake build.sh that takes the --cold CACHE lock dir the way the real one does (the stub must pass --cold and the cache: the lock lives in build.sh since COLDSTART-WAIT-LIVE-HOLDER), logs s, sleeps and logs e, a suspect head and no builder; the log must alternate s e s e, children are bounded by the pool limits and the scratch dir is removed")
 fn ! put! path: String text: String -> Bool
   (ok? (fileWrite path text))
 
@@ -25,7 +25,7 @@ fn ! raceBuilds! root: String -> (Pair (List String) (List String))
         (log (str base "/build.log"))
         (made (listAll? (fn [(d String)] -> Bool (ok? (dirCreate d))) (list (str root "/.asl/cache/binEntryRace") base cache ndir r (str r "/bin") (str r "/asl") (str r "/asl/host") (str r "/asl/host/out"))))
         (stub (exe! (str r "/bin/asl") (resultOr (fileReadString (str root "/bin/asl")) "")))
-        (build (exe! (str r "/asl/host/build.sh") (str "echo s >> " log "; sleep 2; mkdir -p " r "/asl/host/out/aslNativeBuild-fresh; printf '#!/bin/sh\nexit 0\n' > " r "/asl/host/out/aslNativeBuild; chmod +x " r "/asl/host/out/aslNativeBuild; echo e >> " log "\n")))
+        (build (exe! (str r "/asl/host/build.sh") (str "[ \"$1\" = --cold ] && [ \"$2\" = " cache " ] || exit 64; n=0; while ! mkdir \"$2/build.lockd\" 2>/dev/null; do n=$((n+1)); [ $n -le 250 ] || exit 75; sleep 0.2; done; trap 'rmdir \"$2/build.lockd\"' EXIT; echo s >> " log "; sleep 2; mkdir -p " r "/asl/host/out/aslNativeBuild-fresh; printf '#!/bin/sh\nexit 0\n' > " r "/asl/host/out/aslNativeBuild; chmod +x " r "/asl/host/out/aslNativeBuild; echo e >> " log "\n")))
         (served (exe! (str ndir "/bin") "#!/bin/sh\necho served\n"))
         (deps (put! (str ndir "/deps") "no/such/source\n"))
         (pointed (put! (str cache "/head" (stringReplace (resultOr (realPath r) r) "/" "_")) (str ndir "\n")))
