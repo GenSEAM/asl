@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -364,6 +364,48 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
 
+fn leadDigits s: String n: Int64 i: Int64 -> String
+  (if (and (< i n) (stringContains? "0123456789" (optionOr (stringSlice s i (+ i 1)) "x")))
+    (leadDigits s n (+ i 1))
+    (optionOr (stringSlice s 0 i) ""))
+
+(schema Drain
+  (:f bytes Int64)
+  (:f ms Int64))
+
+; (:m :ref FR-KILL-DRAIN :do "a value of the :fleet group of .asl.config.asn under the root (ASL_ROOT, else the working directory): the digits after :KEY inside the group, the default when the file, the group or the key is absent or the value is outside lo..hi")
+fn fleetInt text: String key: String dflt: Int64 lo: Int64 hi: Int64 -> Int64
+  (match (stringIndexOf text ":fleet")
+    ((none) dflt)
+    ((some g)
+      (let [(rest (optionOr (stringSlice text g (stringLength text)) ""))
+            (end (optionOr (stringIndexOf rest ")") (stringLength rest)))
+            (grp (optionOr (stringSlice rest 0 end) ""))]
+        (match (stringIndexOf grp (str ":" key " "))
+          ((none) dflt)
+          ((some i)
+            (let [(tail (stringTrim (optionOr (stringSlice grp (+ i (+ (stringLength key) 2)) (stringLength grp)) "")))
+                  (digits (leadDigits tail (stringLength tail) 0))
+                  (v (optionOr (stringToInt64 digits) -1))]
+              (if (and (>= v lo) (<= v hi)) v dflt)))))))
+
+; (:m :ref FR-KILL-DRAIN :do "after a judge kill the pipes are read on, bounded by :fleet :drainBytes (default 1048576, 0 turns the drain off) and :fleet :drainMs (default 300): the child died with output still in its pipes and the pump had not read it yet")
+fn ! drainConfig! -> Drain
+  (let [(text (resultOr (fileReadString (str (optionOr (envGet "ASL_ROOT") ".") "/.asl.config.asn")) ""))]
+    (Drain :bytes (fleetInt text "drainBytes" 1048576 0 67108864) :ms (fleetInt text "drainMs" 300 0 5000)))
+
+fn ! drainFd fd: Int64 isOpen: Bool cap: Int64 deadlineNs: Int64 acc: String -> (Pair Bool String)
+  (cond
+    ((not isOpen) (pair false acc))
+    ((>= (stringLength acc) cap) (pair true acc))
+    ((>= (monotonicNs) deadlineNs) (pair true acc))
+    (else
+      (let [(c (readChunk fd true))]
+        (cond
+          ((not (pairFirst c)) (pair false (str acc (pairSecond c))))
+          ((stringEmpty? (pairSecond c)) (do (fdPoll (list (pair fd 1)) 10) (drainFd fd true cap deadlineNs acc)))
+          (else (drainFd fd true cap deadlineNs (str acc (pairSecond c))))))))
+
 fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: Running -> Running
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
         (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
@@ -375,9 +417,13 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
                :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
       (let [(left (killTreeWith! r.pid groups known))
+            (dc (drainConfig!))
+            (dl (+ (monotonicNs) (* dc.ms 1000000)))
+            (o (drainFd r.outFd r.outOpen dc.bytes dl ""))
+            (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
-        (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text note)
-                 :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed verdict :groups groups :known known))))
+        (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text (pairSecond o) (pairSecond e) note)
+                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
 
 fn ! closeIfOpen fd: Int64 isOpen: Bool -> Int64
   (if isOpen (do (fdClose fd) 1) 0)
@@ -424,9 +470,13 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
       (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText
                   :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
       (let [(left (killTreeWith! r.pid groups known))
+            (dc (drainConfig!))
+            (dl (+ (monotonicNs) (* dc.ms 1000000)))
+            (o (drainFd r.outFd r.outOpen dc.bytes dl ""))
+            (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
-        (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText (str r.errText note)
-                    :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed verdict :groups groups :known known))))
+        (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e) note)
+                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
 
 fn ! finishSep r: RunningSep -> ProcOut
   (let [(_ (closeIfOpen r.outFd r.outOpen))
