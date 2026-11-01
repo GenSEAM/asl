@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -373,9 +373,15 @@ fn leadDigits s: String n: Int64 i: Int64 -> String
   (:f bytes Int64)
   (:f ms Int64))
 
+; (:m :ref FR-KILL-DRAIN :do "the :fleet group starts at :fleet followed by a space and an opening paren or by an opening paren, so :fleetRun or another key that begins with fleet is not the group")
+fn fleetGroupAt text: String -> (Option Int64)
+  (match (stringIndexOf text ":fleet (")
+    ((some g) (some g))
+    ((none) (stringIndexOf text ":fleet(")))
+
 ; (:m :ref FR-KILL-DRAIN :do "a value of the :fleet group of .asl.config.asn under the root (ASL_ROOT, else the working directory): the digits after :KEY inside the group, the default when the file, the group or the key is absent or the value is outside lo..hi")
 fn fleetInt text: String key: String dflt: Int64 lo: Int64 hi: Int64 -> Int64
-  (match (stringIndexOf text ":fleet")
+  (match (fleetGroupAt text)
     ((none) dflt)
     ((some g)
       (let [(rest (optionOr (stringSlice text g (stringLength text)) ""))
