@@ -6,7 +6,7 @@
       stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
-      (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
+      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
 
@@ -208,14 +208,21 @@ fn priorEntry line: String -> String
     (str (optionOr (listHead parts) "") ": " (stringJoin (optionOr (listTail parts) (list)) " ")))
 
 ; (:m :ref ESC-LADDER :do "the fixer on the next rung gets the newest failure as :last and the earlier rungs' failures as :history, oldest first; the earlier commits stay on the branch")
+; (:m :ref CONDUCTOR-ASN-NOTES :do "a stall entry rides raw only when the reader finds exactly one form in it; a prefix and suffix test passes two forms or a torn one")
+fn oneStallForm? entry: String -> Bool
+  (and (stringStartsWith? entry "(:stall ")
+       (match (ast/readForms (lx/tokenize entry))
+         ((ok forms) (= (listLength forms) 1))
+         ((err _) false)))
+
 fn ! priorNote! dir: String id: String -> String
   (let [(rows (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines (readOr (runPath dir id "prior" "txt")))))]
     (match (listLast rows)
       ((none) "")
       ((some last)
-        (str "(:prior :last " (st/q (stringJoin (optionOr (listTail (stringSplit last "\t")) (list)) " "))
-             " :history (" (stringJoin (map (fn [(l String)] -> String (st/q (priorEntry l))) (listTake rows (- (listLength rows) 1))) " ") "))\n"
-             "Lower rungs failed this unit; their commits are on this branch, fix forward from them."))))
+        (let [(entry (stringJoin (optionOr (listTail (stringSplit last "\t")) (list)) " "))]
+          (str "(:prior :last " (if (oneStallForm? entry) entry (st/q entry))
+               " :history (" (stringJoin (map (fn [(l String)] -> String (st/q (priorEntry l))) (listTake rows (- (listLength rows) 1))) " ") ") :branchHas commits)")))))
 
 ; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
 fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit

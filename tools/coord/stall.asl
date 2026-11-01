@@ -114,7 +114,7 @@ fn stallCount rows: String id: String -> Int64
 fn actOf cfg: Cfg prior: Int64 class: String op: String -> Act
   (Act :class class
        :lane (if (>= (+ prior 1) cfg.escalateAfter) "strong" "")
-       :note (str "(:stall :class " class " :n " (stringFromInt64 (+ prior 1)) " :op \"" op "\") the previous attempt on this unit was cut for this; change the approach instead of repeating that op"))
+       :note (str "(:stall :class " class " :n " (stringFromInt64 (+ prior 1)) " :op \"" op "\")"))
 
 fn stallRow id: String class: String op: String lane: String now: Int64 -> String
   (str "(:stall :unit \"" id "\" :class " class " :op \"" op "\" :escalate \"" lane "\" :at " (stringFromInt64 now) ")")

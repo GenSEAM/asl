@@ -1,6 +1,6 @@
 (module asl/tools/coord/tests/stallTest
   :x [runTests]
-  :i [(asl-tools/coord/stall :a sl) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/coord/stall :a sl) (asl-tools/fleet/run :a fr) (asl-tools/coord/conductor :a cd)])
 
 ; (:m :ref COND-STALL-AUTO :do "fixture journals for each stall class under a scratch dir in this worktree's .asl/cache, removed by the test; time is the now argument, so ages need no sleeping; the hooks only append to a log file, nothing is killed")
 fn ! nowMs -> Int64
@@ -79,6 +79,8 @@ fn testAct -> Bool
     (do (assert (stringEmpty? first.lane) "the first stall keeps the lane")
         (assert (= second.lane "strong") "the second stall of one unit escalates to strong")
         (assert (stringContains? first.note "(:stall :class looping :n 1 :op \"<step :op gate>\")") (str "the note carries class, count and op: " first.note))
+        (assert (not (stringContains? first.note "change the approach")) (str "the note is data, no English: " first.note))
+        (assert (and (stringStartsWith? first.note "(:stall ") (stringEndsWith? first.note ")") (= (listLength (stringSplit first.note "(")) (listLength (stringSplit first.note ")")))) (str "the note is one balanced form: " first.note))
         (assert (= (sl/stallCount "(:stall :unit \"A\" :class x)\n(:stall :unit \"AB\" :class x)\n(:stall :unit \"A\" :class y)\n" "A") 2) "stalls count per exact unit id")
         true))
 
@@ -156,8 +158,30 @@ fn ! testWrites -> Bool
         (assert (= hidden 0) "a tree whose only file is under .asl has no write")
         true))
 
+; (:m :ref CONDUCTOR-ASN-NOTES :do "the prior note for the next rung is data only: (:prior :last <form> :history (...) :branchHas commits), a stall row stays a raw form and anything else is quoted")
+fn testPrior -> Bool
+  (let [(dir (scratch "prior"))
+        (_ (cleanup dir))
+        (_ (dirCreate (cd/runsDir dir)))
+        (_ (fileAppend (cd/runPath dir "P" "prior" "txt") "free\twriter boom on free\nleon\t(:stall :class looping :n 1 :op \"<step :op gate>\")\n"))
+        (_ (fileAppend (cd/runPath dir "Q" "prior" "txt") "free\twriter boom on free\n"))
+        (stall (cd/priorNote! dir "P"))
+        (plain (cd/priorNote! dir "Q"))
+        (_ (fileAppend (cd/runPath dir "R" "prior" "txt") "leon\t(:stall :a 1) (:x\n"))
+        (_ (fileAppend (cd/runPath dir "S" "prior" "txt") "leon\t(:stall :a 1) (:x 2)\n"))
+        (torn (cd/priorNote! dir "R"))
+        (two (cd/priorNote! dir "S"))
+        (_ (cleanup dir))]
+    (do (assert (stringStartsWith? torn "(:prior :last \"(:stall :a 1) (:x\" ") (str "a torn entry is quoted: " torn))
+        (assert (stringStartsWith? two "(:prior :last \"(:stall :a 1) (:x 2)\" ") (str "two forms are quoted: " two))
+        (assert (= stall "(:prior :last (:stall :class looping :n 1 :op \"<step :op gate>\") :history (\"free: writer boom on free\") :branchHas commits)") (str "a stall last entry stays a raw form: " stall))
+        (assert (= plain "(:prior :last \"writer boom on free\" :history () :branchHas commits)") (str "a plain failure is quoted: " plain))
+        (assert (not (stringContains? stall "Lower rungs")) "no English line after the form")
+        true))
+
 fn ! runTests -> Bool
-  (do (assert (testConfig) "config rows: off without a row, ranges, unknown keys")
+  (do (assert (testPrior) "prior note: data only, stall row raw, branchHas commits")
+      (assert (testConfig) "config rows: off without a row, ranges, unknown keys")
       (assert (testVerdicts) "verdicts: ok, looping, empty streak, stalled, silent, dead")
       (assert (testAct) "acts: lane kept, escalation after K, note text, per-unit count")
       (assert (testSweep) "sweep: acts per verdict through the hooks, rate limit, escalation, rows")
