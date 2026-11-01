@@ -142,6 +142,7 @@
         (:backend :type str :default "agy")
         (:base :type str :default "" :note "rev gitDiff compares to")
         (:budget :type int :default 3000)
+        (:commit :type bool :default false :note "commit the session's written paths with the message of its (:done :commit s); absent, nothing is committed")
         (:contextFile :type str :default "")
         (:contextTokens :type int)
         (:dryRun :type bool :default false)
