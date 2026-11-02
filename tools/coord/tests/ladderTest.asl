@@ -174,6 +174,7 @@ fn testBrief -> Bool
         (assert (not (stringContains? b ".asl/mem")) "no memory path or contents go out")
         (assert (not (stringContains? b "sk-or-")) "no key-looking text goes out")
         (assert (not (stringContains? b "TOKEN=")) "no token line goes out")
+        (assert (listContains? (l/scrubLines "+ (let [toks (tokenize text)]" 10 120) "+ (let [toks (tokenize text)]") "tokenize identifier is not scrubbed as a secret")
         (assert (not (stringContains? b "\n")) "the brief is a single line")
         (assert (stringStartsWith? b "(:review :unit \"U1\"") "the brief is an ASN form")
         true))

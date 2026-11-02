@@ -297,7 +297,7 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
 fn secretLike? l: String -> Bool
   (let [(s (stringLower l))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
-              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
+              (list ".asl/mem" "secret=" "_secret" "token=" "_token" "token:" "password" "apikey" "api_key" "api-key" "_key" "bearer " "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
 
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)
