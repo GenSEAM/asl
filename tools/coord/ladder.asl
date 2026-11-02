@@ -298,7 +298,7 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
 fn secretLike? l: String -> Bool
   (let [(s (stringReplace (stringReplace (stringLower l) "tokeniz" "") "tokensof" ""))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
-              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
+              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "\"sk-" " sk-" "=sk-" ":sk-" "sk-or-" "sk-ant-" "sk-proj-" "aizasy" "github_pat_" "ghp_" "xoxb-" "xoxp-" "xoxa-" "passwd" "private key" "authorization:")))
 
 ; (:m :ref WRITER-UNKNOWN :do "the writer a review excludes: the unit's model, else the configured writer alias; an unknown writer stays unknown so selection waits instead of guessing a family")
 fn reviewWriter model: String fallback: String -> String
