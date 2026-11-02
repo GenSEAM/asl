@@ -44,4 +44,6 @@
     "aslGateway/subPacing"
     "aslGateway/subPace"
     "aslGateway/rateLearn"
-    "aslGateway/subsRefresh"))
+    "aslGateway/subsRefresh"
+    "aslGateway/capOrder"
+    "aslGateway/capOrderStats"))

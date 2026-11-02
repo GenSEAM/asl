@@ -1852,6 +1852,38 @@ fn parseCooldownSec props: (Map String rd/SExpr) pid: String intent: String -> (
         ((scalarInt n) (if (> n 0) (pair n (list)) (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))
         (_ (pair 60 (list (str "profile " pid " route " intent ": :cooldownSec must be a positive integer")))))))
 
+; (:m :ref GW-CAP-ORDER :do "optional :order measured on a route (with :explore 0..50, :refreshS >= 60, :minSamples >= 1, :staleS >= 60, :orderOff (ALIAS ..) of known aliases, :orderAt >= 0): opt-in to measured chain order written back by `gateway order`; any of the options without :order, a value other than measured, an out-of-range number or an unknown alias in :orderOff is an error, and a route without :order is read exactly as before")
+fn orderIntOk props: (Map String rd/SExpr) key: String lo: Int64 hi: Int64 -> Bool
+  (match (mapGet props key)
+    ((none) true)
+    ((some v) (match (asnScalar v) ((scalarInt n) (and (>= n lo) (<= n hi))) (_ false))))
+
+fn parseRouteOrder props: (Map String rd/SExpr) models: (Map String GatewayModel) pid: String intent: String -> (List String)
+  (let [(where (str "profile " pid " route " intent ": "))
+        (opts (list "explore" "refreshS" "minSamples" "staleS" "orderOff" "orderAt"))]
+    (match (mapGet props "order")
+      ((none) (map (fn [(k String)] -> String (str where ":" k " needs :order measured")) (filter (fn [(k String)] -> Bool (mapHas? props k)) opts)))
+      ((some v)
+        (listAppend
+          (match (asnScalar v) ((scalarStr s) (if (= s "measured") (list) (list (str where ":order must be measured")))) (_ (list (str where ":order must be measured"))))
+          (listAppend
+            (filter (fn [(e String)] -> Bool (not (stringEmpty? e)))
+              (list (if (orderIntOk props "explore" 0 50) "" (str where ":explore must be an integer 0..50"))
+                    (if (orderIntOk props "refreshS" 60 31536000) "" (str where ":refreshS must be an integer >= 60"))
+                    (if (orderIntOk props "minSamples" 1 1000000) "" (str where ":minSamples must be an integer >= 1"))
+                    (if (orderIntOk props "staleS" 60 31536000) "" (str where ":staleS must be an integer >= 60"))
+                    (if (orderIntOk props "orderAt" 0 9007199254740991) "" (str where ":orderAt must be an integer >= 0"))))
+            (match (mapGet props "orderOff")
+              ((none) (list))
+              ((some e)
+                (let [(items (match e ((rd/sexprList l) l) ((rd/sexprVect vv) vv) (_ (list))))]
+                  (filter (fn [(m String)] -> Bool (not (stringEmpty? m)))
+                    (map (fn [(it rd/SExpr)] -> String
+                           (match it
+                             ((rd/sexprAtom a) (if (mapHas? models a) "" (str where ":orderOff unknown alias " a)))
+                             (_ (str where ":orderOff entries must be aliases"))))
+                         items)))))))))) 
+
 fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option String)) models: (Map String GatewayModel) -> (Pair (Option GatewayRoute) (List String))
   (match (asnProps rf (none))
     ((err e) (pair (none) (list (str "profile " pid ": " e))))
@@ -1889,7 +1921,8 @@ fn parseProfileRoute rf: rd/SExpr pid: String intents: (Map String (Option Strin
                       (cooldownRes (parseCooldownSec props pid intent))
                       (cooldownSec (pairFirst cooldownRes))
                       (cooldownErrs (pairSecond cooldownRes))
-                      (finalErrs (listAppend (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) overErrs) spreadErrs) cooldownErrs))]
+                      (orderErrs (parseRouteOrder props models pid intent))
+                      (finalErrs (listAppend (listAppend (listAppend (listAppend (listAppend (listAppend errs2 chainErrs) tempErrs) overErrs) spreadErrs) cooldownErrs) orderErrs))]
                   (pair (some (GatewayRoute :intent intent :chain chain :models (list) :temperature temperature :temperatureOverride tempOverride :spread spread :cooldownSec cooldownSec)) finalErrs)))))))))
 
 fn profileFallbackStep profiles: (Map String GatewayProfile) cur: String seen: (List String) -> (Option (List String))

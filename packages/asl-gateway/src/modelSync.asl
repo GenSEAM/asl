@@ -1,6 +1,6 @@
 (module aslGateway/modelSync
   :x [SyncDiff SyncProbe modelFilterFor nonChatId? listedModels syncDiff chainsWith proposeAlias calStatus toProbe syncProposals
-      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText applySubPace patchHost modelsApplyCli!]
+      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText applySubPace patchHost modelsApplyCli! routeSpan setField todayUtc!]
   :i [(config :a c)
       (search :a srch)
       (localTime :a lt)
