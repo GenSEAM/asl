@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -109,7 +109,9 @@
   (:f vacuousGates (List String))
   (:f specCheck (Option ls/SpecVerdict))
   (:f stop (Option String))
-  (:f lastStep (Option String)))
+  (:f lastStep (Option String))
+  (:f servedAlias (Option String))
+  (:f servedModel (Option String)))
 
 (schema MainResult
   (:f stdout String)
@@ -907,6 +909,8 @@ fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
        (match (nonEmpty r.stop) ((some s) (str " :stop " s)) ((none) ""))
        (match (nonEmpty r.lastStep) ((some l) (str " :lastStep " l)) ((none) ""))
+       (match (nonEmpty r.servedAlias) ((some a) (str " :servedAlias \"" (c/escapeAsn a) "\"")) ((none) ""))
+       (match (nonEmpty r.servedModel) ((some m) (str " :servedModel \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.deliver) ((some d) (str " :deliver :" d)) ((none) ""))
        " :phases (" (stringJoin r.phases " ") ")"
@@ -1181,6 +1185,43 @@ fn ! liveAdvisor provider: pv/Provider sys: String msg: String -> (Result (Optio
       (match turn.reply
         ((err e) (err (pv/errorMessage e)))
         ((ok reply) (ok reply)))))
+
+; (:m :ref SERVED-ALIAS :do "node2 2026-11-02: 2589 of about 2817 write rows journalled :model unknown or empty; the gateway names the alias that answered in the served fields of its reply, so the journal's served row and the receipt carry it beside the upstream model")
+fn servedAlias meta: pv/TurnMeta -> (Option String)
+  (match meta.served
+    ((some fields) (optionMap pairSecond (listHead (filter (fn [p] (and (= (pairFirst p) "alias") (not (stringEmpty? (pairSecond p))))) fields))))
+    ((none) none))
+
+fn servedLine turn: Int64 meta: pv/TurnMeta -> (Option String)
+  (let [model (servedModel meta)
+        alias (servedAlias meta)]
+    (if (and (none? model) (none? alias))
+      none
+      (some (str "(:served :turn " (stringFromInt64 turn)
+        (match model ((some m) (str " :model \"" (c/escapeAsn m) "\"")) ((none) ""))
+        (match alias ((some a) (str " :alias \"" (c/escapeAsn a) "\"")) ((none) ""))
+        ")\n"))))
+
+fn quotedAfter line: String key: String -> (Option String)
+  (match (stringIndexOf line (str key " \""))
+    ((none) none)
+    ((some at)
+      (let [rest (c/sliceOf line (+ at (+ (stringLength key) 2)) (stringLength line))]
+        (match (stringIndexOf rest "\"") ((some e) (some (c/asnUnescape (c/sliceOf rest 0 e)))) ((none) none)))))
+
+; (:m :ref SERVED-ALIAS :do "the alias and model of the last served row of a journal text, each none when no row names it")
+fn servedIn text: String -> (Pair (Option String) (Option String))
+  (fold (fn [acc line]
+          (if (stringStartsWith? line "(:served :turn ")
+            (pair (match (quotedAfter line ":alias") ((some a) (some a)) ((none) (pairFirst acc)))
+                  (match (quotedAfter line ":model") ((some m) (some m)) ((none) (pairSecond acc))))
+            acc))
+    (pair none none) (stringLines text))
+
+fn ! liveServed! rootDir: String journal: (Option String) -> (Pair (Option String) (Option String))
+  (match journal
+    ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (servedIn text)) ((err _) (pair none none))))
+    ((none) (pair none none)))
 
 fn servedModel meta: pv/TurnMeta -> (Option String)
   (match meta.served
@@ -1828,8 +1869,8 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
         shapes (map pairSecond (ex/opShapes))
         _usageLogged (match (providerUsageLine response.meta)
           ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))
-        _servedLogged (match (servedModel response.meta)
-          ((some model) (ok? (fileAppend path (str "(:served :turn " (stringFromInt64 turn) " :model \"" (c/escapeAsn model) "\")\n"))))
+        _servedLogged (match (servedLine turn response.meta)
+          ((some line) (ok? (fileAppend path line)))
           ((none) true))]
     (match response.reply
       ((err e)
@@ -2023,7 +2064,8 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
     :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
     :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates
-    :specCheck result.specCheck :stop (some (stopCause result.status result.signal result.error result.vacuousGates)) :lastStep lastStep))
+    :specCheck result.specCheck :stop (some (stopCause result.status result.signal result.error result.vacuousGates)) :lastStep lastStep
+    :servedAlias none :servedModel none))
 
 ; (:m :ref LEON-SPECCHECK-REVIEWER-DOWN :do "exit 0 for an ok run, and for a gated run that only lacks a reviewer: its status stays needsReview in the receipt")
 fn liveExitCode r: LoopResult -> Int64
@@ -2088,7 +2130,9 @@ fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                   (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
 
 fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
-  (let [receipt (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))]
+  (let [base (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))
+        served (liveServed! ls.rootDir result.journal)
+        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served))]
     (MainResult :stdout (formatReceipt receipt) :exitCode (liveExitCode receipt)))
 
 fn ! liveRun ls: LiveSession -> MainResult
