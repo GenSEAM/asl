@@ -97,9 +97,9 @@ fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAs
               (afterCall (match live.left ((some n) (some (max 0 (- n spent)))) ((none) none)))
               (transient (rt/errorTransient (pv/errorCode error) (pv/errorMessage error)))
               (backoff (rt/providerRetryPause transient (+ live.retries 1) (list 1 2 4) afterCall))
-              (hinted (pv/retryAfterSec (pv/errorMessage error)))
-              (wait (max backoff (min hinted (match afterCall ((some n) n) ((none) hinted)))))]
-          (if (and (< live.retries 3) (and transient (budgetOpen afterCall)))
+              (hinted (rt/hintedPause (pv/retryAfterSec (pv/errorMessage error)) afterCall))
+              (wait (max backoff (optionOr hinted 0)))]
+          (if (and (< live.retries 3) (and transient (and (budgetOpen afterCall) (some? hinted))))
             (callAsk! book id live live.wrapped ask t.provider (+ live.retries 1) (match afterCall ((some n) (some (max 0 (- n wait)))) ((none) none)) wait)
             (settled! book id live ask t))))))
 

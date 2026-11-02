@@ -2,7 +2,7 @@
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
       makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
-      providerRetryPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
+      providerRetryPause hintedPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
   :i [(asl/agentLoop/context :a ctx) (asl/agentLoop/providers :a pv)])
 
 ; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")
@@ -56,6 +56,12 @@ fn errorClass code: String message: String -> String
 fn retryAfterCapSec -> Int64
   300
 
+; (:m :ref RETRY-AFTER-PARITY :do "one decision for a server Retry-After hint, used by retryTurnLoop! and the pool's decide!: none when the raw hint reaches the wall budget left (the retry would fail anyway), else the hint clipped to retryAfterCapSec")
+fn hintedPause hinted: Int64 left: (Option Int64) -> (Option Int64)
+  (match left
+    ((some n) (if (and (> hinted 0) (>= hinted n)) none (some (min hinted (retryAfterCapSec)))))
+    ((none) (some (min hinted (retryAfterCapSec)))))
+
 fn providerRetryPause transient: Bool retryCount: Int64 configured: (List Int64) budgetLeft: (Option Int64) -> Int64
   (let [slot (min retryCount (listLength configured))
         pause (if (and transient (> slot 0)) (optionOr (listGet configured (- slot 1)) 0) 0)]
@@ -82,10 +88,11 @@ fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Tu
       ((err error)
         (let [transient (errorTransient (pv/errorCode error) (pv/errorMessage error))
               basePause (providerRetryPause transient (+ retries 1) configured afterCall)
-              raSec (min (retryAfterCapSec) (if transient (pv/retryAfterSec (pv/errorMessage error)) 0))
+              raPlan (hintedPause (if transient (pv/retryAfterSec (pv/errorMessage error)) 0) afterCall)
+              raSec (optionOr raPlan 0)
               rawPause (max basePause raSec)
               pause (match afterCall ((some left) (max 0 (min rawPause left))) ((none) rawPause))
-              raOutlastsBudget (match afterCall ((some left) (and (> raSec 0) (>= raSec left))) ((none) false))]
+              raOutlastsBudget (not (some? raPlan))]
           (if (and (< retries maxRetries) (and transient (and (budgetOpen afterCall) (not raOutlastsBudget))))
             (let [waited (if (> pause 0) (sleep pause) true)
                   left (match afterCall ((some n) (some (max 0 (- n pause)))) ((none) none))]
