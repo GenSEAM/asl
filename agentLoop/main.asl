@@ -865,7 +865,7 @@ fn unavailableSpecText reasons: (List String) -> String
   (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
 
-; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite doneNoWrite parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
 fn stopCause status: String signal: (Option String) error: (Option String) vacuous: (List String) -> String
   (match (nonEmpty signal)
     ((some s) s)
@@ -1126,6 +1126,16 @@ fn withCounts st: ls/LoopState counts: (Map String Int64) -> ls/LoopState
 
 fn repeatFailureCap -> Int64
   3
+
+; (:m :ref LEON-DONE-LOOP :do "a turn that sent only done, wrote nothing and left the run not terminal counts toward the doneNoWrite stop; the count lives in the placeholderBriefs map, a field nothing else reads, under one key")
+fn doneStreakKey -> String
+  "doneNoWrite"
+
+fn doneStreakOf st: ls/LoopState -> Int64
+  (optionOr (mapGet st.placeholderBriefs (doneStreakKey)) 0)
+
+fn withDoneStreak st: ls/LoopState n: Int64 -> ls/LoopState
+  (with st :placeholderBriefs (mapSet st.placeholderBriefs (doneStreakKey) n))
 
 fn failedReceipts? receipts: String -> Bool
   (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))
@@ -2011,6 +2021,11 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
                     (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
                   counts (if (> repeats 0) (mapSet (mapEmpty) repeatKey repeats) (mapEmpty))
+                  doneOnly (and done (and (not wrote) (and (not terminal) (listEmpty? (filter (fn [o] (!= (liveOpName o) "done")) operations)))))
+                  doneStreak (if doneOnly (+ 1 (doneStreakOf state)) 0)
+                  doneStop (and doneOnly (>= doneStreak (ctx/doneNoWriteTurnsFor! rootDir)))
+                  doneReason (str "the reply was only done " (stringFromInt64 doneStreak) " turns in a row with nothing written and the run not finished")
+                  _ (if doneStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :doneNoWrite :reason \"" doneReason "\")\n"))) true)
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
@@ -2021,12 +2036,15 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (wallHalt
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
+                    (doneStop
+                      (rl/withState nextRun0 (withDoneStreak (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "doneNoWrite") (some (str "(:escalate :reason \"" doneReason "\")")) state.runStarted) counts) doneStreak)))
                     (repeatStop
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
-                    (else (rl/withState nextRun0 (withCounts nextRun0.state counts))))]
+                    (else (rl/withState nextRun0 (withDoneStreak (withCounts nextRun0.state counts) doneStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal (or repeatStop wallHalt)) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt doneStop))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))

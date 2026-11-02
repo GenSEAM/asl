@@ -1087,3 +1087,7 @@
 (:doc :symbol "asl/agentLoop/tests/writeRejectTest.asl#runTests" :text "a write step whose file text follows the closed :raw step without a fence, or follows :raw as a quoted string, binds as its content; a fenced block still binds; a checker refusal carries the checker's syntaxMessage as its message")
 (:doc :symbol "asl/agentLoop/txn.asl#balanceFix" :text "the specific hint for an unbalanced write: the line where the unclosed form opens and the closer it expects, or the line and column of the closer with nothing to close, none for balanced text")
 (:doc :symbol "asl/agentLoop/tests/unbalancedHintTest.asl#runTests" :text "balanceFix names the opening line and expected closer of an unclosed form and the position of an extra closer, and the write receipt hint carries it instead of the generic advice")
+(:doc :symbol "asl/agentLoop/context.asl#doneNoWriteTurns" :text "default number of consecutive done-only turns with nothing written before a run stops with doneNoWrite, 2")
+(:doc :symbol "asl/agentLoop/context.asl#doneNoWriteTurnsIn" :text "the :doneNoWriteTurns row of the :agentLoop group of a config text, none when absent or not a positive integer")
+(:doc :symbol "asl/agentLoop/context.asl#doneNoWriteTurnsFor!" :text "the done-only stop threshold of a run root: its .asl.config.asn row, else 2")
+(:doc :symbol "asl/agentLoop/tests/doneNoWriteTest.asl#runTests" :text "a recorded run with a green gate and only done replies ends with the doneNoWrite signal within the configured turns, 2 by default, and the config row moves the threshold")
