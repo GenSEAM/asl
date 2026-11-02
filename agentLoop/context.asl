@@ -3,7 +3,7 @@
       Review reviewError reviewVerdict AdviceForm adviceOf AdvisorResult advisorSkipped advisorError advisorAdvice Cover coverOf
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
-      noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! readStreakNudgeLine noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
+      noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
       renderTranscriptBounded renderTranscriptKept contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
@@ -646,6 +646,21 @@ fn ! readStreakEscalateFor! root: String -> Int64
     (if (isFile! cfg)
       (optionOr (readStreakEscalateIn (resultOr (fileReadString cfg) "")) (readStreakEscalate))
       (readStreakEscalate)))
+
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "seconds a turn may wait in all for an all-down gateway (:allDownWaitSec, default 1200) and the pause between rounds when the reply carries no Retry-After (:allDownPauseSec, default 60), :agentLoop rows of the run root's .asl.config.asn")
+fn allDownWaitSecIn text: String -> (Option Int64)
+  (configInt text ":allDownWaitSec")
+
+fn allDownPauseSecIn text: String -> (Option Int64)
+  (configInt text ":allDownPauseSec")
+
+fn ! allDownWaitSecFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg) (optionOr (allDownWaitSecIn (resultOr (fileReadString cfg) "")) 1200) 1200))
+
+fn ! allDownPauseSecFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg) (optionOr (allDownPauseSecIn (resultOr (fileReadString cfg) "")) 60) 60))
 
 ; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02: no readStreak stop had a nudge before it, since only the deliver-patch nudge reached the live prompt; from the nudge threshold on, a red declared gate tells the model how many turns it has left before the stop")
 fn readStreakNudgeLine readStreak: Int64 redGate: Bool nudgeAt: Int64 escalateAt: Int64 -> String

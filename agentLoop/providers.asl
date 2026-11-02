@@ -1,5 +1,5 @@
 (module asl/agentLoop/providers
-  :x [retryAfterSec ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
+  :x [retryAfterSec withRetryAfter ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
       ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
@@ -1035,9 +1035,10 @@ fn headerValue lines: (List String) name: String -> String
     ((some l) (pyStrip (sub l (+ (optionOr (stringIndexOf l ":") 0) 1) (stringLength l))))
     (none ""))
 
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "a 502 all-down reply's Retry-After rides along too, so the waiting turn sleeps the gateway's earliest recovery")
 ; (:m :ref HUB-QUEUE-PACED :do "a 429's Retry-After header rides in the status reason as [retry-after=N] so the error text carries it to the caller; other statuses are untouched")
 fn withRetryAfter st: (Pair Int64 String) header: String -> (Pair Int64 String)
-  (if (and (or (= (pairFirst st) 429) (= (pairFirst st) 503)) (not (stringEmpty? header)))
+  (if (and (or (= (pairFirst st) 429) (or (= (pairFirst st) 502) (= (pairFirst st) 503))) (not (stringEmpty? header)))
     (pair (pairFirst st) (str (pairSecond st) " [retry-after=" header "]"))
     st)
 

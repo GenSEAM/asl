@@ -1,10 +1,12 @@
 (module asl/agentLoop/leonPool
   :x [Live Book leonOpen! leonTurn! leonExit leonRouted? leonViaHub? leonDrop]
   :i [(asl/agentLoop/main :a m) (asl/agentLoop/sessionPool :a sp) (asl/agentLoop/runLoop :a rl)
-      (asl/agentLoop/loopState :a ls) (asl/agentLoop/providers :a pv) (asl/agentLoop/retry :a rt)])
+      (asl/agentLoop/loopState :a ls) (asl/agentLoop/providers :a pv) (asl/agentLoop/retry :a rt)
+      (asl/agentLoop/context :a ctx)])
 
 ; (:m :ref SE3-POOL-DRIVER :do "one Leon run per session id, driven by sessionPool: the pool's turn function is leonTurn! over a book of live runs, so many runs share one process and none blocks while a model call is in flight. A turn ends at the hub post (askHub: the pool sends it and wakes the run with the raw reply) or at the end of the run (the receipt is the session's result); script, replay and CLI providers answer at once and the run goes on inside the same call. A run reads the same journal as liveTurn! gives, because setup, head, ask, apply and finish are the very functions the blocking path composes; what the pool path does not do yet is route, provider retry, and the parent watcher")
 (schema Live
+  (:f waited Int64)
   (:f sess m/LiveSession)
   (:f wrapped rl/ProviderRun)
   (:f ask (Option m/LiveAsk))
@@ -59,7 +61,7 @@ fn ! leonOpen! book: (List (Pair String Live)) id: String form: String repoRoot:
           ((m/prepared sess)
             (match (rl/loopOpen! sess.env sess.turnProvider sess.ra.parentPid)
               ((rl/openDone result) (pair book (some (m/liveResult sess result))))
-              ((rl/openRun wrapped) (pair (bookPut book id (Live :sess sess :wrapped wrapped :ask none :provider sess.turnProvider :exit -1 :retries 0 :left none :askedAt 0.0)) none))))))))
+              ((rl/openRun wrapped) (pair (bookPut book id (Live :waited 0 :sess sess :wrapped wrapped :ask none :provider sess.turnProvider :exit -1 :retries 0 :left none :askedAt 0.0)) none))))))))
 
 ; (:m :ref SE3-POOL-DRIVER :do "the pool's turn function: state is the session id; a reply of '' starts or continues the run, any other text is the raw hub response to the ask this run left outstanding (a 503 keeps the ask and waits)")
 fn ! leonTurn! book: (List (Pair String Live)) id: String raw: String -> (Pair (List (Pair String Live)) sp/Turn)
@@ -85,6 +87,7 @@ fn busyHoldSec live: Live t: pv/Turn -> Int64
 fn budgetOpen left: (Option Int64) -> Bool
   (match left ((some n) (> n 0)) ((none) true))
 
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "after the quick retries an all-down reply holds the ask for its Retry-After, else allDownPauseSec, while the waits of this turn stay inside allDownWaitSec and the pause fits the wall left, then asks again in the same session")
 ; (:m :ref HUB-RETRY-POOL :do "a hub 429 or 503 carrying Retry-After N holds the run at least N seconds (capped by the wall left) as the same Turn.holdMs the backoff uses, so the pool thread never sleeps for it")
 ; (:m :ref SE3F-POOL-PARITY :do "provider retry as retryTurn! decides it, from the same functions: a transient error is retried up to 3 times under the wall budget with the pause list 1 2 4; the retried call is issued at once and a hub request carries the pause as its hold, so the pool waits without blocking; a provider that answers in the call (script, replay, CLI) pauses after the retried call instead of before it, which changes timing only. The retry rows go to the journal before the apply, as liveTurn! writes them")
 fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk t: pv/Turn pause: Int64 -> (Pair (List (Pair String Live)) sp/Turn)
@@ -98,10 +101,19 @@ fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAs
               (transient (rt/errorTransient (pv/errorCode error) (pv/errorMessage error)))
               (backoff (rt/providerRetryPause transient (+ live.retries 1) (list 1 2 4) afterCall))
               (hinted (rt/hintedPause (pv/retryAfterSec (pv/errorMessage error)) afterCall))
-              (wait (max backoff (optionOr hinted 0)))]
-          (if (and (< live.retries 3) (and transient (and (budgetOpen afterCall) (some? hinted))))
-            (callAsk! book id live live.wrapped ask t.provider (+ live.retries 1) (match afterCall ((some n) (some (max 0 (- n wait)))) ((none) none)) wait)
-            (settled! book id live ask t))))))
+              (wait (max backoff (optionOr hinted 0)))
+              (hint (pv/retryAfterSec (pv/errorMessage error)))
+              (downPause (if (> hint 0) hint (ctx/allDownPauseSecFor! sess.rootDir)))
+              (downFits (and (rt/allDown? (pv/errorMessage error))
+                          (and (<= (+ live.waited downPause) (ctx/allDownWaitSecFor! sess.rootDir))
+                            (match afterCall ((some n) (< downPause n)) ((none) true)))))]
+          (cond
+            ((and (< live.retries 3) (and transient (and (budgetOpen afterCall) (some? hinted))))
+              (callAsk! book id live live.wrapped ask t.provider (+ live.retries 1) (match afterCall ((some n) (some (max 0 (- n wait)))) ((none) none)) wait))
+            (downFits
+              (callAsk! book id (with live :waited (+ live.waited downPause)) live.wrapped ask t.provider (+ live.retries 1)
+                (match afterCall ((some n) (some (max 0 (- n downPause)))) ((none) none)) downPause))
+            (else (settled! book id live ask t)))))))
 
 fn ! settled! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk t: pv/Turn -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(sess live.sess)
@@ -142,7 +154,7 @@ fn ! callAsk! book: (List (Pair String Live)) id: String live: Live headed: rl/P
   (let [(sess live.sess)
         (state headed.run.state)
         (wall (m/wallLeft sess.env.wallBudget (- (sess.env.now) state.runStarted)))
-        (next (with live :wrapped headed :ask (some ask) :provider prov :retries retries :left left :askedAt (sess.env.now)))]
+        (next (with live :wrapped headed :ask (some ask) :provider prov :retries retries :left left :askedAt (sess.env.now) :waited (if (= retries 0) 0 live.waited)))]
     (match (pv/nextTurnAsk! (m/attractorProvider prov ask.prefill wall) ask.sysA ask.user)
       ((pv/askDone t) (decide! book id next ask t pause))
       ((pv/askHub p call)

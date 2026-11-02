@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -1407,6 +1407,10 @@ fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/P
 fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
 
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "the live turn's retry: the quick retries, then waits on an all-down gateway inside the run root's allDownWaitSec and allDownPauseSec, so the same session resumes instead of the unit ending with :stop provider")
+fn ! liveProviderWait! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) rootDir: String -> (Pair pv/Turn Int64)
+  (rt/retryTurnWaiting! provider call 3 (list 1 2 4) wallBudget sleep now (ctx/allDownWaitSecFor! rootDir) (ctx/allDownPauseSecFor! rootDir))
+
 fn liveWriteStatus out: ex/ExecOut -> Bool
   (match (ex/recGet out.rec "status")
     ((some value) (match value ((ex/vStr status) (= status "ok")) (_ false)))
@@ -1805,12 +1809,12 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
         retried (match ra.route
           ((some rs) (routedCall! ra rs rootDir path turn run.session sysA user wrapped.provider
             (fn [text] (routeVerdict! text ra rootDir repoRoot path routeEnvFor run routeLeft))))
-          ((none) (liveProviderRetry! wrapped.provider
+          ((none) (liveProviderWait! wrapped.provider
           (fn [p attempt] (providerCall (attractorProvider p prefill (wallLeft env.wallBudget (- (env.now) state.runStarted))) sysA user))
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
-          env.sleep env.now)))
+          env.sleep env.now rootDir)))
         _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))]
     (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried)))
