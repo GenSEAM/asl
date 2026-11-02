@@ -898,19 +898,38 @@ fn checkOnce! overlay: String target: String rel: String text: String -> (Pair S
           (let [(lines (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
             (pair "error" (pyTrunc (optionOr (listHead lines) (str "native check exit " (stringFromInt64 h.code))) 300)))))))
 
+fn checkFast! base: String path: String text: String cache: cc/Cache -> (Pair (Pair String String) cc/Cache)
+  (let [(roots (list base (resultOr (realPath base) base)))
+        (rel (unroot path roots))
+        (r (cc/checkSourceCachedIn! (resultOr (realPath base) base) path text (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) cache))]
+    (match (pairFirst r)
+      ((err _) (pair (pair "error" (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports")) (pairSecond r)))
+      ((ok v)
+        (if (listEmpty? v.diags)
+          (pair (pair "ok" "") (pairSecond r))
+          (pair (pair "error" (pyTrunc (unroot (diagLine (optionOr (listHead v.diags) (ty/Diagnostic :code "" :message "" :msg "" :line 0 :col 0 :path rel))) roots) 300)) (pairSecond r))))))
+
 fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
-  (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))
-        (self (listAppend others (match (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
-    (match (buildOverlay! env self)
-      ((err e) (list "skipped" (str "native check did not run: " e) ""))
-      ((ok overlay)
-        (let [(rel (relOf env path))
-              (target (k/joinPath overlay (k/relPath path env.root)))
-              (mk (dirCreate (k/dirName target)))
-              (r1 (checkOnce! overlay target rel after))
-              (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (checkOnce! overlay target rel (optionOr before ""))) ""))
-              (gone (pathRemove overlay))]
-          (list (pairFirst r1) (pairSecond r1) pre)))))
+  (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))]
+    (if (listEmpty? others)
+      (let [(c0 (cc/stampedCache!))
+            (r1 (checkFast! env.root path after c0))
+            (res1 (pairFirst r1))
+            (pre (if (and (= (pairFirst res1) "error") (some? before))
+                   (pairFirst (pairFirst (checkFast! env.root path (optionOr before "") (pairSecond r1))))
+                   ""))]
+        (list (pairFirst res1) (pairSecond res1) pre))
+      (let [(self (listAppend others (match (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
+        (match (buildOverlay! env self)
+          ((err e) (list "skipped" (str "native check did not run: " e) ""))
+          ((ok overlay)
+            (let [(rel (relOf env path))
+                  (target (k/joinPath overlay (k/relPath path env.root)))
+                  (mk (dirCreate (k/dirName target)))
+                  (r1 (checkOnce! overlay target rel after))
+                  (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (checkOnce! overlay target rel (optionOr before ""))) ""))
+                  (gone (pathRemove overlay))]
+              (list (pairFirst r1) (pairSecond r1) pre)))))))
 
 fn validateStaged! env: GateEnv path: String before: (Option String) after: String force: Bool -> (List String)
   (let [(lang (syntaxLang! path after))]

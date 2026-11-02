@@ -494,8 +494,11 @@ fn chatReplyAsn respJson: j/Json -> String
                                       ((none) (list))))
                              (tPart (match (getPropLoop aslKvs "temperature")
                                       ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":temperature " (asnValue v)))))
+                                      ((none) (list))))
+                             (cPart (match (getPropLoop aslKvs "contextTokens")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":contextTokens " (asnValue v)))))
                                       ((none) (list))))]
-                         (listAppend aPart (listAppend ePart tPart))))
+                         (listAppend aPart (listAppend ePart (listAppend tPart cPart)))))
                       ((none) (list))))
         (partFinish (list (str ":finish \"" (asnEscape finishStr) "\"")))
         (usageOpt (chatReplyUsage respJson))

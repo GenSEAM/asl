@@ -29,13 +29,9 @@ fn attractorCards v: String lastGot: String lastDefect: Bool writesPersisted: Bo
       (if (stringContains? lastGot "ERR_USE_RAW")
         (list (pair "rawWrite" "(:attractor :raw :use \"write with :content :raw then a fenced block on the following lines; never quote multi-line code\")"))
         (list))
-      (listAppend
-        (if lastDefect
-          (list (pair "stepOnly" "(:attractor :stepOnly :use \"(:step only, no prose\")"))
-          (list))
-        (if (and (not writesPersisted) (>= turnsSoFar 3))
-          (list (pair "gateFirst" "(:attractor :gateFirst :use \"run the gate, read its failure, edit only that\")"))
-          (list))))
+      (if lastDefect
+        (list (pair "stepOnly" "(:attractor :stepOnly :use \"(:step only, no prose\")"))
+        (list)))
     (list))
 
 fn attractorTail cards: (List (Pair String String)) -> String

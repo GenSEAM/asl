@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl/agentLoop/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (asl/agentLoop/nativeTools :a nt)])
 
 enum ProviderError
@@ -45,7 +45,8 @@ enum ProviderError
   (:f defer Bool :default false)
   (:f hub (Option HubCall) :default none)
   ; (:m :ref TOOLS-400-FALLBACK :do "set once a route answered HTTP 400 to a request carrying tools: cfgTools then keeps the tool list empty for the rest of the session, so every later turn speaks the text protocol")
-  (:f noTools Bool :default false))
+  (:f noTools Bool :default false)
+  (:f excludeModel String :default ""))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -459,7 +460,7 @@ fn servedFields fields: (List (Pair String j/Json)) -> (Option (List (Pair Strin
                         ((some v) (match v ((j/jnull) false) ((j/jstr s) (not (stringEmpty? s))) (_ true)))
                         (none false))))
         (out (map (fn [k] (pair k (pyStr (optionOr (dictGet fields k) (j/jnull)))))
-                  (filter keep (list "alias" "model" "effort" "temperature"))))]
+                  (filter keep (list "alias" "model" "effort" "temperature" "contextTokens"))))]
     (if (or (some? (dictGet out "alias")) (some? (dictGet out "model"))) (some out) none))
 
 fn isSchemeByte b: Int64 -> Bool
@@ -1497,7 +1498,8 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
 ; (:m :ref LEON-ATTRIB-20261028 :do "every gateway call names its consumer (leon) and, once the first main turn has run, the turn number, so the gateway ledger row joins the session by X-ASL-Session; advisor and grader calls carry the turn of the last main turn, and a call made before any turn carries no turn header")
 fn attribHeaders cfg: VendorConfig -> (List (Pair String String))
   (listAppend (list (pair "X-ASL-Consumer" "leon"))
-    (if (> cfg.turn 0) (list (pair "X-ASL-Turn" (stringFromInt64 cfg.turn))) (list)))
+    (listAppend (if (> cfg.turn 0) (list (pair "X-ASL-Turn" (stringFromInt64 cfg.turn))) (list))
+      (if (stringEmpty? cfg.excludeModel) (list) (list (pair "X-ASL-Exclude-Model" cfg.excludeModel)))))
 
 fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
   (cond
@@ -1637,8 +1639,16 @@ fn capTimeouts p: Provider left: Int64 -> Provider
     ((vendorProvider cfg) (vendorProvider (capConfig cfg left)))
     (_ p))
 
-fn graderConfig cfg: VendorConfig intent: String profile: String -> VendorConfig
-  (with cfg :intent intent :model "" :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
+fn setExclude cfg: VendorConfig exclude: String -> VendorConfig
+  (with cfg :excludeModel exclude)
+
+fn withExclude p: Provider exclude: String -> Provider
+  (match p
+    ((vendorProvider cfg) (vendorProvider (setExclude cfg exclude)))
+    (_ p))
+
+fn graderConfig cfg: VendorConfig intent: String profile: String exclude: String -> VendorConfig
+  (with cfg :intent intent :model "" :excludeModel exclude :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
 
 fn noGraderChannel p: Provider -> Turn
   (Turn :provider p :reply
@@ -1659,7 +1669,7 @@ fn ! grade! p: Provider intent: String profile: String system: String text: Stri
             ((some message) (Turn :provider p :reply (err (providerError "ERR_VENDOR" message)) :meta (emptyMeta)))
             ((none) (noGraderChannel p))))))
     ((vendorProvider cfg)
-      (let [(r (callVendor! (graderConfig cfg intent profile) system text))]
+      (let [(r (callVendor! (graderConfig cfg intent profile cfg.excludeModel) system text))]
         (Turn :provider p :reply r.reply :meta r.meta)))
     (_ (noGraderChannel p)))
 

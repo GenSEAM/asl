@@ -1,6 +1,6 @@
 (module asl/agentLoop/turn
   :x [TurnReply turnReply vendorRetryPause cutRestored]
-  :i [(asl/agentLoop/reply :a r) (asl/agentLoop/core :a c) (asl/agentLoop/retry :a rt)])
+  :i [(asl/agentLoop/reply :a r) (asl/agentLoop/core :a c) (asl/agentLoop/retry :a rt) (asl/agentLoop/toolCalls :a tc)])
 
 (schema TurnReply
   (:f text String)
@@ -36,8 +36,18 @@ fn cutRestored cut: (Option r/CutInfo) parsedCut: (Option r/CutInfo) spans: (Opt
           ((none) false)))
       ((none) false)))
 
-fn turnReply reply: String declared: (Option (List String)) -> TurnReply
-  (let [deg (r/degenerateCut reply)
+fn dropThink text: String -> String
+  (match (stringIndexOf text "<think>")
+    ((none) text)
+    ((some a)
+      (let [rest (optionOr (stringSlice text (+ a 7) (stringLength text)) "")]
+        (match (stringIndexOf rest "</think>")
+          ((none) text)
+          ((some b) (dropThink (str (optionOr (stringSlice text 0 a) "") (optionOr (stringSlice rest (+ b 8) (stringLength rest)) ""))))))))
+
+fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
+  (let [reply (dropThink (pairFirst (tc/untagToolCalls reply0)))
+        deg (r/degenerateCut reply)
         cut (match deg ((some p) (pairFirst p)) ((none) (stringLength reply)))
         kept (optionOr (stringSlice reply 0 cut) "")
         capped (r/capReply kept)

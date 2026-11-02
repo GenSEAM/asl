@@ -535,9 +535,8 @@ fn renderResponse resp: ch/ChatResponse -> String
   (let [(head resp.head)
         (code (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (match h ((ch/headStatus n) n) ((ch/headField _ _) acc))) 200 head))
         (fields (fold (fn [(acc (List String)) (h ch/HeadItem)] -> (List String)
-                        (match h ((ch/headStatus _) acc) ((ch/headField n v) (listAppend acc (list (str n ": " v "\r\n")))))) (list) head))
-        (hasLength (listAny? (fn [(h ch/HeadItem)] -> Bool (match h ((ch/headField n _) (= (stringLower n) "content-length")) ((ch/headStatus _) false))) head))
-        (length (if hasLength "" (str "Content-Length: " (stringFromInt64 (stringLength resp.body)) "\r\n")))]
+                        (match h ((ch/headStatus _) acc) ((ch/headField n v) (if (= (stringLower n) "content-length") acc (listAppend acc (list (str n ": " v "\r\n"))))))) (list) head))
+        (length (str "Content-Length: " (stringFromInt64 (bytesLength (stringToBytes resp.body))) "\r\n"))]
     (str "HTTP/1.1 " (stringFromInt64 code) " " (reasonPhrase code) "\r\n" (stringJoin fields "") length "Connection: close\r\n\r\n" resp.body))
 
 fn errorResponse code: Int64 text: String -> String

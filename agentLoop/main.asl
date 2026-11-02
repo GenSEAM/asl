@@ -1187,9 +1187,35 @@ fn servedModel meta: pv/TurnMeta -> (Option String)
     ((some fields) (optionMap pairSecond (listHead (filter (fn [p] (= (pairFirst p) "model")) fields))))
     ((none) none))
 
+fn servedContextTokens meta: pv/TurnMeta backend: String -> (Option Int64)
+  (match meta.served
+    ((some fields)
+      (match (listHead (filter (fn [p] (= (pairFirst p) "contextTokens")) fields))
+        ((some p) (match (stringToInt64 (pairSecond p)) ((some n) (if (> n 0) (some n) none)) ((none) none)))
+        ((none)
+          (match (servedModel meta)
+            ((some m) (some (ctx/contextTokensFor (some m) (j/jnull) (listContains? (supportedBackends) backend))))
+            ((none) none)))))
+    ((none) none))
+
 ; (:m :ref LEON-CAPS :do "the grader call is its own gateway request for the configured intent and profile; its served model is journaled as (:graderServed ...) so the spec check can compare it with the writer's")
+fn writerModelFromJournal path: String -> String
+  (let [text (resultOr (fileReadString path) "")]
+    (fold (fn [acc line]
+            (if (stringStartsWith? line "(:served ")
+              (match (stringIndexOf line ":model \"")
+                ((none) acc)
+                ((some k)
+                  (let [rest (optionOr (stringSlice line (+ k 8) (stringLength line)) "")]
+                    (match (stringIndexOf rest "\"")
+                      ((some e) (optionOr (stringSlice rest 0 e) acc))
+                      ((none) acc)))))
+              acc))
+          "" (stringSplit text "\n")))
+
 fn ! liveGrader provider: pv/Provider intent: String profile: String path: String sys: String msg: String -> (Result (Option String) String)
-  (let [turn (pv/grade! provider intent profile sys msg)
+  (let [writer (writerModelFromJournal path)
+        turn (pv/grade! (pv/withExclude provider writer) intent profile sys msg)
         _ (match (servedModel turn.meta)
             ((some model) (ok? (fileAppend path (str "(:graderServed :model \"" (c/escapeAsn model) "\")\n"))))
             ((none) true))]
@@ -1369,11 +1395,11 @@ fn validPrefix? v: String -> Bool
 fn prefixDrop v: String -> (List String)
   (filter (fn [t] (not (= t "focus"))) (prefixList v))
 
-fn focusTail v: String task: String gates: (List String) persisted: Bool -> String
+fn focusTail v: String task: String gates: (List String) wroteSinceGate: Bool -> String
   (if (not (listContains? (prefixList v) "focus")) ""
     (str "\n\n(:focus :goal \"" (c/escapeAsn (if (> (stringLength task) 400) (optionOr (stringSlice task 0 400) task) task))
       "\" :gate \"" (c/escapeAsn (optionOr (listHead gates) "")) "\" :next "
-      (if persisted "(:step :op \"gate\")" "(:step :op \"read\"|\"edit\"|\"write\" ...)") ")"))
+      (if wroteSinceGate "(:step :op \"gate\")" "(:step :op \"read\"|\"edit\"|\"write\" ...)") ")"))
 
 fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/Provider
   (if (stringEmpty? prefill) (wallCappedProvider p left) (pv/withPrefill (wallCappedProvider p left) prefill))
@@ -1688,10 +1714,16 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
     (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
 
 ; (:m :ref LEON-ECHO-GUARD :do "every user turn ends with one imperative line naming the next required form, so a weak model that continues the prompt text has an instruction to follow")
-fn nextFormLine persisted: Bool -> String
-  (if persisted
-    "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done)."
-    "\n\nReply with ASN forms only; the next form is a (:step :op ...).")
+fn nextFormLine persisted: Bool wroteSinceGate: Bool hasGates: Bool -> String
+  (cond
+    ((and persisted wroteSinceGate)
+      "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done).")
+    ((and persisted hasGates)
+      "\n\nReply with ASN forms only; the last gate was red and nothing was written since -- write or edit an owned file before running the gate again.")
+    (persisted
+      "\n\nReply with ASN forms only; the next form is a (:step :op ...) or the (:done).")
+    (else
+      "\n\nReply with ASN forms only; the next form is a (:step :op ...)."))
 
 ; (:m :ref SE2-LIVETURN-SPLIT :do "what the first half of a turn hands the second: the system and user text and prefill the model call needs, the sent text the history records, the attractor card names the journal logs and whether the advisor hook was acceptable; liveTurn! composes liveAsk!, the blocking call and liveApply! so its behaviour is unchanged, and a pool runs the call between the two")
 (schema LiveAsk
@@ -1728,13 +1760,14 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
         cards (at/attractorCards ra.attractor (gr/lastGot wrapped.history) run.lastDefect state.writesPersisted turnsSoFar)
         tail (at/attractorTail cards)
         expects (gr/rejectHints (gr/lastGot wrapped.history) (ex/opShapes))
-        user (str tail "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+        user (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+          (if (stringEmpty? tail) "" (str "\n\n" (stringTrim tail)))
           (if (stringEmpty? expects) "" (str "\n\n" expects))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge
-          (focusTail ra.prefix ra.task ra.gates state.writesPersisted)
-          (nextFormLine state.writesPersisted))
+          (focusTail ra.prefix ra.task ra.gates state.wroteSinceGate)
+          (nextFormLine state.writesPersisted state.wroteSinceGate (not (listEmpty? ra.gates))))
         turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
@@ -1809,9 +1842,11 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   findingForms facts.dataFindings
                   priorFindings (map ctx/pyStr state.findingsList)
                   mergedFindingForms (fold (fn [acc form] (pairFirst (cl/mergeFindings form acc))) priorFindings findingForms)
+                  servedCtx (if state.explicitContext state.contextTokens
+                    (match (servedContextTokens response.meta ra.backend) ((some t) (some t)) ((none) state.contextTokens)))
                   effects (resultOr (tx/loadEffects! repoRoot) (list))
                   execEnv (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
-                    ra.gates effects "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
+                    ra.gates effects "" (list) (ctx/readPayloadChars (optionOr servedCtx 24000))
                     ra.timeout none run.session none)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
@@ -1896,7 +1931,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   hooksOk (and ask.advisorOk reviewOk)
                   status (if (or (not (pairFirst integrity)) (not hooksOk))
                     "failed" (if terminal "ok" "running"))
-                  nextState0 (rl/withHeadState executed.state turn state.readStreak writesPersisted
+                  wroteSinceGate (if (not (listEmpty? newGates)) false (or state.wroteSinceGate wrote))
+                  nextReadStreak (if wrote 0 (+ state.readStreak 1))
+                  nextStateBase (rl/withTurnContext executed.state servedCtx (ctx/readPayloadChars (optionOr servedCtx 24000)) wroteSinceGate)
+                  nextState0 (rl/withHeadState nextStateBase turn nextReadStreak writesPersisted
                     deliver allGates lastGates
                     status none none state.runStarted)
                   nextState1 (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)

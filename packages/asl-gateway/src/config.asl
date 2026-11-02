@@ -985,20 +985,22 @@ fn checkMaxTokens props: (Map String rd/SExpr) what: String cur: GatewayParams e
           (_ (pair cur (cons (str what ": :maxTokens must be a positive number") errs)))))))
 
 fn checkContextBudget props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
-  (match (mapGet props "contextBudget")
-    ((none) (pair cur errs))
-    ((some expr)
-      (let [(sc (asnFigure expr))]
-        (match sc
-          ((scalarInt n)
-            (if (> n 0)
-              (pair (with cur :contextBudget (some n)) errs)
-              (pair cur (cons (str what ": :contextBudget must be a positive number") errs))))
-          ((scalarFloat f)
-            (if (and (> f 0.0) (some? (float64ToInt64 f)))
-              (pair (with cur :contextBudget (float64ToInt64 f)) errs)
-              (pair cur (cons (str what ": :contextBudget must be a positive number") errs))))
-          (_ (pair cur (cons (str what ": :contextBudget must be a positive number") errs)))))))
+  (let [(key (if (mapHas? props "contextBudget") "contextBudget" "contextTokens"))
+        (found (match (mapGet props "contextBudget") ((some e) (some e)) ((none) (mapGet props "contextTokens"))))]
+    (match found
+      ((none) (pair cur errs))
+      ((some expr)
+        (let [(sc (asnFigure expr))]
+          (match sc
+            ((scalarInt n)
+              (if (> n 0)
+                (pair (with cur :contextBudget (some n)) errs)
+                (pair cur (cons (str what ": :" key " must be a positive number") errs))))
+            ((scalarFloat f)
+              (if (and (> f 0.0) (some? (float64ToInt64 f)))
+                (pair (with cur :contextBudget (float64ToInt64 f)) errs)
+                (pair cur (cons (str what ": :" key " must be a positive number") errs))))
+            (_ (pair cur (cons (str what ": :" key " must be a positive number") errs))))))))
 
 fn checkTimeoutSec props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "timeoutSec")

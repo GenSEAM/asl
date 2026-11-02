@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -110,6 +110,9 @@ fn stateFor env: s/LoopEnv -> s/LoopState
       :retries (j/jobj (list)) :runUnbackedClaims (list) :specChecksDone 0 :startTurn resumeTurn
       :taskLines "" :unparsable (j/jobj (list)) :vendorBounds (j/jobj (list))
       :window (j/jobj (list)) :writtenFiles (list)))
+fn withTurnContext state: s/LoopState contextTokens: (Option Int64) readCap: Int64 wroteSinceGate: Bool -> s/LoopState
+  (with state :contextTokens contextTokens :readCap readCap :wroteSinceGate wroteSinceGate)
+
 fn withHeadState state: s/LoopState turn: Int64 readStreak: Int64 writesPersisted: Bool deliver: (Option String) gates: (List g/GateResult) lastGates: (Map String j/Json) status: String signal: (Option String) escalate: (Option String) started: Float64 -> s/LoopState
   (s/LoopState
       :turn turn

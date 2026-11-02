@@ -77,7 +77,10 @@ fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Tu
       ((ok _) (pair turn retries))
       ((err error)
         (let [transient (errorTransient (pv/errorCode error) (pv/errorMessage error))
-              pause (providerRetryPause transient (+ retries 1) configured afterCall)]
+              basePause (providerRetryPause transient (+ retries 1) configured afterCall)
+              raSec (if transient (pv/retryAfterSec (pv/errorMessage error)) 0)
+              rawPause (max basePause raSec)
+              pause (match afterCall ((some left) (max 0 (min rawPause left))) ((none) rawPause))]
           (if (and (< retries maxRetries) (and transient (budgetOpen afterCall)))
             (let [waited (if (> pause 0) (sleep pause) true)
                   left (match afterCall ((some n) (some (max 0 (- n pause)))) ((none) none))]

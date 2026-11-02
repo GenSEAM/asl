@@ -426,7 +426,10 @@ fn charsPerToken -> Int64
 fn familyTokens -> (List (Pair String Int64))
   (list (pair "gemini" (/ 180000 3)) (pair "claude" 100000) (pair "opus" 100000) (pair "sonnet" 100000)
         (pair "haiku" 100000) (pair "gpt" 100000) (pair "codex" 100000) (pair "glm" 100000)
-        (pair "deepseek" 120000) (pair "minimax" 120000))
+        (pair "deepseek" 120000) (pair "minimax" 120000) (pair "kimi" 120000) (pair "moonshot" 120000)
+        (pair "mimo" 120000) (pair "qwen" 120000) (pair "nemotron" 120000) (pair "beam" 120000)
+        (pair "laguna" 120000) (pair "dots" 120000) (pair "north" 120000) (pair "ling" 120000)
+        (pair "step" 120000) (pair "longcat" 120000) (pair "horizon" 120000) (pair "glyph" 120000))
 
 fn contextTokensFor model: (Option String) contextTokens: j/Json split: Bool -> Int64
   (if (pyTruthy contextTokens)
@@ -738,9 +741,14 @@ fn neutralGot got: String turnLabel: String -> String
       ((stringStartsWith? clean "(") (str clean rest))
       (else (str "(:replyDropped :turn " turnLabel " :chars " (stringFromInt64 (stringLength reply)) ")" rest))))
 
+fn clipSent sent: String turnLabel: String -> String
+  (if (and (!= turnLabel "1") (> (stringLength sent) 160))
+    (str (sub sent 0 160) " ... [" (stringFromInt64 (- (stringLength sent) 160)) " bytes clipped]")
+    sent)
+
 fn turnWhole h: j/Json cap: Int64 -> String
   (let [turn (jgetStr h "turn")
-        sent (jgetStr h "sent")
+        sent (clipSent (jgetStr h "sent") turn)
         got (jgetStr h "got")]
     (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot (neutralGot got turn) turn cap)) "\")"))
 

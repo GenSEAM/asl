@@ -190,7 +190,8 @@
   (:f dropOnSwitch Bool)
   ; (:m :ref GW-MODES :do "the selected profile's mode (pin, route or judge) and judge rules, set by withProfile; route and the default rules before")
   (:f mode String)
-  (:f judge c/JudgeRules))
+  (:f judge c/JudgeRules)
+  (:f excludeModel String))
 
 (schema Loop
   (:f body j/Json)
@@ -727,7 +728,8 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
                                  :headerEff (u/headerGet hs "X-ASL-Effort") :envEff (mapGet world.env "ASL_EFFORT")
                                  :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60
-                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault)))]
+                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault)
+                                 :excludeModel (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Exclude-Model") ""))))]
                     (match world.table
                       ((err e) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG")
                                   (sendError cx (list) 503 e true)
@@ -886,8 +888,22 @@ fn switchedBody cx: Ctx alias: String body: j/Json -> j/Json
   (if (and cx.dropOnSwitch (and (not (stringEmpty? cx.stuck)) (!= alias cx.stuck))) (dropReasoning body) body)
 
 ; (:m :ref GW-MODES :do "a pin profile tries the first member of its route and nothing after it, so no reroute, spread or fallback profile ever replaces the named model")
+fn entryMatchesExclude? entry: c/GatewayResolvedEntry ex: String -> Bool
+  (if (stringEmpty? ex)
+    false
+    (match entry
+      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (= e.dispatch ex))))
+      ((c/entryUnresolved a) (= a ex))))
+
+fn filterExcluded cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (if (stringEmpty? cx.excludeModel)
+    models
+    (let [(kept (filter (fn [(m c/GatewayResolvedEntry)] -> Bool (not (entryMatchesExclude? m cx.excludeModel))) models))]
+      (if (listEmpty? kept) models kept)))
+
 fn pinModels cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
-  (if (= cx.mode "pin") (listTake models 1) models)
+  (let [(filtered (filterExcluded cx models))]
+    (if (= cx.mode "pin") (listTake filtered 1) filtered))
 
 fn finishReason resp: j/Json -> String
   (match (getOr resp "choices" (j/jnull))
@@ -901,10 +917,10 @@ fn judgeFailure cx: Ctx p: Projection raw: String -> String
   (if (!= cx.mode "judge")
     ""
     (let [(r cx.judge)
-          (msg (match (pt/jsonLoads raw) ((ok parsed) (firstMessage parsed)) ((err _) (firstMessage p.resp))))
+          (msg (firstMessage p.resp))
           (text (match p.content ((j/jstr s) s) (_ "")))]
       (cond
-        ((and r.empty (and (emptyContent? (getOr msg "content" (j/jnull))) (not (toolCalls? msg)))) "empty")
+        ((and r.empty (and (emptyContent? p.content) (not (toolCalls? msg)))) "empty")
         ((and r.truncated (= (finishReason p.resp) "length")) "truncated")
         ((and (listContains? r.stepIntents (stringLower cx.intent))
               (not (listAny? (fn [(h String)] -> Bool (stringContains? text h)) r.stepHeads))) "noStepForm")
@@ -1816,7 +1832,7 @@ fn project body: String -> (Option Projection)
               (let [(msg (getOr c "message" (j/jobj (list))))]
                 (if (isObj? msg)
                   (let [(raw (getOr msg "content" (j/jnull)))]
-                    (if (and (emptyContent? raw) (not (toolCalls? msg)))
+                    (if (and (emptyContent? raw) (and (not (toolCalls? msg)) (!= (finishReason resp) "length")))
                       (match (reasoningFallbackText msg)
                         ((none) (some (Projection :resp resp :content raw)))
                         ((some fb)
@@ -1862,8 +1878,13 @@ fn servedBy a: Attempt body: j/Json -> (List (Pair String j/Json))
         (withEffort (match a.sentEffort
                       ((some e) (match e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
                       ((none) base)))
-        (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))]
-    (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))
+        (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))
+        (withTemp (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))]
+    (match a.v2
+      ((some e) (match e.params.contextBudget
+                  ((some n) (listAppend withTemp (list (pair "contextTokens" (j/jint n)))))
+                  ((none) withTemp)))
+      ((none) withTemp)))
 
 fn mergeAsl resp: j/Json served: (List (Pair String j/Json)) -> j/Json
   (let [(existing (match (getOr resp "asl" (j/jnull)) ((j/jobj kvs) kvs) (_ (list))))]
@@ -2084,12 +2105,11 @@ fn answered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String
 fn passthrough cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) respBody: String rec: (Option String) -> ChatStep
   (let [(head (listAppend l.head
                           (cons (headStatus status)
-                                (listAppend (fields (dropHeaders headers (list "transfer-encoding" "content-encoding" "content-length")))
+                                (listAppend (fields (dropHeaders headers (list "transfer-encoding" "content-encoding" "content-length" "connection")))
                                             (list (headField "Content-Length" (stringFromInt64 (bytesLength (stringToBytes respBody)))))))))]
     (if l.telBound
       (done (listAppend head (listAppend (fields (telemetryHeader rec)) (list (headField "X-ASL-Wire" "asn,json")))) respBody)
-      (let [(lh (with l :telBound false :head head))]
-        (raised cx lh a false "cannot access local variable 'tel_rec' where it is not associated with a value"))))
+      (raised cx (with (with l :head head) :telBound false) a false "cannot access local variable 'tel_rec' where it is not associated with a value")))
 
 fn gatewayOriginHeader -> String
   "X-ASL-Origin"

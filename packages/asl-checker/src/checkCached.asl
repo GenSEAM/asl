@@ -1,5 +1,5 @@
 (module asl-checker/checkCached
-  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn!]
+  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn! checkSourceCachedIn!]
   :i [(types :a ty) (resolve :a r) (ast :a a) (check :a chk)])
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "bodies maps the real path of each module whose body this process checked to its diagnostics, so a sweep checks a shared dependency once and every later importer counts it as summarised")
@@ -121,6 +121,19 @@ fn ! checkFileCached! path: String roots: (List String) cache: Cache -> (Pair (R
   (checkFileCachedIn! (resultOr (realPath ".") ".") path roots cache)
 
 ; (:m :ref RELAY-FORMS-SLOW :do "base is the tree stampKeyIn! labels the closure's deps from; a check of a byte-identical copy (asl-forms' staged overlay) passes the copy's root, so its deps match the workspace stamp instead of being labelled by their absolute copy paths and re-checked")
+fn ! checkSourceCachedIn! base: String path: String src: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
+  (match (a/parseForTypeCheck src)
+    ((err pe) (pair (ok (Verdict :diags (parseErrDiag pe path) :checked 1 :summarised 0)) cache))
+    ((ok forms)
+      (let [(summary (r/collectSummary forms path))
+            (importPaths (r/mapValuesList summary.imports))
+            (allRoots (cons (r/parentDirOf path) roots))
+            (cl (r/loadModuleDepsFrom! allRoots importPaths (mapEmpty) cache.index))
+            (nextCache (with cache :index cl.index))]
+        (match (classify cl)
+          ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))
+          ((ok deps) (closureVerdict! base path src forms allRoots cl deps cache))))))
+
 fn ! checkFileCachedIn! base: String path: String roots: (List String) cache: Cache -> (Pair (Result Verdict String) Cache)
   (match (fileReadString path)
     ((err ioErr) (pair (err ioErr) cache))
