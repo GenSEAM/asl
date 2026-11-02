@@ -52,6 +52,10 @@ fn errorTransient code: String message: String -> Bool
 fn errorClass code: String message: String -> String
   (if (errorTransient code message) "transient" "permanent")
 
+; (:m :ref D7-FIX :do "upper bound in seconds on a server Retry-After pause; adopted 300, a larger hint is clipped")
+fn retryAfterCapSec -> Int64
+  300
+
 fn providerRetryPause transient: Bool retryCount: Int64 configured: (List Int64) budgetLeft: (Option Int64) -> Int64
   (let [slot (min retryCount (listLength configured))
         pause (if (and transient (> slot 0)) (optionOr (listGet configured (- slot 1)) 0) 0)]
@@ -78,10 +82,11 @@ fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Tu
       ((err error)
         (let [transient (errorTransient (pv/errorCode error) (pv/errorMessage error))
               basePause (providerRetryPause transient (+ retries 1) configured afterCall)
-              raSec (if transient (pv/retryAfterSec (pv/errorMessage error)) 0)
+              raSec (min (retryAfterCapSec) (if transient (pv/retryAfterSec (pv/errorMessage error)) 0))
               rawPause (max basePause raSec)
-              pause (match afterCall ((some left) (max 0 (min rawPause left))) ((none) rawPause))]
-          (if (and (< retries maxRetries) (and transient (budgetOpen afterCall)))
+              pause (match afterCall ((some left) (max 0 (min rawPause left))) ((none) rawPause))
+              raOutlastsBudget (match afterCall ((some left) (and (> raSec 0) (>= raSec left))) ((none) false))]
+          (if (and (< retries maxRetries) (and transient (and (budgetOpen afterCall) (not raOutlastsBudget))))
             (let [waited (if (> pause 0) (sleep pause) true)
                   left (match afterCall ((some n) (some (max 0 (- n pause)))) ((none) none))]
               (if waited
