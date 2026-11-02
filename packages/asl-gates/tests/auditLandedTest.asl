@@ -14,8 +14,11 @@ fn ledgerText -> String
        "(:grade :ev \"X5\" :sha \"r5\" :verdict pass :by \"google\" :at \"2026-11-02T02:00:00Z\")\n")
 
 ; (:m :ref LANDED-AUDIT :do "fake ancestry: a candidate is covered by a row sha only when the pair is listed")
-fn covers cand: String row: String -> Bool
+fn covers cand: String row: String base: String -> Bool
   (listContains? (list "c1>r1" "c8>r1" "c2>r2" "p9>r5" "src>r5") (str cand ">" row))
+
+fn realMessage -> String
+  "(:c :a coord :do \"W1b-FIX: gradeLand! rebuilds the ledger from the committed HEAD version plus its one row, never the worktree file; a writer commit touching .asl/mem/grades.asn (anything but the conductor grade commit) fails the write result and a review pass as LEDGER_FORGED; audit landed covers a commit only by sha (a pass row whose reviewed head is that commit or a descendant, or a source named by cherry-pick -x), so a later reuse of a passed id is ungraded; evIds reads :ev from the commit message parsed as an ASN form; wip commits on main are findings; servedField reads the final receipt row (last (: line with :usage) parsed as a form\" :g \"auditLandedTest 46, conductorTest 314, conductorWireTest 110, worktreeTest 119, gradeTest 32, auditGatesTest 50, manifestGateTest 20, docLedgerTest 68, noSelfHostTest 18 exit 0; red before: worktree-file ledger read, ledger guard removed, first-row receipt read and covers-always-true each fail their assert; check exit 0\" :ev (W1b-FIX))"
 
 fn ! testPure -> Bool
   (let [(cs (list (commit "c1" 1 "(:c :a x :do \"d\" :g \"g\" :ev (X1 Z9))" (list "a.asl"))
@@ -38,7 +41,11 @@ fn ! testPure -> Bool
         (assert (= (al/evIds "no evidence here") (list)) "no :ev, no ids")
         (assert (= (al/evIds "(:c :a x :do \"note :ev (FAKE) in text\" :ev (REAL))") (list "REAL")) (str "an :ev inside a string never counts: " (stringJoin (al/evIds "(:c :a x :do \"note :ev (FAKE) in text\" :ev (REAL))") ",")))
         (assert (= (al/evIds "(:c :a x :do \"note :ev (FAKE) in text\")") (list)) "and without a real :ev there are none")
-        (assert (= (al/evIds "(:c :a x :do \"d\" :ev (X1)") (list)) "a message that is not one form has no ids")
+        (assert (= (al/evIds "(:c :a x :do \"d\" :ev (X1)") (list "X1")) "an unterminated form still reads its own :ev through the tolerant scan")
+        (assert (= (al/evIds (realMessage)) (list "W1b-FIX")) "the real message of 3bea93623, which the ASN reader refuses, yields its :ev")
+        (assert (= (al/evIds "(:c :a x :do \"fake :ev (EVIL) here\" :ev (Wb-FIX))") (list "Wb-FIX")) "a refused symbol still never reads an :ev inside a string")
+        (assert (= (al/evIds "(:c :a x :do \"fake :ev (EVIL) here\" :g y)") (list)) "and without its own :ev there is none")
+        (assert (= (al/stripStrings "a \"b \\\" c\" d") "a   d") "strings with escapes are dropped")
         (assert (= (al/fromShas "(:c :a x)\n\n(cherry picked from commit abc123)") (list "abc123")) "cherry-pick -x sources")
         (assert (= (al/headSince (ledgerText)) "abc") "the head row names the checkpoint")
         (assert (= (al/headSince "") "") "no head row, no checkpoint")
@@ -61,7 +68,7 @@ fn ! testPure -> Bool
         (assert (= (al/isoOfMs 951782400000) "2000-02-29T00:00:00Z") "a leap day")
         (assert (= (al/isoOfMs 1793577600000) "2026-11-02T00:00:00Z") "today")
         (assert (= (al/isoOfMs 1793577600000) (al/isoOfMs 1793577600999)) "milliseconds are dropped")
-        (assert (= (al/gradeRow "U1" "abc" "pass" "google" "2026-11-02T00:00:00Z") "(:grade :ev \"U1\" :sha \"abc\" :verdict pass :by \"google\" :at \"2026-11-02T00:00:00Z\")") "row text")
+        (assert (= (al/gradeRow "U1" "abc" "" "pass" "google" "2026-11-02T00:00:00Z") "(:grade :ev \"U1\" :sha \"abc\" :verdict pass :by \"google\" :at \"2026-11-02T00:00:00Z\")") "row text")
         true))
 
 fn ! parseTest -> Bool
@@ -95,12 +102,12 @@ fn ! gitTest -> Bool
         (_ (dirCreate (str root "/.asl/mem")))
         (okA (step root "a.txt" "2\n" "(:c :a x :do \"first\" :g g :ev (X1))"))
         (shaA (revOf root))
-        (okL (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X1" shaA "pass" "google" "2026-11-02T00:00:00Z") "\n") "(:c :a grade :do \"g\" :g review :ev (X1))"))
+        (okL (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X1" shaA "" "pass" "google" "2026-11-02T00:00:00Z") "\n") "(:c :a grade :do \"g\" :g review :ev (X1))"))
         (okB (step root "a.txt" "3\n" "(:c :a x :do \"second\" :g g :ev (X2))"))
         (shaB (revOf root))
         (red (al/cmdLanded! root (list)))
         (redSince (al/cmdLanded! root (list "--since" base)))
-        (okR (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X1" shaA "pass" "google" "2026-11-02T00:00:00Z") "\n" (al/gradeRow "X2" shaB "pass" "anthropic" "2026-11-02T00:01:00Z") "\n") "(:c :a grade :do \"g\" :g review :ev (X2))"))
+        (okR (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X1" shaA "" "pass" "google" "2026-11-02T00:00:00Z") "\n" (al/gradeRow "X2" shaB "" "pass" "anthropic" "2026-11-02T00:01:00Z") "\n") "(:c :a grade :do \"g\" :g review :ev (X2))"))
         (green (al/cmdLanded! root (list)))
         (okC (step root "a.txt" "4\n" "(:c :a x :do \"reuse of a passed id\" :g g :ev (X1))"))
         (reuse (al/cmdLanded! root (list)))
@@ -120,8 +127,33 @@ fn ! gitTest -> Bool
         (assert (and okN (= none.exitCode 1) (stringContains? none.receipt "ERR_NO_CHECKPOINT")) "no checkpoint is a failure, never a guess")
         true))
 
+fn ! baseTest -> Bool
+  (let [(root (str (resultOr (realPath ".") ".") "/.asl/cache/auditLandedBase-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove root))
+        (_ (dirCreate root))
+        (ok0 (and (ok? (gf/initContained! root)) (step root "a.txt" "1\n" "base")))
+        (base (revOf root))
+        (_ (dirCreate (str root "/.asl")))
+        (_ (dirCreate (str root "/.asl/mem")))
+        (okO (step root "a.txt" "2\n" "(:c :a x :do \"old main commit\" :g g :ev (X7))"))
+        (shaOld (revOf root))
+        (okK (step root "a.txt" "3\n" "(:c :a x :do \"reviewed branch commit\" :g g :ev (X7))"))
+        (shaK (revOf root))
+        (okL (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X7" shaK shaOld "pass" "google" "2026-11-02T00:00:00Z") "\n") "(:c :a grade :do \"g\" :g review :ev (X7))"))
+        (withBase (al/cmdLanded! root (list)))
+        (okR (step root ".asl/mem/grades.asn" (str "(:gradesHead :since \"" base "\")\n" (al/gradeRow "X7" shaK "" "pass" "google" "2026-11-02T00:00:00Z") "\n") "(:c :a grade :do \"g2\" :g review :ev (X7))"))
+        (noBase (al/cmdLanded! root (list)))
+        (_ (pathRemove root))]
+    (do (assert (and ok0 (and okO (and okK (and okL okR)))) "base fixture history built")
+        (assert (and (= withBase.exitCode 1) (stringContains? withBase.receipt (str "ungraded-" (optionOr (stringSlice shaOld 0 9) shaOld)))) (str "an older commit citing the id, below the row's base, is not covered: " withBase.receipt))
+        (assert (not (stringContains? withBase.receipt (str "ungraded-" (optionOr (stringSlice shaK 0 9) shaK)))) "the reviewed branch commit itself is covered")
+        (assert (= noBase.exitCode 0) (str "an old row without :base covers by ancestry as before: " noBase.receipt))
+        (assert (= (al/gradeRow "U1" "abc" "b0" "pass" "google" "t") "(:grade :ev \"U1\" :sha \"abc\" :base \"b0\" :verdict pass :by \"google\" :at \"t\")") "the row records its base")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testPure) "pure rules")
       (assert (parseTest) "log parsing")
       (assert (gitTest) "git fixture")
+      (assert (baseTest) "base fixture")
       true)

@@ -16,7 +16,7 @@ fn ledgerText owns2: String -> String
        "(:u :id I9 :auto true :do \"gains owns\" " owns2 " :gate \"true\")\n")
 
 fn ! scratchStore name: String -> String
-  (str (resultOr (realPath ".") ".") "/.asl/cache/planImportTest-" name)
+  (str (resultOr (realPath ".") ".") "/.asl/cache/planImportTest-" (stringFromInt64 (procSelf)) "-" name)
 
 fn ! ids store: String -> (List String)
   (match (st/readUnits! store) ((ok us) (listSort (map (fn [(u st/Task)] -> String u.id) us))) ((err _) (list)))

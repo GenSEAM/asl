@@ -1,5 +1,5 @@
 (module asl-tools/coord/worktree
-  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! isWorktreeOf! secretUntracked! wipCommitAt! wipCommit! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
+  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! isWorktreeOf! secretUntracked! outsideUntracked! wipCommitOwned! wipCommitAt! wipCommit! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/egress :a eg)])
 
 (schema Cfg
@@ -157,15 +157,29 @@ fn ! secretUntracked! path: String -> (List String)
   (let [(u (git! path (list "ls-files" "-o" "--exclude-standard")))]
     (filter (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (eg/secretPath? f))) (map stringTrim (stringLines u.out))))
 
-; (:m :ref COORD-WIP-RESCUE :do "a unit whose writer stopped without landing keeps its edits: a dirty worktree at path (non-ignored paths) is committed as one wip commit on its own branch, ASN message naming the unit and the stop reason, and a detached head is then given a rescue branch; untracked files the egress filter flags as secret by path are left uncommitted; returns the new short sha, or empty when there was nothing to commit; a path that is not a worktree of the repo (or is its own checkout) is an error and nothing is touched; never discards, never touches ignored build output")
+; (:m :ref WIP-OUTSIDE-OWNS :do "untracked, non-ignored files at path outside the unit's :owns (git pathspecs, globs included) and not already counted as secret; empty owns means every path is owned; a wip commit leaves them where they are")
+fn ! outsideUntracked! path: String owns: (List String) -> (List String)
+  (if (listEmpty? owns) (list)
+    (let [(all (git! path (list "ls-files" "-o" "--exclude-standard")))
+          (inside (git! path (listAppend (list "ls-files" "-o" "--exclude-standard" "--") owns)))
+          (in (map stringTrim (stringLines inside.out)))]
+      (if (or (!= all.exit 0) (!= inside.exit 0)) (list)
+        (filter (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (and (not (listContains? in f)) (not (eg/secretPath? f))))) (map stringTrim (stringLines all.out))))))
+
+; (:m :ref COORD-WIP-RESCUE :do "a unit whose writer stopped without landing keeps its edits: a dirty worktree at path (non-ignored paths) is committed as one wip commit on its own branch, ASN message naming the unit and the stop reason, and a detached head is then given a rescue branch; untracked files the egress filter flags as secret by path and the grades ledger .asl/mem/grades.asn (only the conductor commits that) are left uncommitted; returns the new short sha, or empty when there was nothing to commit; a path that is not a worktree of the repo (or is its own checkout) is an error and nothing is touched; never discards, never touches ignored build output")
 fn ! wipCommitAt! cfg: Cfg unit: String path: String reason: String -> (Result String String)
+  (wipCommitOwned! cfg unit path reason (list))
+
+; (:m :ref WIP-OUTSIDE-OWNS :do "wipCommitAt! with the unit's :owns: tracked changes are committed wherever they are, untracked files are committed only inside :owns and the others stay in the tree; empty owns commits every untracked file")
+fn ! wipCommitOwned! cfg: Cfg unit: String path: String reason: String owns: (List String) -> (Result String String)
   (if (not (isWorktreeOf! cfg path)) (err (str "not a worktree of the repo: " path))
     (let [(counts (statusCounts! path))
           (br (git! path (list "symbolic-ref" "-q" "--short" "HEAD")))]
       (if (= (pairFirst counts) 0) (ok "")
-        (let [(left (secretUntracked! path))
+        (let [(left (listAppend (secretUntracked! path) (outsideUntracked! path owns)))
               (a (git! path (list "add" "-A")))
               (_ (if (listEmpty? left) () (let [(_ (git! path (listAppend (list "reset" "-q" "--") left)))] ())))
+              (_ (git! path (list "reset" "-q" "--" ".asl/mem/grades.asn")))
               (nothing (= (git! path (list "diff" "--cached" "--quiet")).exit 0))
               (msg (str "(:c :a wip :do " (q (str "unit " unit " stopped: " reason)) " :g none :ev (" unit "))"))
               (c (if (!= a.exit 0) a

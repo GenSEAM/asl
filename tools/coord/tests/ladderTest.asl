@@ -168,6 +168,8 @@ fn testBlocked -> Bool
         (assert (stringContains? row ":disagree") "the escalate row names the disagreement")
         (assert (and (stringContains? row "orNemotronUltraFree pass") (stringContains? row "ocLongcat fail")) "the disagreement names both reviewers' verdicts")
         (assert (stringContains? row ":seen") "the escalate row names what was seen")
+        (assert (and (stringContains? row " :need tiebreak :usedModels (") (stringContains? row "ocLongcat")) (str "a split at the last rung asks for a tiebreak and names the models used: " row))
+        (assert (stringContains? r.why "tiebreak: reviewers split at the last rung (pass 1 fail 1)") (str "the blocked reason says so: " r.why))
         (assert (and (stringContains? row ":to queue ") (not (stringContains? row ":to claude")) (stringContains? row ":tiers (claude)")) (str "the escalation goes to the queue with Claude as the last tier once the strong lane has been asked: " row))
         true))
 
