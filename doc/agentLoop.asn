@@ -1092,3 +1092,4 @@
 (:doc :symbol "asl/agentLoop/context.asl#doneNoWriteTurnsFor!" :text "the done-only stop threshold of a run root: its .asl.config.asn row, else 2")
 (:doc :symbol "asl/agentLoop/tests/doneNoWriteTest.asl#runTests" :text "a recorded run with a green gate and only done replies ends with the doneNoWrite signal within the configured turns, 2 by default, and the config row moves the threshold")
 (:doc :symbol "asl/agentLoop/tests/leonPoolAllDownTest.asl#runTests" :text "the pool's all-down branch: spent quick retries and a 502 no model answered hold the ask allDownPauseSec as holdMs with waited advanced and the ask repeated; with waited at allDownWaitSec the ask settles")
+(:doc :symbol "asl/agentLoop/tests/malformedReplyTest.asl#runTests" :text "a recorded run of broken tool-call wrapper replies gets the expected step shape after the first and ends with the malformedReply signal at the second")

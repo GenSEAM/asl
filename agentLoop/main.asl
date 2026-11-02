@@ -865,7 +865,7 @@ fn unavailableSpecText reasons: (List String) -> String
   (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
 
-; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite doneNoWrite parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite doneNoWrite malformedReply parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
 fn stopCause status: String signal: (Option String) error: (Option String) vacuous: (List String) -> String
   (match (nonEmpty signal)
     ((some s) s)
@@ -1130,6 +1130,22 @@ fn repeatFailureCap -> Int64
 ; (:m :ref LEON-DONE-LOOP :do "a turn that sent only done, wrote nothing and left the run not terminal counts toward the doneNoWrite stop; the count lives in the placeholderBriefs map, a field nothing else reads, under one key")
 fn doneStreakKey -> String
   "doneNoWrite"
+
+; (:m :ref LEON-MALFORMED-TOOLTEXT :do "node2 stalls.asn, 8 rows: a model sent a broken tool-call wrapper such as <:step<</arg_value>>>> that holds no parseable step; the first such reply is answered with the expected shape, the second in a row ends the run with stop cause malformedReply, counted in the placeholderBriefs map under one key")
+fn brokenWrapper? text: String -> Bool
+  (or (stringContains? text "<:step") (or (stringContains? text "arg_value>") (or (stringContains? text "<arg_key") (or (stringContains? text "tool_call>") (stringContains? text "<step")))))
+
+fn malformedKey -> String
+  "malformedReply"
+
+fn malformedHint -> String
+  "(:malformed :error ERR_NO_STEP :message \"no (:step ...) in that reply; the tool wrapper is not part of the protocol\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
+
+fn malformedStreakOf st: ls/LoopState -> Int64
+  (optionOr (mapGet st.placeholderBriefs (malformedKey)) 0)
+
+fn withMalformedStreak st: ls/LoopState n: Int64 -> ls/LoopState
+  (with st :placeholderBriefs (mapSet st.placeholderBriefs (malformedKey) n))
 
 fn doneStreakOf st: ls/LoopState -> Int64
   (optionOr (mapGet st.placeholderBriefs (doneStreakKey)) 0)
@@ -1918,6 +1934,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     ra.timeout none run.session none)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
+                  malformedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw)))
+                  malformedStreak (if malformedNow (+ 1 (malformedStreakOf state)) 0)
+                  malformedStop (and malformedNow (>= malformedStreak 2))
                   gateMin (wallSetting (ac/configText! rootDir) ":wallGateMinSec" (defaultWallGateMinSec))
                   gateOpStop (and (not (listEmpty? ra.gates))
                     (and (listAny? (fn [o] (= (liveOpName o) "gate")) operations)
@@ -1940,7 +1959,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   wrote (pairSecond (pairSecond execResult))
                   ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
                   poolAsks (po/servePending! ra.pool)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)))
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) ""))
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
@@ -2026,6 +2045,8 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   doneStop (and doneOnly (>= doneStreak (ctx/doneNoWriteTurnsFor! rootDir)))
                   doneReason (str "the reply was only done " (stringFromInt64 doneStreak) " turns in a row with nothing written and the run not finished")
                   _ (if doneStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :doneNoWrite :reason \"" doneReason "\")\n"))) true)
+                  malformedReason (str "the reply held no parseable step " (stringFromInt64 malformedStreak) " times in a row, only a broken tool-call wrapper")
+                  _ (if malformedStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :malformedReply :alias \"" (c/escapeAsn (optionOr (servedAlias response.meta) "")) "\" :reason \"" malformedReason "\")\n"))) true)
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
@@ -2036,15 +2057,18 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (wallHalt
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
+                    (malformedStop
+                      (rl/withState nextRun0 (withMalformedStreak (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "malformedReply") (some (str "(:escalate :reason \"" malformedReason "\")")) state.runStarted) counts) malformedStreak)))
                     (doneStop
                       (rl/withState nextRun0 (withDoneStreak (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "doneNoWrite") (some (str "(:escalate :reason \"" doneReason "\")")) state.runStarted) counts) doneStreak)))
                     (repeatStop
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
-                    (else (rl/withState nextRun0 (withDoneStreak (withCounts nextRun0.state counts) doneStreak))))]
+                    (else (rl/withState nextRun0 (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal (or repeatStop (or wallHalt doneStop))) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt (or doneStop malformedStop)))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
