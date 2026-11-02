@@ -72,6 +72,9 @@ fn testSelect -> Bool
         (match (l/selectOne rs "ccKimi31Pro" "strong" (pool))
           ((l/pickOk ls) (assert false "R3 must not pick the writer's own family"))
           ((l/pickAwait a w) (assert (= a "strong") "R3 waits on the strong tier when its only lane is the writer family")))
+        (match (l/selectFree rs "mimoMimoV26Pro+olGptOss120b+ccInclusionaiLing31Flash" (pool))
+          ((l/pickOk ls) (assert (= (listLength ls) 2) "R1 picks two non-overlapping reviewers when writer used a multi-family profile"))
+          ((l/pickAwait a w) (assert false "multi-family writer profile must not stall on writerFamily")))
         true))
 
 fn testVerdicts -> Bool

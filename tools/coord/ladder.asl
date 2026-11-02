@@ -161,11 +161,11 @@ fn coverageProblems rows: (List rd/SExpr) aliases: (List String) unknown: (List 
 fn laneFamily rows: (List rd/SExpr) lane: Lane -> String
   (familyIn rows lane.alias)
 
-fn eligible rows: (List rd/SExpr) wfam: String tier: String lane: Lane -> Bool
+fn eligible rows: (List rd/SExpr) wfams: (List String) tier: String lane: Lane -> Bool
   (and (= lane.tier tier)
        (and (> lane.allowance 0)
             (let [(f (laneFamily rows lane))]
-              (and (not (stringEmpty? f)) (!= f wfam)))))
+              (and (not (stringEmpty? f)) (not (listContains? wfams f))))))
 
 ; (:m :ref COND2 :do "the lane a rung waits for: first lane of the tier that is out of allowance and would be eligible, else the tier name")
 fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
@@ -178,35 +178,37 @@ fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
 fn rankLanes lanes: (List Lane) -> (List Lane)
   (fold (fn [(acc (List Lane)) (l Lane)] -> (List Lane) (insertRanked l acc)) (list) lanes)
 
-fn waitLane rows: (List rd/SExpr) wfam: String tier: String skipFamily: String lanes: (List Lane) -> String
+fn waitLane rows: (List rd/SExpr) wfams: (List String) tier: String skipFamily: String lanes: (List Lane) -> String
   (match (listHead (filter (fn [(l Lane)] -> Bool
                              (let [(f (laneFamily rows l))]
-                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (!= f wfam) (!= f skipFamily))))))
+                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
                            lanes))
     ((some l) l.alias)
     ((none) tier))
 
 fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List Lane) -> Pick
-  (let [(wfam (familyIn rows writerAlias))]
+  (let [(wfams (familiesIn rows writerAlias))
+        (wfam (stringJoin wfams "+"))]
     (cond
-      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
-        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam tier l)) lanes)))
+        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams tier l)) lanes)))
           ((some l) (pickOk (list l)))
-          ((none) (pickAwait (waitLane rows wfam tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
+          ((none) (pickAwait (waitLane rows wfams tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
 
 fn selectFree rows: (List rd/SExpr) writerAlias: String lanes: (List Lane) -> Pick
-  (let [(wfam (familyIn rows writerAlias))
-        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam "free" l)) lanes)))]
+  (let [(wfams (familiesIn rows writerAlias))
+        (wfam (stringJoin wfams "+"))
+        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams "free" l)) lanes)))]
     (cond
-      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
         (match (listHead els)
-          ((none) (pickAwait (waitLane rows wfam "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
+          ((none) (pickAwait (waitLane rows wfams "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
           ((some a)
             (let [(af (laneFamily rows a))]
               (match (listHead (filter (fn [(l Lane)] -> Bool (!= (laneFamily rows l) af)) els))
-                ((none) (pickAwait (waitLane rows wfam "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
+                ((none) (pickAwait (waitLane rows wfams "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
                 ((some b) (pickOk (list a b))))))))))
 
 fn dropFence s: String -> String
