@@ -1,6 +1,6 @@
 (module asl-tools/coord/ladder
   :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
-  :i [(asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+  :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
 
@@ -294,8 +294,11 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
       (last (stepBlocked "reviewers split at the last rung"))
       (else (stepEscalate))))
 
-; (:m :ref SECRET-SCRUB :do "only the identifiers tokenize and tokensOf are blanked before the match; any other line naming a token, secret or bearer stays out of the brief")
+; (:m :ref SECRET-SCRUB :do "the review brief is stricter than egress, never weaker: any egress hit, plus the bare words below; only the identifiers tokenize and tokensOf are blanked before that match")
 fn secretLike? l: String -> Bool
+  (or (eg/secretLike? l) (strictHit? l))
+
+fn strictHit? l: String -> Bool
   (let [(s (stringReplace (stringReplace (stringLower l) "tokeniz" "") "tokensof" ""))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
               (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "\"sk-" " sk-" "=sk-" ":sk-" "sk-or-" "sk-ant-" "sk-proj-" "aizasy" "github_pat_" "ghp_" "xoxb-" "xoxp-" "xoxa-" "passwd" "private key" "authorization:")))
@@ -309,9 +312,7 @@ fn clip s: String n: Int64 -> String
 
 ; (:m :ref COND2 :do "lines that may go to an external model: no memory contents, no secret-looking lines, bounded count and width")
 fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
-  (listTake (map (fn [(l String)] -> String (clip l width))
-                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (secretLike? l)))) (stringLines text)))
-            maxLines)
+  (eg/scrubLinesBy (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
 
 fn reviewBrief u: ReviewUnit diff: String gates: String -> String
   (str "(:review :unit " (fm/asnQuote u.id) " :risk " u.risk

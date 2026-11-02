@@ -1,5 +1,5 @@
 (module asl-tools/coord/egress
-  :x [secretLike? memLike? secretPath? leaks? leaksWith? envLeak? clip scrubLines scrubText allowedPath? minEnvValueLength]
+  :x [secretLike? memLike? secretPath? leaks? leaksWith? envLeak? clip unarmored scrubLinesBy scrubLines scrubText allowedPath? minEnvValueLength]
   :i [])
 
 ; (:m :ref FLOW-EGRESS :do "the one filter for text that may reach an external model: no memory content, no secret-looking text, no env values, no key files; pure, env values come in as data")
@@ -60,10 +60,25 @@ fn leaksWith? values: (List String) text: String -> Bool
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)
 
-fn scrubLines values: (List String) text: String maxLines: Int64 width: Int64 -> (List String)
+; (:m :ref SECRET-PEM-BODY :do "an armored block, a -----BEGIN line through its -----END line, is dropped whole because its base64 body lines carry no keyword; an unterminated block drops every line after its start")
+fn unarmored text: String -> (List String)
+  (listReverse
+    (pairSecond
+      (fold (fn [(acc (Pair Bool (List String))) (l String)] -> (Pair Bool (List String))
+              (let [(s (stringLower l))]
+                (cond
+                  ((stringContains? s "-----begin") (pair true (pairSecond acc)))
+                  ((pairFirst acc) (pair (not (stringContains? s "-----end")) (pairSecond acc)))
+                  (else (pair false (cons l (pairSecond acc)))))))
+            (pair false (list)) (stringLines text))))
+
+fn scrubLinesBy leak: (fn [String] -> Bool) text: String maxLines: Int64 width: Int64 -> (List String)
   (listTake (map (fn [(l String)] -> String (clip l width))
-                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (leaksWith? values l)))) (stringLines text)))
+                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (leak l)))) (unarmored text)))
             maxLines)
+
+fn scrubLines values: (List String) text: String maxLines: Int64 width: Int64 -> (List String)
+  (scrubLinesBy (fn [(l String)] -> Bool (leaksWith? values l)) text maxLines width)
 
 fn scrubText values: (List String) text: String maxLines: Int64 width: Int64 -> String
   (stringJoin (scrubLines values text maxLines width) "\n")
