@@ -1299,6 +1299,7 @@
 (:doc :symbol "asl/tools/coord/ladder.asl#gatesProven" :text "true when the receipt has a redBefore row and every gate row exited 0 with executed assertions above 0")
 (:doc :symbol "asl/tools/coord/ladder.asl#decide" :text "tallies verdicts at a rung into merge, fix, escalate or blocked, requiring proven gates before a merge and one fix round at most")
 (:doc :symbol "asl/tools/coord/ladder.asl#scrubLines" :text "drops blank lines and secret-looking lines, clips to width and keeps at most maxLines")
+(:doc :symbol "asl/tools/coord/ladder.asl#reviewWriter" :text "the writer alias a review excludes: the unit's model, else the configured fallback; an unknown writer stays unknown so selection waits on writerFamily")
 (:doc :symbol "asl/tools/coord/ladder.asl#reviewBrief" :text "the (:review ...) prompt for a unit with scrubbed task, diff and gates and the one-form reply instruction")
 (:doc :symbol "asl/tools/coord/ladder.asl#reviewWith" :text "runs the ladder with a given family table from the start rung and returns a Ruling, or an error for an empty table, bad risk or bad startRung")
 (:doc :symbol "asl/tools/coord/conductor.asl#realCfg" :text "builds a RealCfg from CLI options: repo, dev-repo, dev, worktrees, archive, home, keys, lanes, writer-alias and profile, with defaults derived from the repo and store")
