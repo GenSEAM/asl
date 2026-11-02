@@ -899,7 +899,7 @@ fn filterExcluded cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/Gatew
   (if (stringEmpty? cx.excludeModel)
     models
     (let [(kept (filter (fn [(m c/GatewayResolvedEntry)] -> Bool (not (entryMatchesExclude? m cx.excludeModel))) models))]
-      (if (listEmpty? kept) models kept)))
+      kept))
 
 fn pinModels cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
   (let [(filtered (filterExcluded cx models))]
@@ -967,7 +967,9 @@ fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String mod
                                        (or (some? (present (u/headerGet hs "X-ASL-Execution-Timeout")))
                                            (or (listContains? keys "timeout") (listContains? keys "execution_timeout")))))
                   (cx2 (with cx :world world :reqKeys keys :headerEff hEff :envEff eEff :tempExplicit tempExplicit :timeoutExplicit timeoutExplicit :baseBody final :cascadeLen (listLength (pinModels cx models))))]
-              (startLoop cx2 final (pinModels cx models)))))))))
+              (if (and (not (listEmpty? models)) (listEmpty? (pinModels cx models)))
+                (sendError cx (list) 400 (str "(:err :code excludedAll :model " (asnQuoteModel cx.excludeModel) ")") true)
+                (startLoop cx2 final (pinModels cx models))))))))))
 
 
 fn advance l: Loop body: j/Json -> Loop

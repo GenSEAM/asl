@@ -16,8 +16,8 @@ fn configText dir: String profileExtra: String -> String
   (str "(:gateway :v 2 :ledgerPath \"" dir "/calls.asn\" :sharedUsagePath \"" dir "/shared.asn\""
        " :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))"
        " :models ((:model :id m1 :provider test :name \"model-1\") (:model :id m2 :provider test :name \"model-2\"))"
-       " :intents ((:intent :id code))"
-       " :profiles ((:profile :id default " profileExtra " :routes ((:intent any :chain (m1 m2)))))"
+       " :intents ((:intent :id code) (:intent :id solo))"
+       " :profiles ((:profile :id default " profileExtra " :routes ((:intent solo :chain (m1)) (:intent any :chain (m1 m2)))))"
        " :uses ((:use :for default :profile default)))")
 
 fn testEnv -> (Map String String)
@@ -31,8 +31,8 @@ fn okReply model: String content: String finish: String reasoning: String -> Str
        (if (stringEmpty? reasoning) "" (str ",\"reasoning_content\":\"" (jesc reasoning) "\""))
        "},\"finish_reason\":\"" finish "\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}")
 
-fn request intent: String -> ch/ChatRequest
-  (ch/ChatRequest :path "/v1/chat/completions" :headers (list (pair "X-ASL-Intent" intent))
+fn request intent: String excl: String -> ch/ChatRequest
+  (ch/ChatRequest :path "/v1/chat/completions" :headers (if (stringEmpty? excl) (list (pair "X-ASL-Intent" intent)) (list (pair "X-ASL-Intent" intent) (pair "X-ASL-Exclude-Model" excl)))
                   :body "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":10}")
 
 fn statusOf head: (List ch/HeadItem) -> Int64
@@ -67,6 +67,9 @@ fn ! drop! dir: String -> Bool
 
 ; (:m :do "one request through a fresh scratch gateway whose default profile carries extra; the HOME is removed before the result returns")
 fn ! once! tag: String extra: String intent: String stub: (fn [String] -> (Pair Int64 String)) -> Run
+  (onceExcl! tag extra intent "" stub)
+
+fn ! onceExcl! tag: String extra: String intent: String excl: String stub: (fn [String] -> (Pair Int64 String)) -> Run
   (let [(dir (home! tag extra))
         (run (match (srv/linkOpen! (mapSet (testEnv) "HOME" dir) dir dir (list))
                ((err e) (Run :models (list) :status 0 :end (str "linkOpen: " e)))
@@ -76,7 +79,7 @@ fn ! once! tag: String extra: String intent: String stub: (fn [String] -> (Pair 
                   ((ok settings)
                    (let [(world (ch/ChatWorld :env (testEnv) :rootDir "/" :settings settings :agyPromptMaxBytes 10000
                                               :table (c/gatewayProfilesLoadText! "/test" true (ok (configText dir extra)) "")))]
-                     (drive! loop (ch/chatStart! (request intent) world) stub (list) 200)))))))
+                     (drive! loop (ch/chatStart! (request intent excl) world) stub (list) 200)))))))
         (_ (drop! dir))]
     run)
 
@@ -149,8 +152,24 @@ fn ! testCheck -> Bool
         (assert (stringContains? (pairFirst items) ":judge :stepIntents must be a list") (str "a bare step intent is an error: " (pairFirst items)))
         true))
 
+; (:m :ref D7-FIX :do "X-ASL-Exclude-Model drops matching members; a cascade whose every member matches answers 400 excludedAll and asks no model, so the grader cannot be the writer; a mixed cascade keeps the other member")
+fn ! testExclude -> Bool
+  (let [(good (fn [(m String)] -> (Pair Int64 String) (pair 200 (okReply m "(:step ok)" "stop" ""))))
+        (mixed (onceExcl! "exMixed" "" "any" "m1" good))
+        (solo (onceExcl! "exSolo" ":mode pin" "any" "m1" good))
+        (all (onceExcl! "exAll" "" "solo" "m1" good))
+        (soloOk (onceExcl! "exSoloOk" "" "solo" "" good))
+        (none (onceExcl! "exNone" "" "any" "" good))]
+    (do (assert (= mixed.models (list "model-2")) (str "a mixed cascade keeps the non-matching member, got " (stringJoin mixed.models " ")))
+        (assert (= none.models (list "model-1")) "no exclude asks the first member")
+        (assert (= solo.models (list "model-2")) (str "pin skips the excluded first member, got " (stringJoin solo.models " ")))
+        (assert (and (= all.status 400) (= all.end "done") (listEmpty? all.models)) (str "every member excluded answers 400 and asks no model, got " (stringFromInt64 all.status) " " (stringJoin all.models " ")))
+        (assert (and (= soloOk.status 200) (= soloOk.models (list "model-1"))) "the solo route works when nothing is excluded")
+        true))
+
 fn ! runTests -> Bool
   (let [(p (testPin))
         (j (testJudge))
-        (k (testCheck))]
-    (and p (and j k)))
+        (k (testCheck))
+        (e (testExclude))]
+    (and p (and j (and k e))))
