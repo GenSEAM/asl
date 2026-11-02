@@ -1084,3 +1084,4 @@
 (:doc :symbol "asl/agentLoop/providers.asl#withRetryAfter" :text "the status reason of a 429, 502 or 503 with its Retry-After header appended as [retry-after=N]")
 (:doc :symbol "asl/agentLoop/runLoop.asl#withTurnContext" :text "updates the loop state's contextTokens, readCap and wroteSinceGate after a turn")
 (:doc :symbol "asl/agentLoop/runLoop.asl#redGateOf" :text "true when the latest result of any declared gate is red")
+(:doc :symbol "asl/agentLoop/tests/writeRejectTest.asl#runTests" :text "a write step whose file text follows the closed :raw step without a fence, or follows :raw as a quoted string, binds as its content; a fenced block still binds; a checker refusal carries the checker's syntaxMessage as its message")

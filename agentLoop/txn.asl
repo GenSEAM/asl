@@ -195,6 +195,15 @@ fn messageAt s: String n: Int64 p: Int64 -> (Option String)
 fn messageIn s: String -> (Option String)
   (messageAt s (stringLength s) 0)
 
+fn syntaxMessageAt s: String n: Int64 p: Int64 -> (Option String)
+  (cond
+    ((>= p n) none)
+    ((litAt s p ":syntaxMessage")
+      (let [r (runEnd s n (+ p 14) isSpace)
+            e (if (and (> r (+ p 14)) (and (< r n) (= (ch s r) "\""))) (quotedEnd s n (+ r 1)) -1)]
+        (if (>= e 0) (some (c/sliceOf s (+ r 1) e)) (syntaxMessageAt s n (+ p 1)))))
+    (else (syntaxMessageAt s n (+ p 1))))
+
 fn digitsAfter s: String n: Int64 p: Int64 lit: String -> String
   (cond
     ((>= p n) "")
@@ -227,8 +236,11 @@ fn txnRefusal stdout: String stderr: String fallback: String content: (Option St
       (match (messageIn stdout)
         ((some m) (pair err m))
         (none
-          (let [t (cpSuffix (pyStrip stderr) 300)]
-            (pair err (if (!= t "") t (str fallback ": " (cpSuffix (pyStrip stdout) 300)))))))))
+          (match (syntaxMessageAt stdout n 0)
+            ((some sm) (pair err sm))
+            (none
+              (let [t (cpSuffix (pyStrip stderr) 300)]
+                (pair err (if (!= t "") t (str fallback ": " (cpSuffix (pyStrip stdout) 300)))))))))))
 
 fn plural k: Int64 -> String
   (if (> k 1) "s" "")
