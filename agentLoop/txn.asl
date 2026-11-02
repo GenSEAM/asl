@@ -1,6 +1,6 @@
 (module asl/agentLoop/txn
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
-      execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid txnRefusal abortAid! abortAidOn applySteps stepsOf
+      execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid balanceFix txnRefusal abortAid! abortAidOn applySteps stepsOf
       intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
       langForPath tryRepairText! orderSubs moduleHints moduleOf importsOf expectedModule txnSubs]
   :i [(asl/agentLoop/core :a c)
@@ -315,6 +315,26 @@ fn balanceAid text: String -> (Option String)
       ((balStop m) (some m))
       ((balGo inStr stack start head)
         (if (listEmpty? stack) none (some (neverClosed stack "" start head))))))
+
+fn closerOf c: String -> String
+  (cond ((= c "(") ")") ((= c "[") "]") (else "}"))
+
+fn numAfter m: String lit: String -> String
+  (digitsAfter m (stringLength m) 0 lit)
+
+; (:m :ref LEON-UNBALANCED-HINT :do "node2 2026-11-01, 35 refusals for unbalanced delimiters repeated one generic hint every turn; the fix names the line where the unclosed form opens and the closer it expects, or the line and column of the closer that has nothing to close")
+fn balanceFix text: String -> (Option String)
+  (match (balanceAid text)
+    ((none) none)
+    ((some m)
+      (match (stringIndexOf m " opens a ")
+        ((some i)
+          (let [o (c/sliceOf m (+ i 9) (+ i 10))]
+            (some (str "the " o " opened at line " (numAfter m "line ") " is never closed: add the expected " (closerOf o) " at the end of that form, before the next top-level form"))))
+        (none
+          (let [start (numAfter m "starts at line ")]
+            (some (str "line " (numAfter m "line ") " column " (numAfter m "column ") " has a closer with nothing open to close; delete it"
+                    (if (= start "") "" (str " (the form starting at line " start " is already complete there)")))))))))
 
 fn endLen line: String -> Int64
   (let [n (stringLength line)

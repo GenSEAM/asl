@@ -1085,3 +1085,5 @@
 (:doc :symbol "asl/agentLoop/runLoop.asl#withTurnContext" :text "updates the loop state's contextTokens, readCap and wroteSinceGate after a turn")
 (:doc :symbol "asl/agentLoop/runLoop.asl#redGateOf" :text "true when the latest result of any declared gate is red")
 (:doc :symbol "asl/agentLoop/tests/writeRejectTest.asl#runTests" :text "a write step whose file text follows the closed :raw step without a fence, or follows :raw as a quoted string, binds as its content; a fenced block still binds; a checker refusal carries the checker's syntaxMessage as its message")
+(:doc :symbol "asl/agentLoop/txn.asl#balanceFix" :text "the specific hint for an unbalanced write: the line where the unclosed form opens and the closer it expects, or the line and column of the closer with nothing to close, none for balanced text")
+(:doc :symbol "asl/agentLoop/tests/unbalancedHintTest.asl#runTests" :text "balanceFix names the opening line and expected closer of an unclosed form and the position of an extra closer, and the write receipt hint carries it instead of the generic advice")
