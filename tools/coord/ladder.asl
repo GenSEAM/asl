@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
   :i [(asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -294,10 +294,15 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
       (last (stepBlocked "reviewers split at the last rung"))
       (else (stepEscalate))))
 
+; (:m :ref SECRET-SCRUB :do "only the identifiers tokenize and tokensOf are blanked before the match; any other line naming a token, secret or bearer stays out of the brief")
 fn secretLike? l: String -> Bool
-  (let [(s (stringLower l))]
+  (let [(s (stringReplace (stringReplace (stringLower l) "tokeniz" "") "tokensof" ""))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
-              (list ".asl/mem" "secret=" "_secret" "token=" "_token" "token:" "password" "apikey" "api_key" "api-key" "_key" "bearer " "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
+              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
+
+; (:m :ref WRITER-UNKNOWN :do "the writer a review excludes: the unit's model, else the configured writer alias; an unknown writer stays unknown so selection waits instead of guessing a family")
+fn reviewWriter model: String fallback: String -> String
+  (if (or (stringEmpty? model) (= model "unknown")) fallback model)
 
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)

@@ -1359,8 +1359,7 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
         (diff (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))))
         (riskRaw (stringTrim (readOr (str dir "/tasks/" u.id ".risk"))))
         (risk (if (stringEmpty? riskRaw) "low" riskRaw))
-        (writer0 (if (or (stringEmpty? c.model) (= c.model "unknown")) rc.writerAlias c.model))
-        (writer (if (or (stringEmpty? writer0) (= writer0 "unknown")) (if (= c.lane "free") "mimoPro" "ocDeepseekPro") writer0))
+        (writer (l/reviewWriter c.model rc.writerAlias))
         (ru (l/ReviewUnit :id u.id :task (taskText dir u) :risk risk :closureChanged false :writerAlias writer :writerChannel u.channel
                           :startRung (offeredRung! dir u.id) :fixesUsed c.fails :prior (list)))
         (call (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText)))]
