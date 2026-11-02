@@ -1738,8 +1738,11 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
   (let [run wrapped.run
         state run.state
         turn state.turn
-        transcript (ctx/renderTranscriptBounded wrapped.history (ctx/contextKeepTurnsFor! rootDir) (ctx/contextToolCapBytesFor! rootDir) (ctx/contextMaxOlderLinesFor! rootDir)
-          (ctx/contextLatestCapBytes (optionOr state.contextTokens 24000)))
+        keepTurns (ctx/contextKeepTurnsFor! rootDir)
+        toolCap (ctx/contextToolCapBytesFor! rootDir)
+        windowTokens (optionOr state.contextTokens 24000)
+        transcript (ctx/renderTranscriptKept wrapped.history keepTurns toolCap (ctx/contextMaxOlderLinesFor! rootDir)
+          (ctx/contextKeptCapBytes windowTokens keepTurns toolCap) (ctx/contextLatestCapBytes windowTokens))
         advisorInvoked (= (optionOr ra.intent "") "reinforce")
         advisorResult (if advisorInvoked
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))
@@ -1766,6 +1769,8 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge
+          (ctx/readStreakNudgeLine state.readStreak (rl/redGateOf env.gates state.lastGates)
+            (ctx/readStreakNudgeFor! rootDir) (ctx/readStreakEscalateFor! rootDir))
           (focusTail ra.prefix ra.task ra.gates state.wroteSinceGate)
           (nextFormLine state.writesPersisted state.wroteSinceGate (not (listEmpty? ra.gates))))
         turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))

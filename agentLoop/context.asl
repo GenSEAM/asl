@@ -3,8 +3,8 @@
       Review reviewError reviewVerdict AdviceForm adviceOf AdvisorResult advisorSkipped advisorError advisorAdvice Cover coverOf
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
-      noWriteNudge noWriteNudgeTurns readStreakEscalate noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! readStreakNudgeLine noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
+      renderTranscriptBounded renderTranscriptKept contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -628,6 +628,32 @@ fn readStreakNudge -> Int64
 fn readStreakEscalate -> Int64
   12
 
+; (:m :ref READSTREAK-TUNE :do "the read-streak nudge and stop thresholds are :agentLoop (:readStreakNudge N :readStreakEscalate N) rows of the run root's .asl.config.asn, read like parseDefectEscalate; the literals above are the defaults")
+fn readStreakNudgeIn text: String -> (Option Int64)
+  (configInt text ":readStreakNudge")
+
+fn readStreakEscalateIn text: String -> (Option Int64)
+  (configInt text ":readStreakEscalate")
+
+fn ! readStreakNudgeFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (readStreakNudgeIn (resultOr (fileReadString cfg) "")) (readStreakNudge))
+      (readStreakNudge)))
+
+fn ! readStreakEscalateFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (readStreakEscalateIn (resultOr (fileReadString cfg) "")) (readStreakEscalate))
+      (readStreakEscalate)))
+
+; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02: no readStreak stop had a nudge before it, since only the deliver-patch nudge reached the live prompt; from the nudge threshold on, a red declared gate tells the model how many turns it has left before the stop")
+fn readStreakNudgeLine readStreak: Int64 redGate: Bool nudgeAt: Int64 escalateAt: Int64 -> String
+  (if (and redGate (>= readStreak nudgeAt))
+    (str "\n\n" (stringFromInt64 readStreak) " turns without a write while a declared gate is red; the run stops at "
+      (stringFromInt64 escalateAt) ". What you read is in the transcript above: write the fix now, or escalate naming what is missing.")
+    "")
+
 fn noWriteNudgeTurns -> Int64
   10
 
@@ -765,7 +791,16 @@ fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
 fn contextLatestCapBytes contextTokens: Int64 -> Int64
   (* 2 (readPayloadChars contextTokens))
 
+; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02, 22 readStreak stops: runs re-read the same file and range up to 79 times while input stayed at 10-20k of a 120k window, because every kept turn but the newest was clipped to toolCapBytes (1500) and single-op turns kept only one read whole; a kept turn now keeps up to half the window shared over the most kept turns (keepTurns plus compaction step minus 1), never below toolCapBytes nor above the newest-turn cap, a fixed value per run so the rendered prefix stays byte-stable")
+fn contextKeptCapBytes contextTokens: Int64 keepTurns: Int64 toolCapBytes: Int64 -> Int64
+  (let [slots (max 1 (+ keepTurns (- (contextCompactStep) 1)))
+        share (/ (/ (* contextTokens (charsPerToken)) 2) slots)]
+    (max toolCapBytes (min (contextLatestCapBytes contextTokens) share)))
+
 fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 latestCapBytes: Int64 -> String
+  (renderTranscriptKept history keepTurns toolCapBytes maxOlderLines toolCapBytes latestCapBytes)
+
+fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)
     ""
     (let [n (listLength history)
@@ -776,7 +811,7 @@ fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes:
           kept (optionOr (listSlice history cutAt (- n 1)) (list))
           latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))
           summaryLines (map turnReceiptLine survivors)
-          keptLines (map (fn [h] (turnWhole h toolCapBytes)) kept)
+          keptLines (map (fn [h] (turnWhole h (max toolCapBytes keptCapBytes))) kept)
           latestLines (map (fn [h] (turnWhole h (max toolCapBytes latestCapBytes))) latest)]
       (c/joinSep (listAppend summaryLines (listAppend keptLines latestLines)) "\n")))
 

@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -561,7 +561,7 @@ fn headDecision! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> String
   (let [runTurns (max 0 (- state.turn state.startTurn))
         elapsed (- (env.now) state.runStarted)
         noWriteTurnLimit (min (* (int64ToFloat64 env.budget) 0.5) (int64ToFloat64 (ctx/noWriteTurns)))]
-    (lp/loopBoundary (redGateOf env.gates state.lastGates) state.readStreak (ctx/readStreakEscalate)
+    (lp/loopBoundary (redGateOf env.gates state.lastGates) state.readStreak (ctx/readStreakEscalateFor! env.rootDir)
       (optionOr state.deliver "") state.writesPersisted (int64ToFloat64 runTurns) noWriteTurnLimit
       (optionOr env.wallBudget 0) elapsed 0.5 (+ state.turn 1) env.budget parseDefects (ctx/parseDefectEscalateFor! env.rootDir)
       (usageIntOf state.usageTotals "inputTokens") env.inputTokenBudget))
