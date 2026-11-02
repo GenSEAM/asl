@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [kwPrev? plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -313,6 +313,9 @@ fn headAt s: String i: Int64 -> String
       w))
 
 ; (:m :ref FORMS-PINNED-CLI :do "a :word counts as a keyword after a blank, an open or close paren or a closing quote; rows (HEAD, KEYWORD) of the top-level forms of one argv element, KEYWORD empty for the head row itself: every :word that starts a token outside a string counts, nested form heads too, only the head right after a top-level open paren is the head; none for text outside a form or unbalanced delimiters")
+fn kwPrev? prev: String -> Bool
+  (or (blank? prev) (listContains? (list "(" ")" "[" "]" "{" "}" "\"") prev))
+
 fn scanForms s: String i: Int64 n: Int64 depth: Int64 inStr: Bool esc: Bool cur: String acc: (List (Pair String String)) -> (Option (List (Pair String String)))
   (if (>= i n)
     (if (and (= depth 0) (not inStr)) (some acc) (none))
@@ -326,7 +329,7 @@ fn scanForms s: String i: Int64 n: Int64 depth: Int64 inStr: Bool esc: Bool cur:
         ((= c ")") (if (= depth 0) (none) (scanForms s (+ i 1) n (- depth 1) false false cur acc)))
         ((= c "\"") (if (= depth 0) (none) (scanForms s (+ i 1) n depth true false cur acc)))
         ((blank? c) (scanForms s (+ i 1) n depth false false cur acc))
-        ((and (= c ":") (and (> depth 0) (or (blank? prev) (or (= prev "(") (or (= prev ")") (= prev "\""))))))
+        ((and (= c ":") (and (> depth 0) (kwPrev? prev)))
           (scanForms s (+ i 1) n depth false false cur (if (and (= depth 1) (= prev "(")) acc (cons (pair cur (wordAt s i)) acc))))
         (else (if (= depth 0) (none) (scanForms s (+ i 1) n depth false false cur acc))))))
 

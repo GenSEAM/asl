@@ -429,3 +429,4 @@
 (:doc :symbol "asl/packages/asl-cli/src/release.asl#valueAfter" :text "the unquoted atom that follows KEY in a list of config items; empty when KEY or its value is absent")
 (:doc :symbol "asl/packages/asl-cli/src/nativeCli.asl#plainArg?" :text "true for a trailing intel outline argument that is a plain path: not empty, no leading ( : or -, no quote")
 (:doc :symbol "asl/packages/asl-cli/src/release.asl#releaseAmong" :text "the items of the list that follows the atom :release as a key among a list of items, searching nested lists; none when no list follows it")
+(:doc :symbol "asl/packages/asl-cli/src/nativeCli.asl#kwPrev?" :text "true when a :word right after this character starts a keyword: a blank, a paren, bracket or brace of either direction, or a closing quote")
