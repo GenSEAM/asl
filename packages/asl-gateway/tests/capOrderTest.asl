@@ -238,5 +238,55 @@ fn ! testFixRound -> Bool
         (assert (not missing) "LOST: a vanished config fails the check")
         true))
 
+fn ! testRace -> Bool
+  (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/capOrderRace." (stringFromInt64 (procSelf))))
+        (_ (pathRemove dir))
+        (_ (dirCreate dir))
+        (config (str dir "/cfg.asn"))
+        (tmp (str config ".order.tmp"))
+        (backup (str config ".bak"))
+        (_ (fileWrite config "old"))
+        (raced (cos/commitOrdered! config "old" "ranked" tmp backup (fn [] -> Bool (ok? (fileWrite config "edited by someone else")))))
+        (afterRace (resultOr (fileReadString config) ""))
+        (tmpLeft (ok? (fileStat tmp)))
+        (_ (fileWrite config "old"))
+        (clean (cos/commitOrdered! config "old" "ranked" tmp backup (fn [] -> Bool true)))
+        (afterClean (resultOr (fileReadString config) ""))
+        (_ (pathRemove dir))]
+    (do (assert (= raced (ok 1)) "RACE: a config that moved between read and rename is refused")
+        (assert (= afterRace "edited by someone else") "RACE: the concurrent edit is kept, nothing written over it")
+        (assert (not tmpLeft) "RACE: the tmp file is removed on refusal")
+        (assert (= clean (ok 0)) "RACE: an unchanged config is renamed over")
+        (assert (= afterClean "ranked") "RACE: the ranked text is the config after a clean commit")
+        true))
+
+fn ! testCli -> Bool
+  (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/capOrderCli." (stringFromInt64 (procSelf))))
+        (_ (pathRemove dir))
+        (_ (dirCreate dir))
+        (config (str dir "/cfg.asn"))
+        (journal (str dir "/journal.asn"))
+        (text (cfgWith ":order measured :explore 12 :refreshS 3600 :minSamples 1 :staleS 31536000"))
+        (_ (fileWrite config text))
+        (_ (fileWrite journal (str "(:t :unit \"u1\" :from writing :to gating :stage write :model \"n-b\" :tokens 5 :costUsd 0.000000 :verdict \"written\" :ms 10 :at 1000)\n"
+                                   "(:t :unit \"u1\" :from merging :to merged :stage merge :model \"\" :tokens 0 :costUsd 0.000000 :verdict \"merged\" :ms 10 :at 2000)\n"
+                                   "(:t :unit \"u2\" :from writing :to ready :stage write :model \"n-a\" :tokens 0 :costUsd 0.000000 :verdict \"fail: x\" :ms 10 :at 3000)\n")))
+        (base (list "--config" config "--ledger" (str dir "/none.asn") "--journal" journal "--now" "10000000" "--windowH" "100000"))
+        (dry (cos/orderCli! base))
+        (afterDry (resultOr (fileReadString config) ""))
+        (applied (cos/orderCli! (listAppend base (list "--apply"))))
+        (afterApply (resultOr (fileReadString config) ""))
+        (files (resultOr (dirList dir) (list)))
+        (backups (filter (fn [(f String)] -> Bool (stringContains? f ".bak-")) files))
+        (_ (pathRemove dir))]
+    (do (assert (= dry (ok 0)) "CLI: a dry run succeeds")
+        (assert (= afterDry text) "CLI: a dry run writes nothing")
+        (assert (= applied (ok 0)) "CLI: --apply succeeds")
+        (assert (stringContains? afterApply ":chain (bb aa cc)") (str "CLI: --apply writes the ranked chain, got " afterApply))
+        (assert (stringContains? afterApply ":spread ((bb ") "CLI: --apply writes the spread")
+        (assert (stringContains? afterApply ":orderAt 10000000") "CLI: --apply stamps :orderAt")
+        (assert (= (listLength backups) 1) "CLI: --apply keeps one backup of the old config")
+        true))
+
 fn ! runTests -> Bool
-  (do (testOrder) (testExplore) (testStale) (testOff) (testKept) (testTies) (testRefresh) (testReaders) (testCheck) (testApply) (testUpstream) (testFixRound) true)
+  (do (testOrder) (testExplore) (testStale) (testOff) (testKept) (testTies) (testRefresh) (testReaders) (testCheck) (testApply) (testUpstream) (testFixRound) (testRace) (testCli) true)

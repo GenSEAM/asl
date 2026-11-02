@@ -1,5 +1,5 @@
 (module aslGateway/capOrderStats
-  :x [JournalRow journalRowOf modelNames aliasesOf journalStats ledgerStats measuredStats orderConfigText configUnchanged! orderCli!]
+  :x [JournalRow journalRowOf modelNames aliasesOf journalStats ledgerStats measuredStats orderConfigText configUnchanged! commitOrdered! orderCli!]
   :i [(aslGateway/capOrder :a co)
       (aslGateway/usageLedger :a ul)
       (aslGateway/config :a c)
@@ -218,6 +218,18 @@ fn ! configUnchanged! path: String expected: String -> Bool
 fn ! orderRefuse! why: String -> (Result Int64 String)
   (do (sys/sayErr! (str "(:order :status :refused :why " (q why) " :configWritten false)")) (ok 1))
 
+; (:m :do "the write step of `gateway order`, a seam so the race is testable: backup of the text ranked from, tmp file, then between! (nothing in production, a concurrent writer in tests), then the config must still hold the ranked-from text before the rename, else ERR_CONFIG_CHANGED and the tmp file goes; ok 0 only when the config was renamed over")
+fn ! commitOrdered! config: String cfgText: String newText: String tmp: String backup: String between!: (fn [] -> Bool) -> (Result Int64 String)
+  (cond
+    ((not (ok? (fileWrite backup cfgText))) (orderRefuse! (str "cannot write the backup " backup)))
+    ((not (ok? (fileWrite tmp newText))) (orderRefuse! (str "cannot write " tmp)))
+    ((not (between!)) (do (pathRemove tmp) (orderRefuse! "between hook failed")))
+    ((not (configUnchanged! config cfgText)) (do (pathRemove tmp) (orderRefuse! (str "ERR_CONFIG_CHANGED: " config " changed while ranking; nothing written, rerun"))))
+    (else
+      (match (pathRename tmp config)
+        ((err e) (do (pathRemove tmp) (orderRefuse! (str "cannot rename over " config ": " e))))
+        ((ok _) (ok 0)))))
+
 ; (:m :do "asl gateway order [--config P] [--ledger P] [--journal P] [--now MS] [--windowH H] [--apply]: ranks every route carrying :order measured from the ledger and the conductor journal, prints one receipt row per route, and with --apply writes the config through a backup and a tmp file after config check passes; without --apply nothing is written")
 fn ! orderCli! args: (List String) -> (Result Int64 String)
   (let [(home (optionOr (envGet "HOME") "/tmp"))
@@ -252,11 +264,6 @@ fn ! orderCli! args: (List String) -> (Result Int64 String)
                       (if (!= (pairSecond checked) 0)
                         (do (sys/sayErr! (pairFirst checked)) (orderRefuse! "configCheck failed on the ranked config; the config is untouched"))
                         (let [(backup (str config ".bak-" (ms/todayUtc!) "-" (stringFromInt64 nowMs)))]
-                          (cond
-                            ((not (ok? (fileWrite backup cfgText))) (orderRefuse! (str "cannot write the backup " backup)))
-                            ((not (ok? (fileWrite tmp newText))) (orderRefuse! (str "cannot write " tmp)))
-                            ((not (configUnchanged! config cfgText)) (do (pathRemove tmp) (orderRefuse! (str "ERR_CONFIG_CHANGED: " config " changed while ranking; nothing written, rerun"))))
-                            (else
-                              (match (pathRename tmp config)
-                                ((err e) (do (pathRemove tmp) (orderRefuse! (str "cannot rename over " config ": " e))))
-                                ((ok _) (do (sys/say! (str receipt " :changed true :backup " (q backup) " :configWritten true)")) (ok 0))))))))))))))))))
+                          (match (commitOrdered! config cfgText newText tmp backup (fn [] -> Bool true))
+                            ((ok 0) (do (sys/say! (str receipt " :changed true :backup " (q backup) " :configWritten true)")) (ok 0)))
+                            (other other))))))))))))))

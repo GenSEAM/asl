@@ -46,4 +46,5 @@
     "aslGateway/rateLearn"
     "aslGateway/subsRefresh"
     "aslGateway/capOrder"
-    "aslGateway/capOrderStats"))
+    "aslGateway/capOrderStats"
+    "aslGateway/modelWindows"))
