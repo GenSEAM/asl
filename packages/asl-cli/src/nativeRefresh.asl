@@ -83,7 +83,7 @@ fn ! guard! root: String -> Int64
 
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
 fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
-  (if (or (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd))
+  (if (or (nc/formsPinned? root (headDir cache root) cmd) (or (nc/pinned? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd)))
     (do (eprintln "asl: native CLI pinned: kept for this command") 0)
   (let [head (nc/headPath cache root)
         dir0 (headDir cache root)

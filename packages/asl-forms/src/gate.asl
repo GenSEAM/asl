@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl/packages/asl-gates/src/dyck :a dyck)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))
@@ -898,16 +898,20 @@ fn checkOnce! overlay: String target: String rel: String text: String -> (Pair S
           (let [(lines (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
             (pair "error" (pyTrunc (optionOr (listHead lines) (str "native check exit " (stringFromInt64 h.code))) 300)))))))
 
+; (:m :ref FORMS-FASTPATH :do "the in-process check must accept exactly what asl check accepts: asl check runs the dyck balance pass (parens inside a ; comment count) before the cached checker, so the fast path runs the same pass first; a reader error of the checker keeps its own code and only a failed cached check of the source reports ERR_IO, with the reason")
 fn checkFast! base: String path: String text: String cache: cc/Cache -> (Pair (Pair String String) cc/Cache)
   (let [(roots (list base (resultOr (realPath base) base)))
-        (rel (unroot path roots))
-        (r (cc/checkSourceCachedIn! (resultOr (realPath base) base) path text (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) cache))]
-    (match (pairFirst r)
-      ((err _) (pair (pair "error" (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports")) (pairSecond r)))
-      ((ok v)
-        (if (listEmpty? v.diags)
-          (pair (pair "ok" "") (pairSecond r))
-          (pair (pair "error" (pyTrunc (unroot (diagLine (optionOr (listHead v.diags) (ty/Diagnostic :code "" :message "" :msg "" :line 0 :col 0 :path rel))) roots) 300)) (pairSecond r))))))
+        (rel (unroot path roots))]
+    (match (dyck/checkString text false)
+      ((some d) (pair (pair "error" (str rel ":0:0: ERR_UNBALANCED " (pairSecond d) " at byte " (stringFromInt64 (pairFirst d)))) cache))
+      ((none)
+        (let [(r (cc/checkSourceCachedIn! (resultOr (realPath base) base) path text (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) cache))]
+          (match (pairFirst r)
+            ((err e) (pair (pair "error" (str rel ":0:0: ERR_IO " (pyTrunc e 200))) (pairSecond r)))
+            ((ok v)
+              (if (listEmpty? v.diags)
+                (pair (pair "ok" "") (pairSecond r))
+                (pair (pair "error" (pyTrunc (unroot (diagLine (optionOr (listHead v.diags) (ty/Diagnostic :code "" :message "" :msg "" :line 0 :col 0 :path rel))) roots) 300)) (pairSecond r)))))))))
 
 fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
   (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))]

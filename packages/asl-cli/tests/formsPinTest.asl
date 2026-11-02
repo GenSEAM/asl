@@ -1,0 +1,102 @@
+(module asl-cli/tests/formsPinTest
+  :x [runTests]
+  :i [(asl-tools/fleet/run :a fr) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/tests/nativeColdFixture :a nf)])
+
+; (:m :ref FORMS-PINNED-CLI :do "part one asserts formsOnly? on argv shapes (every element only forms of the edit family, parens and escaped quotes inside strings do not count, anything else is false); part two makes a scratch checkout with a private native CLI cache and a stub aslNativeBuild that logs its arguments, marks a CLI dependency so the CLI is stale, and shows a forms-only argv answering with no builder call while a check argv calls the refresh builder and ends in ERR_NATIVE_STALE; no assert reads a duration")
+fn ! sh! cmd: String cwd: String secs: Int64 cache: String -> fr/Done
+  (fr/runOneLimited (fr/job (list "/bin/sh" "-c" cmd) cwd (envRows cache)) (fr/limits secs 400))
+
+fn ! envRows cache: String -> (List String)
+  (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" (optionOr (envGet "HOME") "/tmp")) (str "ASL_NATIVE_CLI_CACHE=" cache) "ASL_NATIVE_BUILD_WAIT=20")
+
+fn headFile cache: String root: String -> String
+  (str cache "/head" (stringReplace root "/" "_"))
+
+fn ! headDir path: String -> String
+  (stringTrim (resultOr (fileReadString path) ""))
+
+fn ! depUnder dir: String prefix: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? l prefix)) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))) "")
+
+fn ! mark! path: String -> Bool
+  (ok? (fileAppend path (str "\n; (:m :do \"formsPinTest " (stringFromInt64 (nowNs)) "\")\n")))
+
+fn stubText log: String real: String -> String
+  (str "#!/bin/sh\nif [ \"$1\" = refresh ]; then case \"$5\" in \"(\"*) exec '" real "' \"$@\" ;; esac; fi\necho \"$1 $2\" >> '" log "'\ncase \"$1\" in refresh) exit 0 ;; esac\nrm -rf \"$2/lock\"\n")
+
+fn ! shapes -> Bool
+  (do (assert (nc/formsOnly? (list "(:read :file \"a.asl\")")) "one read form")
+      (assert (nc/formsOnly? (list "(:edit :file \"x\" :old \"(:flush\" :new \")\") (:flush)")) "parens inside strings do not end a form")
+      (assert (nc/formsOnly? (list "(:edit :old \"a\\\"b)\" :new \"c\")")) "an escaped quote does not end the string")
+      (assert (nc/formsOnly? (list "(:query :text \"x\")" "(:observe)" "(:diff)" "(:write :file \"f\")" "(:discard)")) "every family op over several argv elements")
+      (assert (nc/formsOnly? (list "(:intel :outline :file \"x.asl\")")) "intel outline form")
+      (assert (nc/formsOnly? (list "intel" "outline" "x.asl")) "intel outline argv")
+      (assert (not (nc/formsOnly? (list))) "an empty argv")
+      (assert (not (nc/formsOnly? (list "check" "x.asl"))) "check is not a form")
+      (assert (not (nc/formsOnly? (list "test" "t.asl"))) "test is not a form")
+      (assert (not (nc/formsOnly? (list "(:read) (:run :x 1)"))) "one foreign op among family ops")
+      (assert (not (nc/formsOnly? (list "(:read)" "check"))) "a verb after a form")
+      (assert (not (nc/formsOnly? (list "(:editor)"))) "a longer op name is another op")
+      (assert (not (nc/formsOnly? (list "x (:read)"))) "text outside a form")
+      (assert (not (nc/formsOnly? (list "(:read"))) "unbalanced open")
+      (assert (not (nc/formsOnly? (list "(:read))"))) "unbalanced close")
+      (assert (not (nc/formsOnly? (list "(:intel :graph)"))) "intel with another sub op")
+      (assert (not (nc/formsOnly? (list "(:tools)"))) "tools is not in the family")
+      (assert (not (nc/formsOnly? (list "(:flush :gates (\"./bin/asl test x\"))"))) "a flush carrying a gates list is not forms-only")
+      (assert (not (nc/formsOnly? (list "(:read :file \"a.asl\" (:run :cmd \"x\"))"))) "a read carrying a nested run form is not forms-only")
+      (assert (not (nc/formsOnly? (list "(:read (:run))"))) "a nested form with only a head and no keyword of its own (parenPrev)")
+      (assert (not (nc/formsOnly? (list "(:flush (:read))"))) "a nested allowed op head is still a keyword of the outer op")
+      (assert (not (nc/formsOnly? (list "(:flush :cmd \"x\")"))) "an unknown keyword on a family op")
+      (assert (not (nc/formsOnly? (list "(:flush :file \"x\":gates (\"./bin/asl test x\"))"))) "a keyword glued to a closing quote is still a keyword")
+      (assert (not (nc/formsOnly? (list "(:flush (:diff):gates (\"x\"))"))) "a keyword right after a closing paren is still a keyword")
+      (assert (not (nc/formsOnly? (list "intel" "outline" "x.asl" "(:run :cmd \"x\")"))) "intel outline with a form as trailing arg")
+      (assert (not (nc/formsOnly? (list "intel" "outline" "--gates"))) "intel outline with a flag as trailing arg")
+      (assert (nc/formsOnly? (list "intel" "outline" "a/b.asl")) "intel outline with a plain path")
+      (assert (not (nc/formsOnly? (list "(:read :content \"x\")"))) "a keyword of another op")
+      (assert (nc/formsOnly? (list "(:edit :old \"(:run :cmd x)\" :new \":gates\")")) "keywords inside strings are text")
+      (assert (nc/formsOnly? (list "(:intel :op outline :file \"x.asl\" :limit 5)")) "intel op outline form")
+      (assert (not (nc/formsOnly? (list "(:intel :op coupling)"))) "intel op other than outline")
+      (assert (nc/formsPinOn? ":nativeCli (:buildWaitS 5 :formsPin true)") "an explicit true turns the pin on")
+      (assert (not (nc/formsPinOn? ":nativeCli (:formsPin false)")) "false is off")
+      (assert (not (nc/formsPinOn? ":nativeCli (:formsPin ture)")) "a typo is off")
+      (assert (not (nc/formsPinOn? ":nativeCli (:formsPin trueish)")) "another word is off")
+      (assert (not (nc/formsPinOn? ":nativeCli (:buildWaitS 5)")) "an absent key is off")
+      true)
+
+fn ! runTests -> Bool
+  (let [(ok1 (shapes))
+        (here (resultOr (realPath ".") "."))
+        (base (resultOr (realPath (optionOr (envGet "TMPDIR") "/tmp")) "/tmp"))
+        (scratch (str base "/formsPin-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (cache (str scratch "-cache"))
+        (log (str scratch "-stub.log"))
+        (added (sh! (str "git worktree add --detach --quiet \"" scratch "\" HEAD && d=$(mktemp) && git diff --binary HEAD > \"$d\" && { [ ! -s \"$d\" ] || (cd \"" scratch "\" && git apply \"$d\"); } && rm -f \"$d\"") here 120 cache))
+        (cold (sh! "ASL_NATIVE_BUILD_WAIT=3600 env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl run tools/remote/vps.asl" scratch (nf/coldBuildS) cache))
+        (head (headFile cache scratch))
+        (dir0 (headDir head))
+        (dep (depUnder (headDir head) "asl/packages/asl-gateway/src/"))
+        (builder (str scratch "/asl/host/out/aslNativeBuild"))
+        (kept (sh! (str "mv '" builder "' '" builder ".real'") here 10 cache))
+        (stubbed (and (= kept.exit 0) (and (ok? (fileWrite builder (stubText log (str builder ".real")))) (= (sh! (str "chmod 755 '" builder "'") here 10 cache).exit 0))))
+        (_ (sleepMs 1100))
+        (moved (mark! (str scratch "/" dep)))
+        (forms (sh! "env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl '(:discard)'" scratch 600 cache))
+        (probed (sh! "printf '(module probe)\\n' > probe.asl" scratch 10 cache))
+        (refused (sh! "env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl '(:edit :file \"probe.asl\" :old \"(module probe)\" :new \"(module probe))\" :autofix none) (:flush)'" scratch 600 cache))
+        (probeText (resultOr (fileReadString (str scratch "/probe.asl")) ""))
+        (logAfterForms (resultOr (fileReadString log) ""))
+        (checked (sh! "env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl check asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl" scratch 600 cache))
+        (logAfterCheck (resultOr (fileReadString log) ""))
+        (_ (sh! (str "rm -rf \"" cache "\" \"" log "\"") here 120 cache))
+        (_ (sh! (str "git worktree remove --force \"" scratch "\"; git worktree prune") here 120 cache))]
+    (do (assert (= added.exit 0) (str "the scratch checkout is made: " added.out))
+        (assert (not (stringEmpty? dir0)) (str "the scratch checkout has a native CLI head: " (str "exit " (stringFromInt64 cold.exit) " head " head " tail " (optionOr (stringSlice cold.out (max 0 (- (stringLength cold.out) 700)) (stringLength cold.out)) ""))))
+        (assert (and (not (stringEmpty? dep)) stubbed moved) "a CLI dependency moved and the builder is a stub")
+        (assert (and (not (stringContains? forms.out "ERR_NATIVE_STALE")) (= forms.exit 0)) (str "a forms-only argv runs on the stale CLI: " (optionOr (stringSlice forms.out 0 300) "")))
+        (assert (and (= probed.exit 0) (stringContains? refused.out "ERR_UNBALANCED") (not (stringContains? refused.out "ERR_NATIVE_STALE"))) (str "a pinned edit that would leave the file unparsable is refused by the stale CLI: " (optionOr (stringSlice refused.out 0 300) "")))
+        (assert (= probeText "(module probe)\n") (str "the refused flush left the file as it was: " probeText))
+        (assert (stringEmpty? logAfterForms) (str "a forms-only argv calls no builder: " logAfterForms))
+        (assert (stringContains? logAfterCheck "refresh ") (str "a check argv calls the refresh builder: " logAfterCheck))
+        (assert (stringContains? checked.out "ERR_NATIVE_STALE") (str "a check argv does not run on the stale CLI: " (optionOr (stringSlice checked.out 0 300) "")))
+        (assert (not (fileExists? scratch)) "the scratch checkout is removed")
+        ok1))

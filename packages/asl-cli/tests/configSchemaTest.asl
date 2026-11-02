@@ -20,7 +20,7 @@ fn validText -> String
     "  ; another comment"
     "  :native (:parts 8 :level :dev :rc :notrace :clang \"/usr/bin/clang\" :llc \"/usr/bin/llc\" :opt \"/usr/bin/opt\" :wasmLd \"/usr/bin/wasm-ld\" :llvmNm \"/usr/bin/llvm-nm\" :node \"/usr/bin/node\" :storeCap 2G :storeMinAge 60m :sweep false :claimWaitS 900 :lockGraceS 10 :buildPool \"/tmp/pool\" :buildTokens 2)"
     "  :fleet (:drainBytes 1048576 :drainMs 300)"
-    "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
+    "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :formsPin true :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/agentLoop/leonServe.asl\"])"
     "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
     "  :agentLoop (:parseDefectEscalate 8 :readOutlineBytes 16384 :baseline true :specCheck false :toolMemo false :graderIntent grade :graderProfile \"p\" :gatewayConfig \"/tmp/g.asn\" :wallReserveSec 120 :wallGateMinSec 60 :gateVacuousRounds 2 :gateMaxDescendants 512 :contextKeepTurns 8 :contextToolCapBytes 1500 :contextMaxOlderLines 50 :doc \"d\")"
@@ -60,6 +60,7 @@ fn ! testRange -> Bool
         (cap (checkOf "(:aslConfig :native (:storeCap 0))"))
         (age (checkOf "(:aslConfig :native (:storeMinAge 5d))"))
         (flag (checkOf "(:aslConfig :native (:sweep maybe))"))
+        (formsTypo (checkOf "(:aslConfig :nativeCli (:formsPin ture))"))
         (pin (checkOf "(:aslConfig :release (:pin \"v1\"))"))
         (mode (checkOf "(:aslConfig :release (:mode :explode))"))
         (paths (checkOf "(:aslConfig :nativeCli (:relayPaths \"tools\"))"))
@@ -77,6 +78,7 @@ fn ! testRange -> Bool
         (assert (= (codesOf cap) (list "outOfRange")) "storeCap 0 is outOfRange")
         (assert (= (codesOf age) (list "outOfRange")) "storeMinAge 5d is outOfRange")
         (assert (= (codesOf flag) (list "badType")) "sweep maybe is badType")
+        (assert (= (codesOf formsTypo) (list "badType")) "formsPin ture is badType")
         (assert (= (codesOf pin) (list "badType")) "pin v1 is badType")
         (assert (= (codesOf mode) (list "outOfRange")) "mode :explode is outOfRange")
         (assert (= (codesOf paths) (list "badType")) "relayPaths as a bare string is badType")

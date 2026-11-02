@@ -4,7 +4,7 @@
 
 ; (:m :ref CHECK-TEST-PARITY :do "asl check and asl test of one suite agree in a foreign workspace: a module importing asl-json passes both; an unresolved import, an unknown symbol and an unexported type fail both with the same code and the suite path:line:col; replays the inbox repros workspace-20261030-checkTestImportParity and workspace-20261028-testRunsWhatCheckRejects")
 fn ! fixtureRoot! tag: String -> String
-  (str "/tmp/aslCheckTestParity_" tag "_" (stringFromInt64 (monotonicNs)))
+  (str (resultOr (realPath "/tmp") "/tmp") "/aslCheckTestParity_" tag "_" (stringFromInt64 (monotonicNs)))
 
 fn ! repoRoot! -> String
   (resultOr (realPath ".") ".")
@@ -27,7 +27,7 @@ fn ! stage! root: String bridge: String suite: String -> Bool
 
 fn bothFail code: String chk: fr/Done tst: fr/Done -> Bool
   (and (and (!= chk.exit 0) (!= tst.exit 0))
-       (and (stringContains? chk.out code) (and (stringContains? tst.out code) (stringContains? tst.out "bridgeTest.asl:"))))
+       (and (stringContains? chk.out code) (and (stringContains? tst.out code) (and (stringContains? chk.out "kernel/bridgeTest.asl:") (stringContains? tst.out "kernel/bridgeTest.asl:")))))
 
 fn ! parityOf! tag: String bridge: String suite: String -> (Pair fr/Done fr/Done)
   (let [(root (fixtureRoot! tag))
@@ -68,10 +68,78 @@ fn ! testCheckNamesTheCallersPath -> Bool
         (assert (not (stringContains? chk.out "outsidePkg")) (str "no staged path leaks into check output: " chk.out))
         true))
 
+; (:m :ref CHECK-FOREIGN-LOWS :do "routes of asl check from a foreign workspace: an in-root file is never staged; a directory argument is refused (ERR_NO_FILE) not staged; a mixed list checks the outside file in its staged mirror and the in-root file as ever; an imported staged file is named by its package path, absolute; a deleted module does not survive in the mirror between two runs")
+fn ! aslArgs! root: String verb: String args: (List String) -> fr/Done
+  (fr/runOneLimited (fr/job (cons (str (repoRoot!) "/bin/asl") (cons verb args)) root (fr/childEnv (list))) (fr/limits 900 64))
+
+fn ! inRootFile! -> String
+  (str (repoRoot!) "/asl/packages/asl-cli/src/check.asl")
+
+fn leaks? out: String -> Bool
+  (or (stringContains? out "outsidePkg") (stringContains? out "nativeTest/outside"))
+
+fn ! testInRootArgNotStaged! -> Bool
+  (let [(root (fixtureRoot! "inroot"))
+        (staged (stage! root (bridgeSource "" "3") (suiteSource "")))
+        (chk (aslArgs! root "check" (list (inRootFile!))))
+        (_ (pathRemove root))]
+    (do (assert (and staged (= chk.exit 0)) (str "an in-root file checks green from a foreign cwd: " chk.out))
+        (assert (stringContains? chk.out (inRootFile!)) (str "it is named by the path given: " chk.out))
+        (assert (not (leaks? chk.out)) (str "it was not staged: " chk.out))
+        true))
+
+fn ! testDirectoryArgRefusedNotStaged! -> Bool
+  (let [(root (fixtureRoot! "dir"))
+        (staged (stage! root (bridgeSource "" "3") (suiteSource "")))
+        (chk (aslArgs! root "check" (list "kernel")))
+        (_ (pathRemove root))]
+    (do (assert (and staged (!= chk.exit 0)) (str "a directory argument fails: " chk.out))
+        (assert (stringContains? chk.out "ERR_NO_FILE") (str "it is refused as no file, not checked: " chk.out))
+        (assert (not (leaks? chk.out)) (str "it was not staged: " chk.out))
+        true))
+
+fn ! testMixedListChecksBoth! -> Bool
+  (let [(root (fixtureRoot! "mixed"))
+        (staged (stage! root (bridgeSource "" "(noSuchFnHere 3)") (suiteSource "")))
+        (chk (aslArgs! root "check" (list "kernel/bridgeTest.asl" (inRootFile!))))
+        (_ (pathRemove root))]
+    (do (assert (and staged (!= chk.exit 0)) (str "the outside file's error fails the list: " chk.out))
+        (assert (stringContains? chk.out "check failed: kernel/bridgeTest.asl") (str "the outside file is named as given: " chk.out))
+        (assert (stringContains? chk.out (str "ok " (inRootFile!))) (str "the in-root file still checks: " chk.out))
+        (assert (not (leaks? chk.out)) (str "no staged path leaks: " chk.out))
+        true))
+
+fn ! testImportedStagedPathNormalised! -> Bool
+  (let [(root (fixtureRoot! "imported"))
+        (staged (stage! root (bridgeSource "" "(noSuchFnHere 3)") (suiteSource "")))
+        (chk (aslArgs! root "check" (list "kernel/bridgeTest.asl")))
+        (_ (pathRemove root))]
+    (do (assert (and staged (!= chk.exit 0)) (str "an error in the imported module fails the check: " chk.out))
+        (assert (stringContains? chk.out (str root "/kernel/bridge.asl:")) (str "the imported file is named by its package path: " chk.out))
+        (assert (not (leaks? chk.out)) (str "no staged path leaks: " chk.out))
+        true))
+
+fn ! testNoStaleMirrorBetweenRuns! -> Bool
+  (let [(root (fixtureRoot! "stale"))
+        (staged (stage! root (bridgeSource "" "3") (suiteSource "")))
+        (first (aslArgs! root "check" (list "kernel/bridgeTest.asl")))
+        (removed (pathRemove (str root "/kernel/bridge.asl")))
+        (second (aslArgs! root "check" (list "kernel/bridgeTest.asl")))
+        (_ (pathRemove root))]
+    (do (assert (and staged (= first.exit 0)) (str "the first check is green: " first.out))
+        (assert (ok? removed) "the imported module was deleted")
+        (assert (and (!= second.exit 0) (stringContains? second.out "ERR_UNRESOLVED_IMPORT")) (str "the deleted module is gone from the mirror, not served stale: " second.out))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testAslPackageImportPassesBoth!) "asl-json import passes check and test")
       (assert (testCheckNamesTheCallersPath) "check output names the caller path, not the staged mirror")
       (assert (testUnresolvedImportFailsBoth!) "unresolved import fails check and test")
       (assert (testUnknownSymbolFailsBoth!) "unknown symbol fails check and test")
       (assert (testUnexportedTypeFailsBoth!) "unexported type fails check and test")
+      (assert (testInRootArgNotStaged!) "an in-root file is not staged")
+      (assert (testDirectoryArgRefusedNotStaged!) "a directory argument is refused, not staged")
+      (assert (testMixedListChecksBoth!) "a mixed list checks the outside file staged and the in-root file as ever")
+      (assert (testImportedStagedPathNormalised!) "an imported staged file is named by its package path")
+      (assert (testNoStaleMirrorBetweenRuns!) "a deleted module does not survive in the mirror between runs")
       true)

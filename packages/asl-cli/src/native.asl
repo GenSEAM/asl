@@ -668,16 +668,34 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
 fn ! outsideAsl? ctx: sys/Context a: String -> Bool
   (and (stringEndsWith? a ".asl") (and (sys/isFile? a) (not (inRoot? ctx (resultOr (realPath a) a)))))
 
-fn ! stagedPair! ctx: sys/Context a: String -> (Result (Pair String String) String)
-  (match (stageOutside! ctx (resultOr (realPath a) a))
-    ((err e) (err (str a ": cannot stage: " e)))
-    ((ok rel) (ok (pair (str ctx.root "/" rel) a))))
+; (:m :ref CHECK-FOREIGN-LOWS :do "the staged view of one outside file: a package file checks inside the package mirror (stagePackageMirror!, the view asl test checks) with the flat mirror and the indexed <workspace>/ mirror both mapped back to the package root, absolute and root-relative; a lone file checks its single-file stage mapped back to the path given")
+fn ! relForm ctx: sys/Context p: String -> String
+  (if (stringStartsWith? p (str ctx.root "/")) (dropPrefixLen p (+ (stringLength ctx.root) 1)) p)
 
-fn ! stagedPairs! ctx: sys/Context files: (List String) -> (Result (List (Pair String String)) String)
-  (fold (fn [(acc (Result (List (Pair String String)) String)) (a String)] -> (Result (List (Pair String String)) String)
+fn ! stagedView! ctx: sys/Context a: String -> (Result verify/Staged String)
+  (let [(abs (resultOr (realPath a) a))]
+    (match (findPackageRoot! (ckr/parentDirOf abs) 0)
+      ((some root)
+        (match (stagePackageMirror! ctx root)
+          ((err e) (err (str a ": cannot stage: " e)))
+          ((ok mirrorDir)
+            (let [(wsRaw (workspaceNameOf (resultOr (fileReadString (str root "/.asl.config.asn")) "")))
+                  (ws (if (stringEmpty? wsRaw) "pkg" wsRaw))
+                  (indexed (str mirrorDir "/" ws "/"))
+                  (flat (str mirrorDir "/"))]
+              (ok (verify/Staged :actual (str mirrorDir "/" (dropPrefixLen abs (+ (stringLength root) 1))) :shown a
+                                 :maps (list (pair indexed (str root "/")) (pair flat (str root "/"))
+                                             (pair (relForm ctx indexed) (str root "/")) (pair (relForm ctx flat) (str root "/")))))))))
+      ((none)
+        (match (stageOutsideSingle! ctx abs)
+          ((err e) (err (str a ": cannot stage: " e)))
+          ((ok rel) (ok (verify/Staged :actual (str ctx.root "/" rel) :shown a :maps (list (pair rel a)))))))))
+
+fn ! stagedViews! ctx: sys/Context files: (List String) -> (Result (List verify/Staged) String)
+  (fold (fn [(acc (Result (List verify/Staged) String)) (a String)] -> (Result (List verify/Staged) String)
           (match acc
             ((err e) (err e))
-            ((ok ps) (match (stagedPair! ctx a) ((err e) (err e)) ((ok p) (ok (listAppend ps (list p))))))))
+            ((ok ss) (match (stagedView! ctx a) ((err e) (err e)) ((ok s) (ok (listAppend ss (list s))))))))
         (ok (list)) files)
 
 fn ! check! ctx: sys/Context args: (List String) -> Int64
@@ -687,10 +705,10 @@ fn ! check! ctx: sys/Context args: (List String) -> Int64
           (others (filter (fn [(a String)] -> Bool (not (outsideAsl? ctx a))) args))]
       (if (listEmpty? outside)
         (cmd/dispatch! ctx "check" args)
-        (match (stagedPairs! ctx outside)
+        (match (stagedViews! ctx outside)
           ((err e) (do (sys/sayErr! e) 1))
-          ((ok pairs)
-            (let [(stagedRc (verify/nativeCheckStaged! pairs))
+          ((ok views)
+            (let [(stagedRc (verify/nativeCheckStaged! views))
                   (otherRc (if (listEmpty? others) 0 (cmd/dispatch! ctx "check" others)))]
               (if (!= stagedRc 0) stagedRc otherRc)))))))
 
