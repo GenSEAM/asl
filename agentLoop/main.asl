@@ -1127,31 +1127,25 @@ fn withCounts st: ls/LoopState counts: (Map String Int64) -> ls/LoopState
 fn repeatFailureCap -> Int64
   3
 
-; (:m :ref LEON-DONE-LOOP :do "a turn that sent only done, wrote nothing and left the run not terminal counts toward the doneNoWrite stop; the count lives in the placeholderBriefs map, a field nothing else reads, under one key")
-fn doneStreakKey -> String
-  "doneNoWrite"
-
-; (:m :ref LEON-MALFORMED-TOOLTEXT :do "node2 stalls.asn, 8 rows: a model sent a broken tool-call wrapper such as <:step<</arg_value>>>> that holds no parseable step; the first such reply is answered with the expected shape, the second in a row ends the run with stop cause malformedReply, counted in the placeholderBriefs map under one key")
+; (:m :ref LEON-DONE-LOOP :do "a turn that sent only done, wrote nothing and left the run not terminal counts toward the doneNoWrite stop; the count lives in the LoopState doneNoWriteStreak field")
+; (:m :ref LEON-MALFORMED-TOOLTEXT :do "node2 stalls.asn, 8 rows: a model sent a broken tool-call wrapper such as <:step<</arg_value>>>> that holds no parseable step; the first such reply is answered with the expected shape, the second in a row ends the run with stop cause malformedReply, counted in the LoopState malformedStreak field")
 fn brokenWrapper? text: String -> Bool
   (or (stringContains? text "<:step") (or (stringContains? text "arg_value>") (or (stringContains? text "<arg_key") (or (stringContains? text "tool_call>") (stringContains? text "<step")))))
-
-fn malformedKey -> String
-  "malformedReply"
 
 fn malformedHint -> String
   "(:malformed :error ERR_NO_STEP :message \"no (:step ...) in that reply; the tool wrapper is not part of the protocol\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
 
 fn malformedStreakOf st: ls/LoopState -> Int64
-  (optionOr (mapGet st.placeholderBriefs (malformedKey)) 0)
+  st.malformedStreak
 
 fn withMalformedStreak st: ls/LoopState n: Int64 -> ls/LoopState
-  (with st :placeholderBriefs (mapSet st.placeholderBriefs (malformedKey) n))
+  (with st :malformedStreak n)
 
 fn doneStreakOf st: ls/LoopState -> Int64
-  (optionOr (mapGet st.placeholderBriefs (doneStreakKey)) 0)
+  st.doneNoWriteStreak
 
 fn withDoneStreak st: ls/LoopState n: Int64 -> ls/LoopState
-  (with st :placeholderBriefs (mapSet st.placeholderBriefs (doneStreakKey) n))
+  (with st :doneNoWriteStreak n)
 
 fn failedReceipts? receipts: String -> Bool
   (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))

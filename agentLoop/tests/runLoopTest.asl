@@ -164,7 +164,7 @@ fn finalState base: s/LoopState f: Final -> s/LoopState
     :lastGates f.lastGates
     :missingGateIntro base.missingGateIntro
     :patchErr base.patchErr
-    :placeholderBriefs base.placeholderBriefs
+    :placeholderBriefs base.placeholderBriefs :doneNoWriteStreak base.doneNoWriteStreak :malformedStreak base.malformedStreak
     :prefetch base.prefetch
     :baselineGreen base.baselineGreen
     :priorIds base.priorIds
