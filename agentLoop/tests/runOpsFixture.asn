@@ -214,7 +214,7 @@
 (:case :id "guard33" :fn "guard" :cmd "git update-ref HEAD x" :want "(refuse \"git update-ref\" \"(:done :commit msg) for commits\")")
 (:case :id "guard34" :fn "guard" :cmd "git am x" :want "(refuse \"git am\" \"(:done :commit msg) for commits\")")
 (:case :id "guard35" :fn "guard" :cmd "git" :want "nil")
-(:case :id "guard36" :fn "guard" :cmd "git -C sub reset" :want "nil")
+(:case :id "guard36" :fn "guard" :cmd "git -C sub reset" :want "(refuse \"git reset\" \"edit or write ops for files\")" :note "LEON-GIT-C-BYPASS: the Python original let a global option value hide the subcommand")
 (:case :id "guard37" :fn "guard" :cmd "git --no-pager log" :want "nil")
 (:case :id "guard38" :fn "guard" :cmd "echo ok; git reset --hard" :want "(refuse \"git reset\" \"edit or write ops for files\")")
 (:case :id "guard39" :fn "guard" :cmd "echo git reset" :want "(refuse \"git reset\" \"edit or write ops for files\")")
