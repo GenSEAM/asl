@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! cdErrors repoPath fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! cdErrors repoPath ledgerForged! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -111,11 +111,13 @@ fn ! moveA! ctx: Ctx c: CUnit to: String stage: String model: String alias: Stri
     next)
 
 ; (:m :ref SERVED-ALIAS-JOURNAL :do "the model a write is journalled under comes from Leon's receipt: :servedAlias A, else :servedModel M, else the older literal :model tag (modelOf, unknown when absent); the alias alone is also journalled as :alias; review's writer exclusion (reviewWriter) reads the unit's model, so it sees the served alias and never an unknown family when the receipt named one")
+; (:m :ref SERVED-ALIAS-JOURNAL :do "receiptRowOf is the last line of the output that starts with (: and carries :usage, Leon's final receipt row; servedField parses that one row as an ASN form and reads the key from it, so an echoed line earlier in the output never decides")
+fn receiptRowOf out: String -> String
+  (optionOr (listLast (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:") (stringContains? l ":usage")))
+                              (map stringTrim (stringLines out)))) "")
+
 fn servedField out: String key: String -> String
-  (let [(parts (stringSplit out (str key " ")))]
-    (if (<= (listLength parts) 1) ""
-      (let [(w (optionOr (listHead (stringSplit (stringTrim (optionOr (listGet parts 1) "")) " ")) ""))]
-        (stringReplace (stringReplace w "\"" "") ")" ""))))
+  (al/rowText (receiptRowOf out) (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
 
 fn servedAliasOf out: String -> String
   (servedField out ":servedAlias")
@@ -169,7 +171,7 @@ fn ! wipSave! ctx: Ctx id: String reason: String -> Unit
             (_ (if (stringEmpty? row) (ok ()) (fileAppend (journalPath ctx.dir) (str row "\n"))))]
         ())))
 
-; (:m :ref LANDED-AUDIT :do "a review pass lands with its verdict: one (:grade :ev UNIT :sha HEAD :verdict pass :by FAMILY :at ISO) row is appended to .asl/mem/grades.asn in the unit worktree and committed on the unit branch, so a merge or cherry-pick of the branch carries it; a worktree that is not one of the repo, or a failed append or commit, journals a gradeSkipped row and never blocks the merge")
+; (:m :ref LANDED-AUDIT :do "a review pass lands with its verdict: one (:grade :ev UNIT :sha HEAD :verdict pass :by FAMILY :at ISO) row is appended to .asl/mem/grades.asn in the unit worktree and committed on the unit branch, so a merge or cherry-pick of the branch carries it; a worktree that is not one of the repo, or a failed append or commit, journals a gradeSkipped row and never blocks the merge; the ledger is rebuilt from the committed HEAD version plus the one conductor row, never from the worktree file, so a row a writer left in the working tree is overwritten and never committed")
 fn ! gradeLand! ctx: Ctx c: CUnit unit: String model: String -> Unit
   (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
         (cfg (w/Cfg :repo repo :base (wtBase ctx.dir repo) :prefix "asex-" :archive (str ctx.dir "/archive") :mainRef "main"))
@@ -181,7 +183,8 @@ fn ! gradeLand! ctx: Ctx c: CUnit unit: String model: String -> Unit
             (file (str path "/" (al/ledgerPath)))
             (_ (dirCreate (str path "/.asl")))
             (_ (dirCreate (str path "/.asl/mem")))
-            (old (readOr file))
+            (shown (gitOut path (list "show" (str "HEAD:" (al/ledgerPath)))))
+            (old (if (= shown.exit 0) shown.out ""))
             (wrote (fileWrite file (str old (if (or (stringEmpty? old) (stringEndsWith? old "\n")) "" "\n") row "\n")))
             (added (gitOut path (list "add" "--" (al/ledgerPath))))
             (done (gitOut path (list "-c" "user.name=conductor" "-c" "user.email=conductor@localhost" "-c" "commit.gpgsign=false" "commit" "-q" "--no-verify" "-m"
@@ -485,9 +488,26 @@ fn awaiting c: CUnit lane: String -> CUnit
 fn inFlight? c: CUnit -> Bool
   (and (!= c.launched 0) (!= (stageName c.st) ""))
 
+; (:m :ref LANDED-AUDIT :do "a unit branch whose writer commits touch .asl/mem/grades.asn is forged: every commit past the base that touches the ledger must be the conductor's own grade commit (author conductor@localhost, subject starting (:c :a grade :do); anything else, or an unreadable log, counts as forged")
+fn ! ledgerForged! path: String base: String -> Bool
+  (if (stringEmpty? path) false
+    (let [(r (gitOut path (list "log" "--format=%ae|%s" (str base "..HEAD") "--" (al/ledgerPath))))]
+      (or (!= r.exit 0)
+          (listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (stringStartsWith? l "conductor@localhost|(:c :a grade :do ")))) (stringLines r.out)))))
+
+; (:m :ref LANDED-AUDIT :do "the ledger guard of finish!: a write result that landed commits touching the ledger, or a review pass over such a branch, becomes a failure (LEDGER_FORGED) so it is neither gated, reviewed nor merged")
+fn ! ledgerGuard u: st/Task c: CUnit res0: Res -> Res
+  (cond
+    ((and (= c.st "writing") (and (= res0.ok 1) (ledgerForged! res0.wt (baseRef u))))
+      (with res0 :ok 0 :sig "LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn"))
+    ((and (= c.st "reviewing") (and (= res0.verdict "pass") (ledgerForged! c.wt (baseRef u))))
+      (with res0 :verdict "fail" :sig "LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn"))
+    (else res0))
+
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
-fn ! finish! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
-  (let [(stage (stageName c.st))
+fn ! finish! ctx: Ctx u: st/Task c: CUnit res0: Res -> Unit
+  (let [(res (ledgerGuard u c res0))
+        (stage (stageName c.st))
         (_ (dropRun! ctx.dir c.id stage))]
     (cond
       ((= c.st "writing")

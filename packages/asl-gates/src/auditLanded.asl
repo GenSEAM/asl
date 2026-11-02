@@ -1,6 +1,6 @@
 (module asl-gates/auditLanded
-  :x [Commit evIds exemptKind gradeVerdicts headSince gradeRow isoOfMs parseLog landedChecks ledgerPath cmdLanded!]
-  :i [(asl-gates/auditGates :a ag)])
+  :x [Commit rowFieldsAny rowText rowItems evIds fromShas exemptKind gradeRows headSince gradeRow isoOfMs parseLog landedChecks ledgerPath cmdLanded!]
+  :i [(asl-gates/auditGates :a ag) (asl-syntax/asl/asn :a asn)])
 
 ; (:m :ref LANDED-AUDIT :do "main commits must be graded: the tracked ledger .asl/mem/grades.asn holds one (:grade :ev ID :sha SHA :verdict pass|fixNeeded :by FAMILY :at ISO) row per verdict, the newest row of an ev id wins, and a head row (:gradesHead :since SHA) is the checkpoint older history is not audited from; audit landed [--since REF] lists the commits in REF..HEAD that are neither exempt nor carry an :ev id whose newest verdict is pass, exit 1 on any. Exempt: a merge commit (more than one parent), a wip rescue commit (message head (:c :a wip :do), and a commit touching only the ledger (the verdict itself)")
 (schema Commit
@@ -17,35 +17,72 @@ fn wordAt s: String -> String
         (w (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit t " ")) "") ")")) ""))]
     (stringReplace w "\"" ""))
 
-; (:m :ref LANDED-AUDIT :do "evIds reads the ids after the first :ev of a commit message: a parenthesised list, a quoted string or one bare word; quotes are dropped")
+; (:m :ref LANDED-AUDIT :do "the fields of the first form of a text whatever its tag, an error when the text is not one ASN form")
+fn rowFieldsAny raw: String -> (Result (List asn/AsnField) String)
+  (match (asn/asnRead (stringTrim raw))
+    ((err e) (err e))
+    ((ok (asn/asnTagged _ fields _)) (ok fields))
+    ((ok _) (err "not a tagged form")))
+
+fn symOrString v: asn/AsnValue -> String
+  (match v
+    ((asn/asnSym name) name)
+    (_ (optionOr (asn/asnStringValue v) "")))
+
+fn fieldOf fields: (List asn/AsnField) key: String -> (Option asn/AsnValue)
+  (match (listFind (fn [(f asn/AsnField)] -> Bool (= f.key (str ":" key))) fields)
+    ((some f) (some f.val))
+    ((none) (none)))
+
+fn itemsOfValue v: asn/AsnValue -> (List String)
+  (let [(vals (match v
+                ((asn/asnUnit) (list))
+                ((asn/asnTuple items) items)
+                ((asn/asnVec items) items)
+                ((asn/asnPair a b) (list a b))
+                ((asn/asnTagged t _ kids) (cons (asn/asnSym t) kids))
+                ((asn/asnCase name args) (cons (asn/asnSym name) args))
+                ((asn/asnCtor name fs) (cons (asn/asnSym name) (map (fn [(f asn/AsnField)] -> asn/AsnValue f.val) fs)))
+                (_ (list v))))]
+    (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (map symOrString vals)))
+
+; (:m :ref LANDED-AUDIT :do "rowText reads one key of a one-form text as text, empty when the text is not a form or lacks the key; rowItems reads it as a list of words")
+fn rowText raw: String key: String -> String
+  (match (rowFieldsAny raw)
+    ((err _) "")
+    ((ok fs) (match (fieldOf fs key) ((some v) (symOrString v)) ((none) ""))))
+
+fn rowItems raw: String key: String -> (List String)
+  (match (rowFieldsAny raw)
+    ((err _) (list))
+    ((ok fs) (match (fieldOf fs key) ((some v) (itemsOfValue v)) ((none) (list)))))
+
+; (:m :ref LANDED-AUDIT :do "evIds parses the commit message's first line as one ASN form and reads its :ev (a list, a string or a symbol); a message that is not a form has none, and text that merely contains ' :ev ' inside a string never counts")
 fn evIds msg: String -> (List String)
-  (let [(parts (stringSplit msg " :ev "))]
-    (if (<= (listLength parts) 1) (list)
-      (let [(after (stringTrim (optionOr (listGet parts 1) "")))
-            (open (stringStartsWith? after "("))
-            (inner (if open (optionOr (listHead (stringSplit (optionOr (stringSlice after 1 (stringLength after)) "") ")")) "") ""))]
-        (if open
-          (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (map wordAt (stringSplit inner " ")))
-          (let [(w (wordAt after))] (if (stringEmpty? w) (list) (list w)))))))
+  (rowItems (optionOr (listHead (stringLines msg)) "") "ev")
 
-fn keyVal line: String key: String -> String
-  (let [(parts (stringSplit line (str " " key " ")))]
-    (if (<= (listLength parts) 1) "" (wordAt (optionOr (listGet parts 1) ""))))
+; (:m :ref LANDED-AUDIT :do "fromShas reads the sources of a cherry-pick -x message: every '(cherry picked from commit SHA)' line")
+fn fromShas msg: String -> (List String)
+  (fold (fn [(acc (List String)) (line String)] -> (List String)
+          (let [(parts (stringSplit line "(cherry picked from commit "))]
+            (if (<= (listLength parts) 1) acc
+              (listAppend acc (list (stringReplace (stringTrim (optionOr (listGet parts 1) "")) ")" ""))))))
+        (list) (stringLines msg))
 
-; (:m :ref LANDED-AUDIT :do "newest verdict per ev id from the ledger text, later rows replace earlier ones")
-fn gradeVerdicts text: String -> (List (Pair String String))
-  (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
+; (:m :ref LANDED-AUDIT :do "the ledger rows in file order as (ev, (sha, verdict)); a row whose form does not parse is dropped")
+fn gradeRows text: String -> (List (Pair String (Pair String String)))
+  (fold (fn [(acc (List (Pair String (Pair String String)))) (line String)] -> (List (Pair String (Pair String String)))
           (if (stringStartsWith? line "(:grade ")
-            (let [(ev (keyVal line ":ev"))
-                  (v (keyVal line ":verdict"))]
-              (if (or (stringEmpty? ev) (stringEmpty? v)) acc
-                (listAppend (filter (fn [(p (Pair String String))] -> Bool (!= (pairFirst p) ev)) acc) (list (pair ev v)))))
+            (let [(ev (rowText line "ev"))
+                  (sha (rowText line "sha"))
+                  (v (rowText line "verdict"))]
+              (if (or (stringEmpty? ev) (or (stringEmpty? sha) (stringEmpty? v))) acc (listAppend acc (list (pair ev (pair sha v))))))
             acc))
         (list) (stringLines text))
 
 fn headSince text: String -> String
   (match (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gradesHead ")) (stringLines text)))
-    ((some l) (keyVal l ":since"))
+    ((some l) (rowText l "since"))
     ((none) ""))
 
 fn quoted s: String -> String
@@ -77,20 +114,24 @@ fn gradeRow ev: String sha: String verdict: String by: String at: String -> Stri
 fn wip? msg: String -> Bool
   (stringStartsWith? msg "(:c :a wip :do")
 
-; (:m :ref LANDED-AUDIT :do "why a commit is not audited: merge, wip or ledger; empty when it is")
+; (:m :ref LANDED-AUDIT :do "why a commit is not audited: merge or ledger; empty when it is audited. A wip rescue commit is not exempt: it belongs on a unit branch, and one on main is a finding")
 fn exemptKind c: Commit -> String
   (cond
     ((> c.parents 1) "merge")
-    ((wip? c.msg) "wip")
     ((and (not (listEmpty? c.files)) (listAll? (fn [(f String)] -> Bool (= f (ledgerPath))) c.files)) "ledger")
     (else ""))
 
-fn graded? c: Commit verdicts: (List (Pair String String)) -> Bool
-  (listAny? (fn [(id String)] -> Bool
-              (match (listFind (fn [(p (Pair String String))] -> Bool (= (pairFirst p) id)) verdicts)
-                ((some p) (= (pairSecond p) "pass"))
-                ((none) false)))
-            (evIds c.msg))
+; (:m :ref LANDED-AUDIT :do "a commit is graded when, for one of its :ev ids, the newest ledger row whose :sha covers it is a pass; covers is (candidate sha, row sha) -> the row's reviewed head is that commit or a descendant of it; the candidates are the commit and the sources a cherry-pick -x names, so a later commit reusing an old passed id is not covered")
+fn graded? c: Commit rows: (List (Pair String (Pair String String))) covers: (fn [String String] -> Bool) -> Bool
+  (let [(cands (cons c.sha (fromShas c.msg)))]
+    (listAny? (fn [(id String)] -> Bool
+                (let [(mine (filter (fn [(r (Pair String (Pair String String)))] -> Bool
+                                      (and (= (pairFirst r) id) (listAny? (fn [(cand String)] -> Bool (covers cand (pairFirst (pairSecond r)))) cands)))
+                                    rows))]
+                  (match (listLast mine)
+                    ((some r) (= (pairSecond (pairSecond r)) "pass"))
+                    ((none) false))))
+              (evIds c.msg)))
 
 fn short sha: String -> String
   (optionOr (stringSlice sha 0 9) sha)
@@ -99,15 +140,15 @@ fn subjectOf msg: String -> String
   (let [(l (optionOr (listHead (stringLines msg)) ""))]
     (optionOr (stringSlice l 0 (if (< (stringLength l) 100) (stringLength l) 100)) l))
 
-; (:m :ref LANDED-AUDIT :do "one failed check per commit that is not exempt and has no :ev id whose newest verdict is pass, oldest first; none failing is one passed check counting the audited commits")
-fn landedChecks commits: (List Commit) ledger: String -> (List ag/Check)
-  (let [(verdicts (gradeVerdicts ledger))
+; (:m :ref LANDED-AUDIT :do "one failed check per audited commit that is a wip rescue commit (ERR_WIP_ON_MAIN) or has no covering pass row (ERR_UNGRADED, or ERR_NO_EV without any :ev), oldest first; none failing is one passed check counting the audited commits")
+fn landedChecks commits: (List Commit) ledger: String covers: (fn [String String] -> Bool) -> (List ag/Check)
+  (let [(rows (gradeRows ledger))
         (audited (filter (fn [(c Commit)] -> Bool (stringEmpty? (exemptKind c))) commits))
-        (bad (filter (fn [(c Commit)] -> Bool (not (graded? c verdicts))) audited))]
+        (bad (filter (fn [(c Commit)] -> Bool (or (wip? c.msg) (not (graded? c rows covers)))) audited))]
     (if (listEmpty? bad)
       (list (ag/passCheck "landed" (some (listLength audited)) (none)))
       (map (fn [(c Commit)] -> ag/Check
-             (ag/failCheck (str "ungraded-" (short c.sha)) (if (listEmpty? (evIds c.msg)) "ERR_NO_EV" "ERR_UNGRADED") (subjectOf c.msg) (none) (none)))
+             (ag/failCheck (str "ungraded-" (short c.sha)) (cond ((wip? c.msg) "ERR_WIP_ON_MAIN") ((listEmpty? (evIds c.msg)) "ERR_NO_EV") (else "ERR_UNGRADED")) (subjectOf c.msg) (none) (none)))
            bad)))
 
 ; (:m :ref LANDED-AUDIT :do "parseLog reads git log --name-only --format=@@C@@%H@@%P@@%B@@F@@ output: one record per commit; git prints newest first, the result is oldest first")
@@ -137,4 +178,4 @@ fn cmdLanded! root: String argv: (List String) -> ag/AuditRun
       (ag/emit "landed" (list (ag/failCheck "checkpoint" "ERR_NO_CHECKPOINT" "no --since and no (:gradesHead :since SHA) row in .asl/mem/grades.asn" (none) (none))) "" "" false)
       (match (ag/git! root (list "log" "--name-only" "--format=@@C@@%H@@%P@@%B@@F@@" (str since "..HEAD")))
         ((err e) (ag/emit "landed" (list (ag/failCheck "log" "ERR_GIT_LOG" e (none) (none))) "" "" false))
-        ((ok out) (ag/emit "landed" (landedChecks (parseLog out) ledger) (str ":since " (quoted since)) "" false)))))
+        ((ok out) (ag/emit "landed" (landedChecks (parseLog out) ledger (fn [(cand String) (rowSha String)] -> Bool (ag/gitOk! root (list "merge-base" "--is-ancestor" cand rowSha)))) (str ":since " (quoted since)) "" false)))))
