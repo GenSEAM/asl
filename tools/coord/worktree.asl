@@ -1,6 +1,6 @@
 (module asl-tools/coord/worktree
-  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
-  :i [(asl-tools/fleet/run :a fr)])
+  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! isWorktreeOf! secretUntracked! wipCommitAt! wipCommit! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/egress :a eg)])
 
 (schema Cfg
   (:f repo String)
@@ -143,6 +143,48 @@ fn ! rescueBranch! cfg: Cfg w: Wt -> (Result String String)
       (else
         (let [(b (git! cfg.repo (list "branch" name w.head)))]
           (if (= b.exit 0) (ok name) (err (str "rescue branch failed: " (stringTrim b.out))))))))
+
+; (:m :ref COORD-WIP-RESCUE :do "a path is a linked worktree of the repo when its real path is one of the repo's git worktree list entries and is not the repo's own checkout, which is never a wip or grade target")
+fn ! isWorktreeOf! cfg: Cfg path: String -> Bool
+  (let [(rp (realPath! path))
+        (g (git! cfg.repo (list "worktree" "list" "--porcelain")))]
+    (and (not (stringEmpty? rp))
+         (and (!= rp (realPath! cfg.repo))
+              (and (= g.exit 0) (listAny? (fn [(e Entry)] -> Bool (= (realPath! e.path) rp)) (parseWorktrees g.out))))))
+
+; (:m :ref COORD-WIP-RESCUE :do "untracked files at path that the egress filter calls secret by path (.env, id_rsa, keys, memory); a wip commit leaves them where they are")
+fn ! secretUntracked! path: String -> (List String)
+  (let [(u (git! path (list "ls-files" "-o" "--exclude-standard")))]
+    (filter (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (eg/secretPath? f))) (map stringTrim (stringLines u.out))))
+
+; (:m :ref COORD-WIP-RESCUE :do "a unit whose writer stopped without landing keeps its edits: a dirty worktree at path (non-ignored paths) is committed as one wip commit on its own branch, ASN message naming the unit and the stop reason, and a detached head is then given a rescue branch; untracked files the egress filter flags as secret by path are left uncommitted; returns the new short sha, or empty when there was nothing to commit; a path that is not a worktree of the repo (or is its own checkout) is an error and nothing is touched; never discards, never touches ignored build output")
+fn ! wipCommitAt! cfg: Cfg unit: String path: String reason: String -> (Result String String)
+  (if (not (isWorktreeOf! cfg path)) (err (str "not a worktree of the repo: " path))
+    (let [(counts (statusCounts! path))
+          (br (git! path (list "symbolic-ref" "-q" "--short" "HEAD")))]
+      (if (= (pairFirst counts) 0) (ok "")
+        (let [(left (secretUntracked! path))
+              (a (git! path (list "add" "-A")))
+              (_ (if (listEmpty? left) () (let [(_ (git! path (listAppend (list "reset" "-q" "--") left)))] ())))
+              (nothing (= (git! path (list "diff" "--cached" "--quiet")).exit 0))
+              (msg (str "(:c :a wip :do " (q (str "unit " unit " stopped: " reason)) " :g none :ev (" unit "))"))
+              (c (if (!= a.exit 0) a
+                   (git! path (list "-c" "user.name=conductor" "-c" "user.email=conductor@localhost" "-c" "commit.gpgsign=false" "commit" "-q" "--no-verify" "-m" msg))))
+              (h (git! path (list "rev-parse" "HEAD")))
+              (head (stringTrim h.out))]
+          (cond
+            (nothing (ok ""))
+            ((!= c.exit 0) (err (str "wip commit failed: " (stringTrim c.out))))
+            ((!= h.exit 0) (err "wip commit unreadable"))
+            (else
+              (let [(rb (if (!= br.exit 0)
+                          (rescueBranch! cfg (Wt :unit unit :path path :head head :branch "" :detached true :dirty 0 :ignored 0 :merged false :lease ""))
+                          (ok "")))]
+                (match rb ((err e) (err e)) ((ok _) (ok (optionOr (stringSlice head 0 9) head)))))))))))
+
+; (:m :ref COORD-WIP-RESCUE :do "wipCommit! is wipCommitAt! on the unit's own path base/prefixUNIT; an absent path commits nothing")
+fn ! wipCommit! cfg: Cfg unit: String reason: String -> (Result String String)
+  (if (fileExists? (wtPath cfg unit)) (wipCommitAt! cfg unit (wtPath cfg unit) reason) (ok ""))
 
 fn ! archiveDirty! cfg: Cfg w: Wt -> Result String String
   (let [(out (str cfg.archive "/" w.unit "-" (stringFromInt64 (/ (nowNs) 1000000))))

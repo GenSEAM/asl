@@ -22,6 +22,7 @@
    "asl-gates/vacuity"
    "asl-gates/auditForeign"
    "asl-gates/auditGates"
+   "asl-gates/auditLanded"
    "asl-gates/auditMain"
    "asl-gates/docExtract"
    "asl-gates/docLedger"

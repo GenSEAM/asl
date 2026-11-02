@@ -1,7 +1,8 @@
 (module asl-gates/auditMain
   :x [runAudit! main]
   :i [(asl-gates/auditGates :a ag)
-      (asl-gates/auditForeign :a af)])
+      (asl-gates/auditForeign :a af)
+      (asl-gates/auditLanded :a al)])
 
 fn identLoop bs: Bytes n: Int64 i: Int64 -> Bool
   (if (>= i n)
@@ -47,10 +48,10 @@ fn stripRootArgs args: (List String) -> (List String)
 fn runAudit! root: String args: (List String) baseEnv: String inRunner: Bool -> ag/AuditRun
   (match (listHead args)
     ((none)
-     (ag/emit "none" (list (ag/failCheck "usage" "ERR_USAGE" "subcommands: build check closure consistency foreign gates steps" (none) (none))) "" "" false))
+     (ag/emit "none" (list (ag/failCheck "usage" "ERR_USAGE" "subcommands: build check closure consistency foreign gates landed steps" (none) (none))) "" "" false))
     ((some sub)
      (if (not (isSubcommandIdent? sub))
-       (ag/emit "none" (list (ag/failCheck "usage" "ERR_USAGE" "subcommands: build check closure consistency foreign gates steps" (none) (none))) "" "" false)
+       (ag/emit "none" (list (ag/failCheck "usage" "ERR_USAGE" "subcommands: build check closure consistency foreign gates landed steps" (none) (none))) "" "" false)
        (let [(rest (optionOr (listTail args) (list)))]
          (cond
            ((= sub "consistency") (ag/cmdConsistency! root rest))
@@ -58,6 +59,7 @@ fn runAudit! root: String args: (List String) baseEnv: String inRunner: Bool -> 
             (let [(fr (af/runForeign! root rest baseEnv))]
               (ag/AuditRun :receipt fr.receipt :summary fr.summary :exitCode fr.exitCode)))
            ((= sub "gates") (ag/cmdGatesAt! root rest inRunner))
+           ((= sub "landed") (al/cmdLanded! root rest))
            ((= sub "closure") (ag/cmdClosure! root rest))
            ((= sub "steps") (ag/cmdSteps! root rest))
            ((= sub "check") (ag/cmdCheck! root rest))

@@ -74,7 +74,74 @@ fn ! testSideLedgerKeepsParked -> Bool
         (assert (stringContains? parked2 ":id \"P1\"") (str "and P1 still stays: " parked2))
         true))
 
+; (:m :ref CONDUCTOR-TASK-REFRESH :do "a changed ledger row refreshes tasks/ID.txt and the store row's owns and gate of a unit that is not in a stage and journals one (:refresh ...) row; the same ledger again changes nothing; a writing unit is left alone; a dry import only reports")
+fn ledgerOne doc: String gate: String -> String
+  (str "(:u :id R1 :queue conductor :do \"" doc "\" :owns (\"docs/r.md\") :gate \"" gate "\")\n")
+
+fn refreshedOf r: (Result pi/Report String) -> (List String)
+  (match r ((ok rep) rep.refreshed) ((err _) (list "ERR")))
+
+fn ! journalRows store: String -> Int64
+  (listLength (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:refresh ")) (stringLines (resultOr (fileReadString (str store "/journal.asn")) ""))))
+
+fn ! testRefresh -> Bool
+  (let [(store (scratchStore "refresh"))
+        (_ (dirCreate store))
+        (first (pi/plan! (ledgerOne "d1" "g1") store "dev" false))
+        (r0 (refreshedOf first))
+        (changed (pi/plan! (ledgerOne "d2" "g2") store "dev" false))
+        (r1 (refreshedOf changed))
+        (u1 (unitOf store "R1"))
+        (doc1 (resultOr (fileReadString (str store "/tasks/R1.txt")) ""))
+        (rows1 (journalRows store))
+        (again (refreshedOf (pi/plan! (ledgerOne "d2" "g2") store "dev" false)))
+        (rows2 (journalRows store))
+        (_ (dirCreate (str store "/cond")))
+        (_ (fileWrite (str store "/cond/R1.asn") "(:cu :id \"R1\" :st writing)\n"))
+        (busy (refreshedOf (pi/plan! (ledgerOne "d3" "g3") store "dev" false)))
+        (doc2 (resultOr (fileReadString (str store "/tasks/R1.txt")) ""))
+        (_ (fileWrite (str store "/cond/R1.asn") "(:cu :id \"R1\" :st blocked :await \"lead\")\n"))
+        (leadHeld (refreshedOf (pi/plan! (ledgerOne "d3" "g3") store "dev" false)))
+        (_ (fileWrite (str store "/cond/R1.asn") "(:cu :id \"R1\" :st blocked :await \"rebase\")\n"))
+        (rebaseHeld (refreshedOf (pi/plan! (ledgerOne "d3" "g3") store "dev" false)))
+        (docHeld (resultOr (fileReadString (str store "/tasks/R1.txt")) ""))
+        (_ (fileWrite (str store "/cond/R1.asn") "(:cu :id \"R1\" :st blocked :await \"\")\n"))
+        (dry (refreshedOf (pi/plan! (ledgerOne "d3" "g3") store "dev" true)))
+        (doc3 (resultOr (fileReadString (str store "/tasks/R1.txt")) ""))
+        (_ (pathRemove store))]
+    (do (assert (listEmpty? r0) (str "the first import refreshes nothing: " (stringJoin r0 ",")))
+        (assert (= r1 (list "R1")) (str "a changed row is refreshed: " (stringJoin r1 ",")))
+        (assert (and (= u1.gate "g2") (= doc1 "d2")) (str "gate and task text follow the row: " u1.gate " " doc1))
+        (assert (= rows1 1) "one refresh row in the journal")
+        (assert (and (listEmpty? again) (= rows2 1)) "the same ledger again refreshes nothing and journals nothing")
+        (assert (and (listEmpty? busy) (= doc2 "d2")) "a writing unit keeps its task text")
+        (assert (and (listEmpty? leadHeld) (and (listEmpty? rebaseHeld) (= docHeld "d2"))) "a unit blocked awaiting the lead or a rebase keeps its task text")
+        (assert (and (= dry (list "R1")) (= doc3 "d2")) "a dry import reports the refresh and writes nothing")
+        true))
+
+; (:m :ref ORG-GAP-20261102 :do "staleOwns: one (:staleOwns :id :paths) line per row whose :owns has a path with neither the path nor its directory in the tree; an existing file, a new file in an existing directory and a glob over an existing directory are live; a moved package's old paths are stale")
+fn ! testStaleOwns -> Bool
+  (let [(root (scratchStore "stale"))
+        (_ (dirCreate root))
+        (_ (dirCreate (str root "/asl")))
+        (_ (dirCreate (str root "/asl/live")))
+        (_ (fileWrite (str root "/asl/live/a.asl") "x"))
+        (text (str "(:u :id S1 :queue conductor :do \"live\" :owns (\"asl/live/a.asl\") :gate \"true\")\n"
+                   "(:u :id S2 :queue conductor :do \"new file\" :owns (\"asl/live/new.asl\" \"asl/live/\") :gate \"true\")\n"
+                   "(:u :id S3 :queue conductor :do \"moved\" :owns (\"asl/agentLoop/x.asl\") :gate \"true\")\n"
+                   "(:u :id S4 :queue conductor :do \"mixed\" :owns (\"asl/live/a.asl\" \"asl/agentLoop/**\" \"asl/live/*.asl\" \"old/y/z.asl\") :gate \"true\")\n"))
+        (rows (pi/staleOwns text root))
+        (none (pi/staleOwns "" root))
+        (_ (pathRemove root))]
+    (do (assert (= (listLength rows) 2) (str "two rows are stale: " (stringJoin rows " | ")))
+        (assert (= (optionOr (listGet rows 0) "") "(:staleOwns :id \"S3\" :paths (\"asl/agentLoop/x.asl\"))") (str "S3 names its moved path: " (stringJoin rows " | ")))
+        (assert (= (optionOr (listGet rows 1) "") "(:staleOwns :id \"S4\" :paths (\"asl/agentLoop/**\" \"old/y/z.asl\"))") (str "S4 names only the missing paths: " (stringJoin rows " | ")))
+        (assert (listEmpty? none) "an empty ledger has nothing stale")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testImport) "plan import on a fixture ledger")
+      (assert (testRefresh) "a changed row refreshes an idle unit")
+      (assert (testStaleOwns) "rows owning paths absent from the tree are reported")
       (assert (testSideLedgerKeepsParked) "side-ledger import keeps parked rows")
       true)
