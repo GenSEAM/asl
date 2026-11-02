@@ -143,8 +143,9 @@ fn buildTagged items: (List AsnValue) -> (Result AsnValue String)
 fn buildTuple items: (List AsnValue) -> (Result AsnValue String)
   (if (and (not (listEmpty? items)) (allVectorValues? items)) (ok (asnTuple items)) (err "parse"))
 
+; (:m :ref READER-MIXEDCASE-HYPHEN :do "same head rule as asl-syntax/asl/asn; the refusal names the symbol only, token line and column are not at hand here, so it differs from the byte-offset text of asl-syntax")
 fn buildNamed name: String rest: (List AsnValue) -> (Result AsnValue String)
-  (match (headKind name) ((headType) (buildSchemaHead name rest)) ((headCase) (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))) ((headTag) (buildTuple (cons (asnSym name) rest))) ((headBad) (err "parse")))
+  (match (headKind name) ((headType) (buildSchemaHead name rest)) ((headCase) (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))) ((headTag) (buildTuple (cons (asnSym name) rest))) ((headBad) (err (str "bad head symbol " name))))
 
 fn buildSchemaHead name: String rest: (List AsnValue) -> (Result AsnValue String)
   (match (listHead rest) ((none) (ok (asnCtor name (list)))) ((some h) (match h ((asnVec _) (if (allVectors? rest) (ok (asnRows name rest)) (err "parse"))) ((asnKw _) (match (fieldsOf rest (list)) ((ok fs) (ok (asnCtor name fs))) ((err c) (err c)))) (_ (if (allVectorValues? rest) (ok (asnCase name rest)) (err "parse"))))))

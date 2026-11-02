@@ -551,6 +551,13 @@ fn buildCstMap text: String kids: (List tr/TreeElement) -> (Result AsnValue Stri
          ((err e) (err e))))
       ((err e) (err e))))
 
+; (:m :ref READER-MIXEDCASE-HYPHEN :do "a list head symbol outside the three head classes (PascalCase type, kebab-lower case, SCREAMING tag) is refused by name and byte offset, e.g. mixed case with a hyphen as in W1b-FIX; the eval reader accepts more, this reader keeps the stricter head rule")
+fn badHeadError s: String inner: (List tr/TreeElement) -> String
+  (str "bad head symbol " s " at byte "
+       (match (listHead inner)
+         ((some (tr/elemToken t)) (stringFromInt64 t.start))
+         (_ "?")))
+
 fn buildCstList text: String kids: (List tr/TreeElement) -> (Result AsnValue String)
   (let [(inner (dropFirstAndLast kids))]
     (if (listEmpty? inner)
@@ -576,7 +583,9 @@ fn buildCstList text: String kids: (List tr/TreeElement) -> (Result AsnValue Str
            ((some h)
             (match h
               ((asnKw _) (buildRecord items))
-              ((asnSym s) (buildNamed s (optionOr (listTail items) (list))))
+              ((asnSym s) (match (headKind s)
+                            ((headBad) (err (badHeadError s inner)))
+                            (_ (buildNamed s (optionOr (listTail items) (list))))))
               ((asnVec _) (buildTable items))
               ((asnStr _) (buildPair items))
               ((asnInt _) (buildPair items))
