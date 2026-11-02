@@ -917,10 +917,10 @@ fn judgeFailure cx: Ctx p: Projection raw: String -> String
   (if (!= cx.mode "judge")
     ""
     (let [(r cx.judge)
-          (msg (firstMessage p.resp))
+          (msg (match (pt/jsonLoads raw) ((ok parsed) (firstMessage parsed)) ((err _) (firstMessage p.resp))))
           (text (match p.content ((j/jstr s) s) (_ "")))]
       (cond
-        ((and r.empty (and (emptyContent? p.content) (not (toolCalls? msg)))) "empty")
+        ((and r.empty (and (emptyContent? (getOr msg "content" (j/jnull))) (not (toolCalls? msg)))) "empty")
         ((and r.truncated (= (finishReason p.resp) "length")) "truncated")
         ((and (listContains? r.stepIntents (stringLower cx.intent))
               (not (listAny? (fn [(h String)] -> Bool (stringContains? text h)) r.stepHeads))) "noStepForm")
