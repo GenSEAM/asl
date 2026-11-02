@@ -11,7 +11,7 @@
       (asl/agentLoop/context :a ctx)
       (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go)
-      (asl/agentLoop/runLoop :a rl)
+      (asl/agentLoop/runLoop :a rl) (asl/agentLoop/pathResolve :a pres)
       (asl/agentLoop/loopState :a ls)
       (asl/agentLoop/turn :a tr)
       (asl/agentLoop/exec :a ex)
@@ -1442,10 +1442,17 @@ fn ! liveOwnsField! rootDir: String journal: (Option String) -> String
 fn withRemote op: (List (Pair String c/KvVal)) unit: String -> (List (Pair String c/KvVal))
   (if (or (stringEmpty? unit) (listAny? (fn [p] (= (pairFirst p) "remote")) op)) op (listAppend op (list (pair "remote" (c/kvStr unit)))))
 
+; (:m :ref LEON-PATH-RESOLVE :do "node2 2026-11-02: the top repeatFailure ops were tree, write and read on module-name paths (asl-gates/metaAudit.asl) repeated until the stop; a step path that does not exist runs on the one workspace path it names (pathResolve), owns and the write snapshot see that path, and the receipt carries :resolvedFrom with the path as sent")
+fn resolvedOut out: ex/ExecOut from: (Option String) -> ex/ExecOut
+  (match from
+    ((some f) (ex/ExecOut :rec (ex/recSet out.rec "resolvedFrom" (ex/vStr f)) :procs out.procs))
+    ((none) out))
+
 fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: String repoRoot: String sid: String journal: String env: ex/ExecEnv run: rl/LoopRun -> (Pair rl/LoopRun (Pair String Bool))
   (if (listEmpty? ops)
     (pair run (pair "" false))
-    (let [op (c/firstOf ops)
+    (let [resolvedOp (pres/resolveOp! (c/firstOf ops) (liveOpName (c/firstOf ops)) rootDir)
+          op (pairFirst resolvedOp)
           opName (liveOpName op)
           target (liveOpPath op)
           mutating (listContains? (list "write" "edit" "delete") opName)
@@ -1470,6 +1477,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
               (ex/execOp! (withRemote op ra.remote) env run.procs (fn [] (resultOr (newSessionId) sid))
                 (fn [path] (listContains? (rl/writtenPaths written) path))
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
+          out (resolvedOut out (pairSecond resolvedOp))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)

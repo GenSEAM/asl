@@ -313,6 +313,7 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                 (if (truthyField rec "error") (str " :error :" (lstripColons (fieldStr rec "error" ""))) "")
                 (if (truthyField rec "message") (str " :message \"" (escField rec "message") "\"") "")
                 (if (truthyField rec "canonical") (str " :canonical \"" (escField rec "canonical") "\"") "")
+                (if (truthyField rec "resolvedFrom") (str " :resolvedFrom \"" (escField rec "resolvedFrom") "\"") "")
                 (if (truthyField rec "warning") (str " :warning \"" (escField rec "warning") "\"") "")
                 (if (notNone rec "line") (str " :line " (fieldStr rec "line" "")) "")
                 (if (notNone rec "arrived") (str " :arrived \"" (escField rec "arrived") "\"") "")
