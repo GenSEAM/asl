@@ -501,8 +501,12 @@ fn chatReplyAsn respJson: j/Json -> String
                              ; (:m :ref CTX-ROUTE :do "the largest window of the route, after the served member's own")
                              (mPart (match (getPropLoop aslKvs "maxContextTokens")
                                       ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":maxContextTokens " (asnValue v)))))
+                                      ((none) (list))))
+                             ; (:m :ref GW-AFFINITY-SPREAD :do "the session's previous member when another one answered")
+                             (sPart (match (getPropLoop aslKvs "switchedFrom")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":switchedFrom " (asnValue v)))))
                                       ((none) (list))))]
-                         (listAppend aPart (listAppend ePart (listAppend tPart (listAppend cPart mPart))))))
+                         (listAppend aPart (listAppend ePart (listAppend tPart (listAppend cPart (listAppend mPart sPart))))))
                       ((none) (list))))
         (partFinish (list (str ":finish \"" (asnEscape finishStr) "\"")))
         (usageOpt (chatReplyUsage respJson))

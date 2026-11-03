@@ -189,6 +189,10 @@
   (:f session String)
   (:f stuck String)
   (:f dropOnSwitch Bool)
+  ; (:m :ref GW-AFFINITY-SPREAD :do "seconds the sticking member (stuck) waits for its rpm token, 0 when the session does not stick")
+  (:f stickWaitSec Float64)
+  ; (:m :ref GW-AFFINITY-SPREAD :do "true while the session sticks to stuck (inside :affinityStickSec)")
+  (:f sticking Bool)
   ; (:m :ref GW-MODES :do "the selected profile's mode (pin, route or judge) and judge rules, set by withProfile; route and the default rules before")
   (:f mode String)
   (:f judge c/JudgeRules)
@@ -733,7 +737,7 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
                                  :headerEff (u/headerGet hs "X-ASL-Effort") :envEff (mapGet world.env "ASL_EFFORT")
                                  :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60
-                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault)
+                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :stickWaitSec 0.0 :sticking false :mode "route" :judge (c/judgeDefault)
                                  :excludeModel (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Exclude-Model") ""))))]
                     (match world.table
                       ((err e) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG")
@@ -881,8 +885,10 @@ fn stickLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatS
              (match (listHead xs)
                ((none) (run cx models))
                ((some alias)
-                (run (with cx :stuck alias :dropOnSwitch (= (listGet xs 2) (some "1")))
-                     (if (= (listGet xs 1) (some "1")) (reorderBySpread models (list alias)) models)))))
+                (let [(sticks (= (listGet xs 1) (some "1")))
+                      (wait (if sticks (match (listGet xs 3) ((some s) (match (u/pyFloat s) ((ok f) (max 0.0 f)) ((err _) 0.0))) ((none) 0.0)) 0.0))]
+                  (run (with cx :stuck alias :dropOnSwitch (= (listGet xs 2) (some "1")) :stickWaitSec wait :sticking sticks)
+                       (if sticks (reorderBySpread models (list alias)) models))))))
             ((outDone) (run cx models))
             (_ (mismatch "strings")))))))
 
@@ -1657,10 +1663,14 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 ; (:m :ref GW-THROTTLE-NO-AGY :do "a throttled member (bucket depleted) goes straight to the next loop model whenever its entry comes from the config table; the agy CLI rescue stays only for the legacy gemini-only path where no config entry exists")
 ; (:m :ref GW-THROTTLE-WAIT :do "the last member of a chain waits up to 30 s for its own bucket instead of failing the request, so a chain skipped only by local rpm buckets ends in a call, not an error; earlier members keep the 0.5 s fall-through")
 ; (:m :ref GW-BUCKET-SHORTWAIT :do "a member before the last waits for its bucket up to the config's :bucketWaitSec (default 5 s) instead of 0.5 s, so a bucket refilling within a few seconds is used rather than skipped; the last member still waits 30 s")
-fn bucketWaitSec cx: Ctx l: Loop -> Float64
-  (if (>= l.idx (- (listLength l.models) 1))
-    (queueBudgetSec cx)
-    (match cx.world.table ((ok t) t.bucketWaitSec) ((err _) (c/defaultBucketWaitSec))))
+; (:m :ref GW-AFFINITY-SPREAD :do "a session's sticking member waits up to :affinityWaitSec (never past the queue budget) for its own rpm token, so a provider bucket shared with other sessions does not push the session onto another model after a few seconds")
+fn bucketWaitSec cx: Ctx l: Loop alias: String -> Float64
+  (let [(plain (if (>= l.idx (- (listLength l.models) 1))
+                 (queueBudgetSec cx)
+                 (match cx.world.table ((ok t) t.bucketWaitSec) ((err _) (c/defaultBucketWaitSec)))))]
+    (if (and (> cx.stickWaitSec 0.0) (= alias cx.stuck))
+      (max plain (min cx.stickWaitSec (queueBudgetSec cx)))
+      plain))
 
 ; (:m :ref HUB-QUEUE-PACED :do "the request's own queue budget in seconds: X-ASL-Queue-Ms, else X-ASL-Queue-Timeout, else the body's queue_timeout (Leon always sends one); 30 s when the caller gave none, the wait the last member always had")
 fn positiveSec v: j/Json scale: Float64 -> (Option Float64)
@@ -1695,7 +1705,7 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
     (match rpm
       ((some r)
        (if (!= r 0.0)
-         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r (bucketWaitSec cx l))
+         (askBool (effBucket (match a.v2 ((some e) (if (stringEmpty? e.rpmKey) a.target e.rpmKey)) ((none) a.target)) r (bucketWaitSec cx l a.alias))
            (fn [(acquired Bool)] -> ChatStep
              (if acquired
                (httpAttempt cx l a)
@@ -1944,8 +1954,11 @@ fn sanitizeFirst resp: j/Json f: (fn [String] -> String) -> j/Json
     (_ resp))
 
 ; (:m :ref CTX-ROUTE :do "maxContext is the largest contextBudget in the loop's chain, sent as maxContextTokens when any member declares one: the largest window this route can serve, so a client knows how far it may grow before compacting harder")
-fn servedBy a: Attempt body: j/Json maxContext: Int64 -> (List (Pair String j/Json))
-  (let [(base (list (pair "alias" (j/jstr a.alias))))
+; (:m :ref GW-AFFINITY-SPREAD :do "prev is the session's last answering member (empty when none); when another member answers, the reply names it as switchedFrom, so the caller rebuilds its context for the new member's contextTokens")
+fn servedBy a: Attempt body: j/Json maxContext: Int64 prev: String -> (List (Pair String j/Json))
+  (let [(base (if (or (stringEmpty? prev) (= prev a.alias))
+                (list (pair "alias" (j/jstr a.alias)))
+                (list (pair "alias" (j/jstr a.alias)) (pair "switchedFrom" (j/jstr prev)))))
         (withEffort (match a.sentEffort
                       ((some e) (match e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
                       ((none) base)))
@@ -2141,7 +2154,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
            (telemetry cx content m
              (fn [(rec (Option String))] -> ChatStep
                (let [(withModel (if (has? sanitized "model") sanitized (pt/jset sanitized "model" (j/jstr a.target))))
-                     (resp (mergeAsl withModel (servedBy a l.body (maxBudgetOf l.models))))
+                     (resp (mergeAsl withModel (servedBy a l.body (maxBudgetOf l.models) cx.stuck)))
                      (lb (with l :telBound true))]
                  (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec))))))))
       ((none) (answered cx l a status headers body none none))))
@@ -2173,7 +2186,18 @@ fn answered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String
                        (passthrough cx l a status headers respBody rec)))
                     ((none) (passthrough cx l a status headers respBody rec)))))]
     (tell (effUsageNote prov a.alias "ok" usage)
-      (fn [] -> ChatStep (noteAffinity cx a.alias (fn [] -> ChatStep (clearBreakerPools (list a.pool a.providerPool) finish))))))
+      (fn [] -> ChatStep (noteSwitch cx l a.alias (fn [] -> ChatStep (noteAffinity cx a.alias (fn [] -> ChatStep (clearBreakerPools (list a.pool a.providerPool) finish))))))))
+
+; (:m :ref GW-AFFINITY-SPREAD :do "a sticking session answered by another member than its own records the switch: a skippedSwitch usage note on the member it left (not a sent call) and a log line naming session, from and to")
+fn noteSwitch cx: Ctx l: Loop alias: String k: (fn [] -> ChatStep) -> ChatStep
+  (if (or (stringEmpty? cx.session) (or (not cx.sticking) (or (stringEmpty? cx.stuck) (= cx.stuck alias))))
+    (k)
+    (let [(prov (fold (fn [(acc String) (m c/GatewayResolvedEntry)] -> String
+                        (match m ((c/entryResolved e) (if (= e.alias cx.stuck) e.provider acc)) ((c/entryUnresolved _) acc)))
+                      "" l.models))]
+      (tellAll (list (usageNote prov cx.stuck (str "skippedSwitch:" alias))
+                     (effLog (str "[Gateway Affinity] session " cx.session " switched " cx.stuck " -> " alias "\n")))
+        k)))
 
 fn passthrough cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) respBody: String rec: (Option String) -> ChatStep
   (let [(head (listAppend l.head
