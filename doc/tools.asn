@@ -1592,6 +1592,7 @@
 (:doc :symbol "asl/tools/coord/conductor.asl#mergeBusy?" :text "true when another unit is merging with a live merge child, since merge stages run one at a time")
 (:doc :symbol "asl/tools/coord/conductor.asl#nextRung!" :text "the rung above the lane whose daily cap has room, a capped rung skipped; none when there is none")
 (:doc :symbol "asl/tools/coord/conductor.asl#noCommits?" :text "true when the write left no commit past its base; an unreadable count or no worktree counts as none")
+(:doc :symbol "asl/tools/coord/conductor.asl#vacuousAround!" :text "the write stage vacuous verdict: reads the tree for a blank slate just before the writer thunk runs and returns (result, vacuous), vacuous only when blank and the gate is listed in :vacuousGates; writeRes calls it, so a retained wip-only branch with a green gate reaches gating")
 (:doc :symbol "asl/tools/coord/conductor.asl#blankSlate?" :text "true when the branch holds no commit at all past its base (wip rescue commits included) and no owned change; the vacuous-gate verdict applies only then, so a retained branch with rescued work whose gate is green is real work")
 (:doc :symbol "asl/tools/coord/conductor.asl#noEdits?" :text "true when the write has no commit past its base and no changed owned file")
 (:doc :symbol "asl/tools/coord/conductor.asl#offerBacklog!" :text "while the lead heartbeat is fresh, writes one lead row for each unit blocked on a plain escalate, oldest first, at most leadBacklogCap per tick; returns the rows written")
