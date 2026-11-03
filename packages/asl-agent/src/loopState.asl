@@ -43,7 +43,7 @@ schema LoopState
   (:f code String) (:f commitRequested Bool) (:f declaredOps (List String)) (:f fetched j/Json)
   (:f header String) (:f history (List j/Json)) (:f lastGates (Map String j/Json))
   (:f missingGateIntro (List String)) (:f patchErr (Option String))
-  (:f placeholderBriefs (Map String Int64)) (:f doneNoWriteStreak Int64) (:f malformedStreak Int64) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
+  (:f placeholderBriefs (Map String Int64)) (:f doneNoWriteStreak Int64) (:f malformedStreak Int64) (:f notFoundStreak Int64) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
   (:f resumePatchPath (Option String)) (:f retries j/Json) (:f runUnbackedClaims (List j/Json))
   (:f specChecksDone Int64) (:f startTurn Int64) (:f taskLines String) (:f unparsable j/Json)
   (:f vendorBounds j/Json) (:f window j/Json) (:f writtenFiles (List String))

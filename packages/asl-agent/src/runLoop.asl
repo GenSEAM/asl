@@ -106,7 +106,7 @@ fn stateFor env: s/LoopEnv -> s/LoopState
       :usageTotals (j/jobj (list)) :batching (j/jobj (list (pair "ops" (j/jint 0)) (pair "single" (j/jint 0)) (pair "turns" (j/jint 0)))) :hasTiming false :basePrompt ""
       :briefCount 0 :code "" :commitRequested env.commit :declaredOps (list) :fetched (j/jobj (list))
       :header "" :history (list) :lastGates (mapEmpty) :missingGateIntro (list) :patchErr none
-      :placeholderBriefs (mapEmpty) :doneNoWriteStreak 0 :malformedStreak 0 :prefetch "" :baselineGreen (list) :priorIds (list) :resumePatchPath none
+      :placeholderBriefs (mapEmpty) :doneNoWriteStreak 0 :malformedStreak 0 :notFoundStreak 0 :prefetch "" :baselineGreen (list) :priorIds (list) :resumePatchPath none
       :retries (j/jobj (list)) :runUnbackedClaims (list) :specChecksDone 0 :startTurn resumeTurn
       :taskLines "" :unparsable (j/jobj (list)) :vendorBounds (j/jobj (list))
       :window (j/jobj (list)) :writtenFiles (list)))
@@ -178,7 +178,7 @@ fn withHeadState state: s/LoopState turn: Int64 readStreak: Int64 writesPersiste
       :lastGates lastGates
       :missingGateIntro state.missingGateIntro
       :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak
       :prefetch state.prefetch :baselineGreen state.baselineGreen
       :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath
@@ -216,7 +216,7 @@ fn withOwnsRejections state: s/LoopState rejections: (List j/Json) -> s/LoopStat
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -256,7 +256,7 @@ fn withUsageTotals state: s/LoopState usageTotals: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -293,7 +293,7 @@ fn withBatching state: s/LoopState batching: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -323,7 +323,7 @@ fn withPlan state: s/LoopState plan: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -353,7 +353,7 @@ fn withFindings state: s/LoopState findings: (List j/Json) confirms: (List j/Jso
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -384,7 +384,7 @@ fn withPrefetch state: s/LoopState prefetch: String -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -465,7 +465,7 @@ fn withBaseline state: s/LoopState green: (List String) -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen green :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen green :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window

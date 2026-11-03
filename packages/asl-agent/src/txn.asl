@@ -1,6 +1,6 @@
 (module aslAgent/txn
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
-      execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid balanceFix txnRefusal abortAid! abortAidOn applySteps stepsOf
+      execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid balanceFix balanceRepair txnRefusal abortAid! abortAidOn applySteps stepsOf
       intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
       langForPath tryRepairText! orderSubs moduleHints moduleOf importsOf expectedModule txnSubs]
   :i [(aslAgent/core :a c)
@@ -335,6 +335,52 @@ fn balanceFix text: String -> (Option String)
           (let [start (numAfter m "starts at line ")]
             (some (str "line " (numAfter m "line ") " column " (numAfter m "column ") " has a closer with nothing open to close; delete it"
                     (if (= start "") "" (str " (the form starting at line " start " is already complete there)")))))))))
+
+fn quoteOdd raw: String n: Int64 i: Int64 inStr: Bool inCmt: Bool -> Bool
+  (if (>= i n)
+    inStr
+    (let [x (ch raw i)]
+      (cond
+        (inCmt (quoteOdd raw n (+ i 1) inStr (!= x "\n")))
+        (inStr
+          (cond
+            ((= x "\\") (quoteOdd raw n (+ i 2) inStr false))
+            ((= x "\"") (quoteOdd raw n (+ i 1) false false))
+            (else (quoteOdd raw n (+ i 1) inStr false))))
+        ((= x ";") (quoteOdd raw n (+ i 1) false true))
+        ((= x "\"") (quoteOdd raw n (+ i 1) true false))
+        (else (quoteOdd raw n (+ i 1) inStr false)))))
+
+fn dropCharAt text: String line: Int64 col: Int64 x: String -> (Option String)
+  (let [lines (stringSplit text "\n")
+        k (- line 1)
+        cur (optionOr (listGet lines k) "")]
+    (if (or (< k 0) (or (< col 1) (!= (ch cur (- col 1)) x)))
+      none
+      (let [cut (str (c/sliceOf cur 0 (- col 1)) (tailFrom cur col))]
+        (some (stringJoin (listAppend (optionOr (listSlice lines 0 k) (list)) (cons cut (optionOr (listSlice lines (+ k 1) (listLength lines)) (list)))) "\n")))))
+
+; (:m :ref LEON-AUTOFIX-CLOSER :do "node2 2026-11-03: 11 of 18 repeatFailure sessions resent byte-identical content after a hint naming the one stray closer; exactly one stray closer is deleted, or exactly one unclosed opener at the end of the text is closed, and the result is accepted only when it balances and the quotes pair")
+fn balanceRepair text: String -> (Option String)
+  (if (quoteOdd text (stringLength text) 0 false false)
+    none
+    (match (balanceAid text)
+      ((none) none)
+      ((some m)
+        (let [fixed (if (stringContains? m " opens a ")
+                      (if (and (= (numAfter m "never closed: ") "1") (not (stringContains? m " before line ")))
+                        (let [i (optionOr (stringIndexOf m " opens a ") 0)
+                              o (c/sliceOf m (+ i 9) (+ i 10))
+                              cut (stripRightAt text (stringLength text))]
+                          (some (str (c/sliceOf text 0 cut) (closerOf o) (tailFrom text cut))))
+                        none)
+                      (if (= (numAfter m "closes ") "1")
+                        (let [i (optionOr (stringIndexOf m " more ") 0)]
+                          (dropCharAt text (optionOr (stringToInt64 (numAfter m "line ")) 0) (optionOr (stringToInt64 (numAfter m "column ")) 0) (c/sliceOf m (+ i 6) (+ i 7))))
+                        none))]
+          (match fixed
+            ((some f) (if (none? (balanceAid f)) fixed none))
+            ((none) none))))))
 
 fn endLen line: String -> Int64
   (let [n (stringLength line)

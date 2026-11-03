@@ -1150,6 +1150,24 @@ fn withDoneStreak st: ls/LoopState n: Int64 -> ls/LoopState
 fn failedReceipts? receipts: String -> Bool
   (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))
 
+; (:m :ref LEON-OWNED-MISSING :do "node2 2026-11-03: 13 of 18 readStreak stops read owned files that do not exist yet and got not-found answers; a turn of not-found reads extends the streak at most notFoundStreakCap turns in a row, counted in the LoopState notFoundStreak field")
+fn notFoundStreakCap -> Int64
+  2
+
+fn notFoundReceipts? receipts: String -> Bool
+  (or (stringContains? receipts "ERR_FILE_NOT_FOUND") (stringContains? receipts "ERR_SYMBOL_NOT_FOUND"))
+
+; (:m :ref LEON-IDENTICAL-2 :do "node2 2026-11-03: 18 repeatFailure stops, 11 with a delimiter refusal the model resent byte-identical; on the turn before the cap the refusal text and the instruction to change the content are appended to what the model gets back")
+fn refusalOf receipts: String -> String
+  (let [line (optionOr (listHead (filter (fn [l] (and (failedReceipts? l) (not (stringContains? l ":echoed true")))) (stringSplit receipts "\n"))) "")
+        msg (optionOr (quotedAfter line ":message") "")
+        hint (optionOr (quotedAfter line ":hint") "")]
+    (let [full (str msg (if (stringEmpty? hint) "" (str " ; " hint)))]
+      (c/sliceOf full 0 (min 600 (stringLength full)))))
+
+fn repeatHint receipts: String repeats: Int64 -> String
+  (str "(:repeated :times " (stringFromInt64 repeats) " :refusal \"" (c/escapeAsn (refusalOf receipts)) "\" :do \"change the content, do not resend\")")
+
 ; (:m :ref LEON-RAW-PROTOCOL :do "a rejected write that only answers an :error code the model copied into its step (:echoed true) is not a new attempt, so it does not count toward the repeat cap")
 fn countedFailures? receipts: String -> Bool
   (failedReceipts? (stringJoin (filter (fn [l] (not (stringContains? l ":echoed true"))) (stringSplit receipts "\n")) "\n"))
@@ -1953,7 +1971,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   wrote (pairSecond (pairSecond execResult))
                   ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
                   poolAsks (po/servePending! ra.pool)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) ""))
+                  repeatKey (stringTrim normalized)
+                  repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
+                    (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
@@ -2013,7 +2034,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   status (if (or (not (pairFirst integrity)) (not hooksOk))
                     "failed" (if terminal "ok" "running"))
                   wroteSinceGate (if (not (listEmpty? newGates)) false (or state.wroteSinceGate wrote))
-                  nextReadStreak (if wrote 0 (+ state.readStreak 1))
+                  notFoundTurn (and (not wrote) (notFoundReceipts? opReceipts))
+                  notFoundStreak (if notFoundTurn (+ 1 state.notFoundStreak) 0)
+                  nextReadStreak (cond (wrote 0) ((and notFoundTurn (> notFoundStreak (notFoundStreakCap))) state.readStreak) (else (+ state.readStreak 1)))
                   nextStateBase (rl/withTurnContext executed.state servedCtx (ctx/readPayloadChars (optionOr servedCtx 24000)) wroteSinceGate)
                   nextState0 (rl/withHeadState nextStateBase turn nextReadStreak writesPersisted
                     deliver allGates lastGates
@@ -2030,9 +2053,6 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (rl/withState notedRun (rl/withHeadState nextState turn nextState.readStreak writesPersisted deliver allGates lastGates
                       "failed" (some "gateIntegrity") (some (pairSecond integrity)) state.runStarted))
                     notedRun)
-                  repeatKey (stringTrim normalized)
-                  repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
-                    (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
                   counts (if (> repeats 0) (mapSet (mapEmpty) repeatKey repeats) (mapEmpty))
                   doneOnly (and done (and (not wrote) (and (not terminal) (listEmpty? (filter (fn [o] (!= (liveOpName o) "done")) operations)))))
                   doneStreak (if doneOnly (+ 1 (doneStreakOf state)) 0)
@@ -2060,7 +2080,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (repeatStop
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
-                    (else (rl/withState nextRun0 (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak))))]
+                    (else (rl/withState nextRun0 (with (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak) :notFoundStreak notFoundStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
                     (if (or terminal (or repeatStop (or wallHalt (or doneStop malformedStop)))) (stop) (nextTurn)))))))))
 
