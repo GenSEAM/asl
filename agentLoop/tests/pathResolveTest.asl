@@ -47,4 +47,5 @@ fn ! runTests -> Bool
       (assert (stringContains? run.journal "resolvedFrom") "the receipt names the path the step was sent with")
       (assert (not (stringContains? run.journal "Directory not found")) "the tree of kit-gates found the package directory")
       (assert (stringContains? run.journal "(:written \"NEWBODY") "the write to a module-name directory landed in the resolved directory")
+      (assert (none? (pr/resolveIn (list "asl" "asl/tools" "asl/tools/coord" "asl/other" "asl/other/fixtures") "asl/tools/coord/fixtures")) "a new dir under a real top-level prefix is not redirected to another package's same-named dir")
       true))

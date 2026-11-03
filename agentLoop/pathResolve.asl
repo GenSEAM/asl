@@ -33,6 +33,7 @@ fn dirsOf files: (List String) -> (List String)
 fn hasSegment path: String seg: String -> Bool
   (listContains? (segmentsOf path) seg)
 
+; (:m :ref LEON-W2-FIX :do "a path whose first segment is itself a listed top-level directory is never resolved by dropping segments: a new nested dir under a real prefix stays where it was named")
 ; (:m :do "the one candidate path that a missing path names: drop leading segments one at a time and keep the candidates ending in the rest; several candidates narrow to those that also carry a dropped segment; a single-segment path matches by its last segment; none when nothing or more than one candidate is left")
 fn resolveIn candidates: (List String) want: String -> (Option String)
   (let [segs (segmentsOf want)
@@ -41,7 +42,9 @@ fn resolveIn candidates: (List String) want: String -> (Option String)
       (none)
       (if (= n 1)
         (pickOne (filter (fn [p] (endsAt p want)) candidates) segs)
-        (dropTry candidates segs 1))))
+        (if (listContains? candidates (optionOr (listHead segs) ""))
+          (none)
+          (dropTry candidates segs 1)))))
 
 fn pickOne hits: (List String) dropped: (List String) -> (Option String)
   (cond
