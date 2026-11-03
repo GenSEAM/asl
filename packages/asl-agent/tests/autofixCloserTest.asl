@@ -2,7 +2,8 @@
   :x [runTests]
   :i [(aslAgent/aslOps :a o)
       (aslAgent/txn :a t)
-      (aslAgent/core :a c)])
+      (aslAgent/core :a c)
+      (aslHarness/tests/agentLoopRecorderKit :a rk)])
 
 ; (:m :ref LEON-AUTOFIX-CLOSER :do "node2 2026-11-03: 11 of 18 repeatFailure sessions resent byte-identical content after a hint naming the one stray closer; exactly one stray closer is deleted, or one unclosed opener at the end closed, only when the result balances and the quotes pair")
 
@@ -13,6 +14,14 @@ fn gateRun form: String root: String -> t/AslRun
 
 fn ! recOf op: String -> String
   (o/serReceipt (o/execAslOpMemo! (c/parseKv op) (list) "/nonexistent-autofixCloser" "s" (fn [] "rid") (fn [f] true) (fn [form r] (gateRun form r)) 8000 none))
+
+fn ! editRec! -> String
+  (let [root (rk/freshRecorderRoot! "autofixEdit")
+        _ (fileWrite (str root "/x.asl") "fn a -> Int64\n  (f 1)\n")
+        op "(:step :op \"edit\" :file \"x.asl\" :old \"(f 1)\" :new \"(f 1))\")"
+        rec (o/serReceipt (o/execAslOpMemo! (c/parseKv op) (list) root "s" (fn [] "rid") (fn [f] true) (fn [form r] (gateRun form r)) 8000 none))
+        cleaned (pathRemove root)]
+    rec)
 
 fn wr content: String -> String
   (str "(:step :op \"write\" :file \"x.asl\" :content \"" (c/escapeAsn content) "\")")
@@ -26,7 +35,8 @@ fn ! runTests -> Bool
         mid "fn a -> Int64\n  (f 1\n\nfn b -> Int64\n  2\n"
         okText "fn a -> Int64\n  (f 1)\n"
         recExtra (recOf (wr extra))
-        recTwo (recOf (wr two))]
+        recTwo (recOf (wr two))
+        recEdit (editRec!)]
     (do
       (assert (= (optionOr (t/balanceRepair extra) "") okText) "one stray closer is deleted")
       (assert (= (optionOr (t/balanceRepair open) "") okText) "one unclosed opener at the end is closed")
@@ -40,4 +50,6 @@ fn ! runTests -> Bool
       (assert (not (stringContains? recExtra "ERR_TXN_FLUSH_FAILED")) "no refusal for the repaired write")
       (assert (stringContains? recTwo "persisted false") "an ambiguous write keeps the refusal")
       (assert (not (stringContains? recTwo "repaired")) "an ambiguous write has no repaired")
+      (assert (stringContains? recEdit "repaired") "the edit receipt carries repaired")
+      (assert (stringContains? recEdit "persisted true") "the repaired edit persisted")
       true))
