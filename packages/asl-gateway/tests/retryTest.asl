@@ -204,7 +204,7 @@ fn testCtx tbl: (Option c/GatewayTable) -> ch/Ctx
     :baseBody (j/jnull) :cascadeLen 1 :spread (list) :cooldownSec 60 :session "" :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault) :excludeModel "")
 
 fn testLoop -> ch/Loop
-  (ch/Loop :body (j/jnull) :models (list) :idx 0 :lastErr (none) :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0)
+  (ch/Loop :body (j/jnull) :models (list) :idx 0 :lastErr (none) :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0 :ctxNeed 0 :ctxFails 0 :ctxEst 0)
 
 fn testAttempt providerId: String data: String -> ch/Attempt
   (ch/Attempt :entry (c/entryUnresolved "m1") :v2 (none) :model "m1" :target "m1"
