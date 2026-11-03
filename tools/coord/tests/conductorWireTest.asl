@@ -227,6 +227,28 @@ fn ! testOrphanWt -> Bool
         (assert (= (listLength entriesAfter) (listLength entries)) "a valid worktree is not moved aside")
         true))
 
+; (:m :ref COND-TASK-SPEC :do "the writer's brief carries each owned path's state at claim (missing: create it with one write; the module name of an asl-utils unit is asl-utils/NAME) and loses the size advice when a file is missing; the stored task text stays as it was")
+fn ! testBriefTask -> Bool
+  (let [(root (scratch "briefTask"))
+        (wt (str root "/wt"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (_ (dirCreate (str root "/tasks")))
+        (_ (dirCreate wt))
+        (_ (dirCreate (str wt "/asl")))
+        (_ (fileWrite (str root "/tasks/U1.txt") "Build it.\nSMALL EDITS ONLY in large files.\nGate: x"))
+        (_ (fileWrite (str wt "/asl/have.asl") "(module m)\n(x)"))
+        (u (st/Task :id "U1" :owns (list "asl/have.asl" "asl/packages/asl-utils/src/textdiff.asl" "asl/dir/") :reads (list) :gate "" :channel "free" :model "" :base "HEAD" :after (list) :st "queued" :epoch 0 :receipt ""))
+        (b (cd/briefTask! wt root u ""))
+        (stored (resultOr (fileReadString (str root "/tasks/U1.txt")) ""))
+        (_ (cleanup root))]
+    (do (assert (stringContains? b "asl/have.asl: exists (2 lines)") (str "existing owned file: " b))
+        (assert (stringContains? b "asl/packages/asl-utils/src/textdiff.asl: missing, create it with one write; module asl-utils/textdiff") (str "missing owned file: " b))
+        (assert (not (stringContains? b "SMALL EDITS ONLY")) "size advice dropped for the missing file")
+        (assert (not (stringContains? b "asl/dir/")) "directory entries are not listed")
+        (assert (stringContains? stored "SMALL EDITS ONLY") "the stored task text is untouched")
+        true))
+
 ; (:m :ref COND3 :do "a dev clone made by git clone lists origin and the train's audit consistency is red on that (workspaceIsolation), so the VPS merge never passed; the conductor drops the dev repo's remotes before the train")
 fn ! testDropRemotes -> Bool
   (let [(root (scratch "dropRemotes"))
@@ -536,6 +558,7 @@ fn ! runTests -> Bool
   (do (assert (testAttach) "retry attaches an existing branch")
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
       (assert (testOrphanWt) "an orphan unit dir is moved aside and re-added")
+      (assert (testBriefTask) "the brief carries owned path states")
       (assert (testDropRemotes) "the dev repo's remotes are dropped before a train")
       (assert (testSpend) "token spend from provider usage and Leon's usage row")
       (assert (testMergeEnv) "the train cannot start a nested e2e")
