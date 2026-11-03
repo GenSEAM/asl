@@ -1,6 +1,6 @@
 (module asl/agentLoop/tests/turnParityTest
   :x [runTests]
-  :i [(asl/agentLoop/turn :a tr) (asl/agentLoop/reply :a r) (asl/agentLoop/core :a c) (asl/agentLoop/plan :a p) (asl/agentLoop/tests/parity :a t)])
+  :i [(asl/agentLoop/turn :a tr) (asl/agentLoop/reply :a r) (asl/agentLoop/core :a c) (asl/agentLoop/plan :a p) (asl/agentLoop/context :a ctx) (asl-json/json :a j) (asl/agentLoop/tests/parity :a t)])
 
 fn sVal v: c/KvVal -> String
   (match v ((c/kvStr x) (t/sStr x)) ((c/kvInt x) (match (stringToInt64 x) ((some i) (t/sInt i)) ((none) (t/sStr x)))))
@@ -66,7 +66,8 @@ fn ! runTests -> Bool
         shortProseReply (tr/turnReply shortProse none)
         findingsThenDone (tr/turnReply (str "(:evidence (:receipt \"r1\"))\n"
                             "(:findings (:claim \"a\" :file \"f\" :anchor \"x\"))\n"
-                            "(:findings (:claim \"b\" :file \"f\" :anchor \"y\"))\n(:done)") (some (list)))]
+                            "(:findings (:claim \"b\" :file \"f\" :anchor \"y\"))\n(:done)") (some (list)))
+        thinkToolReply (tr/turnReply "<think>\n(:findings (:claim \"leak\" :file \"f\" :anchor \"x\"))\n</think>\n<tool_call>\n(:step :op \"read\" :file \"a.txt\")\n</tool_call>" none)]
     (do
       (assert (= passed 7) "all seven independently recorded turn results match the core turn implementation")
       (assert (= shortProseReply.text "(:step :op \"read\" :file \"a.txt\")")
@@ -93,4 +94,9 @@ fn ! runTests -> Bool
       (assert (= (tr/vendorRetryPause "ERR_CONTEXT_TOO_LONG" 2 (list 3 8) none) 0) "non-transient provider failures do not back off")
       (assert (= (listLength findingsThenDone.facts.dataFindings) 2)
               "LEONCTX2-FINDINGS-DONE: two (:findings ...) ops delivered alongside (:evidence ...) and a terminal (:done) in the same turn are both kept, not dropped for the reply's other declared ops")
+      (assert (and (listEmpty? thinkToolReply.facts.dataFindings) (= (listLength thinkToolReply.facts.ops) 1))
+              "FREE-MODEL-TURN: <think> blocks are stripped before parsing and <tool_call> blocks are unwrapped into executable step ops")
+      (assert (= (ctx/contextTokensFor (some "moonshotai/kimi-k2.5:free") j/jnull false) 120000) "kimi-k2.5 resolves to 120k context window")
+      (assert (= (ctx/contextTokensFor (some "xiaomi/mimo-v2-pro:free") j/jnull false) 120000) "mimo-v2-pro resolves to 120k context window")
+      (assert (= (ctx/contextTokensFor (some "nvidia/nemotron-3-super-120b-a12b:free") j/jnull false) 120000) "nemotron resolves to 120k context window")
       true))

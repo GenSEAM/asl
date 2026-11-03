@@ -1,6 +1,6 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! formatDiag formatDiags]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! Staged normalisePaths formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
   (list "." "asl/packages" "asl")
@@ -15,8 +15,38 @@ fn formatDiags diags: (List ty/Diagnostic) -> String
 fn balanceError rc: Int64 -> String
   (if (= rc 2) "ERR_NO_FILE" "ERR_UNBALANCED")
 
+; (:m :ref PAREN-CHECK-DIAG :do "an unbalanced file's receipt carries the closer edits its indentation implies, each naming its opener and deciding line, and the (:fix) form that stages them; none when indentation implies no edit")
+fn indentFields! path: String -> String
+  (match (fileReadString path)
+    ((err _) "")
+    ((ok text)
+      (let [(g (ind/guideBroken text))]
+        (if (listEmpty? g.edits)
+          ""
+          (str " :indent " (ind/editsAsn g.edits) " :fix \"(:fix :file \\\"" (dyck/esc (dyck/esc path)) "\\\" :by :indent :apply true)\"")))))
+
+fn balanceReceipt! path: String -> String
+  (pairSecond (dyck/reportFile! path (fn [(p String)] -> String (indentFields! p))))
+
+; (:m :ref PAREN-CHECK-HOST-MSG :do "a reader balance error (ERR_READ_UNBALANCED, or the checker's parse code with an unmatched/unclosed/closes/unterminated message, which asl test and run hit with no balance pass first) is followed by one (:indentFix ...) line per file naming the closer edits indentation implies; the diagnostic lines themselves keep their path:line:col CODE form")
+fn unbalancedRead? d: ty/Diagnostic -> Bool
+  (or (or (stringStartsWith? d.code "ERR_READ_UNBALANCED") (= d.code "ERR_UNBALANCED"))
+      (and (= d.code "parse") (listAny? (fn [(w String)] -> Bool (stringContains? d.message w)) (list "unmatched" "unclosed" " closes " "unterminated"))))
+
+fn ! indentLine! path: String -> String
+  (let [(fields (indentFields! path))]
+    (if (stringEmpty? fields) "" (str "(:indentFix :file \"" (dyck/esc path) "\"" fields ")")))
+
+fn ! diagHints! diags: (List ty/Diagnostic) -> (List String)
+  (let [(paths (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (if (and (unbalancedRead? d) (not (listContains? acc d.path))) (listAppend acc (list d.path)) acc))
+                     (list) diags))]
+    (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map (fn [(p String)] -> String (indentLine! p)) paths)))
+
+fn ! formatDiagsHinted! diags: (List ty/Diagnostic) -> String
+  (stringJoin (listAppend (map formatDiag diags) (diagHints! diags)) "\n")
+
 fn ! balance! paths: (List String) -> Int64
-  (match (dyck/main paths) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
+  (match (dyck/mainWith paths (fn [(p String)] -> String (indentFields! p))) ((ok rc) rc) ((err e) (do (sys/sayErr! e) 2)))
 
 fn ! checkOther! paths: (List String) -> Int64
   (if (listEmpty? paths)
@@ -29,16 +59,41 @@ fn ! checkOther! paths: (List String) -> Int64
 fn ! printDiag! d: ty/Diagnostic -> Bool
   (sys/sayErr! (formatDiag d))
 
+; (:m :ref CHECK-FOREIGN-LOWS :do "a Staged names the file checked in the staged mirror (actual), the path the caller gave (shown) and the other mirror prefixes mapped back to the package's own (maps): every line, the file's own and an imported staged file's, absolute or root-relative, is rewritten through all of them, so no staged path leaks")
+(schema Staged
+  (:f actual String)
+  (:f shown String)
+  (:f maps (List (Pair String String))))
+
+fn normalisePaths maps: (List (Pair String String)) line: String -> String
+  (fold (fn [(l String) (m (Pair String String))] -> String (stringReplace l (pairFirst m) (pairSecond m))) line maps)
+
+fn ! reportStaged! s: Staged verdict: (Result cc/Verdict String) -> Int64
+  (let [(maps (cons (pair s.actual s.shown) s.maps))]
+    (match verdict
+      ((err _) (do (sys/sayErr! (str s.shown ":0:0: ERR_IO cannot open file"))
+                   (sys/sayErr! (str "check failed: " s.shown ": 1 error(s)"))
+                   1))
+      ((ok v)
+        (if (listEmpty? v.diags)
+          (do (sys/say! (str "ok " s.shown ": " (cc/countsText v))) 0)
+          (let [(lines (map (fn [(d ty/Diagnostic)] -> Bool (sys/sayErr! (normalisePaths maps (formatDiag d)))) v.diags))
+                (hinted (map (fn [(l String)] -> Bool (sys/sayErr! (normalisePaths maps l))) (diagHints! v.diags)))]
+            (do (sys/sayErr! (str "check failed: " s.shown ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1))))))
+
 fn ! reportOne! path: String verdict: (Result cc/Verdict String) -> Int64
-  (match verdict
-    ((err _) (do (sys/sayErr! (str path ":0:0: ERR_IO cannot open file"))
-                 (sys/sayErr! (str "check failed: " path ": 1 error(s)"))
-                 1))
-    ((ok v)
-      (if (listEmpty? v.diags)
-        (do (sys/say! (str "ok " path ": " (cc/countsText v))) 0)
-        (let [(shown (map printDiag! v.diags))]
-          (do (sys/sayErr! (str "check failed: " path ": " (stringFromInt64 (listLength v.diags)) " error(s)")) 1)))))
+  (reportStaged! (Staged :actual path :shown path :maps (list)) verdict)
+
+fn ! nativeCheckStagedStep! staged: (List Staged) cache: cc/Cache rc: Int64 -> Int64
+  (match (listHead staged)
+    ((none) rc)
+    ((some s)
+      (let [(r (cc/checkFileCached! s.actual (checkRoots) cache))
+            (one (reportStaged! s (pairFirst r)))]
+        (nativeCheckStagedStep! (optionOr (listTail staged) (list)) (pairSecond r) (if (!= one 0) one rc)))))
+
+fn ! nativeCheckStaged! staged: (List Staged) -> Int64
+  (nativeCheckStagedStep! staged (cc/stampedCache!) 0)
 
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
   (match (listHead paths)

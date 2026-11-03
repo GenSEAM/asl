@@ -3,8 +3,6 @@
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
-      (asl-syntax/core/symbols :a sym)
-      (asl-syntax/core/outline :a out)
       (asl-syntax/js/lex :a lx)
       (asl-syntax/js/stmt :a stmt)
       (asl-syntax/js/module :a jsm)

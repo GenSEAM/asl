@@ -1,9 +1,6 @@
 (module asl-syntax/tests/asl/symbolsTest
   :x [runTests]
-  :i [(asl-syntax/asl/symbols :a asym)
-      (asl-syntax/core/symbols :a sym)
-      (asl-syntax/core/outline :a out)
-      (asl-syntax/core/source :a src)])
+  :i [(asl-syntax/asl/symbols :a asym)])
 
 fn testParenSymbols -> Bool
   (let [(code "(module foo/bar :d \"doc\" :x [add])\n\n(schema Point\n  (:f x Int64)\n  (:f y Int64))\n\n(enum Color\n  (red)\n  (green)\n  (blue))\n\n(defn add a: Int64 b: Int64 -> Int64\n  (+ a b))\n\n(:task :id myTask :status :done)\n\n(:op :read :params [foo])\n")

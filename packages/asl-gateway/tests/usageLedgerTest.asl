@@ -11,7 +11,7 @@ fn scratchDir -> String
 
 fn sampleRow at: Int64 provider: String model: String alias: String inT: Int64 cachedT: Int64 outT: Int64 ttft: (Option Int64) ms: (Option Int64) outcome: String charge: Int64 -> ul/CallRow
   (ul/CallRow :atMs at :profile "p1" :intent "construct" :alias alias :provider provider :model model :inTokens inT :cachedTokens cachedT :outTokens outT :reasoningTokens 0 :ttftMs ttft :ms ms :outcome outcome :charge charge
-    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
+    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)
 
 fn sampleRowTagged at: Int64 provider: String alias: String tag: (Option String) -> ul/CallRow
   (with (sampleRow at provider "m" alias 0 0 1 none (some 5) "ok" 0) :tag tag)
@@ -42,7 +42,7 @@ fn ! roundTripChecks -> Bool
         (withParams (ul/CallRow :atMs 3000 :profile "p1" :intent "code" :alias "ocDeepseekFlash" :provider "opencodeGo" :model "deepseek-v4.1-flash"
                       :inTokens 50 :cachedTokens 5 :outTokens 60 :reasoningTokens 15 :ttftMs none :ms (some 900) :outcome "ok" :charge 7
                       :tag (some "leon-run-42") :temperature (some 0.25) :topP (some 0.9) :maxTokens (some 32768) :effort (some "low")
-                      :api "responses" :stream true :toolCount 3 :promptBytes 512 :sysHash "ab12cd34ef56" :session none :turn none :consumer none :cacheWriteTokens none))
+                      :api "responses" :stream true :toolCount 3 :promptBytes 512 :sysHash "ab12cd34ef56" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none))
         (lineA (ul/callRowLine withTtft))
         (lineB (ul/callRowLine noTtft))
         (lineC (ul/callRowLine withParams))
@@ -126,7 +126,7 @@ fn ! settlePathChecks -> Bool
         (charge (/ (* (max 0 total) price) 1000000))
         (built (ul/CallRow :atMs 500000 :profile "default" :intent "any" :alias "mA" :provider "fixp" :model served
                  :inTokens 100 :cachedTokens 10 :outTokens 200 :reasoningTokens 0 :ttftMs none :ms (some 2500) :outcome "ok" :charge charge
-                 :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none))
+                 :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none))
         (path (str (scratchDir) "/settlePath.asn"))
         (madeDir (dirCreate (scratchDir)))
         (clearedFirst (pathRemove path))

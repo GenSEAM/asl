@@ -16,6 +16,8 @@
       effUsageFallback
       effSpreadOrder
       effSpreadNote429
+      effAffinity
+      effAffinityNote
       effTelemetry
       effNoteIntent
       effLog
@@ -110,6 +112,9 @@
   (:c effSpreadOrder [(profile String) (intent String) (spread (List (Pair String Int64))) (cooldownSec Int64) (pools (List (Pair String String)))])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 at the server's own wall clock (GatewayLoop.spreadLast429), independent of and in addition to the existing per-model breaker trip -- :cooldownSec is configurable per route and almost never equals BreakerState's own fixed cooldown")
   (:c effSpreadNote429 [(alias String)])
+  ; (:m :ref GW-SESSION-AFFINITY :do "asks the server for a session's last answering member: empty, or (alias stick drop) with stick and drop 1 or 0; a driver that answers done means none")
+  (:c effAffinity [(session String)])
+  (:c effAffinityNote [(session String) (alias String)])
   (:c effTelemetry [(rec (Option String))])
   (:c effNoteIntent [(intent String)])
   (:c effLog [(text String)])
@@ -178,7 +183,15 @@
   (:f cascadeLen Int64)
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the matched route's :spread/:cooldownSec, carried from config.asl's RouteEntries through withProfile so cascadeChosen can order Loop.models by spreadOrder before construction; empty spread (the default for any route without one) means startLoop skips the effect entirely, unchanged behaviour")
   (:f spread (List (Pair String Int64)))
-  (:f cooldownSec Int64))
+  (:f cooldownSec Int64)
+  ; (:m :ref GW-SESSION-AFFINITY :do "the caller session key (cliCallerKey), the member that last answered it (empty when none) and whether another member gets the transcript without its reasoning")
+  (:f session String)
+  (:f stuck String)
+  (:f dropOnSwitch Bool)
+  ; (:m :ref GW-MODES :do "the selected profile's mode (pin, route or judge) and judge rules, set by withProfile; route and the default rules before")
+  (:f mode String)
+  (:f judge c/JudgeRules)
+  (:f excludeModel String))
 
 (schema Loop
   (:f body j/Json)
@@ -188,7 +201,9 @@
   (:f skipped (List String))
   (:f emptyRetries Int64)
   (:f telBound Bool)
-  (:f head (List HeadItem)))
+  (:f head (List HeadItem))
+  ; (:m :ref HUB-QUEUE-PACED :do "seconds to the next bucket token when the last failure was a refused rpm bucket, else 0; afterLoop answers 429 with this Retry-After")
+  (:f retryAfterSec Int64))
 
 (schema Attempt
   (:f entry c/GatewayResolvedEntry)
@@ -560,6 +575,41 @@ fn dropEmptySystem body: j/Json -> j/Json
 
 ; (:m :ref GW-IFM-EMPTY-TOOLS :do "true when the body carries tools as an empty array, which a provider with :dropEmptyTools true must not receive")
 ; (:m :ref NATIVE-TOOLS-DEFAULT :do "the tools a provider receives: a row with :nativeTools false gets none (tools and tool_choice dropped), a :dropEmptyTools provider gets no empty array, everything else is sent as the caller built it")
+; (:m :ref IFM-4XX-20261031 :do "a provider with :assistantReasoning true gets reasoning_content \"\" on every assistant message that carries neither reasoning_content nor reasoning: ifm answers 400 'Add a supported thinking field to each assistant message in the multi-turn conversation history' to any history or prefill without one; other providers and other roles are untouched")
+fn thinkingMissing? msg: j/Json -> Bool
+  (and (= (getOr msg "role" (j/jnull)) (j/jstr "assistant"))
+       (and (= (getOr msg "reasoning_content" (j/jnull)) (j/jnull))
+            (= (getOr msg "reasoning" (j/jnull)) (j/jnull))))
+
+fn withThinking msg: j/Json -> j/Json
+  (if (thinkingMissing? msg) (pt/jset msg "reasoning_content" (j/jstr "")) msg)
+
+fn fillReasoning fill: Bool body: j/Json -> j/Json
+  (if (not fill)
+    body
+    (match (getOr body "messages" (j/jnull))
+      ((j/jarr xs) (pt/jset body "messages" (j/jarr (map withThinking xs))))
+      (_ body)))
+
+fn reasoningBlock? part: j/Json -> Bool
+  (match (getOr part "type" (j/jnull))
+    ((j/jstr t) (listContains? (list "thinking" "redacted_thinking" "reasoning") t))
+    (_ false))
+
+fn withoutReasoning msg: j/Json -> j/Json
+  (if (!= (getOr msg "role" (j/jnull)) (j/jstr "assistant"))
+    msg
+    (let [(bare (fold jdel msg (list "reasoning_content" "reasoning" "reasoning_details" "thinking")))]
+      (match (getOr bare "content" (j/jnull))
+        ((j/jarr parts) (pt/jset bare "content" (j/jarr (filter (fn [(p j/Json)] -> Bool (not (reasoningBlock? p))) parts))))
+        (_ bare))))
+
+; (:m :ref GW-SESSION-AFFINITY :do "a session moved to another member forwards its transcript without the reasoning the previous member wrote: the reasoning_content, reasoning, reasoning_details and thinking fields and thinking or reasoning content blocks leave every assistant message; runs before fillReasoning, so an :assistantReasoning provider still gets its empty field")
+fn dropReasoning body: j/Json -> j/Json
+  (match (getOr body "messages" (j/jnull))
+    ((j/jarr xs) (pt/jset body "messages" (j/jarr (map withoutReasoning xs))))
+    (_ body))
+
 fn upstreamTools params: c/GatewayParams dropEmpty: Bool body: j/Json -> j/Json
   (cond
     ((match params.nativeTools ((some b) (not b)) ((none) false)) (jdel (jdel body "tools") "tool_choice"))
@@ -585,7 +635,9 @@ fn belowReasoningFloor? body: j/Json -> Bool
 fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
   (let [(ep e.params)
         (b0 cx.baseBody)
-        (b1 (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))
+        (b1 (match ep.temperatureFixed
+              ((some _) (pt/jset b0 "temperature" (floatJson ep.temperatureFixed)))
+              ((none) (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))))
         (b2 (match ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
         (b3 (match ep.maxTokens
               ((some n) (if (listContains? cx.reqKeys "max_tokens") b2 (pt/jset b2 "max_tokens" (paramJson cx e "maxTokens" (j/jint n)))))
@@ -675,7 +727,9 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                  :intent intent :role role :workspace ws :explicitModel explicitModel :profileRouted routed
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
                                  :headerEff (u/headerGet hs "X-ASL-Effort") :envEff (mapGet world.env "ASL_EFFORT")
-                                 :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60))]
+                                 :tempExplicit false :timeoutExplicit false :baseBody prepared :cascadeLen 0 :spread (list) :cooldownSec 60
+                                 :session (cliCallerKey hs body) :stuck "" :dropOnSwitch false :mode "route" :judge (c/judgeDefault)
+                                 :excludeModel (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Exclude-Model") ""))))]
                     (match world.table
                       ((err e) (if (stringStartsWith? e "ERR_GATEWAY_NO_CONFIG")
                                   (sendError cx (list) 503 e true)
@@ -689,7 +743,8 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "threads the matched route's :spread/:cooldownSec alongside its name, the only place a RouteEntries' routing metadata enters Ctx")
 fn withProfile cx: Ctx re: c/RouteEntries -> Ctx
-  (with cx :profileName re.name :spread re.spread :cooldownSec re.cooldownSec)
+  (with cx :profileName re.name :spread re.spread :cooldownSec re.cooldownSec
+           :mode (c/gatewayProfileMode re.table re.name) :judge (c/gatewayProfileJudge re.table re.name))
 
 fn profileRoute! cx: Ctx body: j/Json explicitRole: String composite: String -> ChatStep
   (match cx.world.table
@@ -803,10 +858,74 @@ fn reorderBySpread models: (List c/GatewayResolvedEntry) order: (List String) ->
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "cascadeChosen's own last step: an empty :spread (the default) skips the effect entirely, zero behaviour change for any route without one; otherwise asks the server for this call's spread order and reorders models by it before Loop is built -- the literal 'orders Loop.models by spreadOrder before construction'")
 fn startLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatStep
   (if (listEmpty? cx.spread)
-    (loopStep cx (Loop :body body :models models :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list)))
+    (stickLoop cx body models)
     (askStrings (effSpreadOrder cx.profileName cx.intent cx.spread cx.cooldownSec (spreadPools models cx.spread))
-      (fn [(order (List String))] -> ChatStep
-        (loopStep cx (Loop :body body :models (reorderBySpread models order) :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list))))))
+      (fn [(order (List String))] -> ChatStep (stickLoop cx body (reorderBySpread models order)))))
+
+; (:m :ref GW-SESSION-AFFINITY :do "a session's last answering member goes first while it sticks, after the spread order and before the loop, so breakers and limits still skip it when it is down; no session key asks nothing")
+fn stickLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatStep
+  (let [(run (fn [(cx2 Ctx) (ms (List c/GatewayResolvedEntry))] -> ChatStep
+               (loopStep cx2 (Loop :body body :models ms :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0))))]
+    (if (stringEmpty? cx.session)
+      (run cx models)
+      (stepEffect (effAffinity cx.session)
+        (fn [(o ChatOutcome)] -> ChatStep
+          (match o
+            ((outStrings xs)
+             (match (listHead xs)
+               ((none) (run cx models))
+               ((some alias)
+                (run (with cx :stuck alias :dropOnSwitch (= (listGet xs 2) (some "1")))
+                     (if (= (listGet xs 1) (some "1")) (reorderBySpread models (list alias)) models)))))
+            ((outDone) (run cx models))
+            (_ (mismatch "strings")))))))
+
+; (:m :ref GW-SESSION-AFFINITY :do "records the member that answered a session; no session key records nothing")
+fn noteAffinity cx: Ctx alias: String k: (fn [] -> ChatStep) -> ChatStep
+  (if (stringEmpty? cx.session) (k) (tell (effAffinityNote cx.session alias) k))
+
+fn switchedBody cx: Ctx alias: String body: j/Json -> j/Json
+  (if (and cx.dropOnSwitch (and (not (stringEmpty? cx.stuck)) (!= alias cx.stuck))) (dropReasoning body) body)
+
+; (:m :ref GW-MODES :do "a pin profile tries the first member of its route and nothing after it, so no reroute, spread or fallback profile ever replaces the named model")
+fn entryMatchesExclude? entry: c/GatewayResolvedEntry ex: String -> Bool
+  (if (stringEmpty? ex)
+    false
+    (match entry
+      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (= e.dispatch ex))))
+      ((c/entryUnresolved a) (= a ex))))
+
+fn filterExcluded cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (if (stringEmpty? cx.excludeModel)
+    models
+    (let [(kept (filter (fn [(m c/GatewayResolvedEntry)] -> Bool (not (entryMatchesExclude? m cx.excludeModel))) models))]
+      kept))
+
+fn pinModels cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (let [(filtered (filterExcluded cx models))]
+    (if (= cx.mode "pin") (listTake filtered 1) filtered))
+
+fn finishReason resp: j/Json -> String
+  (match (getOr resp "choices" (j/jnull))
+    ((j/jarr xs) (match (listHead xs)
+                   ((some c) (match (getOr c "finish_reason" (j/jnull)) ((j/jstr s) s) (_ "")))
+                   ((none) "")))
+    (_ ""))
+
+; (:m :ref GW-MODES :do "the first judge check a judge-mode reply fails, empty when it passes or the profile is not judge: empty (message content of the raw upstream reply blank, before project copies reasoning into it, and no tool calls), truncated (finish_reason length), noStepForm (an intent of :stepIntents whose answer holds none of :stepHeads)")
+fn judgeFailure cx: Ctx p: Projection raw: String -> String
+  (if (!= cx.mode "judge")
+    ""
+    (let [(r cx.judge)
+          (msg (match (pt/jsonLoads raw) ((ok parsed) (firstMessage parsed)) ((err _) (firstMessage p.resp))))
+          (text (match p.content ((j/jstr s) s) (_ "")))]
+      (cond
+        ((and r.empty (and (emptyContent? (getOr msg "content" (j/jnull))) (not (toolCalls? msg)))) "empty")
+        ((and r.truncated (= (finishReason p.resp) "length")) "truncated")
+        ((and (listContains? r.stepIntents (stringLower cx.intent))
+              (not (listAny? (fn [(h String)] -> Bool (stringContains? text h)) r.stepHeads))) "noStepForm")
+        (else ""))))
+
 
 fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String models: (List c/GatewayResolvedEntry) calibrated: Float64 -> ChatStep
   (let [(world cx.world)
@@ -847,15 +966,17 @@ fn cascadeChosen cx: Ctx body: j/Json explicitRole: String composite: String mod
                   (timeoutExplicit (or (some? (present (u/headerGet hs "X-ASL-Timeout")))
                                        (or (some? (present (u/headerGet hs "X-ASL-Execution-Timeout")))
                                            (or (listContains? keys "timeout") (listContains? keys "execution_timeout")))))
-                  (cx2 (with cx :world world :reqKeys keys :headerEff hEff :envEff eEff :tempExplicit tempExplicit :timeoutExplicit timeoutExplicit :baseBody final :cascadeLen (listLength models)))]
-              (startLoop cx2 final models))))))))
+                  (cx2 (with cx :world world :reqKeys keys :headerEff hEff :envEff eEff :tempExplicit tempExplicit :timeoutExplicit timeoutExplicit :baseBody final :cascadeLen (listLength (pinModels cx models))))]
+              (if (and (not (listEmpty? models)) (listEmpty? (pinModels cx models)))
+                (sendError cx (list) 400 (str "(:err :code excludedAll :model " (asnQuoteModel cx.excludeModel) ")") true)
+                (startLoop cx2 final (pinModels cx models))))))))))
 
 
 fn advance l: Loop body: j/Json -> Loop
   (with l :body body :idx (+ l.idx 1))
 
 fn failed l: Loop err: String -> Loop
-  (with l :lastErr (some err))
+  (with l :lastErr (some err) :retryAfterSec 0)
 
 fn loopStep cx: Ctx l: Loop -> ChatStep
   (match (listGet l.models l.idx)
@@ -1230,8 +1351,8 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (effApplied (applyEffort dialect effGate out0))
         (out1 (pairFirst effApplied))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
-        (out3a (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
-        (out3b (match v2 ((some e) (upstreamTools e.params e.dropEmptyTools out3a)) ((none) out3a)))
+        (out3a (switchedBody cx alias (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2)))
+        (out3b (match v2 ((some e) (fillReasoning e.assistantReasoning (upstreamTools e.params e.dropEmptyTools out3a))) ((none) out3a)))
         (out3 (match v2 ((some e) (if (= e.kind "openai") (dropEmptySystem out3b) out3b)) ((none) out3b)))
         (sent (if truthy (if ollama (some (pairSecond effApplied)) (match (pairSecond effApplied) ((some s) (some (some s))) ((none) none))) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
@@ -1285,7 +1406,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
           (fn [] -> ChatStep
             (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1) :lastErr (some why)
                                :skipped (listAppend l1.skipped (list a.alias)) :emptyRetries l1.emptyRetries
-                               :telBound l1.telBound :head l1.head)))))
+                               :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
     (withBreakerPools (list a.providerPool a.pool)
       (fn [(left Float64) (downPool String)] -> ChatStep
         (if (!= left 0.0)
@@ -1295,7 +1416,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                 (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                    :lastErr (some (str "circuit breaker open for " downPool " (" secs "s left)"))
                                    :skipped (listAppend l1.skipped (list downPool)) :emptyRetries l1.emptyRetries
-                                   :telBound l1.telBound :head l1.head)))))
+                                   :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
           (match (missingKey cx a)
             ((some why)
               (tellAll (list (effLog (str "[Gateway Key] skip " a.alias ": " why "\n")) (usageNote prov a.alias "keyMissing"))
@@ -1303,7 +1424,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                   (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                      :lastErr (some why)
                                      :skipped l1.skipped :emptyRetries l1.emptyRetries
-                                     :telBound l1.telBound :head l1.head)))))
+                                     :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
             ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))
 
 ; (:m :ref GW-CONTEXT-BUDGET :do "an entry whose :contextBudget (tokens) is below the prompt estimate (a quarter of the serialized messages, the gateway's usual chars-per-token guess) is skipped for the next loop member instead of being sent a request its window cannot hold; some carries the reason text")
@@ -1461,7 +1582,8 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
                   (ordered resp)]
               (tell (effUsageNote prov a.alias "ok" usage)
                 (fn [] -> ChatStep
-                  (sendReply cx l.head 200 ordered (cons (pair "X-ASL-Fallback" tag) (telemetryHeader rec)))))))))))
+                  (noteAffinity cx a.alias (fn [] -> ChatStep
+                    (sendReply cx l.head 200 ordered (cons (pair "X-ASL-Fallback" tag) (telemetryHeader rec)))))))))))))
 
 
 ; (:m :ref GW-THROTTLE-NO-AGY :do "a throttled member (bucket depleted) goes straight to the next loop model whenever its entry comes from the config table; the agy CLI rescue stays only for the legacy gemini-only path where no config entry exists")
@@ -1469,8 +1591,35 @@ fn cliReplied cx: Ctx l: Loop a: Attempt reply: CliReply client: String telModel
 ; (:m :ref GW-BUCKET-SHORTWAIT :do "a member before the last waits for its bucket up to the config's :bucketWaitSec (default 5 s) instead of 0.5 s, so a bucket refilling within a few seconds is used rather than skipped; the last member still waits 30 s")
 fn bucketWaitSec cx: Ctx l: Loop -> Float64
   (if (>= l.idx (- (listLength l.models) 1))
-    30.0
+    (queueBudgetSec cx)
     (match cx.world.table ((ok t) t.bucketWaitSec) ((err _) (c/defaultBucketWaitSec))))
+
+; (:m :ref HUB-QUEUE-PACED :do "the request's own queue budget in seconds: X-ASL-Queue-Ms, else X-ASL-Queue-Timeout, else the body's queue_timeout (Leon always sends one); 30 s when the caller gave none, the wait the last member always had")
+fn positiveSec v: j/Json scale: Float64 -> (Option Float64)
+  (match (floatOf v)
+    ((ok f) (if (> f 0.0) (some (/ f scale)) none))
+    ((err _) none))
+
+fn tableQueueBudgetSec cx: Ctx -> Float64
+  (match cx.world.table ((ok t) t.queueBudgetSec) ((err _) (c/defaultQueueBudgetSec)))
+
+; (:m :ref GW-ALL-DOWN-RETRY-AFTER :do "the 503 for a chain whose every member is in breaker cooldown carries Retry-After = the shortest cooldown left, rounded up to whole seconds (at least 1), so a caller waits for the first member to come back rather than guessing")
+fn minLeftSec lefts: (List Float64) -> Int64
+  (let [(least (fold (fn [(acc Float64) (f Float64)] -> Float64 (if (and (> f 0.0) (< f acc)) f acc)) 1000000.0 lefts))]
+    (if (>= least 1000000.0) 1 (max 1 (truncInt (+ least 0.999)))))
+
+fn queueBudgetSec cx: Ctx -> Float64
+  (let [(hs cx.req.headers)
+        (fromMs (match (u/headerGet hs "X-ASL-Queue-Ms") ((some h) (positiveSec (j/jstr h) 1000.0)) ((none) none)))
+        (fromHeader (match (u/headerGet hs "X-ASL-Queue-Timeout") ((some h) (positiveSec (j/jstr h) 1.0)) ((none) none)))
+        (fromBody (if (isObj? cx.baseBody) (positiveSec (getOr cx.baseBody "queue_timeout" (j/jnull)) 1.0) none))]
+    (optionOr fromMs (optionOr fromHeader (optionOr fromBody (tableQueueBudgetSec cx)))))
+
+fn retryAfterOf rpm: Float64 -> Int64
+  (max 1 (truncInt (+ (/ 60.0 rpm) 0.999)))
+
+fn withRetryAfter l: Loop secs: Int64 -> Loop
+  (with l :retryAfterSec secs)
 
 fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(prov a.upstream.provider)
@@ -1486,7 +1635,7 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
                  (fn [] -> ChatStep
                    (if (or cx.profileRouted (some? a.v2))
                      (tell (effLog (str "[Gateway RateLimit] Gemini token bucket depleted for " a.alias ". Trying the next profile model...\n"))
-                       (fn [] -> ChatStep (loopStep cx (failed (advance l l.body) (str "gemini rate limit for " a.alias)))))
+                       (fn [] -> ChatStep (loopStep cx (withRetryAfter (failed (advance l l.body) (str "token bucket empty for " a.alias)) (if (>= l.idx (- (listLength l.models) 1)) (retryAfterOf r) 0)))))
                      (tell (effLog (str "[Gateway RateLimit] Gemini token bucket depleted for " a.model ". Cascading to agy fallback...\n"))
                        (fn [] -> ChatStep
                          (match (fallbackPrompt l.body)
@@ -1536,14 +1685,31 @@ fn limitSkipped cx: Ctx l: Loop a: Attempt outcome: String reason: String -> Cha
             (fn [] -> ChatStep (loopStep cx (advance l1 l1.body))))
           (loopStep cx (advance l1 l1.body))))))
 
+; (:m :ref GW-LIMIT-SCOPES :do "a member under a concurrency limit that is full parks: the server answers park with the poll interval, the call sleeps that long and asks again until its queue budget (X-ASL-Queue-Ms, the config's :queueBudgetSec) is used up, then the member is skipped with limit:concurrency and the cascade goes on")
 fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (if (limitedAttempt? cx a)
-    (askStrings (effLimit a.upstream.provider a.alias)
-      (fn [(v (List String))] -> ChatStep
-        (match (listHead v)
-          ((none) (httpAttemptSend cx l a))
-          ((some outcome) (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))))))
+    (askLimit cx l a 0)
     (httpAttemptSend cx l a))
+
+; (:m :ref GW-PARK-LAST-ONLY :do "true when no chain member follows the current one: only that member parks on a full concurrency limit, an earlier one is skipped at once so a later member can answer")
+fn lastMember? l: Loop -> Bool
+  (>= (+ l.idx 1) (listLength l.models))
+
+fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
+  (askStrings (effLimit a.upstream.provider a.alias)
+    (fn [(v (List String))] -> ChatStep
+      (match (listHead v)
+        ((none) (httpAttemptSend cx l a))
+        ((some outcome)
+          (if (!= outcome "park")
+            (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))
+            (if (not (lastMember? l))
+              (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full, a later chain member answers")
+              (let [(poll (optionOr (stringToInt64 (optionOr (listGet v 2) "250")) 250))
+                    (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
+                (if (>= (+ waitedMs poll) budgetMs)
+                  (limitSkipped cx l a "limit:concurrency" "provider concurrency limit full for the whole queue budget")
+                  (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l a (+ waitedMs poll))))))))))))
 
 fn httpAttemptSend cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)
@@ -1607,7 +1773,7 @@ fn raisedOutcome timeout: Bool text: String -> String
 
 fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
   (let [(prov a.upstream.provider)
-        (pool a.providerPool)
+        (pool a.pool)
         (l1 (failed l text))
         (rest (fn [] -> ChatStep
                 (tell (usageNote prov a.alias (raisedOutcome timeout text))
@@ -1668,7 +1834,7 @@ fn project body: String -> (Option Projection)
               (let [(msg (getOr c "message" (j/jobj (list))))]
                 (if (isObj? msg)
                   (let [(raw (getOr msg "content" (j/jnull)))]
-                    (if (and (emptyContent? raw) (not (toolCalls? msg)))
+                    (if (and (emptyContent? raw) (and (not (toolCalls? msg)) (!= (finishReason resp) "length")))
                       (match (reasoningFallbackText msg)
                         ((none) (some (Projection :resp resp :content raw)))
                         ((some fb)
@@ -1714,8 +1880,13 @@ fn servedBy a: Attempt body: j/Json -> (List (Pair String j/Json))
         (withEffort (match a.sentEffort
                       ((some e) (match e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
                       ((none) base)))
-        (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))]
-    (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))
+        (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))
+        (withTemp (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))]
+    (match a.v2
+      ((some e) (match e.params.contextBudget
+                  ((some n) (listAppend withTemp (list (pair "contextTokens" (j/jint n)))))
+                  ((none) withTemp)))
+      ((none) withTemp)))
 
 fn mergeAsl resp: j/Json served: (List (Pair String j/Json)) -> j/Json
   (let [(existing (match (getOr resp "asl" (j/jnull)) ((j/jobj kvs) kvs) (_ (list))))]
@@ -1892,6 +2063,8 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                       (loopStep cx (with l :models (listAppend l.models (list a.entry)) :idx (+ l.idx 1) :emptyRetries (+ l.emptyRetries 1))))))
                  (else (sendError cx l.head 502 (str "ERR_EMPTY_CONTENT: model " m " returned empty content after "
                                                          (stringFromInt64 l.emptyRetries) " retry") true))))))
+         (if (not (stringEmpty? (judgeFailure cx p chatBody)))
+           (judged cx l a p (judgeFailure cx p chatBody))
          (let [(content p.content)
                (sanitized (if cx.sanitize (sanitizeFirst p.resp w/sanitizeAsnContent) p.resp))]
            (telemetry cx content m
@@ -1899,8 +2072,14 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                (let [(withModel (if (has? sanitized "model") sanitized (pt/jset sanitized "model" (j/jstr a.target))))
                      (resp (mergeAsl withModel (servedBy a l.body)))
                      (lb (with l :telBound true))]
-                 (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec)))))))
+                 (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec))))))))
       ((none) (answered cx l a status headers body none none))))
+
+; (:m :ref GW-MODES :do "a reply that fails a judge check is charged to its member with the outcome judge:CHECK and the next member is tried; past the last member the profile's no-model-answered error names the check")
+fn judged cx: Ctx l: Loop a: Attempt p: Projection why: String -> ChatStep
+  (tellAll (list (effUsageNote a.upstream.provider a.alias (str "judge:" why) (getOr p.resp "usage" (j/jnull)))
+                 (effLog (str "[Gateway Judge] Model " a.model " failed the " why " check. Trying the next member...\n")))
+    (fn [] -> ChatStep (loopStep cx (advance (failed l (str "judge " why ": " a.alias)) l.body))))
 
 ; (:m :tags (breaker pool) :do "a success clears both the model pool and the provider pool: it proves the account and this model both work, so any stale account-wide trip (from a sibling model's 401/402) is cleared too")
 fn clearBreakerPools pools: (List String) k: (fn [] -> ChatStep) -> ChatStep
@@ -1923,17 +2102,16 @@ fn answered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String
                        (passthrough cx l a status headers respBody rec)))
                     ((none) (passthrough cx l a status headers respBody rec)))))]
     (tell (effUsageNote prov a.alias "ok" usage)
-      (fn [] -> ChatStep (clearBreakerPools (list a.pool a.providerPool) finish))))
+      (fn [] -> ChatStep (noteAffinity cx a.alias (fn [] -> ChatStep (clearBreakerPools (list a.pool a.providerPool) finish))))))
 
 fn passthrough cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) respBody: String rec: (Option String) -> ChatStep
   (let [(head (listAppend l.head
                           (cons (headStatus status)
-                                (listAppend (fields (dropHeaders headers (list "transfer-encoding" "content-encoding" "content-length")))
+                                (listAppend (fields (dropHeaders headers (list "transfer-encoding" "content-encoding" "content-length" "connection")))
                                             (list (headField "Content-Length" (stringFromInt64 (bytesLength (stringToBytes respBody)))))))))]
     (if l.telBound
       (done (listAppend head (listAppend (fields (telemetryHeader rec)) (list (headField "X-ASL-Wire" "asn,json")))) respBody)
-      (let [(lh (with l :telBound false :head head))]
-        (raised cx lh a false "cannot access local variable 'tel_rec' where it is not associated with a value"))))
+      (raised cx (with (with l :head head) :telBound false) a false "cannot access local variable 'tel_rec' where it is not associated with a value")))
 
 fn gatewayOriginHeader -> String
   "X-ASL-Origin"
@@ -1952,7 +2130,7 @@ fn retryAfterSecondsFromNow headerText: (Option String) now: Float64 -> (Option 
      (let [(s (u/pyStrip raw))]
        (match (u/pyFloat s)
          ((ok f) (if (>= f 0.0) (some f) none))
-         ((err _) (match (lt/parseHttpDateEpochSeconds s)
+         ((err _) (match (if (stringEndsWith? s " GMT") (lt/parseHttpDateEpochSeconds s) none)
                     ((some epoch) (some (- epoch now)))
                     ((none) none)))))))
 
@@ -1971,24 +2149,44 @@ fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (
 
 ; (:m :ref GW-DAILY-PARK :do "a daily-cap 429 asks the clock once so the model is parked until the provider's reset instead of the fixed cooldown; every other failure goes straight on")
 fn httpFailedFinal cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
-  (let [(kind (u/dailyCapKind status body))]
-    (if (stringEmpty? kind)
-      (httpFailedParked cx l a status reason headers body 0)
+  (let [(kind (u/dailyCapKind status body))
+        (retryAfter (u/headerGet headers "retry-after"))]
+    (if (and (stringEmpty? kind) (match retryAfter ((some _) false) ((none) true)))
+      (httpFailedParked cx l a status reason headers body 0 0.0)
       (askFloat (effClock)
-        (fn [(now Float64)] -> ChatStep (httpFailedParked cx l a status reason headers body (u/dailyCapParkSec kind headers body now))))))
+        (fn [(now Float64)] -> ChatStep
+          (if (stringEmpty? kind)
+            (httpFailedParked cx l a status reason headers body 0 now)
+            (httpFailedParked cx l a status reason headers body (u/dailyCapParkSec kind headers body now) now))))))
 
-fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 -> ChatStep
+fn limitWindowSec w: String -> Int64
+  (cond ((= w "minute") 60) ((= w "hour") 3600) ((= w "day") 86400) (else 0))
+
+; (:m :ref GW-429-WINDOW-WAIT :do "the aligned window a member's limit resets on: 60 s when the alias is paced by :rpm, else the shortest minute, hour or day of the (:gateway :limits ...) rows for its provider (scope account) or for the alias itself (scope model); 0 when none, so the breaker uses its growing base; fiveHour, week and month are rolling and give no boundary")
+fn memberWindowSec cx: Ctx a: Attempt -> Int64
+  (match a.v2
+    ((none) 0)
+    ((some e)
+      (let [(fromRpm (match e.rpm ((some r) (if (> r 0.0) 60 0)) ((none) 0)))
+            (rows (match cx.world.table ((ok t) t.limits) ((err _) (list))))
+            (own (filter (fn [(l c/GatewayLimit)] -> Bool (and (= l.provider e.provider) (or (= l.scope "account") (= l.model e.alias)))) rows))
+            (secs (filter (fn [(n Int64)] -> Bool (> n 0)) (cons fromRpm (map (fn [(l c/GatewayLimit)] -> Int64 (limitWindowSec l.window)) own))))]
+        (fold (fn [(m Int64) (n Int64)] -> Int64 (if (or (= m 0) (< n m)) n m)) 0 secs))))
+
+fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 now: Float64 -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
         (providerWide (or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))))
         (quota (or (= status 429) (b/breakerIsQuotaError body)))
-        (pool (cond (providerWide a.providerPool) (quota a.pool) (else a.providerPool)))
+        (pool (b/breakerScope status body a.providerPool a.pool))
         (park (if (and (> parkSec 0) (and quota (not providerWide))) parkSec 0))
+        ; (:m :ref GW-429-WINDOW-WAIT :do "a 429 that is not a daily cap sends note429 (note429window:SECONDS for a member with an aligned window, see memberWindowSec) with the wait its headers name; the breaker turns that into the hint, the minute window end or the growing base")
+        (windowSec (memberWindowSec cx a))
         (errText (u/httpErrorText status reason))
         (l1 (failed l errText))
         (event (cond
                  (providerWide "markDown")
-                 (quota "markDown")
+                 (quota (cond ((> park 0) "markDown") ((> windowSec 0) (str "note429window:" windowSec)) (else "note429")))
                  ((= status 503) "note503")
                  (else "reset503")))
         (relay (fn [] -> ChatStep
@@ -2002,6 +2200,8 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
                  (tell (usageNote prov alias (g/usageHttpError status))
                    (fn [] -> ChatStep
                      (cond
+                       ; (:m :ref GW-MODES :do "a pin profile relays its member's HTTP error with its own status and headers (Retry-After included) instead of trying anything else")
+                       ((= cx.mode "pin") (relay))
                        (cx.profileRouted
                         (tellAll (list (effLog (str "[Gateway Profile] Model " alias " returned HTTP " (stringFromInt64 status) ". Trying the next profile model...\n"))
                                        (effUsageFallback prov alias))
@@ -2020,7 +2220,7 @@ fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String head
                                      ((none) (if (> cx.cascadeLen 1) (loopStep cx (advance l1 l1.body)) (relay)))))))))))
                        (else (relay)))))))
         ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 for the spread cooldown, in addition to (never instead of) the existing per-model breaker trip above -- the breaker's own cooldown is fixed and provider/account-scoped, :cooldownSec is per-route and configurable, the two must stay independent")
-        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool park)))
+        (effs (listAppend (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool (if (stringStartsWith? event "note429") (b/quotaHintSec headers now) park))))
                 (if (and (= status 429) (not (listEmpty? cx.spread))) (list (effSpreadNote429 alias)) (list))))]
     (if (listEmpty? effs) (after) (tellAll effs after)))
 
@@ -2041,11 +2241,14 @@ fn afterLoop cx: Ctx l: Loop -> ChatStep
   (let [(skipped l.skipped)
         (model cx.explicitModel)]
     (cond
+      ((> l.retryAfterSec 0)
+       (sendError cx (listAppend l.head (list (headField "Retry-After" (stringFromInt64 l.retryAfterSec))))
+                  429 (str "ERR_RATE_LIMITED: no rate-limit token within the queue budget" (lastErrSuffix l) "; retry in " (stringFromInt64 l.retryAfterSec) "s") true))
       ((and (not (listEmpty? skipped)) (>= (listLength skipped) cx.cascadeLen))
        (let [(pools (uniqueSorted skipped))]
          (askFloats (effBreakerDownAll pools)
            (fn [(lefts (List Float64))] -> ChatStep
-             (sendError cx l.head 503 (str "providers " (stringJoin pools ", ") " are in circuit-breaker cooldown after quota or timeout failures; retry in "
+             (sendError cx (listAppend l.head (list (headField "Retry-After" (stringFromInt64 (minLeftSec lefts))))) 503 (str "providers " (stringJoin pools ", ") " are in circuit-breaker cooldown after quota or timeout failures; retry in "
                                                (stringFromInt64 (truncInt (maxFloat lefts))) "s") true)))))
       (cx.profileRouted
        (sendError cx l.head 502 (str "profile " cx.profileName ": no model answered (" (labels l.models) ")" (lastErrSuffix l)) true))
@@ -2089,6 +2292,8 @@ fn effectJson eff: ChatEffect -> j/Json
                                (pair "cooldownSec" (j/jint cd))
                                (pair "pools" (j/jarr (map (fn [(p (Pair String String))] -> j/Json (j/jarr (list (j/jstr (pairFirst p)) (j/jstr (pairSecond p))))) pools))))))
       ((effSpreadNote429 alias) (op "spreadNote429" (list (pair "alias" (j/jstr alias)))))
+      ((effAffinity s) (op "affinity" (list (pair "session" (j/jstr s)))))
+      ((effAffinityNote s alias) (op "affinityNote" (list (pair "session" (j/jstr s)) (pair "alias" (j/jstr alias)))))
       ((effTelemetry r) (op "telemetry" (list (pair "rec" (optJson r)))))
       ((effNoteIntent i) (op "noteIntent" (list (pair "intent" (j/jstr i)))))
       ((effLog t) (op "log" (list (pair "text" (j/jstr t)))))

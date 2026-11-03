@@ -832,7 +832,8 @@ fn storeAtInstrs prefix: String name: String ptrName: String off: Int64 storePri
   (list (sys/int64Const (str prefix "." name "Off") off)
         (sys/primInstr (str prefix "." name "St") (ty/tyI1) storePrim (list ptrName (str prefix "." name "Off") valueName)))
 
-fn msgFillInstrs prefix: String buf: String k: (Map String Int64) -> (List ty/SsaInstr)
+; (:m :ref LLVM-NODE2-REDS-B :do "ctlLen is the control room recvmsg is given: the send buffer uses CMSG_SPACE_INT, the receive buffer exactly CMSG_LEN_INT because on linux x86_64 CMSG_SPACE_INT (24) has room for two fds, so a second descriptor was delivered and leaked instead of being cut with MSG_CTRUNC")
+fn msgFillInstrs prefix: String buf: String k: (Map String Int64) ctlLen: Int64 -> (List ty/SsaInstr)
   (let [(iov (fdPassIov k)) (ctl (fdPassControl k))]
     (listAppend
       (list (sys/primInstr (str prefix ".base") (ty/tyI64) "rawPtrToInt" (list buf))
@@ -844,7 +845,7 @@ fn msgFillInstrs prefix: String buf: String k: (Map String Int64) -> (List ty/Ss
             (sys/primInstr (str prefix ".ctlAddr") (ty/tyI64) "addInt" (list (str prefix ".base") (str prefix ".ctlOff")))
             (sys/int64Const (str prefix ".one64") 1)
             (sys/int32Const (str prefix ".one32") 1)
-            (sys/int32Const (str prefix ".space32") (fdPassOf k "CMSG_SPACE_INT")))
+            (sys/int32Const (str prefix ".space32") ctlLen))
       (listAppend (storeAtInstrs prefix "iovBase" buf (+ iov (fdPassOf k "iovec.iov_base")) "rawStoreI64" (str prefix ".dataAddr"))
         (listAppend (storeAtInstrs prefix "iovLen" buf (+ iov (fdPassOf k "iovec.iov_len")) "rawStoreI64" (str prefix ".one64"))
           (listAppend (storeAtInstrs prefix "msgIov" buf (fdPassOf k "msghdr.msg_iov") "rawStoreI64" (str prefix ".iovAddr"))
@@ -943,7 +944,7 @@ fn sendFdFn facts: libc/TripleFacts -> (Result ty/SsaFunction String)
             (listAppend
               (list
                 (sys/block "sf.fill"
-                  (listAppend (msgFillInstrs "sf" "sf.buf" k)
+                  (listAppend (msgFillInstrs "sf" "sf.buf" k (fdPassOf k "CMSG_SPACE_INT"))
                     (listAppend
                       (list (sys/int32Const "sf.cmsgLen" (fdPassOf k "CMSG_LEN_INT"))
                             (sys/int32Const "sf.level" (fdPassOf k "SOL_SOCKET"))
@@ -988,7 +989,7 @@ fn recvFdFn facts: libc/TripleFacts -> (Result ty/SsaFunction String)
                 (listAppend
                   (list
                     (sys/block "rf.fill"
-                      (listAppend (msgFillInstrs "rf" "rf.buf" k)
+                      (listAppend (msgFillInstrs "rf" "rf.buf" k (fdPassOf k "CMSG_LEN_INT"))
                         (list (sys/int32Const "rf.flags" flags)
                               (sys/callInstr "rf.n" (ty/tyI64) "recvmsg" (list "sock" "rf.buf" "rf.flags"))
                               (sys/int64Const "rf.zero" 0)

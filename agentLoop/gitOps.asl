@@ -3,7 +3,7 @@
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
       runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(asl/agentLoop/core :a c)])
+  :i [(asl/agentLoop/core :a c) (asl/agentLoop/agentConfig :a ac) (asl-tools/fleet/run :a fr)])
 
 enum RVal
   (rStr text: String)
@@ -26,7 +26,8 @@ enum PumpEnd
   (:f code (Option Int64))
   (:f out String)
   (:f errText String)
-  (:f timedOut Bool))
+  (:f timedOut Bool)
+  (:f guard String :default ""))
 
 (schema GitCtx
   (:f root String)
@@ -539,21 +540,76 @@ fn runGitArgv! rid: String opName: String argv: (List String) ctx: GitCtx path: 
             (rs "message" (str "git " opName " killed after " (itos t) " s")) (pair "timeout" (rBool true)) (ri "seconds" t) (ri "exit" 1))
           (gitRunRec rid opName argv b path base rev rawBase limit start end ctx.readCap)))))
 
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "a gate runs under the fleet guard (fr/guardStart!): its deadline, a descendant limit and a tree kill with the groups and pins the guard recorded, so a test binary in its own process group under the gate CLI dies with it; runBounded!'s SIGKILL of the gate's group alone left such binaries running under systemd --user. A gone watched pid stops the guarded tree like a timeout")
+; (:m :ref AGENTLOOP-GATE-KILLTREE :do "the descendant limit of a gate run is .asl.config.asn :agentLoop :gateMaxDescendants of the run root (a positive integer, checked by ac/configProblems), else 512")
+fn ! gateMaxDesc! root: String -> Int64
+  (match (ac/agentLoopValue (ac/configText! root) ":gateMaxDescendants")
+    ((some v) (optionOr (ac/positiveInt v) 512))
+    ((none) 512))
+
+(schema GateEnd
+  (:f out fr/ProcOut)
+  (:f stopped Bool)
+  (:f killed String))
+
+fn ! gateLoop! g: fr/Guarded watch: (Option Int64) stopped: Bool -> GateEnd
+  (let [s (fr/guardAdvance! g)]
+    (match s.out
+      ((some o) (GateEnd :out o :stopped stopped :killed s.guard.run.killed))
+      ((none)
+        (if (and (not stopped) (watchedGone? watch))
+          (do (fr/stopGuard! s.guard) (gateLoop! s.guard watch true))
+          (do (if s.progress () (do (fdPoll (fr/guardFds s.guard) 50) ())) (gateLoop! s.guard watch stopped))))))
+
+fn guardNoteMark -> String
+  "\n(:fleetRun :verdict :"
+
+fn lastNoteAt text: String from: Int64 found: (Option Int64) -> (Option Int64)
+  (match (stringIndexOf (c/sliceOf text from (stringLength text)) (guardNoteMark))
+    ((some i) (lastNoteAt text (+ from (+ i 1)) (some (+ from i))))
+    ((none) found))
+
+; (:m :ref AGENTLOOP-GATE-KILLTREE-FIX :do "the guard appends its (:fleetRun :verdict ...) note to stderr only when it killed the gate; the note is stripped only then (its last occurrence, after whatever the gate printed), so a gate that prints such a line itself keeps its stderr whole")
+fn withoutGuardNote text: String killed: String -> String
+  (if (stringEmpty? killed) text
+    (match (lastNoteAt text 0 none) ((some i) (c/sliceOf text 0 i)) ((none) text)))
+
+; (:m :ref AGENTLOOP-GATE-KILLTREE-FIX :do "the guard verdict comes from the guard's own kill record (fr RunningSep killed: timeout or runaway), never from the gate's stderr: timeout, maxDesc for the descendant limit, \"\" for a gate that ended by itself or was stopped for a gone watched pid")
+fn guardVerdict killed: String -> String
+  (cond
+    ((= killed "timeout") "timeout")
+    ((= killed "runaway") "maxDesc")
+    (else ""))
+
+fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
+  (let [maxDesc (gateMaxDesc! root)]
+    (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec maxDesc))
+      ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
+      ((ok g)
+        (let [e (gateLoop! g watch false)
+              o e.out
+              verdict (guardVerdict e.killed)
+              timedOut (or e.stopped (= verdict "timeout"))
+              own (withoutGuardNote o.stderr e.killed)
+              errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
+          (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))))))
+
 fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (runGates! gates root timeoutSec env watch)
 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
-  (let [childEnv (some (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1"))]
+  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")]
     (map (fn [g]
            (let [rid (pairFirst g)
                  cmd (pairSecond g)]
-             (match (runBounded! (list "sh" "-c" cmd) (some root) (some timeoutSec) childEnv watch)
+             (match (runGate! cmd root timeoutSec childEnv watch)
                ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
                ((ok b)
                  (listAppend
                    (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
                      (rs "stdout" b.out) (rs "stderr" b.errText))
-                   (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list)))))))
+                   (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
+                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))
       gates))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))

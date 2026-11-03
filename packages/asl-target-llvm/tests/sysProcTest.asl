@@ -996,7 +996,11 @@ fn procSource work: String -> String
 fn procNames -> (List String)
   (list "procSpawnv" "procWaitPid" "procWaitAny" "procPoll" "procRusage" "procExecv")
 
-fn procWant -> String
+; (:m :ref LLVM-NODE2-REDS-B :do "the poll mask of a pipe at EOF: macOS reports readable and hangup (bits 5 in the shape), Linux reports hangup alone (4); the shape names the bits, so the expected digit follows the host")
+fn ! eofBits -> String
+  (if (= (hostTriple) "darwin-arm64") "5" "4")
+
+fn ! procWant -> String
   (let [(inval "(err \"io:22\")")
         (ten (fn [(k Int64) (s String)] -> String (stringJoin (map (fn [(i Int64)] -> String s) (range 0 k)) " ")))]
     (lines (list "echo hi there| (ok (some 0))" "exit 7  (ok (some 7))" "missing err notFound" "not on path err notFound"
@@ -1005,7 +1009,7 @@ fn procWant -> String
                  "record {:pid  :stdin  :stdout  :stderr } true true true true (ok 5) got line| oops| (ok (some 2))"
                  (str "spawn args " (ten 4 inval)) (str "spawn cwd args " (ten 4 inval)) (str "spawn env args " (ten 5 inval))
                  "running nohang (ok (none))" "waitAny 50 ok none" "poll 50 ok fds pids" "poll fd 0 ok fds pids"
-                 "kill (ok ())" "killed (ok (some -15))" "reaped nohang (err \"noChild\")" "reaped wait (err \"noChild\")" "poll eof ok fds out:5 pids"
+                 "kill (ok ())" "killed (ok (some -15))" "reaped nohang (err \"noChild\")" "reaped wait (err \"noChild\")" (str "poll eof ok fds out:" (eofBits) " pids")
                  "any of three ok b 3" "kill a (ok ()) (ok (some -15))" "kill c (ok ()) ok c -9" "any reaped err noChild"
                  "poll before ok fds pids" "poll writable ok fds zin:2 pids" "release (ok 3)" "poll exit ok fds pids z:4" "poll after err noChild"
                  "poll reaps both ok fds pids x:5 y:6"

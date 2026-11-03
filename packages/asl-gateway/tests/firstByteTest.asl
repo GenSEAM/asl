@@ -30,7 +30,7 @@ fn cfg fb: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5" fb ") (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (m1 m2))))) :uses ((:use :for default :profile default)))")
 
 fn ! run! fb: String n1Reply: ch/HttpReply -> String
-  (match (c/gateway_config_parse! (cfg fb) "default" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! (cfg fb) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))

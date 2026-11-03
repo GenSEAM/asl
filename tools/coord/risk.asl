@@ -22,8 +22,9 @@
   (:f tier String)
   (:f signals (List Signal)))
 
+; (:m :ref RISK-HOTPACKAGES-AGENT :do "hot package keys as packageOf derives them, bare of the asl- prefix: the agent code is agentLoop while it lives in asl/agentLoop/ (packageOf names that directory, which would otherwise key as asl) and agent once it is the package asl/packages/asl-agent")
 fn hotPackages -> (List String)
-  (list "host" "runtime" "llvm" "seed" "gateway" "coord" "agentLoop")
+  (list "host" "runtime" "llvm" "seed" "gateway" "coord" "agentLoop" "agent")
 
 fn spawnMarkers -> (List String)
   (list "spawn" "procExePath" "fileDelete" "~/.asl" "/.asl/")
@@ -40,6 +41,7 @@ fn packageOf path: String -> String
     ((stringStartsWith? path "asl/host/") "asl-host")
     ((stringStartsWith? path "asl/packages/") (segment path 2))
     ((stringStartsWith? path "asl/tools/") (segment path 2))
+    ((stringStartsWith? path "asl/agentLoop/") "agentLoop")
     (else (segment path 0)))
 
 fn bare pkg: String -> String

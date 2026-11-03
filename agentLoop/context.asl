@@ -3,8 +3,8 @@
       Review reviewError reviewVerdict AdviceForm adviceOf AdvisorResult advisorSkipped advisorError advisorAdvice Cover coverOf
       vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
-      noWriteNudge noWriteNudgeTurns readStreakEscalate noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
+      renderTranscriptBounded renderTranscriptKept contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -12,7 +12,7 @@
       parseAdvice askAdvisor! adviceNotice progressLine emitProgress!
       pyStr pyTruthy pyRepr pyRound floatRepr pyNormpath pyRelpath pySplitLines pySplitLinesKeep pyStrip sha1Hex jget jgetOr filePatchNew
       specCheckSystem findingsCheckSystem advisorSystem]
-  :i [(asl/agentLoop/core :a c) (asl-json/json :a j) (asl-proc/coreProcess :a cp)])
+  :i [(asl/agentLoop/core :a c) (asl-json/json :a j) (asl-proc/coreProcess :a cp) (asl/agentLoop/agentConfig :a ac)])
 
 enum ContextTooLong
   (contextTooLong message: String)
@@ -426,7 +426,10 @@ fn charsPerToken -> Int64
 fn familyTokens -> (List (Pair String Int64))
   (list (pair "gemini" (/ 180000 3)) (pair "claude" 100000) (pair "opus" 100000) (pair "sonnet" 100000)
         (pair "haiku" 100000) (pair "gpt" 100000) (pair "codex" 100000) (pair "glm" 100000)
-        (pair "deepseek" 120000) (pair "minimax" 120000))
+        (pair "deepseek" 120000) (pair "minimax" 120000) (pair "kimi" 120000) (pair "moonshot" 120000)
+        (pair "mimo" 120000) (pair "qwen" 120000) (pair "nemotron" 120000) (pair "beam" 120000)
+        (pair "laguna" 120000) (pair "dots" 120000) (pair "north" 120000) (pair "ling" 120000)
+        (pair "step" 120000) (pair "longcat" 120000) (pair "horizon" 120000) (pair "glyph" 120000))
 
 fn contextTokensFor model: (Option String) contextTokens: j/Json split: Bool -> Int64
   (if (pyTruthy contextTokens)
@@ -625,6 +628,60 @@ fn readStreakNudge -> Int64
 fn readStreakEscalate -> Int64
   12
 
+; (:m :ref READSTREAK-TUNE :do "the read-streak nudge and stop thresholds are :agentLoop (:readStreakNudge N :readStreakEscalate N) rows of the run root's .asl.config.asn, read like parseDefectEscalate; the literals above are the defaults")
+fn readStreakNudgeIn text: String -> (Option Int64)
+  (configInt text ":readStreakNudge")
+
+fn readStreakEscalateIn text: String -> (Option Int64)
+  (configInt text ":readStreakEscalate")
+
+fn ! readStreakNudgeFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (readStreakNudgeIn (resultOr (fileReadString cfg) "")) (readStreakNudge))
+      (readStreakNudge)))
+
+fn ! readStreakEscalateFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (readStreakEscalateIn (resultOr (fileReadString cfg) "")) (readStreakEscalate))
+      (readStreakEscalate)))
+
+; (:m :ref LEON-DONE-LOOP :do "consecutive turns that sent only (:step :op done) with nothing written while the run is not terminal before it stops with doneNoWrite; the :agentLoop :doneNoWriteTurns row of the run root's .asl.config.asn, default 2 (node2 2026-11-01, c884a797 and 0e0d8062 repeated done for 20 and 14 turns)")
+fn doneNoWriteTurns -> Int64
+  2
+
+fn doneNoWriteTurnsIn text: String -> (Option Int64)
+  (configInt text ":doneNoWriteTurns")
+
+fn ! doneNoWriteTurnsFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg)
+      (optionOr (doneNoWriteTurnsIn (resultOr (fileReadString cfg) "")) (doneNoWriteTurns))
+      (doneNoWriteTurns)))
+
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "seconds a turn may wait in all for an all-down gateway (:allDownWaitSec, default 1200) and the pause between rounds when the reply carries no Retry-After (:allDownPauseSec, default 60), :agentLoop rows of the run root's .asl.config.asn")
+fn allDownWaitSecIn text: String -> (Option Int64)
+  (configInt text ":allDownWaitSec")
+
+fn allDownPauseSecIn text: String -> (Option Int64)
+  (configInt text ":allDownPauseSec")
+
+fn ! allDownWaitSecFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg) (optionOr (allDownWaitSecIn (resultOr (fileReadString cfg) "")) 1200) 1200))
+
+fn ! allDownPauseSecFor! root: String -> Int64
+  (let [cfg (pathJoin root ".asl.config.asn")]
+    (if (isFile! cfg) (optionOr (allDownPauseSecIn (resultOr (fileReadString cfg) "")) 60) 60))
+
+; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02: no readStreak stop had a nudge before it, since only the deliver-patch nudge reached the live prompt; from the nudge threshold on, a red declared gate tells the model how many turns it has left before the stop")
+fn readStreakNudgeLine readStreak: Int64 redGate: Bool nudgeAt: Int64 escalateAt: Int64 -> String
+  (if (and redGate (>= readStreak nudgeAt))
+    (str "\n\n" (stringFromInt64 readStreak) " turns without a write while a declared gate is red; the run stops at "
+      (stringFromInt64 escalateAt) ". What you read is in the transcript above: write the fix now, or escalate naming what is missing.")
+    "")
+
 fn noWriteNudgeTurns -> Int64
   10
 
@@ -635,17 +692,15 @@ fn noWriteTurns -> Int64
 fn parseDefectEscalate -> Int64
   8
 
-fn parseDefectEscalateAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":parseDefectEscalate"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
-; (:m :ref LEON-TURN-RUNAWAY-PARSEDEFECT-CONFIG-20261017 :do "the 165-turn ccBeam incident wasted several minutes before the fix above could even fire at the old literal 20; let a project tune the cap via :agentLoop (:parseDefectEscalate N) in its own .asl.config.asn without a rebuild, same lightweight key-scan style as budgetAt above rather than pulling a full ASN parser into this module")
-fn parseDefectEscalateIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":parseDefectEscalate")
+; (:m :ref AGENTLOOP-CONFIG-SCHEMA :do "a context setting counts only as a top-level key of the :agentLoop group (ac/agentLoopValue): the same name in another group, a nested list or a doc string is not read; a value that is not a positive integer reads as absent, so the caller keeps its default")
+fn configInt text: String key: String -> (Option Int64)
+  (match (ac/agentLoopValue text key)
     ((none) none)
-    ((some k) (parseDefectEscalateAt text k)))
+    ((some v) (ac/positiveInt v)))
+
+; (:m :ref LEON-TURN-RUNAWAY-PARSEDEFECT-CONFIG-20261017 :do "the 165-turn ccBeam incident wasted several minutes before the fix above could even fire at the old literal 20; let a project tune the cap via :agentLoop (:parseDefectEscalate N) in its own .asl.config.asn without a rebuild, read as a top-level key of the :agentLoop group through configInt")
+fn parseDefectEscalateIn text: String -> (Option Int64)
+  (configInt text ":parseDefectEscalate")
 
 fn parseDefectEscalateFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -653,20 +708,12 @@ fn parseDefectEscalateFor! root: String -> Int64
       (optionOr (parseDefectEscalateIn (resultOr (fileReadString cfg) "")) (parseDefectEscalate))
       (parseDefectEscalate)))
 
-; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "renderTranscript's budget (state.transcriptChars) was the model's entire context window, so a run of a few dozen turns never reached it and resent the whole growing history verbatim every call; contextKeepTurns/contextToolCapBytes bound per-call input on turn count instead, same config-driven, key-scan-over-.asl.config.asn style as parseDefectEscalate above")
+; (:m :ref LEON-CONTEXT-RESEND-20261017 :do "renderTranscript's budget (state.transcriptChars) was the model's entire context window, so a run of a few dozen turns never reached it and resent the whole growing history verbatim every call; contextKeepTurns/contextToolCapBytes bound per-call input on turn count instead, same config-driven reader (configInt) as parseDefectEscalate above")
 fn contextKeepTurns -> Int64
   8
 
-fn contextKeepTurnsAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextKeepTurns"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextKeepTurnsIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextKeepTurns")
-    ((none) none)
-    ((some k) (contextKeepTurnsAt text k)))
+  (configInt text ":contextKeepTurns")
 
 fn ! contextKeepTurnsFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -677,16 +724,8 @@ fn ! contextKeepTurnsFor! root: String -> Int64
 fn contextToolCapBytes -> Int64
   1500
 
-fn contextToolCapBytesAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextToolCapBytes"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextToolCapBytesIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextToolCapBytes")
-    ((none) none)
-    ((some k) (contextToolCapBytesAt text k)))
+  (configInt text ":contextToolCapBytes")
 
 fn ! contextToolCapBytesFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -698,16 +737,8 @@ fn ! contextToolCapBytesFor! root: String -> Int64
 fn contextMaxOlderLines -> Int64
   50
 
-fn contextMaxOlderLinesAt s: String p: Int64 -> (Option Int64)
-  (let [j0 (+ p (stringLength ":contextMaxOlderLines"))
-        j (skipWhile s j0 pySpace)
-        e (digitsAt s j)]
-    (if (> e j) (stringToInt64 (sub s j e)) none))
-
 fn contextMaxOlderLinesIn text: String -> (Option Int64)
-  (match (stringIndexOf text ":contextMaxOlderLines")
-    ((none) none)
-    ((some k) (contextMaxOlderLinesAt text k)))
+  (configInt text ":contextMaxOlderLines")
 
 fn ! contextMaxOlderLinesFor! root: String -> Int64
   (let [cfg (pathJoin root ".asl.config.asn")]
@@ -764,9 +795,14 @@ fn neutralGot got: String turnLabel: String -> String
       ((stringStartsWith? clean "(") (str clean rest))
       (else (str "(:replyDropped :turn " turnLabel " :chars " (stringFromInt64 (stringLength reply)) ")" rest))))
 
+fn clipSent sent: String turnLabel: String -> String
+  (if (and (!= turnLabel "1") (> (stringLength sent) 160))
+    (str (sub sent 0 160) " ... [" (stringFromInt64 (- (stringLength sent) 160)) " bytes clipped]")
+    sent)
+
 fn turnWhole h: j/Json cap: Int64 -> String
   (let [turn (jgetStr h "turn")
-        sent (jgetStr h "sent")
+        sent (clipSent (jgetStr h "sent") turn)
         got (jgetStr h "got")]
     (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot (neutralGot got turn) turn cap)) "\")"))
 
@@ -783,7 +819,16 @@ fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
 fn contextLatestCapBytes contextTokens: Int64 -> Int64
   (* 2 (readPayloadChars contextTokens))
 
+; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02, 22 readStreak stops: runs re-read the same file and range up to 79 times while input stayed at 10-20k of a 120k window, because every kept turn but the newest was clipped to toolCapBytes (1500) and single-op turns kept only one read whole; a kept turn now keeps up to half the window shared over the most kept turns (keepTurns plus compaction step minus 1), never below toolCapBytes nor above the newest-turn cap, a fixed value per run so the rendered prefix stays byte-stable")
+fn contextKeptCapBytes contextTokens: Int64 keepTurns: Int64 toolCapBytes: Int64 -> Int64
+  (let [slots (max 1 (+ keepTurns (- (contextCompactStep) 1)))
+        share (/ (/ (* contextTokens (charsPerToken)) 2) slots)]
+    (max toolCapBytes (min (contextLatestCapBytes contextTokens) share)))
+
 fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 latestCapBytes: Int64 -> String
+  (renderTranscriptKept history keepTurns toolCapBytes maxOlderLines toolCapBytes latestCapBytes)
+
+fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)
     ""
     (let [n (listLength history)
@@ -794,7 +839,7 @@ fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes:
           kept (optionOr (listSlice history cutAt (- n 1)) (list))
           latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))
           summaryLines (map turnReceiptLine survivors)
-          keptLines (map (fn [h] (turnWhole h toolCapBytes)) kept)
+          keptLines (map (fn [h] (turnWhole h (max toolCapBytes keptCapBytes))) kept)
           latestLines (map (fn [h] (turnWhole h (max toolCapBytes latestCapBytes))) latest)]
       (c/joinSep (listAppend summaryLines (listAppend keptLines latestLines)) "\n")))
 

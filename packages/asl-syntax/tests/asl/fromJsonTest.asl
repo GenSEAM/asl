@@ -3,7 +3,6 @@
   :i [(asl-syntax/asl/fromJson :a fj)
       (asl-parser/ast :a a)
       (asl-parser/astConverter :a cv)
-      (asl-parser/astPrinter :a ap)
       (asl-parser/reader :a rd)
       (asl-json/json :a j)
       (asl-syntax/asl/astSchema :a asch)])

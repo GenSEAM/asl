@@ -4,7 +4,7 @@
 
 (enum ParquetColumn (:c i64Column [(name String) (values I64Array) (encoding String)] "I64 column") (:c f64Column [(name String) (values F64Array) (encoding String)] "F64 column") (:c i8Column [(name String) (values I8Array) (encoding String)] "I8 column"))
 
-(schema ChunkMeta (:f name String) (:f physical Int64) (:f encoding String) (:f values Int64) (:f offset Int64) (:f compressed Int64) (:f uncompressed Int64))
+(schema ChunkMeta (:f name String) (:f physical Int64) (:f encoding String) (:f values Int64) (:f offset Int64) (:f compressed Int64) (:f uncompressed Int64) (:f stats Bytes))
 
 (schema GroupMeta (:f chunks (List ChunkMeta)) (:f rows Int64))
 
@@ -441,6 +441,63 @@ fn chunkUncompressedSum chunks: (List ChunkMeta) -> Int64
       ((none) 0)
       ((some chunk) (+ chunk.uncompressed (chunkUncompressedSum (listDrop chunks 1))))))
 
+; (:m :ref V0021-PQ-STATS :do "a chunk's statistics are the min and max of its values, little endian at the physical width (8, 8, 4 bytes) as min then max, empty when the chunk has no values or a double is NaN; the footer then carries null_count 0 and max_value, min_value")
+fn i64Low values: I64Array index: Int64 best: Int64 -> Int64
+  (if (>= index (i64ArrayLen values)) best (i64Low values (+ index 1) (min best (i64ArrayGet values index))))
+
+fn i64High values: I64Array index: Int64 best: Int64 -> Int64
+  (if (>= index (i64ArrayLen values)) best (i64High values (+ index 1) (max best (i64ArrayGet values index))))
+
+fn i8Low values: I8Array index: Int64 best: Int64 -> Int64
+  (if (>= index (i8ArrayLen values)) best (i8Low values (+ index 1) (min best (i8ArrayGet values index))))
+
+fn i8High values: I8Array index: Int64 best: Int64 -> Int64
+  (if (>= index (i8ArrayLen values)) best (i8High values (+ index 1) (max best (i8ArrayGet values index))))
+
+fn f64Low values: F64Array index: Int64 best: Float64 -> Float64
+  (if (>= index (f64ArrayLen values)) best (f64Low values (+ index 1) (min best (f64ArrayGet values index))))
+
+fn f64High values: F64Array index: Int64 best: Float64 -> Float64
+  (if (>= index (f64ArrayLen values)) best (f64High values (+ index 1) (max best (f64ArrayGet values index))))
+
+fn f64HasNan? values: F64Array index: Int64 -> Bool
+  (if (>= index (f64ArrayLen values)) false
+    (or (isNan? (f64ArrayGet values index)) (f64HasNan? values (+ index 1))))
+
+fn ! columnStats! column: ParquetColumn -> Bytes
+  (match column
+    ((i64Column _ values _)
+      (if (= (i64ArrayLen values) 0) (bytesAlloc 0)
+        (let [(out (bytesAlloc 16))
+              (_ (littlePut! out 0 (i64Low values 1 (i64ArrayGet values 0)) 8))
+              (_ (littlePut! out 8 (i64High values 1 (i64ArrayGet values 0)) 8))]
+          out)))
+    ((f64Column _ values _)
+      (if (or (= (f64ArrayLen values) 0) (f64HasNan? values 0)) (bytesAlloc 0)
+        (let [(out (bytesAlloc 16))
+              (_ (bytesSetFloat64 out 0 (f64Low values 1 (f64ArrayGet values 0))))
+              (_ (bytesSetFloat64 out 1 (f64High values 1 (f64ArrayGet values 0))))]
+          out)))
+    ((i8Column _ values _)
+      (if (= (i8ArrayLen values) 0) (bytesAlloc 0)
+        (let [(out (bytesAlloc 8))
+              (_ (littlePut! out 0 (i8Low values 1 (i8ArrayGet values 0)) 4))
+              (_ (littlePut! out 4 (i8High values 1 (i8ArrayGet values 0)) 4))]
+          out))))
+
+fn ! statsStruct! out: Bytes at: Int64 stats: Bytes -> Int64
+  (if (= (bytesLength stats) 0) at
+    (let [(half (/ (bytesLength stats) 2))
+          (s1 (compactField! out at 9 12 12))
+          (s2 (compactLongField! out s1 0 3 0))
+          (s3 (compactField! out s2 3 5 8))
+          (s4 (unsignedVarint! out s3 half))
+          (s5 (copyBytes! stats half out s4 half))
+          (s6 (compactField! out s5 5 6 8))
+          (s7 (unsignedVarint! out s6 half))
+          (s8 (copyBytes! stats 0 out s7 half))]
+      (bytePut! out s8 0)))
+
 fn ! columnChunk! out: Bytes at: Int64 chunk: ChunkMeta compression: String -> Int64
   (let [(p1 (compactLongField! out at 0 2 chunk.offset))
         (p2 (compactField! out p1 2 3 12))
@@ -457,8 +514,9 @@ fn ! columnChunk! out: Bytes at: Int64 chunk: ChunkMeta compression: String -> I
         (p13 (compactLongField! out p12 5 6 chunk.uncompressed))
         (p14 (compactLongField! out p13 6 7 chunk.compressed))
         (p15 (compactLongField! out p14 7 9 chunk.offset))
-        (p16 (bytePut! out p15 0))]
-    (bytePut! out p16 0))
+        (p16 (statsStruct! out p15 chunk.stats))
+        (p17 (bytePut! out p16 0))]
+    (bytePut! out p17 0))
 
 fn ! columnChunks! out: Bytes at: Int64 chunks: (List ChunkMeta) compression: String -> Int64
   (if (listEmpty? chunks) at
@@ -484,12 +542,17 @@ fn ! rowGroups! out: Bytes at: Int64 groups: (List GroupMeta) compression: Strin
       ((none) at)
       ((some group) (rowGroups! out (rowGroup! out at group compression) (listDrop groups 1) compression))))
 
+; (:m :ref V0021-PQ-STATS :do "column_orders (FileMetaData field 7) names TypeDefinedOrder for every leaf, which is what makes min_value and max_value authoritative: pyarrow ignores them without it")
+fn ! columnOrders! out: Bytes at: Int64 count: Int64 -> Int64
+  (if (<= count 0) at
+    (columnOrders! out (bytePut! out (bytePut! out (bytePut! out at 28) 0) 0) (- count 1)))
+
 fn ! parquetFooter! columns: (List ParquetColumn) groups: (List GroupMeta) rows: Int64 compression: String kv: (List (List String)) -> Bytes
   (let [(ncols (listLength columns))
         (ngroups (listLength groups))
         (kvBytes (kvByteCount kv))
         (nameBytes (columnNameByteCount columns))
-        (out (bytesAlloc (+ 4096 (* ncols 256) (* ngroups ncols 192) (* (+ ngroups 1) nameBytes) kvBytes)))
+        (out (bytesAlloc (+ 4096 (* ncols 256) (* ngroups ncols 256) (* (+ ngroups 1) nameBytes) kvBytes)))
         (p1 (compactIntField! out 0 0 1 1))
         (p2 (schemaList! out p1 columns))
         (p3 (compactLongField! out p2 2 3 rows))
@@ -497,8 +560,11 @@ fn ! parquetFooter! columns: (List ParquetColumn) groups: (List GroupMeta) rows:
         (p5 (compactList! out p4 ngroups 12))
         (p6 (rowGroups! out p5 groups compression))
         (p7 (kvList! out p6 kv))
-        (p8 (bytePut! out p7 0))]
-    (exactBytes! out p8))
+        (p8 (compactField! out p7 5 7 9))
+        (p9 (compactList! out p8 ncols 12))
+        (p10 (columnOrders! out p9 ncols))
+        (p11 (bytePut! out p10 0))]
+    (exactBytes! out p11))
 
 fn ! columnSlice! column: ParquetColumn start: Int64 end: Int64 -> ParquetColumn
   (match column
@@ -544,7 +610,7 @@ fn ! writeColumns! temp: String columns: (List ParquetColumn) start: Int64 count
                                 (ok (listAppend
                                   (list (ChunkMeta :name (columnName column) :physical (physicalType column)
                                          :encoding (columnEncoding column) :values count :offset offset
-                                         :compressed compressed :uncompressed uncompressed)) rest)))))))))))))))))
+                                         :compressed compressed :uncompressed uncompressed :stats (columnStats! column))) rest)))))))))))))))))
 
 fn ! writeGroups! temp: String columns: (List ParquetColumn) start: Int64 total: Int64 groupSize: Int64 compression: String level: Int64 offset: Int64 groups: (List GroupMeta) -> (Result (List GroupMeta) String)
   (if (>= start total) (ok groups)

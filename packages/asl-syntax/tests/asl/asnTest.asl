@@ -174,6 +174,12 @@ fn testInvalidAsnRejected -> Bool
     (assert (err? rMapPair1Int) "1-item int pair in map rejected")
     (assert (err? rMapPair3Bool) "3-item bool pair in map rejected")
     (assert (err? rMapPair1Bool) "1-item bool pair in map rejected")
+    (assert (= (asn/asnRead "(:ev (W1b-FIX))") (err "bad head symbol W1b-FIX at byte 6")) "mixed case with hyphen head names symbol and byte")
+    (assert (= (asn/asnRead "(:ev (Wb-FIX))") (err "bad head symbol Wb-FIX at byte 6")) "Wb-FIX head named")
+    (assert (= (asn/asnRead "(:ev (1b-FIX))") (err "bad head symbol 1b-FIX at byte 6")) "1b-FIX head named")
+    (assert (ok? (asn/asnRead "(:ev (W1-FIX))")) "SCREAMING head accepted")
+    (assert (ok? (asn/asnRead "(:ev (b-FIX))")) "kebab head accepted")
+    (assert (ok? (asn/asnRead "(:ev (SECRET-PEM-BODY))")) "SCREAMING multi-part head accepted")
     true)
 
 fn kw step: asn/AsnStep key: String -> String

@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [withUnbacked specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -87,32 +87,6 @@ fn ! emptyResultWith env: s/LoopEnv sid: String status: String error: (Option St
     :queueWaitSec none :execSec none :usage none :signal none :ownsRejected (list)
     :planSummary none :coreHost (if (= status "escalated") (coreZero) (j/jobj (list))) :openPossible (list) :gatePreflight preflight :message message :vacuousGates vacuous :specCheck none)
 
-fn taskByte bs: Bytes n: Int64 i: Int64 -> Int64
-  (if (and (>= i 0) (< i n)) (bytesGet bs i) -1)
-
-fn taskWordByte b: Int64 -> Bool
-  (or (or (and (>= b 65) (<= b 90)) (and (>= b 97) (<= b 122)))
-    (or (and (>= b 48) (<= b 57)) (or (= b 95) (> b 127))))
-
-fn taskCommitAt bs: Bytes n: Int64 i: Int64 -> Bool
-  (and (= (taskByte bs n i) 99)
-    (and (= (taskByte bs n (+ i 1)) 111)
-      (and (= (taskByte bs n (+ i 2)) 109)
-        (and (= (taskByte bs n (+ i 3)) 109)
-          (and (= (taskByte bs n (+ i 4)) 105)
-            (and (= (taskByte bs n (+ i 5)) 116)
-              (and (not (taskWordByte (taskByte bs n (- i 1))))
-                (not (taskWordByte (taskByte bs n (+ i 6)))))))))))
-
-fn taskCommitScan bs: Bytes n: Int64 i: Int64 -> Bool
-  (if (>= i n)
-    false
-    (or (taskCommitAt bs n i) (taskCommitScan bs n (+ i 1))))
-
-fn taskRequestsCommit task: String -> Bool
-  (let [bs (stringToBytes (stringLower task))]
-    (taskCommitScan bs (bytesLength bs) 0))
-
 fn stateFor env: s/LoopEnv -> s/LoopState
   (let [tokens (ctx/contextTokensFor env.model (match env.contextTokens ((some n) (j/jint n)) ((none) (j/jnull))) false)
         resumeTurn (match env.resume ((some resume) (intField resume "turn" 0)) ((none) 0))]
@@ -130,12 +104,15 @@ fn stateFor env: s/LoopEnv -> s/LoopState
       :needsConfirmList (list) :escalateReceipt none :findingsList (list) :possibleOpen (mapEmpty)
       :possibleNotices 0 :status "ok" :error none :totalQueueWaitSec 0.0 :totalExecSec 0.0
       :usageTotals (j/jobj (list)) :batching (j/jobj (list (pair "ops" (j/jint 0)) (pair "single" (j/jint 0)) (pair "turns" (j/jint 0)))) :hasTiming false :basePrompt ""
-      :briefCount 0 :code "" :commitRequested (taskRequestsCommit env.task) :declaredOps (list) :fetched (j/jobj (list))
+      :briefCount 0 :code "" :commitRequested env.commit :declaredOps (list) :fetched (j/jobj (list))
       :header "" :history (list) :lastGates (mapEmpty) :missingGateIntro (list) :patchErr none
-      :placeholderBriefs (mapEmpty) :prefetch "" :baselineGreen (list) :priorIds (list) :resumePatchPath none
+      :placeholderBriefs (mapEmpty) :doneNoWriteStreak 0 :malformedStreak 0 :prefetch "" :baselineGreen (list) :priorIds (list) :resumePatchPath none
       :retries (j/jobj (list)) :runUnbackedClaims (list) :specChecksDone 0 :startTurn resumeTurn
       :taskLines "" :unparsable (j/jobj (list)) :vendorBounds (j/jobj (list))
       :window (j/jobj (list)) :writtenFiles (list)))
+fn withTurnContext state: s/LoopState contextTokens: (Option Int64) readCap: Int64 wroteSinceGate: Bool -> s/LoopState
+  (with state :contextTokens contextTokens :readCap readCap :wroteSinceGate wroteSinceGate)
+
 fn withHeadState state: s/LoopState turn: Int64 readStreak: Int64 writesPersisted: Bool deliver: (Option String) gates: (List g/GateResult) lastGates: (Map String j/Json) status: String signal: (Option String) escalate: (Option String) started: Float64 -> s/LoopState
   (s/LoopState
       :turn turn
@@ -201,7 +178,7 @@ fn withHeadState state: s/LoopState turn: Int64 readStreak: Int64 writesPersiste
       :lastGates lastGates
       :missingGateIntro state.missingGateIntro
       :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak
       :prefetch state.prefetch :baselineGreen state.baselineGreen
       :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath
@@ -239,7 +216,7 @@ fn withOwnsRejections state: s/LoopState rejections: (List j/Json) -> s/LoopStat
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -279,7 +256,7 @@ fn withUsageTotals state: s/LoopState usageTotals: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -316,7 +293,7 @@ fn withBatching state: s/LoopState batching: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -346,7 +323,7 @@ fn withPlan state: s/LoopState plan: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -376,7 +353,7 @@ fn withFindings state: s/LoopState findings: (List j/Json) confirms: (List j/Jso
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -407,7 +384,7 @@ fn withPrefetch state: s/LoopState prefetch: String -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -488,7 +465,7 @@ fn withBaseline state: s/LoopState green: (List String) -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :prefetch state.prefetch :baselineGreen green :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :prefetch state.prefetch :baselineGreen green :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -584,7 +561,7 @@ fn headDecision! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> String
   (let [runTurns (max 0 (- state.turn state.startTurn))
         elapsed (- (env.now) state.runStarted)
         noWriteTurnLimit (min (* (int64ToFloat64 env.budget) 0.5) (int64ToFloat64 (ctx/noWriteTurns)))]
-    (lp/loopBoundary (redGateOf env.gates state.lastGates) state.readStreak (ctx/readStreakEscalate)
+    (lp/loopBoundary (redGateOf env.gates state.lastGates) state.readStreak (ctx/readStreakEscalateFor! env.rootDir)
       (optionOr state.deliver "") state.writesPersisted (int64ToFloat64 runTurns) noWriteTurnLimit
       (optionOr env.wallBudget 0) elapsed 0.5 (+ state.turn 1) env.budget parseDefects (ctx/parseDefectEscalateFor! env.rootDir)
       (usageIntOf state.usageTotals "inputTokens") env.inputTokenBudget))
@@ -600,7 +577,7 @@ fn ! head! env: s/LoopEnv state: s/LoopState parseDefects: Int64 -> (Pair s/Loop
     (cond
       ((= decision "budget")
         (pair (withHeadState state nextTurn state.readStreak state.writesPersisted state.deliver
-          state.allGateResults state.lastGates "escalated" none
+          state.allGateResults state.lastGates "escalated" (some "turnBudget")
           (some (str "(:escalate :reason \"budget exhausted after " (stringFromInt64 state.turn) " turns\")")) state.runStarted) (stop)))
       ((= decision "wallBudget")
         (do

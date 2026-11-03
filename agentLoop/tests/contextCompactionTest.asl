@@ -22,9 +22,9 @@ fn oldSummaryPrefix n: Int64 keepTurns: Int64 maxOlderLines: Int64 -> String
 
 fn writeConfig! root: String keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 -> Bool
   (ok? (fileWrite (str root "/.asl.config.asn")
-    (str "(:agentLoop (:specCheck false) :contextKeepTurns " (stringFromInt64 keepTurns)
+    (str "(:agentLoop (:specCheck false :contextKeepTurns " (stringFromInt64 keepTurns)
       " :contextToolCapBytes " (stringFromInt64 toolCapBytes)
-      " :contextMaxOlderLines " (stringFromInt64 maxOlderLines) ")\n")))
+      " :contextMaxOlderLines " (stringFromInt64 maxOlderLines) "))\n")))
 
 fn initRepo! root: String initial: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") initial))
@@ -64,7 +64,7 @@ fn runTests -> Bool
         resultClipped (ctx/renderTranscriptBounded hBig 5 50 50 2000)
         resultLatestCut (ctx/renderTranscriptBounded hBig 5 50 50 500)
 
-        cfgText "(:agentLoop :contextKeepTurns 3 :contextToolCapBytes 77 :contextMaxOlderLines 9)"
+        cfgText "(:aslConfig :agentLoop (:contextKeepTurns 3 :contextToolCapBytes 77 :contextMaxOlderLines 9))"
 
         tightPair (runCompactionScenario! "tight" 5 300 50)
         loosePair (runCompactionScenario! "loose" 1000 100000 1000)

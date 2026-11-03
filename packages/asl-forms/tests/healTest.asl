@@ -128,7 +128,8 @@ fn testUnrepairableIsReported -> Bool
   (let [(broken "(module m :x [f])\n\n(let [(a (+ n 1))] a)\n")
         (res (h/healSource broken "m.asl"))]
     (assert (not (listEmpty? res.left)) "a missing defun header is not invented: the unbound parameter is left")
-    (assert (stringContains? res.receipt ":left (\"ERR_UNKNOWN_SYMBOL") (str "the receipt lists what is left, got " res.receipt))
+    (assert (stringContains? res.receipt "\"ERR_UNKNOWN_SYMBOL ") (str "the receipt lists the unbound parameter as left, in any position, got " res.receipt))
+    (assert (stringContains? res.receipt "\"ERR_UNDEFINED_EXPORT ") (str "the receipt also lists the export without a defun as left, got " res.receipt))
     true)
 
 fn testEdits -> Bool
@@ -167,6 +168,17 @@ fn ! testImportAddIndex -> Bool
                   (assert (stringContains? res.text "(hints/headerExports s)") (str "the call is qualified, got " res.text))
                   true)))
 
+; (:m :ref HEAL-KEEP-STAGE1 :do "a text with an extra closer importing a module that is not on disk: heal! keeps the delimiter repair and leaves one importsUnloaded diagnostic naming the module, instead of an err")
+fn ! testImportsUnloaded -> Bool
+  (match (h/heal! "m.asl" "(module m :x [f] :i [(nope/missingMod :a z)])\n\nfn f -> Int64\n  (z/g 1))\n" (list ".") "asl/prelude/prelude.asl" 24)
+    ((err e) (do (assert false (str "heal! keeps stage 1 when imports do not load, got err " e)) false))
+    ((ok res) (do (assert (= res.text "(module m :x [f] :i [(nope/missingMod :a z)])\n\nfn f -> Int64\n  (z/g 1)\n") (str "the extra closer is gone, got " res.text))
+                  (assert (listContains? res.repaired "delimiterBalance") (str "delimiterBalance is named, got " res.receipt))
+                  (assert res.changed "the result is marked changed")
+                  (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) res.left) (list "importsUnloaded")) (str "one importsUnloaded diagnostic is left, got " res.receipt))
+                  (assert (stringContains? res.receipt "nope/missingMod") (str "the left diagnostic names the module, got " res.receipt))
+                  true)))
+
 fn ! runTests -> Bool
   (and (testDelimiterBalance) (testLineHeader) (testFreeComment) (testRetiredSpelling) (testFnHeaderUnwrap) (testBodyIndent) (testCondClauses)
-       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testExportAdd) (testImportAdd) (testImportAddIndex) (testUnrepairableIsReported) (testEdits))
+       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testExportAdd) (testImportAdd) (testImportAddIndex) (testImportsUnloaded) (testUnrepairableIsReported) (testEdits))

@@ -1,4 +1,4 @@
-(module aslMem/engineTest :x [runTests testWalVectorRecovery] :i [(ring :a r) (wal :a w) (graph :a g) (snapshot :a snap) (engine :a eng)])
+(module aslMem/engineTest :x [runTests testWalVectorRecovery] :i [(ring :a r) (wal :a w) (graph :a g) (engine :a eng)])
 
 fn testRingBufferOverwrite -> Bool
   (let [(buf0 (r/makeRingBuffer 3 (r/policyOverwriteOldest))) (res1 (r/ringPush buf0 "item-1")) (res2 (r/ringPush res1.buffer "item-2")) (res3 (r/ringPush res2.buffer "item-3")) (isFull (r/ringIsFull? res3.buffer)) (res4 (r/ringPush res3.buffer "item-4")) (recent (r/ringPeekRecent res4.buffer 3))] (assert isFull "Ring buffer must be full after 3 pushes") (assert res4.wasEvicted "Fourth push must trigger eviction") (assert (= res4.buffer.evictedCount 1) "Evicted count must be 1") (assert (= (listLength recent) 3) "Recent items length must be 3") (assert (= (optionOr (listHead recent) "") "item-2") "Oldest retained item must be item-2") (assert (= (r/ringUtilization res4.buffer) 100) "Ring utilization must be 100") true)

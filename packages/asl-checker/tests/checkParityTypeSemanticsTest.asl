@@ -27,9 +27,9 @@ fn missingPreludeSigTable -> (List (Pair String String))
         (pair "isNan?" "Float64 -> Bool")
         (pair "isFinite?" "Float64 -> Bool")
         (pair "stringRepeat" "String Int64 -> String")
-        (pair "&" "Int64 Int64 -> Int64")
-        (pair "|" "Int64 Int64 -> Int64")
-        (pair "^" "Int64 Int64 -> Int64"))
+        (pair "&" "I I -> I")
+        (pair "|" "I I -> I")
+        (pair "^" "I I -> I"))
 
 fn testMissingPreludeSignatures -> Bool
   (do

@@ -1,9 +1,10 @@
 (module aslGateway/modelSync
   :x [SyncDiff SyncProbe modelFilterFor nonChatId? listedModels syncDiff chainsWith proposeAlias calStatus toProbe syncProposals
-      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText applySubPace patchHost modelsApplyCli!]
+      syncPatchText syncCalText syncListText modelsSyncCli! applyPatchText applySubPace patchHost modelsApplyCli! routeSpan setField todayUtc!]
   :i [(config :a c)
       (search :a srch)
       (localTime :a lt)
+      (modelWindows :a mw)
       (asl-json/json :a j)
       (asl-cli/system :a sys)])
 
@@ -289,7 +290,7 @@ fn ! liveProbes! pv: c/GatewayProvider key: String env: (List String) names: (Li
 
 fn syncProviders table: c/GatewayTable only: String -> (List c/GatewayProvider)
   (filter (fn [(pv c/GatewayProvider)] -> Bool (and (= pv.kind "openai") (or (stringEmpty? only) (= only pv.id))))
-          (map (fn [(k String)] -> c/GatewayProvider (optionOr (mapGet table.providers k) (c/GatewayProvider :rpmShared false :dropEmptyTools false :id k :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
+          (map (fn [(k String)] -> c/GatewayProvider (optionOr (mapGet table.providers k) (c/GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id k :kind "" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none))))
                (listSortBy (fn [(k String)] -> String k) (mapKeys table.providers))))
 
 fn ! writeOut! path: String text: String -> Bool
@@ -320,11 +321,25 @@ fn ! modelsSyncCli! args: (List String) -> (Result Int64 String)
                   (usable (filter (fn [(p (Pair c/GatewayProvider String))] -> Bool (or (not (stringEmpty? fixtures)) (not (stringEmpty? (pairSecond p))))) keyed))
                   (noKey (map (fn [(p (Pair c/GatewayProvider String))] -> (Pair String String) (pair (pairFirst p).id "noKey"))
                               (filter (fn [(p (Pair c/GatewayProvider String))] -> Bool (and (stringEmpty? fixtures) (stringEmpty? (pairSecond p)))) keyed)))
-                  (fetched (map (fn [(p (Pair c/GatewayProvider String))] -> (Pair (Pair c/GatewayProvider String) (Result (Pair (List String) (List String)) String))
-                                  (pair p (match (modelsBody! fixtures (pairFirst p) (pairSecond p) env)
+                  (bodies (map (fn [(p (Pair c/GatewayProvider String))] -> (Pair (Pair c/GatewayProvider String) (Result String String))
+                                 (pair p (modelsBody! fixtures (pairFirst p) (pairSecond p) env)))
+                               usable))
+                  (fetched (map (fn [(b (Pair (Pair c/GatewayProvider String) (Result String String)))] -> (Pair (Pair c/GatewayProvider String) (Result (Pair (List String) (List String)) String))
+                                  (pair (pairFirst b) (match (pairSecond b)
                                             ((err e) (err e))
-                                            ((ok body) (listedModels (modelFilterFor (pairFirst p).id) body)))))
-                                usable))
+                                            ((ok body) (listedModels (modelFilterFor (pairFirst (pairFirst b)).id) body)))))
+                                bodies))
+                  (cap (optionOr (stringToInt64 (argAfter args "--cap" "")) (mw/capOfConfigText text)))
+                  (winRows (listAppend (listFlatMap (fn [(nk (Pair String String))] -> (List mw/WindowRow) (mw/windowRows table (pairFirst nk) (list) cap)) noKey) (listFlatMap (fn [(b (Pair (Pair c/GatewayProvider String) (Result String String)))] -> (List mw/WindowRow)
+                                          (let [(pid (pairFirst (pairFirst b)).id)]
+                                            (match (pairSecond b)
+                                              ((err _) (mw/windowRows table pid (list) cap))
+                                              ((ok body) (match (mw/listedWindows body)
+                                                           ((ok l) (mw/windowRows table pid l cap))
+                                                           ((err _) (mw/windowRows table pid (list) cap)))))))
+                                        bodies)))
+                  (winPath (str outDir "/windows-" date ".asn"))
+                  (winPatchPath (str outDir "/" syncId ".windows.patch.asn"))
                   (failed (map (fn [(f (Pair (Pair c/GatewayProvider String) (Result (Pair (List String) (List String)) String)))] -> (Pair String String)
                                  (pair (pairFirst (pairFirst f)).id (match (pairSecond f) ((err e) e) ((ok _) ""))))
                                (filter (fn [(f (Pair (Pair c/GatewayProvider String) (Result (Pair (List String) (List String)) String)))] -> Bool (not (ok? (pairSecond f)))) fetched)))
@@ -347,10 +362,12 @@ fn ! modelsSyncCli! args: (List String) -> (Result Int64 String)
                   (patchPath (str outDir "/" syncId ".patch.asn"))
                   (wrote (and made (and (writeOut! listPath (syncListText date diffs))
                                         (and (writeOut! calPath (syncCalText syncId date diffs props (listAppend noKey failed)))
-                                             (writeOut! patchPath (syncPatchText table syncId source profile diffs props))))))]
+                                             (and (writeOut! patchPath (syncPatchText table syncId source profile diffs props))
+                                                  (and (writeOut! winPath (mw/windowsReportText date cap winRows))
+                                                       (writeOut! winPatchPath (mw/windowsPatchText (str "CTX-SYNC-" date) (machineHost!) winRows))))))))]
               (do (sys/say! (str "(:modelsSync :status " (if wrote ":ok" ":error") " :id " syncId " :providers " (stringFromInt64 (listLength diffs))
                                  " :added " (stringFromInt64 (listLength props)) " :joining " (stringFromInt64 (listLength (filter joins? props)))
-                                 " :skipped (" (skippedText (listAppend noKey failed)) ") :list " (q listPath) " :cal " (q calPath) " :patch " (q patchPath) " :configWritten false)"))
+                                 " :skipped (" (skippedText (listAppend noKey failed)) ") :list " (q listPath) " :cal " (q calPath) " :patch " (q patchPath) " :windows " (stringFromInt64 (listLength winRows)) " :windowsChanged " (stringFromInt64 (listLength (filter (fn [(r mw/WindowRow)] -> Bool (= r.status "ok")) winRows))) " :windowsReport " (q winPath) " :windowsPatch " (q winPatchPath) " :configWritten false)"))
                   (ok (if wrote 0 1)))))))))
 
 ; (:m :ref GW-SYNC-APPLY-TOOL :do "asl gateway models apply PATCH [--config PATH]: the lead-run step for a models sync patch. Reads PATCH (:add model rows, :appendTail alias appends), splices them into the config text, writes the result beside the config as a tmp file, runs the configCheck on that tmp text, and only on a clean check backs the config up and renames the tmp over it; any configCheck error refuses with the config untouched. :leave rows are listed, never applied. It is reached only by this command, nothing runs it automatically")

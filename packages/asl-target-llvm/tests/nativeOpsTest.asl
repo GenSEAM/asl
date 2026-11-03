@@ -673,8 +673,8 @@ fn keyOrderCaller -> String
     "  Val v = {7, 0, {.o = r}};"
     "  return v;"
     "}"
-    "int64_t same(Val a, Val b);"
-    "int64_t differ(Val a, Val b);"
+    "int64_t aslc_same(Val a, Val b);"
+    "int64_t aslc_differ(Val a, Val b);"
     "static Val intVal(int64_t i) { Val v = {2, 0, {.i = i}}; return v; }"
     "int main(void) {"
     "  asl_rt_init();"
@@ -688,8 +688,8 @@ fn keyOrderCaller -> String
     "  Val yx = record(\"P\", swapped, v21);"
     "  Val swap = record(\"P\", swapped, v12b);"
     "  Val other = record(\"Q\", declared, v12c);"
-    "  printf(\"%lld %lld %lld %lld %lld %lld %lld %lld\\n\", (long long)same(xy, yx), (long long)same(yx, xy), (long long)differ(xy, yx),"
-    "         (long long)same(xy, swap), (long long)same(swap, xy), (long long)differ(xy, swap), (long long)same(yx, swap), (long long)same(xy, other));"
+    "  printf(\"%lld %lld %lld %lld %lld %lld %lld %lld\\n\", (long long)aslc_same(xy, yx), (long long)aslc_same(yx, xy), (long long)aslc_differ(xy, yx),"
+    "         (long long)aslc_same(xy, swap), (long long)aslc_same(swap, xy), (long long)aslc_differ(xy, swap), (long long)aslc_same(yx, swap), (long long)aslc_same(xy, other));"
     "  return 0;"
     "}"
     "") "\n")
@@ -697,8 +697,8 @@ fn keyOrderCaller -> String
 fn ! testKeyOrder dir: String -> Bool
   (match (low/lowerSource (keyOrderSource))
     ((err ds) (do (assert false (str "keyOrder: the source lowers: " (formatDiags ds))) true))
-    ((ok m) (match (ssa/emitLlvmModule m)
-              ((err ds) (do (assert false (str "keyOrder: emitLlvmModule emits same and differ: " (formatDiags ds))) true))
+    ((ok m) (match (ssa/emitLlvmModuleCEntries m)
+              ((err ds) (do (assert false (str "keyOrder: emitLlvmModuleCEntries emits same and differ: " (formatDiags ds))) true))
               ((ok ll)
                 (let [(lib (str dir "/keyOrderLib.ll"))
                       (caller (str dir "/keyOrderCaller.c"))

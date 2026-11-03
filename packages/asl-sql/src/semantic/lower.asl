@@ -1,4 +1,4 @@
-(module asl-sql/semantic/lower :x [lowerQuery lowerJoins formatProjectedExpr] :i [(asl-sql/core :a sql) (asl-sql/semantic/schema :a sem) (asl-sql/semantic/expand :a exp) (asl-text/string :a s)])
+(module asl-sql/semantic/lower :x [lowerQuery lowerJoins formatProjectedExpr] :i [(asl-sql/core :a sql) (asl-sql/semantic/schema :a sem) (asl-sql/semantic/expand :a exp)])
 
 fn formatProjectedExpr expr: sql/SqlExpr -> String
   (sql/renderExprStr expr (sql/postgres) 1)

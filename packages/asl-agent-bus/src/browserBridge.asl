@@ -1,4 +1,4 @@
-(module aslAgentBus/browserBridge :x [BridgeTab BridgeCommand BrowserBridgeState BrowserBridgeTraceFrame bridgeInit bridgeRegisterTab bridgeEnqueueCommand bridgePollCommands bridgeCompleteCommand formatCorsHttpResponse isBridgeOpfsPathSafe? emitBrowserTraceFrame queryBrowserBridgeCapability] :i [(asl-text/string :a s) (mesh :a mesh)])
+(module aslAgentBus/browserBridge :x [BridgeTab BridgeCommand BrowserBridgeState BrowserBridgeTraceFrame bridgeInit bridgeRegisterTab bridgeEnqueueCommand bridgePollCommands bridgeCompleteCommand formatCorsHttpResponse isBridgeOpfsPathSafe? emitBrowserTraceFrame queryBrowserBridgeCapability] :i [(mesh :a mesh)])
 
 (schema BridgeTab (:f tabId Str) (:f url Str) (:f title Str) (:f connectedAt I64))
 

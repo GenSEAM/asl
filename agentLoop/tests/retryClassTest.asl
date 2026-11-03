@@ -18,6 +18,10 @@ fn provider -> pv/Provider
 fn noSleep seconds: Int64 -> Bool
   true
 
+; (:m :ref D7-FIX :do "sleep stub that refuses any pause above the 300 s cap, so an uncapped pause ends the loop")
+fn capSleep seconds: Int64 -> Bool
+  (<= seconds 300)
+
 fn clock -> Float64
   (/ (int64ToFloat64 (monotonicNs)) 1000000000.0)
 
@@ -66,4 +70,10 @@ fn ! runTests -> Bool
     (assert (= (r/providerRetryPause true 2 (list 1 2 4) none) 2) "a transient retry backs off by the configured step")
     (assert (= (r/providerRetryPause true 3 (list 1 2 4) (some 1)) 1) "the backoff is cut to the wall budget left")
     (assert (= (r/providerRetryPause false 2 (list 1 2 4) none) 0) "a permanent error has no pause")
+    (assert (= (pairSecond (r/retryTurn! (provider) (failing "ERR_VENDOR" "svc HTTP error 429: slow [retry-after=86400]") 3 (list 1 2 4) none capSleep clock)) 3) "a day-long Retry-After is clipped to the cap, so no sleep exceeds it and retries reach the limit")
+    (assert (= (pairSecond (r/retryTurn! (provider) (failing "ERR_VENDOR" "svc HTTP error 429: slow [retry-after=500]") 3 (list 1 2 4) (some 100) noSleep clock)) 0) "a Retry-After that outlasts the remaining budget returns the turn without a retry")
+    (assert (= (pairSecond (r/retryTurn! (provider) (failing "ERR_VENDOR" "svc HTTP error 429: slow [retry-after=86400]") 3 (list 1 2 4) (some 400) noSleep clock)) 0) "the raw hint, not the clipped one, is compared with the budget: a day-long hint with 400 s left is not retried")
+    (assert (= (optionOr (r/hintedPause 86400 none) -1) 300) "with no budget the hint is clipped to exactly 300 s")
+    (assert (= (optionOr (r/hintedPause 2 (some 100)) -1) 2) "a short hint inside the budget is kept as is")
+    (assert (= (optionOr (r/hintedPause 0 (some 0)) -1) 0) "no hint never blocks a retry by itself")
     true)

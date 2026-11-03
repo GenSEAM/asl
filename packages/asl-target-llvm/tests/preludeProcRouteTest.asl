@@ -156,6 +156,15 @@ fn ! runNative work: String name: String prefix: String -> ProcessOutput
 fn ! fileText path: String -> String
   (resultOr (fileReadString path) (str "<read error: " path ">"))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "the recorded run is macOS: its sh words a missing command as 'sh: CMD: command not found' and dash on Linux as 'sh: 1: CMD: not found'; the exit code 127 and the command name stay compared, only the shell's own wording is folded")
+fn shellNormalLine l: String -> String
+  (if (and (stringStartsWith? l "missing 127 ") (stringContains? l "does-not-exist"))
+    "missing 127 <sh: command-not-found>"
+    l)
+
+fn shellNormal text: String -> String
+  (stringJoin (map shellNormalLine (stringLines text)) "\n")
+
 fn ! testParity work: String -> Bool
   (let [(scriptPath (str work "/stdinCheck.py"))
         (scriptWritten (fileWrite scriptPath (stdinCheckScript)))
@@ -180,7 +189,7 @@ fn ! testParity work: String -> Bool
                 (do (assert (= built.exitCode 0) "native IR compiled")
                     (let [(native (runNative work "procRoute" ""))]
                       (do (assert (= native.exitCode expected.exitCode) "native exit matches host")
-                          (assert (= native.stdout expected.stdout) "native stdout matches host")
+                          (assert (= (shellNormal native.stdout) (shellNormal expected.stdout)) "native stdout matches host")
                           (assert (= native.stderr expected.stderr) "native stderr matches host")
                           (let [(nativePath (str work "/native.log"))
                                 (nativeLog (fileText nativePath))

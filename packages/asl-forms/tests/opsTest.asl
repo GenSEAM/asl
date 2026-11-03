@@ -1,4 +1,4 @@
-(module asl-forms/tests/opsTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/delegate :a d) (asl-forms/gate :a g) (asl-forms/tests/formsDriver :a fd)])
+(module asl-forms/tests/opsTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/ops :a ops) (asl-forms/delegate :a d) (asl-forms/gate :a g) (asl-forms/tests/formsDriver :a fd) (asl-tools/fleet/run :a fr)])
 
 fn wsRoot! -> String
   (resultOr (realPath "asl/packages/asl-forms/tests/fixtures/ws") "")
@@ -191,16 +191,16 @@ fn scratchDir! tag: String -> String
 fn isolatedRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" root) (str "SCRIPT_DIR=" (k/joinPath root "bin"))
-                   (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1"))]
+        (env (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" root) (str "SCRIPT_DIR=" (k/joinPath root "bin"))
+                   (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1") (fr/cacheEnv!)))]
     (g/runArgv! (list host "--root" root form) (some repo) (some env) 60000 0))
 
 ; (:m :ref MAINFIX14-AGENTROUTE-TIMEOUT-20261019 :do "routedAgentRun! sends an :agent step, which agentStep (asl-forms/delegate.asl) handles by building asl/agentLoop/main.asl's native binary via ev/nativeEntry! before it can even spawn the rejection check this test wants -- a strictly heavier path than isolatedRun!'s (forms-host build only), yet this had half isolatedRun!'s 60000ms budget. On a cold .asl/cache/nativeTest (the state after any other suite's cache sweep, or the first worktree to touch this path in a train) that build alone exceeds 30s, g/runArgv! SIGKILLs the still-building subprocess at the deadline (gate.asl#runArgv! graceMs 0), and RunOut.code becomes the kill/wait status, not the ERR_ROLE_DEPRECATED rejection's exit 1 -- reproduced verbatim (same assertion, same 'after 39 asserts') by clearing .asl/cache/nativeTest and rerunning this file. 180000ms matches the run/limits 180s convention used elsewhere for CLI subprocess budgets and comfortably covers the measured ~137s cold-build wall time for this file")
 fn routedAgentRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" repo) (str "SCRIPT_DIR=" (k/joinPath repo "bin"))
-                   (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1"))]
+        (env (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ROOT_DIR=" repo) (str "SCRIPT_DIR=" (k/joinPath repo "bin"))
+                   (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1") (fr/cacheEnv!)))]
     (g/runArgv! (list host "--root" root form) (some repo) (some env) 180000 0))
 
 fn testAgentGetsRawForm! -> Bool
@@ -214,7 +214,7 @@ fn testAgentGetsRawForm! -> Bool
     (do
       (assert (ok? made) "create isolated agent workspace state")
       (assert (fileExists? mainPath) "agent routing targets the checked-in ASL loop entry")
-      (assert (= out.code 1) "agent loop argument rejection propagates through the router")
+      (assert (= out.code 1) (str "agent loop argument rejection propagates through the router: " out.code " " out.out))
       (assert (stringContains? out.out "ERR_ROLE_DEPRECATED") "the router passes the raw task form to ASL main validation")
       (assert (and (= dry.code 0) (stringContains? dry.out "(:dryRunReceipt") (not (stringContains? dry.out "route-test"))) "a successful routed run exits zero and the task stays out of the stable system prompt")
       (assert (and (= badBudget.code 1) (stringContains? badBudget.out "ERR_INVALID_ARG :key \"wallBudget\"")) "the loop receives the :wallBudget keyword from the raw form and validates it")

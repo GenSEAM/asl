@@ -879,6 +879,7 @@ fn extractFailedFilesFromErrors errors: (List String) -> (List String)
          errors))
 
 
+; (:m :ref PAREN-LEON-JOURNAL :do "a write whose delimiter repair leaves items is rejected with ERR_TXN_ABORTED and the message 'repair left N item(s)'; that text names an unbalanced write the same as the word unbalanced does")
 fn determineFailType isParseDefect: Bool errStr: String sigStr: String obsStr: String gateExits: (List Int64) retryBrief: String failedFiles: (List String) turnRecs: (List Receipt) stagedOrFlushed: (List String) -> (Option String)
   (if isParseDefect
     (some "syntax_parse_defect")
@@ -887,8 +888,9 @@ fn determineFailType isParseDefect: Bool errStr: String sigStr: String obsStr: S
          (or (stringContains? obsStr "unbalanced")
            (or (stringContains? obsStr "balance")
              (or (stringContains? obsStr "delimiters")
+               (or (stringContains? obsStr "repair left")
                (or (stringContains? errStr "ERR_TXN_FLUSH_FAILED")
-                 (stringContains? sigStr "ERR_TXN_FLUSH_FAILED"))))))
+                 (stringContains? sigStr "ERR_TXN_FLUSH_FAILED")))))))
         (some "syntax_unbalanced"))
       ((or (stringContains? errStr "ERR_CHECK_FAILED")
          (or (stringContains? errStr "ERR_SYNTAX")

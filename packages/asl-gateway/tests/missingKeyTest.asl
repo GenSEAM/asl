@@ -19,7 +19,7 @@ fn ! world! env: (Map String String) -> (Option ch/ChatWorld)
   (worldOf! (configText) env)
 
 fn ! worldOf! text: String env: (Map String String) -> (Option ch/ChatWorld)
-  (match (c/gateway_config_parse! text "missingKey" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! text "missingKey" ".asl/mem/calibration/index.asn")
     ((err _) none)
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))

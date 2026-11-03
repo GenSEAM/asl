@@ -1,4 +1,4 @@
-(module asl-ui/radarCard :x [RadarAxisScore makeRadarAxisScore RadarSnapshot makeRadarSnapshot renderRadarCard calculateRadarPoints formatAxisLabel] :i [(asl-ui/vnode :a ui) (asl-ui/tokens :a tokens) (asl-ui/theme :a theme)])
+(module asl-ui/radarCard :x [RadarAxisScore makeRadarAxisScore RadarSnapshot makeRadarSnapshot renderRadarCard calculateRadarPoints formatAxisLabel] :i [(asl-ui/vnode :a ui)])
 
 (schema RadarAxisScore (:f axis String) (:f score Int64) (:f snapshotHash String) (:f receiptId String))
 

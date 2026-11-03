@@ -45,7 +45,7 @@
       stepProbe!
       Step
       Inst]
-  :i [(asl-target-sh/emitPs1 :a ps1) (asl-target-sh/emitCmd :a cmd) (asl-target-sh/emitSh :a sh)])
+  :i [(asl-target-sh/emitSh :a sh)])
 
 fn formatGeneratedHeader lang: String targetName: String ssotPath: String -> String
   (let [(commentPrefix (if (= lang "cmd") "::" "#"))]

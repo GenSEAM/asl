@@ -30,6 +30,7 @@
   (:f tries Int64)
   (:f holdMs Int64)
   (:f busyN Int64 :default 0)
+  (:f out String :default "")
   (:f guard (Option fr/Guarded))
   (:f spill String))
 
@@ -108,11 +109,12 @@ fn bodyOf raw: String -> (Option String)
       (let [(body (optionOr (stringSlice raw (+ end 4) (stringLength raw)) ""))]
         (if (>= (stringLength body) (contentLength (optionOr (stringSlice raw 0 end) ""))) (some body) none))))
 
-fn ! writeAll! fd: Int64 data: String -> Bool
-  (if (stringEmpty? data) true
+; (:m :ref LEONPOOL-RETRYAFTER-MAC-HANG :do "the hub fd is non-blocking and a write hands over what the socket takes now (8 KB on macOS) and returns the rest: the pool shares its thread with whoever reads the other end, so a blocking write of a larger request waited for a reader that only runs between pool steps; err is a dead connection, ok empty is all sent")
+fn ! pushOut! fd: Int64 data: String -> (Result String String)
+  (if (stringEmpty? data) (ok "")
     (match (fdWrite fd data)
-      ((err _) false)
-      ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
+      ((err e) (if (= e "wouldBlock") (ok data) (err e)))
+      ((ok n) (if (<= n 0) (err "closed") (pushOut! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
 
 fn spillPath p: Pool id: String -> String
   (str p.spillDir "/" id ".state")
@@ -199,15 +201,16 @@ fn ! launch! p: Pool s: Sess turn: (fn [T String String] -> (Pair T Turn)) d: T 
       (match (unixConnect p.sock)
         ((err e) (pair (retry! p live now) d))
         ((ok fd)
-          (if (writeAll! fd live.request)
-            (pair (with p :active (listAppend p.active (list (connected live fd)))) d)
-            (do (fdClose fd) (pair (retry! p live now) d)))))))
+          (do (fdNonBlocking fd true)
+              (match (pushOut! fd live.request)
+                ((ok rest) (pair (with p :active (listAppend p.active (list (with (connected live fd) :out rest)))) d))
+                ((err _) (do (fdClose fd) (pair (retry! p live now) d)))))))))
 
 ; (:m :ref POOL-SERVE :do "a refused or dropped hub connection is not the session's failure: it goes back to waiting with the same request and is given up on after three tries, so a hub restart costs a pause, not the sessions")
 fn ! retry! p: Pool s: Sess now: Int64 -> Pool
   (if (>= s.tries 3)
     (with p :done (listAppend p.done (list (pair s.id "(:err \"hub unreachable\")"))))
-    (with p :waiting (listAppend p.waiting (list (with s :fd -1 :buf "" :tries (+ s.tries 1) :holdMs (+ now (* 100 (+ s.tries 1))))))))
+    (with p :waiting (listAppend p.waiting (list (with s :fd -1 :buf "" :out "" :tries (+ s.tries 1) :holdMs (+ now (* 100 (+ s.tries 1))))))))
 
 fn poolWatch p: Pool -> (List (Pair Int64 Int64))
   (listAppend (map (fn [(s Sess)] -> (Pair Int64 Int64) (pair s.fd 1)) p.active)
@@ -217,6 +220,15 @@ fn ready? ready: (List (Pair Int64 Int64)) fd: Int64 -> Bool
   (listAny? (fn [(r (Pair Int64 Int64))] -> Bool (= (pairFirst r) fd)) ready)
 
 fn ! readOne! p: Pool s: Sess ready: (List (Pair Int64 Int64)) turn: (fn [T String String] -> (Pair T Turn)) d: T now: Int64 -> (Pair Pool T)
+  (if (not (stringEmpty? s.out))
+    (match (pushOut! s.fd s.out)
+      ((ok rest) (if (stringEmpty? rest)
+                   (readBody! p (with s :out "") ready turn d now)
+                   (pair (with p :active (listAppend p.active (list (with s :out rest)))) d)))
+      ((err _) (do (fdClose s.fd) (pair (retry! p s now) d))))
+    (readBody! p s ready turn d now))
+
+fn ! readBody! p: Pool s: Sess ready: (List (Pair Int64 Int64)) turn: (fn [T String String] -> (Pair T Turn)) d: T now: Int64 -> (Pair Pool T)
   (if (not (ready? ready s.fd)) (pair (with p :active (listAppend p.active (list s))) d)
     (match (fdRead s.fd 65536)
       ((err _) (do (fdClose s.fd) (pair (retry! p s now) d)))

@@ -521,9 +521,9 @@ fn ! runTests -> Bool
         (refute (= content4 (j/jstr "I will read it")) "TOOLCALLREPLY: the reasoning text does not become the content of a tool-call reply"))
       (let [(rl (plainRateLimitEvents))]
         (assert (= (listLength rl) 2) (str "BREAKERSCOPE: a two-model cascade on plain 429 marks down once per model: " (stringFromInt64 (listLength rl))))
-        (assert (listContains? rl "markDown:test:m1") "BREAKERSCOPE: model m1's 429 trips its own pool test:m1")
-        (assert (listContains? rl "markDown:test:m2") "BREAKERSCOPE: model m2's 429 trips its own pool test:m2")
-        (refute (listContains? rl "markDown:test") "BREAKERSCOPE: a plain per-model 429 never trips the bare provider pool"))
+        (assert (listContains? rl "note429:test:m1") "BREAKERSCOPE: model m1 429 cools its own pool test:m1 (GW-429-WINDOW-WAIT note429)")
+        (assert (listContains? rl "note429:test:m2") "BREAKERSCOPE: model m2 429 cools its own pool test:m2")
+        (refute (or (listContains? rl "markDown:test") (listContains? rl "note429:test")) "BREAKERSCOPE: a plain per-model 429 never trips the bare provider pool"))
       (let [(ue (unauthorizedEvents))]
         (assert (listContains? ue "markDown:test") "BREAKERSCOPE: 401 trips the whole provider pool, not a per-model one")
         (refute (listContains? ue "markDown:test:m1") "BREAKERSCOPE: 401 does not use the per-model pool key"))
@@ -532,8 +532,8 @@ fn ! runTests -> Bool
         (refute (listContains? pe "markDown:test:m1") "BREAKERSCOPE: a provider-wide quota marker does not use the per-model pool key"))
       (let [(re (resourceExhaustedEvents))]
         (assert (= (listLength re) 2) (str "GW-BREAKER-STALE-20261018: a two-model cascade on a 503 RESOURCE_EXHAUSTED body marks down once per model: " (stringFromInt64 (listLength re))))
-        (assert (listContains? re "markDown:test:m1") "GW-BREAKER-STALE-20261018: model m1's RESOURCE_EXHAUSTED 503 trips its own pool test:m1, matching the real Gemini incident shape")
-        (assert (listContains? re "markDown:test:m2") "GW-BREAKER-STALE-20261018: model m2's RESOURCE_EXHAUSTED 503 trips its own pool test:m2")
+        (assert (listContains? re "note429:test:m1") "GW-BREAKER-STALE-20261018: model m1 RESOURCE_EXHAUSTED 503 cools its own pool test:m1 as a quota (GW-429-WINDOW-WAIT note429), matching the real Gemini incident shape")
+        (assert (listContains? re "note429:test:m2") "GW-BREAKER-STALE-20261018: model m2 RESOURCE_EXHAUSTED 503 cools its own pool test:m2")
         (refute (listContains? re "markDown:test") "GW-BREAKER-STALE-20261018: a quota-marker 503 never trips the bare provider pool, regardless of status code"))
       (assert (= (spreadDispatchedModel! (list "m1" "m2")) "model-1") "SPREADLIVE: the server's natural-order answer dispatches model-1 first, same as the plain :chain")
       (assert (= (spreadDispatchedModel! (list "m2" "m1")) "model-2") "SPREADLIVE: cascadeChosen must dispatch whatever the server's effSpreadOrder answer names first, not the config's own :chain order -- this is the one assertion that would fail if startLoop forgot to reorder")

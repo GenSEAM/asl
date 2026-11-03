@@ -224,12 +224,30 @@ fn runs -> (List (List String))
         (list "allocMix" "200000" "ASL_GC_MIN_MIB=1" "509154" "36" "1000008" "983048" "38400260" "183")
         (list "deep" "13" "ASL_GC_MIN_MIB=1" "1208473736 2416947460 24893" "3" "354504" "52330" "13278352" "5350784"))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "objectsFreed and bytesLive at the exit snapshot depend on what the target's stack and registers still hold when the program ends (macOS arm64 keeps a stale list head or a few objects the x86_64 code has already dropped), so each triple has its own recorded rows; the other columns, stdout, collections and bytesAllocated, are equal on both; linux-x86_64 rows measured on node2 (clang 20) 2026-10-30")
+fn runsLinuxX8664 -> (List (List String))
+  (list (list "record" "3000" "ASL_GC_STRESS=1" "0 1" "3012" "3012" "3004" "120345" "173")
+        (list "list" "2000" "ASL_GC_STRESS=1" "3003000" "5010" "5010" "5004" "200306" "142")
+        (list "allocMix" "2000" "ASL_GC_STRESS=1" "164708" "10008" "10008" "10003" "384256" "125")
+        (list "deep" "5" "ASL_GC_STRESS=1" "19512 39012 8893" "5384" "5384" "5290" "166040" "3537")
+        (list "record" "200000" "ASL_GC_MIN_MIB=1" "780 -39" "7" "200012" "183502" "8000357" "140")
+        (list "list" "200000" "ASL_GC_MIN_MIB=1" "30000300000" "3" "500010" "3" "20000318" "9436647")
+        (list "allocMix" "200000" "ASL_GC_MIN_MIB=1" "509154" "36" "1000008" "983045" "38400260" "295")
+        (list "deep" "13" "ASL_GC_MIN_MIB=1" "1208473736 2416947460 24893" "3" "354504" "52330" "13278352" "5350784"))
+
+; (:m :ref LLVM-NODE2-REDS-B :do "the exit snapshot counts what a stale stack word keeps alive, which moves with address randomisation (record 200000 gave bytesLive 140 and 180 on two linux runs), so Linux runs the fixtures with randomisation off and the recorded rows are reproducible")
+fn ! noAslr! -> String
+  (if (= (stringTrim (sh "uname -s").stdout) "Linux") (str "setarch " (stringTrim (sh "uname -m").stdout) " -R ") "")
+
+fn ! hostRuns! -> (List (List String))
+  (if (= (hostTriple) "linux-x86_64") (runsLinuxX8664) (runs))
+
 fn ! sameRun work: String bins: (List (Pair String String)) row: (List String) -> Bool
   (let [(name (optionOr (listGet row 0) ""))
         (arg (optionOr (listGet row 1) ""))
         (env (optionOr (listGet row 2) ""))
         (bin (optionOr (match (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) name)) bins)) ((some p) (some (pairSecond p))) ((none) none)) ""))
-        (out (sh (str "ASL_GC_STATS=1 " env " " bin " " arg)))
+        (out (sh (str "ASL_GC_STATS=1 " env " " (noAslr!) bin " " arg)))
         (got (list (stringReplace out.stdout "\n" "")
                    (stringFromInt64 (statsField out.stderr ":collections")) (stringFromInt64 (statsField out.stderr ":objectsAllocated"))
                    (stringFromInt64 (statsField out.stderr ":objectsFreed")) (stringFromInt64 (statsField out.stderr ":bytesAllocated"))
@@ -247,8 +265,8 @@ fn ! testSemantics work: String -> Bool
         (bins (list (pair "record" (built work "record" "asl/packages/asl-target-llvm/tests/fixtures/recordScalar/alloc/record.asl")) (pair "list" (built work "list" "bench/native/list.asl"))
                     (pair "allocMix" (built work "allocMix" "bench/native/allocMix.asl")) (pair "deep" (built work "deep" deep))))]
     (do (assert (ok? written) (str "fileWrite " deep))
-        (assert (> (listLength (runs)) 0) "runs: base rows recorded")
-        (listAll? (fn [(row (List String))] -> Bool (sameRun work bins row)) (runs))))
+        (assert (> (listLength (hostRuns!)) 0) "runs: base rows recorded")
+        (listAll? (fn [(row (List String))] -> Bool (sameRun work bins row)) (hostRuns!))))
 
 fn ! testTimeout -> Bool
   (let [(out (shWithin "sleep 30" 1))]

@@ -4,7 +4,6 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/core/symbols :a sym)
-      (asl-syntax/core/outline :a out)
       (asl-syntax/text :a txt)])
 
 fn testBinaryRefusal! -> Bool

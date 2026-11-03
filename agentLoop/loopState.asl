@@ -8,6 +8,7 @@
       (asl/agentLoop/runOps :a ro) (asl/agentLoop/txn :a tx)
       (asl-json/json :a j)])
 
+; (:m :ref COMMIT-REQUEST-EXPLICIT :do "a commit is requested only by an explicit (:commit true) field of the agent form, never by a word in the task prose")
 schema LoopEnv
   (:f provider (fn [String String] -> pv/Turn))
   (:f task String) (:f modeHint (Option String)) (:f owns (List String)) (:f gates (List String))
@@ -15,6 +16,7 @@ schema LoopEnv
   (:f sessionId (Option String)) (:f base (Option String)) (:f contextTokens (Option Int64))
   (:f model (Option String)) (:f gateTimeout (Option Int64)) (:f wallBudget (Option Int64))
   (:f resume (Option j/Json)) (:f intent (Option String)) (:f plan Bool) (:f specCheck Bool)
+  (:f commit Bool)
   (:f next (fn [String String] -> pv/Turn))
   (:f advise (fn [String String] -> (Result (Option String) String)))
   (:f review (fn [String String] -> (Result (Option String) String)))
@@ -41,7 +43,7 @@ schema LoopState
   (:f code String) (:f commitRequested Bool) (:f declaredOps (List String)) (:f fetched j/Json)
   (:f header String) (:f history (List j/Json)) (:f lastGates (Map String j/Json))
   (:f missingGateIntro (List String)) (:f patchErr (Option String))
-  (:f placeholderBriefs (Map String Int64)) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
+  (:f placeholderBriefs (Map String Int64)) (:f doneNoWriteStreak Int64) (:f malformedStreak Int64) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
   (:f resumePatchPath (Option String)) (:f retries j/Json) (:f runUnbackedClaims (List j/Json))
   (:f specChecksDone Int64) (:f startTurn Int64) (:f taskLines String) (:f unparsable j/Json)
   (:f vendorBounds j/Json) (:f window j/Json) (:f writtenFiles (List String))

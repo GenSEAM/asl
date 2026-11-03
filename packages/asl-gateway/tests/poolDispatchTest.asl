@@ -1,6 +1,6 @@
 (module aslGateway/poolDispatchTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt)])
+  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 (schema StubSeen
   (:f path String)
@@ -228,8 +228,8 @@ fn ! runTests -> Bool
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream " base " --ready " readyPath " 2>" temp "/gateway.err"))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") (nativeCliCacheEnvRow!)))
+        (env (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
+                   (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn")) (fr/cacheEnv!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
         (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
@@ -309,6 +309,3 @@ fn ! runTests -> Bool
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
-
-fn ! nativeCliCacheEnvRow! -> String
-  (str "ASL_NATIVE_CLI_CACHE=" (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")))

@@ -8,8 +8,7 @@
       isLlvmAlpha?
       isLlvmIdentChar?
       tokenSlice]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)])
+  :i [(asl-syntax/core/tree :a tr)])
 
 fn isLlvmWhitespace? b: Int64 -> Bool
   (or (= b 32) (= b 9))

@@ -29,9 +29,10 @@ fn ! serve! listener: Int64 out: String mode: String -> (Result Int64 String)
     ((ok conn)
       (let [(req (readRequest! conn ""))
             (_logged (fileAppend out (str req "\n----\n")))
-            (reject (or (= mode "always") (stringContains? req "\"tools\"")))]
+            (reject (or (= mode "always") (stringContains? req "\"tools\"")))
+            (big (= mode "context"))]
         (do (if reject
-              (reply! conn "400 Bad Request" "application/json" "{\"error\":{\"message\":\"tools are not supported\"}}")
+              (reply! conn "400 Bad Request" "application/json" (if big "{\"error\":{\"message\":\"maximum context length exceeded\"}}" "{\"error\":{\"message\":\"tools are not supported\"}}"))
               (reply! conn "200 OK" "application/asn+sexpr" "(:reply :content \"text ok\")"))
             (serve! listener out mode)))))
 

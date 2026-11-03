@@ -46,8 +46,8 @@ fn ! defaultChecks -> Bool
     true)
 
 fn ! configChecks -> Bool
-  (let [(okRes (cfg/gateway_params (mapFromPairs (list (pair "effort" (rd/sexprAtom "none")) (pair "effortDialect" (rd/sexprAtom "chatTemplateThinking")))) "t"))
-        (badRes (cfg/gateway_params (mapFromPairs (list (pair "effortDialect" (rd/sexprAtom "bogus")))) "t"))]
+  (let [(okRes (cfg/gatewayParams (mapFromPairs (list (pair "effort" (rd/sexprAtom "none")) (pair "effortDialect" (rd/sexprAtom "chatTemplateThinking")))) "t"))
+        (badRes (cfg/gatewayParams (mapFromPairs (list (pair "effortDialect" (rd/sexprAtom "bogus")))) "t"))]
     (do
       (assert (listEmpty? (pairSecond okRes)) "valid effortDialect parses without errors")
       (assert (= (pairFirst okRes).effortDialect (some "chatTemplateThinking")) "effortDialect parsed")

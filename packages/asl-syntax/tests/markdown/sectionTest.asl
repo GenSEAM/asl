@@ -2,7 +2,6 @@
   :x [runTests]
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
-      (asl-syntax/core/symbols :a sym)
       (asl-syntax/core/outline :a out)
       (asl-syntax/markdown :a md)
       (asl-syntax/markdownSymbols :a mds)

@@ -1,4 +1,4 @@
-(module asl-target-swift/app :x [emitSwiftApp emitSwiftMacOsBundle] :i [(asl-target-swift/types :a t) (asl-target-swift/emitSwift :a sw)])
+(module asl-target-swift/app :x [emitSwiftApp emitSwiftMacOsBundle] :i [(asl-target-swift/types :a t)])
 
 fn emitSwiftApp appName: Str rootViewName: Str -> Str
   (let [(cleanApp (t/swiftMangleIdent appName))

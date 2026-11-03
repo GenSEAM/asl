@@ -1,4 +1,4 @@
-(module aslMem/testRunner :x [SandboxResult runSandboxedTest createSandboxOverlay] :i [(stm :a stm) (vfs :a v)])
+(module aslMem/testRunner :x [SandboxResult runSandboxedTest createSandboxOverlay] :i [(stm :a stm)])
 
 (schema SandboxResult (:f passed Bool) (:f logs (List Str)) (:f durationMs I64) (:f memoryPeakMb I64) (:f timeout Bool))
 

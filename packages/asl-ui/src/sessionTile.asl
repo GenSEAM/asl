@@ -1,4 +1,4 @@
-(module asl-ui/sessionTile :x [SessionStatus SessionCardItem makeSessionCardItem statusActive statusIdle statusRunning statusBlocked formatSessionCue renderSessionCard renderSessionTile calculateSessionTileHash] :i [(asl-ui/vnode :a ui) (asl-ui/theme :a theme)])
+(module asl-ui/sessionTile :x [SessionStatus SessionCardItem makeSessionCardItem statusActive statusIdle statusRunning statusBlocked formatSessionCue renderSessionCard renderSessionTile calculateSessionTileHash] :i [(asl-ui/vnode :a ui)])
 
 (enum SessionStatus (:c statusActive [] "Session is active and responding") (:c statusIdle [] "Session is in standby/idle") (:c statusRunning [] "Session is executing background task") (:c statusBlocked [] "Session is waiting on operator confirmation"))
 

@@ -33,11 +33,15 @@ fn ! buildWithNativeAsl1! appPath: String ll: String -> Recorded
     ((err e) (Recorded :exitCode 1 :stdout "" :stderr (str "native asl1 compiler: " e)))
     ((ok nativeAsl1) (let [(r (sh (str nativeAsl1 " build " appPath " -o " ll)))] (Recorded :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "EADDRINUSE is not in the libc table: 48 on Darwin, 98 on both Linux triples (asm-generic errno); ECONNREFUSED comes from the host row, so the recorded netErrors text holds on both")
+fn ! addrInUse -> String
+  (if (= (hostTriple) "darwin-arm64") "io:48" "io:98")
+
 fn ! recordedVm label: String -> Recorded
   (cond
     ((= label "netEcho") (Recorded :exitCode 0 :stdout "tcp port in range true\ntcp echo ping\nunix echo ping\n" :stderr ""))
     ((= label "netErrors") (Recorded :exitCode 0
-      :stdout "tcpListen -1 io:22\ntcpListen 65536 io:22\ntcpListen bound port io:48\ntcpConnect closed port io:61\ntcpConnect 0 io:22\ntcpConnect 4294967297 io:22\nsockAccept -1 io:22\nsockAccept 2147483648 io:22\nsockLocalPort -1 io:22\nunixListen empty io:22\nunixListen 200-byte path io:22\nunixConnect missing io:2\ntcpListen string 80 io:22\ntcpListen float 80.0 io:22\nunixListen int 7 io:22\n"
+      :stdout (str "tcpListen -1 io:22\ntcpListen 65536 io:22\ntcpListen bound port " (addrInUse) "\ntcpConnect closed port " (hostConst "ECONNREFUSED") "\ntcpConnect 0 io:22\ntcpConnect 4294967297 io:22\nsockAccept -1 io:22\nsockAccept 2147483648 io:22\nsockLocalPort -1 io:22\nunixListen empty io:22\nunixListen 200-byte path io:22\nunixConnect missing io:2\ntcpListen string 80 io:22\ntcpListen float 80.0 io:22\nunixListen int 7 io:22\n")
       :stderr ""))
     ((= label "netLinked") (Recorded :exitCode 0 :stdout "lib io:22\nlib ok\napp io:22\n" :stderr ""))
     (else (Recorded :exitCode -1 :stdout "" :stderr (str "no recorded case: " label))))

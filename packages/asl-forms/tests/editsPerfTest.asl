@@ -1,4 +1,4 @@
-(module asl-forms/tests/editsPerfTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/edit :a e) (asl-forms/ops :a ops)])
+(module asl-forms/tests/editsPerfTest :x [runTests] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/edit :a e)])
 
 
 fn lineAt i: Int64 -> String

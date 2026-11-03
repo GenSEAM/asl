@@ -1,10 +1,10 @@
 (module aslGateway/server
-  :x [gatewayCliMode? breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv!]
+  :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
-      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (asl-http/http11 :a h)])
+      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -140,17 +140,27 @@ fn gatewayUpstreamPort upstream: String -> Int64
               (if (some? query) (optionOr query (stringLength hostPort)) (stringLength hostPort))))]
     (optionOr (stringToInt64 (optionOr (stringSlice hostPort 0 end) "")) 0))
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the request accounting of gateway status, read from gatewayRequests.asn: requests accepted and not finished past :requestDeadlineSec (stuck, up to 5 ids) and requests that ended lost in the last 24 hours")
+fn ! requestsStatusText! -> String
+  (let [(home (optionOr (envGet "HOME") "."))
+        (cfgPath (c/gatewayProfilesPath home))
+        (text (if (fileExists? cfgPath) (resultOr (fileReadString cfgPath) "") ""))
+        (rows (resultOr (rq/readReqs! (rq/reqPath home)) (list)))
+        (now (nowMs!))
+        (stuck (rq/stuckRows rows now (rq/requestDeadlineFromText text)))]
+    (str " :requests (:stuck " (stringFromInt64 (listLength stuck)) " :stuckIds (" (stringJoin (map (fn [(r rq/ReqRow)] -> String (str "\"" r.id "\"")) (listTake stuck 5)) " ") ") :lost24h " (stringFromInt64 (rq/lostSince rows (- now 86400000))) ")"))
+
 fn ! gatewayStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
   (match (fileReadString (gatewayStatePath!))
-    ((err _) (do (sys/say! (str "(:gateway :status :offline :port " requestedPort ")")) (ok 0)))
+    ((err _) (do (sys/say! (str "(:gateway :status :offline :port " requestedPort (requestsStatusText!) ")")) (ok 0)))
     ((ok state)
       (let [(numbers (gatewayStateNumbers state))
             (pid (pairFirst numbers))
             (port (if (> (pairSecond numbers) 0) (pairSecond numbers) requestedPort))
             (running (and (> pid 1) (gatewayServiceOwnsPid! launch pid)))]
         (do (sys/say! (if running
-                        (str "(:gateway :status :running :port " port " :pid " pid ")")
-                        (str "(:gateway :status :offline :port " port ")")))
+                        (str "(:gateway :status :running :port " port " :pid " pid (requestsStatusText!) ")")
+                        (str "(:gateway :status :offline :port " port (requestsStatusText!) ")")))
           (ok 0)))))
 
 fn ! gatewayLegacyStatus! launch: Launch requestedPort: Int64 -> (Result Int64 String)
@@ -231,7 +241,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 ; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session, models and subs (models sync and subs refresh reach cliDispatch)")
 fn gatewayCliMode? mode: String -> Bool
-  (listContains? (list "config" "configCheck" "convert" "stats" "session" "models" "subs") mode)
+  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs" "order") mode)
 
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))
@@ -402,7 +412,9 @@ fn ! gatewayRunAt! launch: Launch port: Int64 upstream: String readyPath: String
   (:f charge Int64)
   (:f tag String)
   (:f params ul/CallParams)
-  (:f profile String))
+  (:f profile String)
+  (:f status Int64)
+  (:f reason String))
 
 ; (:m :ref LEON-ATTRIB-20261028 :do "the connection tag is an opaque string all the way to the ledger row, so the caller attribution (X-ASL-Tag, X-ASL-Session, X-ASL-Turn, X-ASL-Consumer) rides in it as four newline-joined parts (a header value never holds a newline) and is split only where the row is built; an absent header stays an empty part and the row omits that field")
 fn packAttrib tag: String session: String turn: String consumer: String -> String
@@ -447,11 +459,19 @@ fn attribConsumer packed: String -> (Option String)
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "live SWRR state: keyed profile|intent, each a (List (Pair String Int64)) alias->current-weight map persisted across calls; spreadLast429 is alias->epoch-ms of its last 429, independent of and in addition to srv.breaker's own per-model trip")
   (:f spreadState (Map String (Map String Int64)))
   (:f spreadLast429 (Map String Int64))
+  ; (:m :ref GW-SESSION-AFFINITY :do "session key -> the member that last answered it and when; af/affinityNote forgets records past :affinityForgetSec")
+  (:f affinity (Map String af/AffinityRecord))
   (:f omni om/OmniState)
   (:f admitWaits (List Int64))
   ; (:m :ref LIMITS-LEDGER-COST :do "rows the provider limit windows count over, and when they were last read from the shared ledger (0 = never)")
   (:f limitRows (List ul/CallRow))
   (:f limitSeededMs Int64)
+  ; (:m :ref GW-LIMIT-LONG-WINDOW :do "the shared ledger's day rows, read with limitRows, so a week or month window counts calls of pruned generations")
+  (:f limitDays (List ul/DayRow) :default (list))
+  ; (:m :ref GW-LIMIT-SCOPES :do "concurrency slots held by calls in flight: taken when a call passes its limit check, freed by the sent usage row of its provider and alias or when the lease runs out")
+  (:f leases (List lim/Lease) :default (list))
+  ; (:m :ref GW-REQUEST-ACCOUNTING :do "the accepted requests still open, one per connection fd: id, start, and once the reply is rendered the outcome and status their done row carries")
+  (:f reqs (List rq/ReqInfo) :default (list))
   (:f startMs Int64))
 
 fn omniZeroKey -> om/Word64
@@ -478,12 +498,19 @@ fn loopSpreadState srv: GatewayLoop spreadState: (Map String (Map String Int64))
 fn loopWiring srv: GatewayLoop wiring: dp/Wiring text: (Option String) -> GatewayLoop
   (with srv :pools (pd/poolWithPlugins srv.pools wiring.plugins) :wiring wiring :wiringText text)
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the first rendered reply of an open request fixes the outcome and status its done row will carry; the rest of a partly written reply changes nothing")
+fn reqMark srv: GatewayLoop fd: Int64 data: String -> GatewayLoop
+  (if (= (rq/statusOfWire data) 0)
+    srv
+    (with srv :reqs (map (fn [(r rq/ReqInfo)] -> rq/ReqInfo (if (and (= r.fd fd) (stringEmpty? r.outcome)) (with r :outcome (rq/outcomeOfWire data) :status (rq/statusOfWire data)) r)) srv.reqs)))
+
 fn addConn srv: GatewayLoop fd: Int64 phase: ConnPhase -> GatewayLoop
   (match phase
     ((connWriting data)
-      (if (<= fd (linkFd))
-        (with srv :outbox (listAppend srv.outbox (list (pair fd data))))
-        (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase phase))))))
+      (let [(marked (reqMark srv fd data))]
+        (if (<= fd (linkFd))
+          (with marked :outbox (listAppend marked.outbox (list (pair fd data))))
+          (loopConns marked (listAppend marked.conns (list (GatewayConn :fd fd :input "" :phase phase)))))))
     (_ (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase phase))))))
 
 fn linkFd -> Int64
@@ -508,9 +535,8 @@ fn renderResponse resp: ch/ChatResponse -> String
   (let [(head resp.head)
         (code (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (match h ((ch/headStatus n) n) ((ch/headField _ _) acc))) 200 head))
         (fields (fold (fn [(acc (List String)) (h ch/HeadItem)] -> (List String)
-                        (match h ((ch/headStatus _) acc) ((ch/headField n v) (listAppend acc (list (str n ": " v "\r\n")))))) (list) head))
-        (hasLength (listAny? (fn [(h ch/HeadItem)] -> Bool (match h ((ch/headField n _) (= (stringLower n) "content-length")) ((ch/headStatus _) false))) head))
-        (length (if hasLength "" (str "Content-Length: " (stringFromInt64 (stringLength resp.body)) "\r\n")))]
+                        (match h ((ch/headStatus _) acc) ((ch/headField n v) (if (= (stringLower n) "content-length") acc (listAppend acc (list (str n ": " v "\r\n"))))))) (list) head))
+        (length (str "Content-Length: " (stringFromInt64 (bytesLength (stringToBytes resp.body))) "\r\n"))]
     (str "HTTP/1.1 " (stringFromInt64 code) " " (reasonPhrase code) "\r\n" (stringJoin fields "") length "Connection: close\r\n\r\n" resp.body))
 
 fn errorResponse code: Int64 text: String -> String
@@ -558,6 +584,14 @@ fn failureStatus f: u/UpstreamFailure -> Int64
 fn failureHeaders f: u/UpstreamFailure -> (List (Pair String String))
   (match f ((u/httpFailure _ _ _ headers) headers) (_ (list)))
 
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "what a failed attempt's ledger row keeps as its reason: the status line and the start of the upstream body, the curl exit and its text, or the tool or protocol detail; ul/callRowLine redacts it before writing")
+fn failureReason f: u/UpstreamFailure -> String
+  (match f
+    ((u/httpFailure status reason body _) (str (stringFromInt64 status) " " reason ": " (optionOr (stringSlice body 0 400) body)))
+    ((u/transportFailure code text) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text)))
+    ((u/toolAbsent tool detail) (str tool ": " detail))
+    ((u/protocolFailure detail) detail))
+
 fn failureReply f: u/UpstreamFailure -> ch/HttpReply
   (match f
     ((u/httpFailure status reason body headers) (ch/httpError status reason headers body))
@@ -581,6 +615,8 @@ fn breakerEvent! st: b/BreakerState event: String pool: String now: Int64 parkSe
   (cond
     ((= event "markDown") (b/breakerMarkDownFor st pool now parkSec))
     ((= event "note503") (pairFirst (b/breakerNote503 st pool now)))
+    ((= event "note429") (b/breakerNote429 st pool now parkSec 0))
+    ((stringStartsWith? event "note429window:") (b/breakerNote429 st pool now parkSec (optionOr (stringToInt64 (optionOr (stringSlice event 14 (stringLength event)) "")) 0)))
     ((= event "reset503") (b/breakerReset503 st pool))
     ((= event "clear") (b/breakerClear st pool))
     (else (do (logLine! (str "(:gateway :breaker :unknownEvent \"" (wire/asnEscape event) "\")")) st)))
@@ -623,23 +659,55 @@ fn ! cliRunSync! srv: GatewayLoop client: String args: (List (Pair String j/Json
       (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none)))))
 
 ; (:m :ref LIMITS-LEDGER-COST :do "reads the shared ledger only when the held rows are unseeded or older than seedTtlMs, and keeps just the rows a configured window can still count")
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "the day rollup of the shared ledger: (:gateway :ledgerRollupPath P) or the ledger path with .days, keeping (:gateway :ledgerRollupKeepDays N) days, 62 by default")
+fn sharedRollup text: String sharedPath: String -> ul/Rollup
+  (ul/Rollup :path (match (c/gatewayTopScalarOverride text "ledgerRollupPath") ((some (c/scalarStr s)) (if (stringEmpty? s) (ul/defaultRollupPath sharedPath) s)) (_ (ul/defaultRollupPath sharedPath)))
+             :keepDays (inRangeOr (c/gatewayTopIntOverride text "ledgerRollupKeepDays") 62 3660 (ul/defaultRollupKeepDays)))
+
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "rows at or before the rollup's :last are in its day rows, so a seed reads the ledger only from there, never later than 24 h back, the longest trailing window (rollingDay)")
+fn seedSinceMs limits: (List c/GatewayLimit) days: (List ul/DayRow) nowMs: Int64 -> Int64
+  (max (lim/longestStartMs limits nowMs) (min (+ (ul/daysThrough days) 1) (- nowMs 86400000)))
+
 fn ! limitSeeded! srv: GatewayLoop text: String limits: (List c/GatewayLimit) nowMs: Int64 -> GatewayLoop
   (if (not (lim/needsSeed? srv.limitSeededMs nowMs))
     srv
     (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
-          (rows (resultOr (ul/readRows! sharedPath) (list)))]
-      (with srv :limitRows (lim/keepRows rows (lim/longestStartMs limits nowMs)) :limitSeededMs nowMs)))
+          (days (match (ul/readDays! (sharedRollup text sharedPath).path)
+                  ((ok ds) ds)
+                  ((err e) (do (logLine! (str "(:gateway :limitRollup :error \"" (wire/asnEscape e) "\")")) (list)))))
+          (since (seedSinceMs limits days nowMs))
+          (rows (resultOr (ul/readRowsSince! sharedPath since) (list)))]
+      (with srv :limitRows (lim/keepRows rows since) :limitDays days :limitSeededMs nowMs)))
+
+; (:m :ref GW-LIMIT-SCOPES :do "a call that passed its windows takes a slot in every concurrency limit covering it; when any is full the answer is park with the poll interval and nothing is taken; leases older than :concurrencyLeaseSec (default 600) are dropped first")
+fn limitConcurrency srv: GatewayLoop text: String sc: c/LimitScope limits: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Pair GatewayLoop ch/ChatOutcome)
+  (let [(lims (lim/concurrencyOf sc limits provider alias))
+        (leaseSec (inRangeOr (c/gatewayTopIntOverride text "concurrencyLeaseSec") 10 86400 (c/defaultConcurrencyLeaseSec)))
+        (pollMs (inRangeOr (c/gatewayTopIntOverride text "concurrencyPollMs") 10 5000 (c/defaultConcurrencyPollMs)))
+        (live (lim/liveLeases srv.leases now (* 1000 leaseSec)))]
+    (cond
+      ((listEmpty? lims) (pair (with srv :leases live) (ch/outStrings (list))))
+      ((lim/full? lims live) (pair (with srv :leases live) (ch/outStrings (list "park" "provider concurrency limit full" (stringFromInt64 pollMs)))))
+      (else (pair (with srv :leases (lim/admit live lims provider alias now)) (ch/outStrings (list))))))
+
+fn inRangeOr v: (Option Int64) lo: Int64 hi: Int64 d: Int64 -> Int64
+  (match v
+    ((some n) (if (and (>= n lo) (<= n hi)) n d))
+    ((none) d))
 
 fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/ChatOutcome)
   (match eff
     ; (:m :ref GW-LIMIT-WINDOWS :do "counts the shared usage ledger against the config's limit rows for this provider and alias; empty means go ahead")
     ((ch/effLimit provider alias)
       (let [(text (optionOr srv.wiringText ""))
-            (limits (c/gatewayLimitsFromText text))
+            (limits (ln/rampedLimitsFor! srv.home text (c/gatewayLimitsFromText text)))
+            (sc (c/gatewayLimitScopeFromText text))
             (now (/ (nowNs) 1000000))
             (srv1 (limitSeeded! srv text limits now))
-            (verdict (lim/decide limits srv1.limitRows provider alias now))]
-        (pair srv1 (ch/outStrings (match verdict ((some v) (list v.outcome v.reason)) ((none) (list)))))))
+            (verdict (lim/decideWith sc limits srv1.limitRows srv1.limitDays provider alias now))]
+        (match verdict
+          ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
+          ((none) (limitConcurrency srv1 text sc limits provider alias now)))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
@@ -673,16 +741,21 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
                    :temperature params.temperature :topP params.topP :maxTokens params.maxTokens :effort params.effort
                    :api params.api :stream params.stream :toolCount params.toolCount :promptBytes params.promptBytes :sysHash params.sysHash
                    :session (match pc ((some x) (attribText x.tag 1)) ((none) none)) :turn (match pc ((some x) (attribTurn x.tag)) ((none) none))
-                   :consumer (match pc ((some x) (attribConsumer x.tag)) ((none) none)) :cacheWriteTokens (g/usageCacheWrite usage)))
+                   :consumer (match pc ((some x) (attribConsumer x.tag)) ((none) none)) :cacheWriteTokens (g/usageCacheWrite usage)
+                   :status (match pc ((some x) x.status) ((none) 0)) :reason (match pc ((some x) (if (stringEmpty? x.reason) none (some x.reason))) ((none) none))))
             (ledgerPath (optionOr (match srv.wiringText ((some t) (c/gatewayLedgerPathOverride t)) ((none) none)) (ul/defaultLedgerPath srv.home)))
-            (wrote (ul/appendCallRow! ledgerPath row))
-            ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
+            ; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "the ledger rotates at (:gateway :ledgerMaxBytes N) and keeps (:gateway :ledgerKeep N) generations; absent rows keep the defaults in usageLedger")
+            (maxBytes (optionOr (match srv.wiringText ((some t) (c/gatewayTopIntOverride t "ledgerMaxBytes")) ((none) none)) (ul/maxLedgerBytes)))
+            (keep (optionOr (match srv.wiringText ((some t) (c/gatewayTopIntOverride t "ledgerKeep")) ((none) none)) (ul/defaultLedgerKeep)))
             (sharedPath (optionOr (match srv.wiringText ((some t) (c/gatewaySharedUsagePathOverride t)) ((none) none)) (ul/defaultSharedUsagePath srv.home)))
-            (wroteShared (if (= sharedPath ledgerPath) (ok true) (ul/appendCallRow! sharedPath row)))]
+            (ru (sharedRollup (optionOr srv.wiringText "") sharedPath))
+            (wrote (ul/appendCallRowRolled! ledgerPath row maxBytes keep (if (= sharedPath ledgerPath) ru (ul/noRollup))))
+            ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "written in addition to, never instead of, the stats ledger above: GW-STATS's per-HOME ledgerPath keeps serving its own calibration/--by queries unchanged, this is the separate shared ledger (default outside scratch homes once the operator sets :sharedUsagePath, see gatewaySharedUsagePathOverride) that a scratch HOME's deletion cannot take with it")
+            (wroteShared (if (= sharedPath ledgerPath) (ok true) (ul/appendCallRowRolled! sharedPath row maxBytes keep ru)))]
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))
-              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row)) none) ch/outDone))))))
+              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row) :leases (if (lim/sentRow? row) (lim/release srv.leases p alias) srv.leases)) none) ch/outDone))))))
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")
@@ -705,6 +778,11 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (pair (loopSpreadState srv (mapSet (mapSet srv.spreadState key nextState) (spc/paceCacheKey) factors) srv.spreadLast429) (ch/outStrings order))))
     ((ch/effSpreadNote429 alias)
       (pair (loopSpreadState srv srv.spreadState (mapSet srv.spreadLast429 alias (/ (nowNs) 1000000))) ch/outDone))
+    ; (:m :ref GW-SESSION-AFFINITY :do "the affinity rows come from the loaded config text on every ask, so a gw apply takes effect without a restart; no text means the defaults")
+    ((ch/effAffinity session)
+      (pair srv (ch/outStrings (af/affinityAnswer (af/affinityConfigFromText (optionOr srv.wiringText "")) srv.affinity session (/ (nowNs) 1000000)))))
+    ((ch/effAffinityNote session alias)
+      (pair (with srv :affinity (af/affinityNote (af/affinityConfigFromText (optionOr srv.wiringText "")) srv.affinity session alias (/ (nowNs) 1000000))) ch/outDone))
     ((ch/effTelemetry rec)
       (do (match rec ((some r) (logLine! r)) ((none) true)) (pair srv ch/outDone)))
     ((ch/effNoteIntent i)
@@ -785,6 +863,17 @@ fn ! drive! srv: GatewayLoop fd: Int64 tag: String step: ch/ChatStep -> GatewayL
 fn errorOutcome status: Int64 reason: String -> ch/ChatOutcome
   (ch/outHttp (ch/httpError status reason (list (pair (ch/gatewayOriginHeader) "gateway")) (str "{\"error\": \"" (wire/asnEscape reason) "\"}")))
 
+; (:m :ref GW-LIMIT-LEFTOVERS :do "a 503 the gateway makes itself because a retry soon is the right answer carries Retry-After from (:gateway :busyRetrySec), default 1; a caller that waits Retry-After no longer guesses")
+fn busyOutcome srv: GatewayLoop reason: String -> ch/ChatOutcome
+  (busyOutcomeIn (optionOr srv.wiringText "") reason)
+
+fn busyOutcomeIn wiringText: String reason: String -> ch/ChatOutcome
+  (let [(sec (inRangeOr (c/gatewayTopIntOverride wiringText "busyRetrySec") 1 3600 (c/defaultBusyRetrySec)))]
+    (ch/outHttp (ch/httpError 503 reason (list (pair (ch/gatewayOriginHeader) "gateway") (pair "Retry-After" (stringFromInt64 sec))) (str "{\"error\": \"" (wire/asnEscape reason) "\"}"))))
+
+fn planOutcome srv: GatewayLoop status: Int64 reason: String -> ch/ChatOutcome
+  (if (= status 503) (busyOutcome srv reason) (errorOutcome status reason))
+
 fn jsonFloatOf v: (Option j/Json) -> (Option Float64)
   (match v ((none) none) ((some jv) (match jv ((j/jint i) (some (int64ToFloat64 i))) ((j/jfloat f) (some f)) ((j/jnum n) (some n)) (_ none))))
 
@@ -845,7 +934,7 @@ fn ! budgetRefusal! srv: GatewayLoop profile: String -> (Option String)
         ((none) none)
         ((some cap)
           (let [(sharedPath (optionOr (c/gatewaySharedUsagePathOverride text) (ul/defaultSharedUsagePath srv.home)))
-                (rows (resultOr (ul/readRows! sharedPath) (list)))
+                (rows (resultOr (ul/readRowsSince! sharedPath (- (/ (nowNs) 1000000) 86400000)) (list)))
                 (day (ul/dayKeyOf (/ (nowNs) 1000000)))
                 (total (ul/profileTokensToday rows day profile))]
             (if (>= total cap)
@@ -862,7 +951,7 @@ fn ! dispatchHttp! srv: GatewayLoop fd: Int64 tag: String hint: dp/RouteHint req
         (match planned
           ((dp/planReject status reason row)
             (do (logLine! (dp/decisionText row))
-              (drive! srv fd tag (k (errorOutcome status reason)))))
+              (drive! srv fd tag (k (planOutcome srv status reason)))))
           ((dp/planSend slot provider sent row)
             (do (logLine! (dp/decisionText row))
               (sendPlanned! (loopWiring srv (pairSecond reserved) srv.wiringText) fd tag slot provider sent (dp/sendTimeout w hint provider timeout) (servedModelK w slot hint k) hint.model hint.intent profile firstByteSec)))
@@ -891,21 +980,21 @@ fn ! sendPlanned! srv: GatewayLoop fd: Int64 tag: String slot: String provider: 
   (let [(w srv.wiring)
         (params (paramsFromRequest sent))]
     (match (p/sendHttp! w.plugins provider sent srv.env timeout)
-      ((err f) (drive! (settled! srv slot provider intent model tag params "" 0 false profile (failureStatus f) (failureHeaders f)) fd tag (k (ch/outHttp (failureReply f)))))
+      ((err f) (drive! (settledFailure! srv slot provider intent model tag params 0 profile f) fd tag (k (ch/outHttp (failureReply f)))))
       ((ok call) (addConn (loopWiring srv (dp/started w slot) srv.wiringText) fd (connHttp (u/upstreamCallWithFirstByte call (nowMs!) firstByteSec) k slot provider (nowMs!) model intent tag params profile)))))
 
 fn ! stepWarm! srv: GatewayLoop conn: GatewayConn tag: String slot: String provider: String sent: u/UpstreamRequest timeout: Float64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) deadline: Int64 model: String intent: String profile: String firstByteSec: Float64 -> GatewayLoop
   (let [(now (nowMs!))]
     (match (dp/slotReady srv.wiring slot now)
       ((dp/readyNow) (sendPlanned! srv conn.fd tag slot provider sent timeout k model intent profile firstByteSec))
-      ((dp/readyGone reason) (drive! srv conn.fd tag (k (errorOutcome 503 reason))))
+      ((dp/readyGone reason) (drive! srv conn.fd tag (k (busyOutcome srv reason))))
       ((dp/readyLater)
         (if (> now deadline)
           (do (logLine! (str "(:gateway :lifecycle :op wait :endpoint \"" slot "\" :result timeout)"))
-            (drive! srv conn.fd tag (k (errorOutcome 503 (str "endpoint " slot " did not warm within coldStartMs")))))
+            (drive! srv conn.fd tag (k (busyOutcome srv (str "endpoint " slot " did not warm within coldStartMs")))))
           (loopConns srv (listAppend srv.conns (list conn)))))))
 
-fn ! settled! srv: GatewayLoop slot: String provider: String intent: String model: String tag: String params: ul/CallParams body: String startMs: Int64 success: Bool profile: String status: Int64 headers: (List (Pair String String)) -> GatewayLoop
+fn ! settled! srv: GatewayLoop slot: String provider: String intent: String model: String tag: String params: ul/CallParams body: String startMs: Int64 success: Bool profile: String status: Int64 headers: (List (Pair String String)) reason: String -> GatewayLoop
   (if (stringEmpty? slot) srv
     (let [(now (nowMs!))
           (latencyMs (if (> startMs 0) (- now startMs) 1))
@@ -914,12 +1003,25 @@ fn ! settled! srv: GatewayLoop slot: String provider: String intent: String mode
           (srv1 (loopWiring srv (dp/observeReply (pairFirst out) slot status headers now) srv.wiringText))
           (served (dp/servedModel body model))
           (charge (/ (* (max 0 total) (dp/priceFor srv1.wiring slot)) 1000000))
-          (pending (PendingCall :intent intent :model served :latencyMs latencyMs :charge charge :tag tag :params params :profile profile))]
+          (pending (PendingCall :intent intent :model served :latencyMs latencyMs :charge charge :tag tag :params params :profile profile :status status :reason reason))]
       (do (logLine! (pairSecond out)) (loopPending srv1 (some pending)))))
+
+; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "every failed upstream attempt settles here, so its status and reason ride on the pending call into the ledger row the following usage note writes")
+fn ! settledFailure! srv: GatewayLoop slot: String provider: String intent: String model: String tag: String params: ul/CallParams startMs: Int64 profile: String f: u/UpstreamFailure -> GatewayLoop
+  (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f) (failureReason f))
 
 ; (:m :ref GW-KEYFILES-WIRED :do "the loop env itself carries the key-file values, so dispatch retargeting, the wiring and the balancer status polls read the same keys chat does")
 fn loopEnv srv: GatewayLoop env: (Map String String) -> GatewayLoop
   (with srv :env env)
+
+; (:m :ref GW-LEARN-RPM :do "the loaded table with the ramped per-model rpm buckets swapped in when :learnRamp is on")
+fn ! rampedWorldTable! home: String table: (Result c/GatewayTable String) -> (Result c/GatewayTable String)
+  (match table
+    ((err e) (err e))
+    ((ok t)
+      (let [(path (c/gatewayProfilesPath home))
+            (text (if (fileExists? path) (resultOr (fileReadString path) "") ""))]
+        (ok (ln/rampedTableFor! home text t)))))
 
 fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld String))
   (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
@@ -928,7 +1030,7 @@ fn ! chatWorld! srv: GatewayLoop -> (Pair GatewayLoop (Result ch/ChatWorld Strin
     (match (u/upstreamSettings srv1.env)
       ((err e) (pair srv1 (err e)))
       ((ok settings) (pair (wired! srv1 (pairSecond loaded) settings) (ok (ch/ChatWorld :env srv1.env :rootDir srv.rootDir :settings settings
-                                      :agyPromptMaxBytes srv.promptMaxBytes :table (pairSecond loaded)))))))
+                                      :agyPromptMaxBytes srv.promptMaxBytes :table (rampedWorldTable! srv.home (pairSecond loaded))))))))
 
 ; (:m :ref GW-KEYFILES-SEND :do "a provider key held only in a (:gateway :keyFiles) file reaches the provider call: the world env the chat effects read is the process env overlaid, per provider row with a keyEnv, by the key file value, the file winning as GW-KEYSTORE-20261019 orders it; values are never logged")
 fn ! keyFilesWorldEnv! table: (Result c/GatewayTable String) env: (Map String String) -> (Map String String)
@@ -968,10 +1070,25 @@ fn ! dispatch! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> Ga
     (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 200) (ch/headField "Content-Type" "application/asn+sexpr")) :body "(:health :status ok)\n"))))
     (dispatchGuarded! srv fd raw request)))
 
+; (:m :ref GW-REQUEST-ACCOUNTING :do "an authenticated request is accepted: it gets an id, an accepted row in gatewayRequests.asn and an entry in srv.reqs; a failed note is logged and the request goes on")
+fn ! acceptReq! srv: GatewayLoop fd: Int64 -> GatewayLoop
+  (let [(now (nowMs!))
+        (id (str "r" (stringFromInt64 now) "-" (stringFromInt64 fd) "-" (stringFromInt64 (monotonicNs))))
+        (open (filter (fn [(r rq/ReqInfo)] -> Bool (= r.fd fd)) srv.reqs))
+        (_ (map (fn [(r rq/ReqInfo)] -> Bool
+                  (do (logLine! (str "(:gateway :requests :fdReused \"" r.id "\")"))
+                      (match (rq/noteDone! srv.home r.id now "gatewayError" r.status (- now r.startMs)) ((ok _) true) ((err _) false))))
+                open))
+        (noted (rq/noteAccept! srv.home id now))]
+    (do (match noted
+          ((err e) (logLine! (str "(:gateway :requests :acceptNoteFailed \"" (wire/asnEscape e) "\")")))
+          ((ok _) true))
+        (with srv :reqs (cons (rq/ReqInfo :fd fd :id id :startMs now :outcome "" :status 0) (filter (fn [(r rq/ReqInfo)] -> Bool (!= r.fd fd)) srv.reqs)))))
+
 fn ! dispatchGuarded! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (match (fed/serveAuthError srv.env request.headers)
     ((some e) (addConn srv fd (connWriting (errorResponse 401 e))))
-    ((none) (dispatchAuthed! srv fd raw request)))
+    ((none) (dispatchAuthed! (acceptReq! srv fd) fd raw request)))
 
 fn ! dispatchAuthed! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest -> GatewayLoop
   (if (and (= request.method "POST") (chatPath? request.path))
@@ -1030,6 +1147,8 @@ fn ! hubStatusText! srv: GatewayLoop -> String
     (str "(:hub :uptimeSec " (stringFromInt64 (/ (- now srv.startMs) 1000))
          " :streams " (stringFromInt64 (listLength flying))
          " :waiting " (stringFromInt64 (listLength (filter hubParked? flying)))
+         " :requests " (stringFromInt64 (listLength srv.reqs))
+         " :stuck " (stringFromInt64 (listLength (filter (fn [(r rq/ReqInfo)] -> Bool (> (- now r.startMs) (* 1000 (rq/requestDeadlineFromText (optionOr srv.wiringText ""))))) srv.reqs)))
          " :buckets (" (stringJoin (map (fn [(p (Pair String u/TokenBucket))] -> String (hubBucketRow (pairFirst p) (pairSecond p) nowSec)) srv.buckets.buckets) " ") ")"
          " :admitWait (:n " (stringFromInt64 (listLength waits)) " :p50 " (stringFromInt64 (hubPercentile waits 50)) " :p95 " (stringFromInt64 (hubPercentile waits 95)) "))"))
 
@@ -1048,6 +1167,20 @@ fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option Gatew
 
 fn ! closeConn! conn: GatewayConn -> Bool
   (do (fdClose conn.fd) true)
+
+; (:m :ref GW-REQUEST-ACCOUNTING :do "the one terminal row of an open request, written where its connection closes: gone true when the write to the client failed (clientGone), else the outcome the reply carried; a connection with no open request just closes")
+fn ! finishReq! srv: GatewayLoop conn: GatewayConn gone: Bool -> GatewayLoop
+  (match (listHead (filter (fn [(r rq/ReqInfo)] -> Bool (= r.fd conn.fd)) srv.reqs))
+    ((none) (do (closeConn! conn) srv))
+    ((some r)
+      (let [(now (nowMs!))
+            (outcome (if gone "clientGone" (if (stringEmpty? r.outcome) "gatewayError" r.outcome)))
+            (noted (rq/noteDone! srv.home r.id now outcome r.status (- now r.startMs)))]
+        (do (match noted
+              ((err e) (logLine! (str "(:gateway :requests :doneNoteFailed \"" (wire/asnEscape e) "\")")))
+              ((ok _) true))
+            (closeConn! conn)
+            (with srv :reqs (filter (fn [(x rq/ReqInfo)] -> Bool (!= x.fd conn.fd)) srv.reqs))))))
 
 fn ! stepReading! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
@@ -1078,24 +1211,24 @@ fn ! stepProxy! srv: GatewayLoop conn: GatewayConn upstreamFd: Int64 pending: St
 fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (not (readyOn? ready conn.fd)) (loopConns srv (listAppend srv.conns (list conn)))
     (match (fdWrite conn.fd data)
-      ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (do (closeConn! conn) srv)))
+      ((err e) (if (= e "wouldBlock") (loopConns srv (listAppend srv.conns (list conn))) (finishReq! srv conn true)))
       ((ok n)
         (let [(rest (optionOr (stringSlice data n (stringLength data)) ""))]
-          (if (stringEmpty? rest) (do (closeConn! conn) srv)
+          (if (stringEmpty? rest) (finishReq! srv conn false)
             (addConn srv conn.fd (connWriting rest)))))))
 
 fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (u/upstreamCallFirstByteExpired? call (nowMs!))
     (let [(f (u/transportFailure 28 (u/firstByteDeadlineText)))]
       (do (u/upstreamCallAbort! call)
-        (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f))))))
+        (drive! (settledFailure! srv slot provider intent model tag params startMs profile f) conn.fd tag (k (ch/outHttp (failureReply f))))))
     (match (u/upstreamCallPump! call ready)
-      ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f)))))
+      ((err f) (drive! (settledFailure! srv slot provider intent model tag params startMs profile f) conn.fd tag (k (ch/outHttp (failureReply f)))))
       ((ok next)
         (if (u/upstreamCallOpen? next) (addConn srv conn.fd (connHttp next k slot provider startMs model intent tag params profile))
           (match (u/upstreamCallFinish! next)
-            ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile resp.status resp.headers) conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
-            ((err f) (drive! (settled! srv slot provider intent model tag params "" startMs false profile (failureStatus f) (failureHeaders f)) conn.fd tag (k (ch/outHttp (failureReply f))))))))))
+            ((ok resp) (drive! (settled! srv slot provider intent model tag params resp.body startMs true profile resp.status resp.headers "") conn.fd tag (k (ch/outHttp (ch/httpOk resp.status (list) resp.body)))))
+            ((err f) (drive! (settledFailure! srv slot provider intent model tag params startMs profile f) conn.fd tag (k (ch/outHttp (failureReply f))))))))))
 
 ; (:m :tags (retry) :do "resumes once the wall clock passes deadlineMs, same as any other conn this turn; otherwise re-parks for the next poll, exactly like stepWarm!'s coldStart wait")
 fn ! stepTimer! srv: GatewayLoop conn: GatewayConn deadlineMs: Int64 k: (fn [ch/ChatOutcome] -> ch/ChatStep) tag: String -> GatewayLoop
@@ -1290,16 +1423,28 @@ fn ! secretsOverlayAt! home: String env: (Map String String) -> (Result (Map Str
 
 fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) env: (Map String String) -> (Result Int64 String)
   (let [        (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") (resultOr (realPath ".") "."))))
-        (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))]
+        (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
+        (quarantined (match (rq/quarantineCorrupt! (optionOr (mapGet env "HOME") root) (nowMs!))
+                       ((some to) (logLine! (str "(:gateway :requests :corrupt \"" (wire/asnEscape to) "\")")))
+                       ((none) true)))
+        (torn (if (rq/tornTail! (rq/reqPath (optionOr (mapGet env "HOME") root))) (logLine! "(:gateway :requests :tornTail 1)") true))
+        (recovered (rq/recoverLost! (optionOr (mapGet env "HOME") root) (nowMs!) 604800000 (rq/requestKeepRowsFromText (resultOr (fileReadString (c/gatewayProfilesPath (optionOr (mapGet env "HOME") root))) ""))))
+        (logged (match recovered
+                  ((ok n) (logLine! (str "(:gateway :requests :lost " (stringFromInt64 n) ")")))
+                  ((err e) (logLine! (str "(:gateway :requests :recoverFailed \"" (wire/asnEscape e) "\")")))))]
     (gatewayEventLoop! (GatewayLoop :listener listenerFd :upstreamPort upstreamPort :env env :home (optionOr (mapGet env "HOME") root)
       :rootDir root :registryPath (if (stringEmpty? registryEnv) (str root "/.asl/mem/calibration/index.asn") registryEnv)
       :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
       :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
       :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
       :wiring (dp/emptyWiring (resultOr (u/upstreamSettings env) (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0)))
-      :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+      :wiringText none :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
       :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!))))
 
+
+; (:m :ref PARKMAX-SERVER-TEST :do "the breaker a loaded config text gets: :breakerCooldownSec, the three 429 cooldown rows and the :parkMaxSec park ceiling, each absent row keeping its default; linkOpenWith! builds GatewayLoop.breaker from it, and parkMaxServerTest drives it")
+fn breakerStateFromConfig text: String -> b/BreakerState
+  (b/withParkMax (b/makeBreakerStateWith (optionOr (c/gatewayBreakerCooldownSecOverride text) 600) (b/quotaPolicy (optionOr (c/gatewayTopIntOverride text "cooldown429Sec") 15) (optionOr (c/gatewayTopIntOverride text "cooldown429MaxSec") 600) (optionOr (c/gatewayTopIntOverride text "cooldownSlackSec") 1))) (optionOr (c/gatewayTopIntOverride text "parkMaxSec") 0))
 
 ; (:m :ref GW-BREAKER-STALE-20261018 :tags (breaker config) :do "the breaker's cooldown comes from the loaded config's (:gateway ... :breakerCooldownSec N) when present, else the 600s default via makeBreakerState's own guard; a config that never sets it is unchanged from before. BreakerState itself is held only in this GatewayLoop value, freshly built here on every linkOpen! call -- there is no file-backed persistence across processes, so GW-BREAKER-STALE-20261018's '45-cell sweep stuck open' incident was one long-lived in-process breaker outlasting a fixed 600s cooldown within a single sweep run, not state surviving a restart")
 fn ! linkOpen! env: (Map String String) home: String rootDir: String families: (List dp/LifecycleFamily) -> (Result GatewayLoop String)
@@ -1325,9 +1470,9 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
                   (ok (GatewayLoop :listener -1 :upstreamPort 0 :env env :home home :rootDir rootDir :registryPath registryPath
                         :promptMaxBytes (optionOr (stringToInt64 (optionOr (mapGet env "AGY_PROMPT_MAX_BYTES") "188000")) 188000)
                         :conns (list) :pools (pd/poolWithPlugins (pd/emptyPoolRegistry) w.plugins) :replies (list)
-                        :breaker (b/makeBreakerState (optionOr (c/gatewayBreakerCooldownSecOverride text) 600))
+                        :breaker (breakerStateFromConfig text)
                         :buckets (u/emptyBucketRegistry) :profiles (pairFirst loaded) :wiring w :wiringText (some text)
-                        :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty)
+                        :families families :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty)
                         :omni (om/emptyOmniState (omniZeroKey) (omniZeroKey)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs (nowMs!)))))))))))
 
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)

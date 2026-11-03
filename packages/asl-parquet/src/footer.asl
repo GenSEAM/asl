@@ -1,10 +1,15 @@
 (module asl-parquet/footer
-  :x [parquetColumnEncodings parquetColumnCompression parquetColumnHasDictionary parquetKvMetadata]
-  :i [(asl-syntax/core/bytesText :a bt)])
+  :x [parquetColumnEncodings parquetColumnCompression parquetColumnHasDictionary parquetKvMetadata parquetColumnStatsInt64 parquetColumnStatsFloat64]
+  :i [(asl-syntax/core/bytesText :a bt) (asl-parquet/reader :a rd)])
+
+; (:m :ref V0021-PQ-STATS :do "min and max are the footer's own bytes, never a data page: a missing statistics struct is an error, not a guess")
+(schema Int64Stats (:f min Int64) (:f max Int64) (:f nulls Int64))
+
+(schema Float64Stats (:f min Float64) (:f max Float64) (:f nulls Int64))
 
 enum ThriftValue
   (thInt number: Int64)
-  (thString text: String)
+  (thBinary raw: Bytes)
   (thList values: (List ThriftValue))
   (thStruct fields: (List (Pair Int64 ThriftValue)))
   (thBool boolean: Bool)
@@ -71,7 +76,7 @@ fn ! readValue bs: Bytes pos: Int64 limit: Int64 ty: Int64 -> (Result (Pair Thri
          (err "ERR_PARQUET: invalid compact binary length")
          (let [(raw (bytesAlloc count))]
            (copyFooterBytes bs raw start 0 count)
-           (ok (pair (thString (bt/bytesToString raw)) (+ start count)))))))
+           (ok (pair (thBinary raw) (+ start count)))))))
     ((or (= ty 9) (= ty 10))
      (let [(h (readListHead bs pos limit))]
        (if (or (< (pairFirst h) 0) (> (pairFirst h) 1000000))
@@ -129,7 +134,7 @@ fn ! footerTree path: String -> (Result (List (Pair Int64 ThriftValue)) String)
          (err "ERR_PARQUET: file too short")
          (let [(magic (bytesAlloc 4))]
            (copyFooterBytes bs magic 0 0 4)
-           (if (not (= (bt/bytesToString magic) "PAR1"))
+           (if (or (not (= (bt/bytesToString magic) "PAR1")) (not (parMagicAt? bs (- size 4))))
              (err "ERR_PARQUET: missing PAR1 magic")
              (let [(length (+ (bytesGet bs (- size 8))
                               (+ (* 256 (bytesGet bs (- size 7)))
@@ -141,6 +146,9 @@ fn ! footerTree path: String -> (Result (List (Pair Int64 ThriftValue)) String)
                  (match (readStruct bs start end 0 (list))
                    ((err e) (err e))
                    ((ok parsed) (ok (matchStructFields (pairFirst parsed)))))))))))))
+
+fn parMagicAt? bs: Bytes at: Int64 -> Bool
+  (and (and (= (bytesGet bs at) 80) (= (bytesGet bs (+ at 1)) 65)) (and (= (bytesGet bs (+ at 2)) 82) (= (bytesGet bs (+ at 3)) 49)))
 
 fn matchStructFields value: ThriftValue -> (List (Pair Int64 ThriftValue))
   (match value ((thStruct fields) fields) (_ (list)))
@@ -162,7 +170,10 @@ fn asInt value: ThriftValue -> Int64
   (match value ((thInt n) n) (_ 0))
 
 fn asText value: ThriftValue -> String
-  (match value ((thString s) s) (_ ""))
+  (match value ((thBinary raw) (bt/bytesToString raw)) (_ ""))
+
+fn asBinary value: ThriftValue -> (Option Bytes)
+  (match value ((thBinary raw) (some raw)) (_ (none)))
 
 fn getField fields: (List (Pair Int64 ThriftValue)) id: Int64 -> ThriftValue
   (optionOr (fieldAt fields id) (thOther))
@@ -256,3 +267,35 @@ fn findKv xs: (List ThriftValue) key: String -> (Result String String)
        (if (= k key)
          (ok (asText (getField fields 2)))
          (findKv (optionOr (listTail xs) (list)) key)))))
+
+fn statBinary stats: (List (Pair Int64 ThriftValue)) preferred: Int64 legacy: Int64 -> (Option Bytes)
+  (match (asBinary (getField stats preferred))
+    ((some raw) (some raw))
+    ((none) (asBinary (getField stats legacy))))
+
+fn ! footerStats path: String columnName: String rowGroup: Int64 physical: Int64 -> (Result (Pair (Pair Bytes Bytes) Int64) String)
+  (match (footerChunk path columnName rowGroup)
+    ((err e) (err e))
+    ((ok meta)
+     (let [(stats (asFields (getField meta 12)))
+           (low (statBinary stats 6 2))
+           (high (statBinary stats 5 1))]
+       (cond
+         ((!= (asInt (getField meta 1)) physical) (err (str "ERR_PARQUET: column " columnName " is not the requested physical type")))
+         ((not (some? (fieldAt meta 12))) (err (str "ERR_PARQUET: no statistics for column " columnName)))
+         ((or (none? low) (none? high)) (err (str "ERR_PARQUET: no min or max statistics for column " columnName)))
+         ((or (!= (bytesLength (optionOr low (bytesAlloc 0))) 8) (!= (bytesLength (optionOr high (bytesAlloc 0))) 8)) (err (str "ERR_PARQUET: statistics of column " columnName " are not 8 bytes")))
+         (else (ok (pair (pair (optionOr low (bytesAlloc 0)) (optionOr high (bytesAlloc 0)))
+                         (if (some? (fieldAt stats 3)) (asInt (getField stats 3)) -1))))))))
+
+fn ! parquetColumnStatsInt64 path: String columnName: String rowGroup: Int64 -> (Result Int64Stats String)
+  (match (footerStats path columnName rowGroup 2)
+    ((err e) (err e))
+    ((ok found)
+     (ok (Int64Stats :min (rd/pqLoad64 (pairFirst (pairFirst found)) 0) :max (rd/pqLoad64 (pairSecond (pairFirst found)) 0) :nulls (pairSecond found)))))
+
+fn ! parquetColumnStatsFloat64 path: String columnName: String rowGroup: Int64 -> (Result Float64Stats String)
+  (match (footerStats path columnName rowGroup 5)
+    ((err e) (err e))
+    ((ok found)
+     (ok (Float64Stats :min (bytesGetFloat64 (pairFirst (pairFirst found)) 0) :max (bytesGetFloat64 (pairSecond (pairFirst found)) 0) :nulls (pairSecond found)))))

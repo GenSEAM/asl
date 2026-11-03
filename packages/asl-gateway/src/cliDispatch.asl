@@ -1,5 +1,7 @@
 (module aslGateway/cliDispatch
   :x [CliUsage
+      gatewayStatsFor!
+      gatewayUsageFor!
       CliParseResult
       CliVersionInfo
       CliPromptDir
@@ -10,22 +12,15 @@
       cliProviderBin!
       cliProviderHealth!
       defaultDispatchOptions
-      resolve_cli_bin!
       resolveCliBin!
       resolveCliBinFromLocations!
-      cli_versions!
       cliVersions!
-      cli_message_text
       cliMessageText
-      cli_agy_tools!
       cliAgyTools!
-      cli_write_prompt_dir!
       cliWritePromptDir!
       cliWritePromptDirAt!
       cliWritePromptDirFrom!
-      cli_json_object
       cliJsonObject
-      cli_parse_result
       cliParseResult
       dispatch_codex_fallback!
       dispatchCodexFallback!
@@ -50,11 +45,15 @@
       main]
   :i [(asl-json/json :a j)
       (config :a cfg)
+      (learn :a ln)
+      (aslGateway/health :a hl)
+      (aslGateway/requestLog :a rq)
       (usageLedger :a ul)
       (sessions :a ses)
       (secrets :a sc)
       (asl-cli/system :a sys)
       (modelSync :a msync)
+      (capOrderStats :a cos)
       (subPacing :a space)
       (subsRefresh :a subsr)])
 
@@ -432,13 +431,22 @@ fn ! gatewayStatsCli! args: (List String) -> (Result Int64 String)
        (match (ul/keyFor byText)
          ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 2)))
          ((ok keyFn)
-          (match (ul/readRows! path)
+          (match (gatewayStatsFor! path windowMs keyFn tagText (/ (nowNs) 1000000))
             ((err e) (do (sys/sayErr! (str "gateway stats: " e)) (ok 1)))
-            ((ok allRows)
-             (let [(rows (ul/filterByTag allRows tagText))
-                   (nowMs (/ (nowNs) 1000000))
-                   (stats (ul/computeStats rows nowMs windowMs keyFn))]
-               (do (sys/say! (ul/statsAsn stats)) (ok 0))))))))))
+            ((ok text) (do (sys/say! text) (ok 0)))))))))
+
+; (:m :ref GW-LEDGER-READ-COST :do "the stats report reads the ledger from the window start only, so a 1 h window opens the live file alone and never the older generations a 24 h day row needs")
+fn ! gatewayStatsFor! path: String windowMs: Int64 keyFn: (fn [ul/CallRow] -> String) tagText: String nowMs: Int64 -> (Result String String)
+  (match (ul/readRowsSince! path (- nowMs windowMs))
+    ((err e) (err e))
+    ((ok rows) (ok (ul/statsAsn (ul/computeStats (ul/filterByTag rows tagText) nowMs windowMs keyFn)))))
+
+; (:m :ref GW-LEDGER-READ-COST :do "the daily report: days 0 totals every kept day and reads every generation, days N totals today and the N-1 UTC days before it and reads only the generations reaching back to that midnight")
+fn ! gatewayUsageFor! path: String tagText: String days: Int64 nowMs: Int64 -> (Result String String)
+  (let [(since (if (<= days 0) (- 0 1) (- (- nowMs (mod nowMs 86400000)) (* (- days 1) 86400000))))]
+    (match (ul/readRowsSince! path since)
+      ((err e) (err e))
+      ((ok rows) (ok (ul/statsAsn (ul/computeDailyStats (ul/filterByTag rows tagText)))))))
 
 ; (:m :ref GW-USAGE-ACCOUNTING-20261017 :do "the per-day per-provider per-model total command, reading the SHARED accounting ledger (ul/defaultSharedUsagePath/:sharedUsagePath), never the per-HOME stats ledgerPath gateway stats reads above -- the shared ledger is the one meant to survive a scratch HOME's deletion, so this is the authoritative source for 'how many tokens did provider/model X use on day Y'")
 fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
@@ -448,12 +456,85 @@ fn ! gatewayUsageCli! args: (List String) -> (Result Int64 String)
         (configPath (cfg/gatewayProfilesPath home))
         (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
         (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))]
+    (match (optionOr (match (flagValue args "--days") ((some d) (some (stringToInt64 d))) ((none) none)) (some 0))
+      ((none) (do (sys/sayErr! "gateway usage: --days takes a whole number of days") (ok 2)))
+      ((some days)
+       (if (< days 0)
+         (do (sys/sayErr! "gateway usage: --days takes a whole number of days") (ok 2))
+         (match (gatewayUsageFor! path tagText days (/ (nowNs) 1000000))
+           ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
+           ((ok text) (do (sys/say! text) (ok 0))))))))
+
+; (:m :ref GW-LEARN-RPM :do "the stored ramped rpm rows after one more ramp step over the configured models; the stored ones unchanged when the config does not parse")
+fn ! gatewayRpmStep configText: String configPath: String learned: (List ln/LearnedRow) ledger: (List ul/CallRow) stored: (List ln/RpmRow) pct: Int64 -> (List ln/RpmRow)
+  (match (cfg/gatewayConfigParse! configText configPath "")
+    ((err _) stored)
+    ((ok t) (ln/rpmPass t.models t.providers learned ledger stored pct)))
+
+; (:m :ref GW-LIMIT-LEARN :do "gateway learn [--dry] [--ramp]: reads every kept ledger generation, folds the learned peaks into learned.asn (a stored peak is never lowered), takes one ramp step into learnedCaps.asn with --ramp or :learnRamp true, and prints own refusals against provider answers per provider and the stored caps; --dry writes nothing")
+fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
+  (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (home (optionOr (envGet "HOME") root))
+        (configPath (cfg/gatewayProfilesPath home))
+        (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
+        (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))
+        (dry (listContains? args "--dry"))
+        (ramp (or (ln/learnRampFromText configText) (listContains? args "--ramp")))]
     (match (ul/readRows! path)
-      ((err e) (do (sys/sayErr! (str "gateway usage: " e)) (ok 1)))
-      ((ok allRows)
-       (let [(rows (ul/filterByTag allRows tagText))
-             (stats (ul/computeDailyStats rows))]
-         (do (sys/say! (ul/statsAsn stats)) (ok 0))))))
+      ((err e) (do (sys/sayErr! (str "gateway learn: " e)) (ok 1)))
+      ((ok rows)
+       (match (ln/readLearned! (ln/learnedPath home))
+         ((err e) (do (sys/sayErr! (str "gateway learn: " e)) (ok 1)))
+         ((ok stored)
+          (match (ln/readCaps! (ln/learnedCapsPath home))
+            ((err e) (do (sys/sayErr! (str "gateway learn: " e)) (ok 1)))
+            ((ok caps)
+             (let [(merged (ln/mergeLearned stored (ln/learnRows rows (ln/learnWindowsFromText configText))))
+                   (newCaps (if ramp (ln/rampPass (cfg/gatewayLimitsFromText configText) merged caps (ln/learnRampPctFromText configText)) caps))
+                   (rpmStored (resultOr (ln/readRpm! (ln/learnedRpmPath home)) (list)))
+                   (newRpms (if ramp (gatewayRpmStep configText configPath merged rows rpmStored (ln/learnRampPctFromText configText)) rpmStored))
+                   (wrote (if dry
+                            (ok true)
+                            (match (ln/writeLearned! (ln/learnedPath home) merged)
+                              ((err e) (err e))
+                              ((ok _) (if ramp
+                                         (match (ln/writeCaps! (ln/learnedCapsPath home) newCaps)
+                                           ((err e) (err e))
+                                           ((ok _) (ln/writeRpm! (ln/learnedRpmPath home) newRpms)))
+                                         (ok true))))))]
+               (match wrote
+                 ((err e) (do (sys/sayErr! (str "gateway learn: " e)) (ok 1)))
+                 ((ok _)
+                  (do (sys/say! (stringJoin (cons (str "(:learn :rows " (stringFromInt64 (listLength rows)) " :learned " (stringFromInt64 (listLength merged)) " :caps " (stringFromInt64 (listLength newCaps)) " :ramp " (if ramp "true" "false") " :dry " (if dry "true" "false") ")")
+                                                    (listAppend (listAppend (map ln/refusalLine (ln/refusalsOf rows)) (map ln/capLine newCaps)) (map ln/rpmLine newRpms))) "\n"))
+                      (ok 0))))))))))))
+
+; (:m :ref GW-HEALTH-REPORT :do "gateway health [--hours N] [--write]: one ASN report of the usage ledger and the request log over the last N hours (default 24, 1..720): per provider and model calls, ok share, upstream 429 against own refusals, latency percentiles, tokens, the request accounting, prune candidates, configured aliases that never served; --write puts it in .asl/run/usage/health/ instead of printing it")
+fn ! gatewayHealthCli! args: (List String) -> (Result Int64 String)
+  (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (home (optionOr (envGet "HOME") root))
+        (configPath (cfg/gatewayProfilesPath home))
+        (configText (if (fileExists? configPath) (resultOr (fileReadString configPath) "") ""))
+        (path (optionOr (cfg/gatewaySharedUsagePathOverride configText) (ul/defaultSharedUsagePath home)))
+        (hoursR (hl/hoursOfArgs args))
+        (hours (resultOr hoursR 0))
+        (now (/ (nowNs) 1000000))
+        (configured (match (cfg/gatewayConfigParse! configText configPath "") ((ok t) t.modelOrder) ((err _) (list))))]
+    (match (match hoursR ((err e) (err e)) ((ok _) (ul/readRowsSince! path (- now (* hours 3600000)))))
+      ((err e) (do (sys/sayErr! (str "gateway health: " e)) (ok 1)))
+      ((ok rows)
+       (match (rq/readReqs! (rq/reqPath home))
+         ((err e) (do (sys/sayErr! (str "gateway health: " e)) (ok 1)))
+         ((ok reqs)
+          (let [(text (hl/healthReport rows reqs configured now hours (rq/requestDeadlineFromText configText)))
+                (file (str (hl/healthDir home) "/" (hl/healthFileName now)))]
+            (if (listContains? args "--write")
+              (match (dirCreate (hl/healthDir home))
+                ((err e) (do (sys/sayErr! (str "gateway health: " e)) (ok 1)))
+                ((ok _) (match (fileWrite file text)
+                          ((err e) (do (sys/sayErr! (str "gateway health: " e)) (ok 1)))
+                          ((ok _) (do (hl/pruneHealthFiles! (hl/healthDir home) (hl/healthKeepFromText configText)) (sys/say! (str "(:health :wrote " file ")")) (ok 0))))))
+              (do (sys/say! text) (ok 0)))))))))
 
 fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
   (let [(mode (gatewayCliArg args 0))
@@ -464,8 +545,11 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((or (= mode "configCheck") (and (= mode "config") (= second "check"))) (gatewayConfigCheckCli! path))
       ((= mode "stats") (gatewayStatsCli! (optionOr (listTail args) (list))))
       ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
+      ((= mode "learn") (gatewayLearnCli! (optionOr (listTail args) (list))))
+      ((= mode "health") (gatewayHealthCli! (optionOr (listTail args) (list))))
       ((= mode "session") (ses/sessionsCli! (optionOr (listTail args) (list))))
       ((and (= mode "models") (= second "sync")) (msync/modelsSyncCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
+      ((= mode "order") (cos/orderCli! (optionOr (listTail args) (list))))
       ((and (= mode "models") (= second "apply")) (msync/modelsApplyCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       ((and (= mode "models") (= second "pace")) (space/modelsPaceCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
       ((and (= mode "subs") (= second "refresh")) (subsr/subsRefreshCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
@@ -541,9 +625,6 @@ fn resolveCliBin! envName: String name: String legacy: String -> String
       ((none)
        (resolveCliBinAfterEnv! name legacy))))
 
-fn resolve_cli_bin! envName: String name: String legacy: String -> String
-  (resolveCliBin! envName name legacy)
-
 fn probeCliVersion! name: String binPath: String -> CliVersionInfo
   (if (not (fileExists? binPath))
     (CliVersionInfo :name name :bin binPath :version (str "error: FileNotFoundError: [Errno 2] No such file or directory: '" binPath "'"))
@@ -557,9 +638,6 @@ fn probeCliVersion! name: String binPath: String -> CliVersionInfo
 
 fn cliVersions! -> (List CliVersionInfo)
   (map (fn [(row CliProvider)] -> CliVersionInfo (probeCliVersion! row.id (cliProviderBin! row))) (cliProviders))
-
-fn cli_versions! -> (List CliVersionInfo)
-  (cliVersions!)
 
 fn extractTextFromParts parts: (List j/Json) -> (List String)
   (if (listEmpty? parts) (list)
@@ -587,9 +665,6 @@ fn cliMessageText content: j/Json -> String
      (let [(parts (extractTextFromParts xs))]
        (stringJoin parts "\n")))
     ((j/jobj _) ""))
-
-fn cli_message_text content: j/Json -> String
-  (cliMessageText content)
 
 fn parseAgyToolsFromText text: String -> (Result (List String) String)
   (let [(idIdx (stringIndexOf text ":id agy"))]
@@ -624,9 +699,6 @@ fn cliAgyToolsIn! rootDir: String -> (Result (List String) String)
     (match readRes
       ((ok content) (parseAgyToolsFromText content))
       ((err e) (err (str "could not read " path ": " e)))))
-
-fn cli_agy_tools! -> (Result (List String) String)
-  (cliAgyTools!)
 
 fn agyToolsYaml tools: (List String) noTools: Bool -> String
   (if noTools
@@ -679,9 +751,6 @@ fn cliWritePromptDir! client: String systemPrompt: String noTools: Bool -> (Resu
     (match mkRes
       ((err e) (err (str "failed to create temp dir " tmpDir ": " e)))
       ((ok _) (cliWritePromptDirAt! client systemPrompt noTools tmpDir))))
-
-fn cli_write_prompt_dir! client: String systemPrompt: String noTools: Bool -> (Result CliPromptDir String)
-  (cliWritePromptDir! client systemPrompt noTools)
 
 fn findFirstBrace text: String idx: Int64 len: Int64 -> (Option Int64)
   (if (>= idx len) none
@@ -755,9 +824,6 @@ fn cliJsonObject text: String -> (Result j/Json String)
                (match val
                  ((j/jobj kvs) (ok val))
                  (_ (err "JSON output is not an object")))))))))))
-
-fn cli_json_object text: String -> (Result j/Json String)
-  (cliJsonObject text)
 
 fn jsonIntField obj: j/Json key: String -> Int64
   (match (j/jsonGet obj key)
@@ -931,9 +997,6 @@ fn cliParseResult client: String stdout: String -> CliParseResult
   (match (cliProviderNamed client)
     ((some row) (row.parse stdout))
     ((none) (parseAgyResult stdout)))
-
-fn cli_parse_result client: String stdout: String -> CliParseResult
-  (cliParseResult client stdout)
 
 fn codexBuildCmd codexBin: String ws: String promptPath: String noTools: Bool effort: (Option String) model: (Option String) -> (List String)
   (let [(base (list codexBin "exec" "-C" ws "-" "--json" "--ephemeral" "--skip-git-repo-check" "-c" (str "model_instructions_file=" promptPath)))

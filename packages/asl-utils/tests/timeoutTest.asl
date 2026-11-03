@@ -132,12 +132,18 @@ fn ! testSpawnFailure -> Bool
         true))
 
 fn testClosure -> Bool
-  (let [(procs (list (fr/Proc :pid 10 :ppid 1 :pgid 10) (fr/Proc :pid 11 :ppid 10 :pgid 10) (fr/Proc :pid 12 :ppid 11 :pgid 10) (fr/Proc :pid 13 :ppid 1 :pgid 13) (fr/Proc :pid 14 :ppid 12 :pgid 10)))
+  (let [(procs (list (fr/Proc :pid 10 :ppid 1 :pgid 10) (fr/Proc :pid 11 :ppid 10 :pgid 10) (fr/Proc :pid 12 :ppid 11 :pgid 10) (fr/Proc :pid 13 :ppid 1 :pgid 13) (fr/Proc :pid 14 :ppid 13 :pgid 10)))
         (tree (t/closure procs (list 10) 14 20))
+        (chain (list (fr/Proc :pid 20 :ppid 1 :pgid 20) (fr/Proc :pid 21 :ppid 20 :pgid 20) (fr/Proc :pid 22 :ppid 21 :pgid 20) (fr/Proc :pid 23 :ppid 22 :pgid 20) (fr/Proc :pid 24 :ppid 20 :pgid 20)))
+        (above (t/closure chain (list 20 24) 23 20))
+        (fromZero (t/closure procs (list 0 1) 14 20))
         (starts (list (pair 10 "Mon Jan  1 00:00:00 2026") (pair 11 "Tue Jan  2 00:00:00 2026")))]
     (do (assert (listContains? tree 12) "a grandchild is reached through its parent")
         (assert (not (listContains? tree 13)) "an unrelated process is not")
         (assert (not (listContains? tree 14)) "the shim's own pid is never a member")
+        (assert (listEmpty? (filter (fn [(p Int64)] -> Bool (or (= p 20) (or (= p 21) (or (= p 22) (= p 23))))) above)) (str "a root above the shim never makes the shim, its parent chain or that root a member: " above))
+        (assert (listContains? above 24) (str "a pinned pid off the chain stays a member: " above))
+        (assert (listEmpty? fromZero) (str "pids 0 and 1 are never seeds: " fromZero))
         (assert (= (t/startOf starts 11) "Tue Jan  2 00:00:00 2026") "a pid maps to its recorded start time")
         (assert (= (t/startOf starts 99) "") "an unknown pid has no start time, so it is never signalled")
         true))

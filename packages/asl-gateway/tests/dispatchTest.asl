@@ -85,7 +85,7 @@ fn ! wiringFor text: String -> (Result dp/Wiring String)
 
 fn ! testRowsFromTableIncludesGeminiProvider -> Bool
   (let [(text "(:gateway :v 2\n  :providers ((:provider :id testGeminiRow :kind gemini :base \"https://example.test/v1\" :keyEnv TESTGEMINIROW_API_KEY))\n  :models ((:model :id testGeminiRowModel :provider testGeminiRow :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testGeminiRowModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gatewayConfigParse! text "rowsFromTableGemini" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
@@ -97,7 +97,7 @@ fn ! testRowsFromTableIncludesGeminiProvider -> Bool
 ; (:m :do "GW-OPENROUTER-PLUGIN-20261018: rowsFromTable's some-tbl branch excludes any id defaultRowNamed already knows (gemini/groq/ollama/openrouter/cli ids) from configured, then appends only upstreamProviders(), which itself excludes the openrouter catch-all row (upstreamFallback is a separate function, listed beside, not inside, upstreamProviders()); so once a real config table exists (every live gateway), the openrouter row never reaches rows/plugins and any model wired to provider openrouter gets ERR_NO_UPSTREAM no plugin for provider openrouter")
 fn ! testRowsFromTableIncludesOpenrouterProvider -> Bool
   (let [(text "(:gateway :v 2\n  :models ((:model :id testOpenrouterModel :provider openrouter :name \"m\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (testOpenrouterModel)))))\n  :uses ((:use :for default :profile p1)))")
-        (res (cfg/gateway_config_parse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
+        (res (cfg/gatewayConfigParse! text "rowsFromTableOpenrouter" ".asl/mem/calibration/index.asn"))]
     (match res
       ((err e) (assert false (str "ROWSFROMTABLE: config must parse: " e)))
       ((ok tbl)
@@ -448,8 +448,17 @@ fn ! socketChecks -> Bool
       (assert (not (listAny? (fn [(x String)] -> Bool (stringEndsWith? x "/chat/completions")) (pathsFrom fifth.seen (listLength third.seen)))) "a request that timed out on a cold start is never sent")
       (and killed (and closed removed))))
 
+; (:m :ref CALL-USAGE-TOKENS-ARITY :do "callUsageTokens has one arity: four values with and without usage")
+fn callUsageArity -> Bool
+  (do
+    (assert (= (listLength (dp/callUsageTokens "{\"choices\":[]}")) 4) "a body with no usage gives four values")
+    (assert (= (dp/callUsageTokens "not json") (list 0 0 0 0)) "an unparseable body gives four zeros")
+    (assert (= (listLength (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}")) 4) "a body with usage gives four values")
+    (assert (= (optionOr (listGet (dp/callUsageTokens "{\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}") 2) -1) 3) "the third value is the output tokens")
+    true)
+
 fn ! runTests -> Bool
-  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))))
+  (and (testRowsFromTableIncludesGeminiProvider) (and (testRowsFromTableIncludesOpenrouterProvider) (and (unitChecks) (and (redirectChecks) (and (coldChecks) (and (socketChecks) (callUsageArity)))))))
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))

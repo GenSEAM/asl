@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [kwPrev? plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -63,14 +63,18 @@ fn rowAfter items: (List rd/SExpr) key: String -> (Option rd/SExpr)
     ((none) (none))
     ((some h) (if (and (rd/isAtom? h) (= (rd/sexprHead h) key)) (listGet items 1) (rowAfter (optionOr (listTail items) (list)) key))))
 
-fn configClang text: String -> (Option String)
-  (if (not (stringContains? text ":clang"))
+; (:m :ref LLVM-NODE2-REDS :do "the :native row names any tool by key, :clang and now :llc :opt :wasmLd :llvmNm :node, so a test resolves its tool the way the native steps resolve clang")
+fn configNative text: String key: String -> (Option String)
+  (if (not (stringContains? text (str ":" key)))
     (none)
     (match (rowAfter (rd/sexprToList (rd/parseSexpr text)) ":native")
       ((none) (none))
-      ((some native) (match (rowAfter (rd/sexprToList native) ":clang")
+      ((some native) (match (rowAfter (rd/sexprToList native) (str ":" key))
                        ((some v) (if (rd/isAtom? v) (let [(w (stringReplace (rd/sexprHead v) "\"" ""))] (if (stringEmpty? w) (none) (some w))) (none)))
                        ((none) (none))))))
+
+fn configClang text: String -> (Option String)
+  (configNative text "clang")
 
 fn ! clangOnPathIn! pathVar: String -> (List String)
   (filter (fn [(c String)] -> Bool
@@ -202,12 +206,169 @@ fn ! hostExec! ctx: sys/Context args: (List String) extra: (List String) -> Int6
     (execWith! (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/command.asl")) args) (list "ASL_NATIVE_CLI_DIR" "ASL_NATIVE_QUIET_PID") extra)
     (do (sys/say! "(:asl :status :failed :error ERR_HOST_ABSENT :message \"asl runs on the stage-0 host at asl/host/out/asl-host; build it with sh asl/host/build.sh or set ASL_HOST\")") 2))
 
+; (:m :ref MAC-CLI-REBUILD-STALL :do "the sources whose bytes key the native compile cache (nativeTest fingerprints exactly these); every CLI dir carries them, with its entry's package, as its roots file, written by the build that made it")
+fn toolchainRootPaths -> (List String)
+  (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
+        "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
+        "asl/host/out/libaslrt.a" "asl/host/out/prelude.asl" "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl")
+
+fn rootsText entry: String -> String
+  (let [(parts (stringSplit entry "/"))
+        (pkg (if (and (>= (listLength parts) 3) (= (optionOr (listGet parts 1) "") "packages")) (stringJoin (listTake parts 3) "/") entry))]
+    (str (stringJoin (listAppend (toolchainRootPaths) (list pkg)) "\n") "\n"))
+
+fn ! mtimeOf path: String -> Int64
+  (match (fileStat path) ((ok st) st.mtimeNs) ((err _) 0))
+
+fn under? path: String roots: (List String) -> Bool
+  (listAny? (fn [(r String)] -> Bool (or (= path r) (stringStartsWith? path (str r "/")))) roots)
+
+; (:m :ref MAC-CLI-REBUILD-STALL :do "run tools/remote/vps.asl keeps the current CLI without the lock when every dep that moved since the head lies outside the roots its build wrote: such an edit changes neither what the CLI compiles (the compile cache key) nor its own package; no roots file, no deps, a missing dep or a moved path under a root is not pinned, and the next unpinned call refreshes; aslNativeBuild refresh and the native CLI's own stale gate both ask it")
+fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (let [(roots (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/roots")) ""))))
+        (deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
+        (stamp (mtimeOf stampPath))]
+    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
+      (and (not (listEmpty? roots))
+        (and (not (listEmpty? deps))
+          (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (<= (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
+
+; (:m :ref RELAY-CLIENT-PINNED :do "run tools/remote/vps.asl also keeps the current CLI when a toolchain root moved, as long as the relay client's own sources (.asl.config.asn :nativeCli :relayPaths, tests directories skipped) are no newer than the head file and :nativeCli :relayPin is true: the relay tool is read from the tree at run time, so a CLI built before the toolchain edit still runs it; a moved relay source, a missing path, an absent head or the knob off is not pinned and the call rebuilds first; nativeGate then starts the new build in the background")
+fn configWord text: String key: String -> String
+  (match (stringIndexOf text (str ":" key " "))
+    ((none) "")
+    ((some i) (let [(rest (stringTrim (optionOr (stringSlice text (+ i (+ (stringLength key) 2)) (stringLength text)) "")))]
+                (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit (optionOr (listHead (stringLines rest)) "") " ")) "") ")")) ""))))
+
+fn configStrings text: String key: String -> (List String)
+  (match (stringIndexOf text (str ":" key " ["))
+    ((none) (list))
+    ((some i) (let [(rest (optionOr (stringSlice text (+ i (+ (stringLength key) 3)) (stringLength text)) ""))
+                    (body (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "]") (stringLength rest))) ""))]
+                (filter (fn [(p String)] -> Bool (not (stringEmpty? (stringTrim p)))) (stringSplit body "\"")))))
+
+fn ! newestSource! path: String -> Int64
+  (match (fileLstat path)
+    ((err _) 4611686018427387904)
+    ((ok st) (if (and st.isDir (not st.isSymlink))
+               (if (= (sys/baseName path) "tests")
+                 0
+                 (fold (fn [(acc Int64) (n String)] -> Int64 (max acc (newestSource! (str path "/" n)))) 0 (resultOr (dirList path) (list))))
+               st.mtimeNs)))
+
+fn ! relayPinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
+        (paths (configStrings text "relayPaths"))
+        (stamp (mtimeOf stampPath))]
+    (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
+      (and (= (configWord text "relayPin") "true")
+        (and (not (listEmpty? paths))
+          (and (> stamp 0) (and (fileExists? (str dir "/roots"))
+            (and (sys/executable? (str dir "/bin"))
+              (listAll? (fn [(p String)] -> Bool (<= (newestSource! (str root "/" p)) stamp)) paths))))))))
+
+fn ! relayRefresh! ctx: sys/Context -> Bool
+  (let [(native (str ctx.root "/asl/host/out/aslNativeBuild"))]
+    (if (and (sys/executable? native) (fresh? ctx.root (str ctx.root "/asl/host/out/aslNativeBuild-fresh")))
+      (do (eprintln (str "asl: native CLI kept for the relay client; its refresh runs in the background: " (startBuild! ctx (cacheDir!) 2 ""))) true)
+      false))
+
+; (:m :ref FORMS-PINNED-CLI :do "an argv that is only ASN forms of the edit family (read query observe edit write diff flush discard, intel outline) runs on the newest already-built CLI without a staleness rebuild: such a form reads or stages text and never needs the toolchain edit that made the CLI stale; every keyword of every form, nested ones included, must be in the op's allow-list (allowedKeys) so a :gates, :run or :cmd field never rides along; check, test, run and every other verb keep the staleness rule; only .asl.config.asn :nativeCli :formsPin true turns it on, absent or any other word is off")
+fn formsAllowed -> (List String)
+  (list ":read" ":query" ":observe" ":edit" ":write" ":diff" ":flush" ":discard" ":intel :outline" ":intel :op outline")
+
+fn allowedKeys head: String -> (List String)
+  (cond
+    ((= head ":read") (list ":file" ":symbol" ":anchor" ":limit" ":start" ":end"))
+    ((= head ":query") (list ":text" ":in" ":limit"))
+    ((= head ":observe") (list ":dim" ":scope" ":limit" ":symbol" ":module" ":path" ":spec" ":id"))
+    ((= head ":edit") (list ":file" ":old" ":new" ":all" ":autofix" ":force"))
+    ((= head ":write") (list ":file" ":content" ":force"))
+    ((= head ":diff") (list ":file"))
+    ((= head ":flush") (list ":file"))
+    ((= head ":discard") (list ":file"))
+    ((= head ":intel :outline") (list ":outline" ":file" ":symbol" ":limit" ":module" ":target"))
+    ((= head ":intel :op outline") (list ":op" ":file" ":symbol" ":limit" ":module" ":target"))
+    (else (list)))
+
+fn charAt s: String i: Int64 -> String
+  (optionOr (stringSlice s i (+ i 1)) "")
+
+fn blank? c: String -> Bool
+  (or (= c " ") (or (= c "\n") (or (= c "\t") (= c "\r"))))
+
+fn wordAt s: String i: Int64 -> String
+  (let [(c (charAt s i))]
+    (if (or (stringEmpty? c) (or (blank? c) (or (= c "(") (= c ")"))))
+      ""
+      (str c (wordAt s (+ i 1)))))
+
+fn headAt s: String i: Int64 -> String
+  (let [(w (wordAt s (+ i 1)))]
+    (if (= w ":intel")
+      (let [(w2 (wordAt s (+ i (+ (stringLength w) 2))))]
+        (if (= w2 ":op")
+          (str w " " w2 " " (wordAt s (+ i (+ (stringLength w) (+ (stringLength w2) 3)))))
+          (str w " " w2)))
+      w))
+
+; (:m :ref FORMS-PINNED-CLI :do "a :word counts as a keyword after a blank, an open or close paren or a closing quote; rows (HEAD, KEYWORD) of the top-level forms of one argv element, KEYWORD empty for the head row itself: every :word that starts a token outside a string counts, nested form heads too, only the head right after a top-level open paren is the head; none for text outside a form or unbalanced delimiters")
+fn kwPrev? prev: String -> Bool
+  (or (blank? prev) (listContains? (list "(" ")" "[" "]" "{" "}" "\"") prev))
+
+fn scanForms s: String i: Int64 n: Int64 depth: Int64 inStr: Bool esc: Bool cur: String acc: (List (Pair String String)) -> (Option (List (Pair String String)))
+  (if (>= i n)
+    (if (and (= depth 0) (not inStr)) (some acc) (none))
+    (let [(c (charAt s i))
+          (prev (if (= i 0) "" (charAt s (- i 1))))]
+      (cond
+        (inStr (scanForms s (+ i 1) n depth (or esc (not (= c "\""))) (and (not esc) (= c "\\")) cur acc))
+        ((= c "(") (if (= depth 0)
+                     (let [(h (headAt s i))] (scanForms s (+ i 1) n 1 false false h (cons (pair h "") acc)))
+                     (scanForms s (+ i 1) n (+ depth 1) false false cur acc)))
+        ((= c ")") (if (= depth 0) (none) (scanForms s (+ i 1) n (- depth 1) false false cur acc)))
+        ((= c "\"") (if (= depth 0) (none) (scanForms s (+ i 1) n depth true false cur acc)))
+        ((blank? c) (scanForms s (+ i 1) n depth false false cur acc))
+        ((and (= c ":") (and (> depth 0) (kwPrev? prev)))
+          (scanForms s (+ i 1) n depth false false cur (if (and (= depth 1) (= prev "(")) acc (cons (pair cur (wordAt s i)) acc))))
+        (else (if (= depth 0) (none) (scanForms s (+ i 1) n depth false false cur acc))))))
+
+fn rowOk? row: (Pair String String) -> Bool
+  (and (listContains? (formsAllowed) (pairFirst row))
+    (or (stringEmpty? (pairSecond row)) (listContains? (allowedKeys (pairFirst row)) (pairSecond row))))
+
+; (:m :ref FORMS-PINNED-CLI :do "a trailing argument of intel outline is a plain path: it starts with neither ( nor : nor - and holds no quote, so no form or flag rides along")
+fn plainArg? a: String -> Bool
+  (and (not (stringEmpty? a))
+    (and (not (stringStartsWith? a "(")) (and (not (stringStartsWith? a ":")) (and (not (stringStartsWith? a "-")) (not (stringContains? a "\""))))))
+
+fn formsOnly? cmd: (List String) -> Bool
+  (or (and (= (listTake cmd 2) (list "intel" "outline"))
+        (listAll? plainArg? (optionOr (listTail (optionOr (listTail cmd) (list))) (list))))
+    (and (not (listEmpty? cmd))
+      (listAll? (fn [(a String)] -> Bool
+                  (match (scanForms a 0 (stringLength a) 0 false false "" (list))
+                    ((none) false)
+                    ((some rows) (and (not (listEmpty? rows)) (listAll? rowOk? rows)))))
+                cmd)))
+
+fn formsPinOn? text: String -> Bool
+  (= (configWord text "formsPin") "true")
+
+fn ! formsPinned? root: String dir: String cmd: (List String) -> Bool
+  (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))]
+    (and (formsPinOn? text)
+      (and (sys/executable? (str dir "/bin")) (formsOnly? cmd))))
+
 fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
       ((not (direct?)) (none))
       ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
+      ((formsPinned? ctx.root dir args) (none))
+      ((pinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
+      ((relayPinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (do (relayRefresh! ctx) (none)))
       (else (some (awaitStaleRebuild! ctx dir args)))))
 
 fn leadingDigitsAt s: String n: Int64 i: Int64 -> String

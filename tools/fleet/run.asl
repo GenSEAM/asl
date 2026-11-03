@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardFds spawn spawnSep reapStaleLeases! leaseDir leasePath writeLease! psPairs descendantsOf psSnapshot procsOf procSnapshot treeOf killTree! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -23,7 +23,9 @@
 (schema Proc
   (:f pid Int64)
   (:f ppid Int64)
-  (:f pgid Int64))
+  (:f pgid Int64)
+  (:f age Int64 :default -1)
+  (:f born Int64 :default -1))
 
 (schema Running
   (:f idx Int64)
@@ -42,7 +44,8 @@
 (schema ProcOut
   (:f exitCode Int64)
   (:f stdout String)
-  (:f stderr String))
+  (:f stderr String)
+  (:f timedOut Bool :default false))
 
 (schema RunningSep
   (:f pid Int64)
@@ -62,7 +65,10 @@
   (:f pgid Int64)
   (:f ownerPid Int64)
   (:f startNs Int64)
-  (:f deadlineNs Int64))
+  (:f deadlineNs Int64)
+  (:f wroteNs Int64)
+  (:f pgidBorn Int64)
+  (:f ownerBorn Int64))
 
 fn job argv: (List String) cwd: String env: (List String) -> Job
   (Job :argv argv :cwd cwd :env env)
@@ -70,10 +76,33 @@ fn job argv: (List String) cwd: String env: (List String) -> Job
 fn secretName? name: String -> Bool
   (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
 
+; (:m :ref CACHE-HOME-LEAK :do "the caches that key off HOME, each with its one override: a child started with another HOME (a test's temp home) reuses the shared caches only when it gets every row; ASL_CHECK_CACHE missing alone made a fresh-HOME vps.asl run 349894 ms against 4157 ms (node2, 2026-10-30). ASL_NATIVE_TEST_CACHE keys off HOME only in a linked worktree (nativeTest defaultCacheDirFor); the main checkout keeps .asl/cache/nativeTest, so the row is left out there unless set")
+fn cacheRows -> (List (Pair String String))
+  (list (pair "ASL_NATIVE_CLI_CACHE" "/.asl/run/nativeCli") (pair "ASL_HOST_CACHE_DIR" "/.asl/run/hosts") (pair "ASL_NATIVE_TEST_CACHE" "/.asl/run/nativeTest")
+        (pair "ASL_NATIVE_ASL1_CACHE" "/.asl/run/asl1") (pair "ASL_CHECK_CACHE" "/.asl/cache/check") (pair "ASL_CORPUS_CACHE" "/.asl/run/corpusCache"))
+
+; (:m :ref CACHE-HOME-LEAK :do "NAME=dir rows for this process's caches, as seen from cwd: the override when set and non-empty, else this HOME's default; pass them with a child's own HOME")
+fn ! cacheEnv! -> (List String)
+  (let [(home (optionOr (envGet "HOME") "/tmp"))
+        (linked (match (fileStat ".git") ((ok st) (not st.isDir)) ((err _) false)))]
+    (fold (fn [(acc (List String)) (r (Pair String String))] -> (List String)
+            (let [(set (optionOr (envGet (pairFirst r)) ""))]
+              (cond
+                ((not (stringEmpty? set)) (listAppend acc (list (str (pairFirst r) "=" set))))
+                ((and (= (pairFirst r) "ASL_NATIVE_TEST_CACHE") (not linked)) acc)
+                (else (listAppend acc (list (str (pairFirst r) "=" home (pairSecond r))))))))
+          (list) (cacheRows)))
+
+; (:m :ref WT-FRESH-HOST-BUILD :do "a child given its own HOME and no ASL_NATIVE_TEST_CACHE gets this process's compile cache row from cacheEnv!: in a linked worktree the cache follows HOME, so a test's temp-HOME child recompiled 100 modules and the prelude on every start (gateway serve 36-39 s on node2, 2026-10-31) and outran its 30 s ready wait")
 fn ! childEnv overrides: (List String) -> (List String)
   (let [(nameOf (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)))
-        (names (map nameOf overrides))]
-    (listAppend overrides
+        (given (map nameOf overrides))
+        (cache (if (and (listContains? given "HOME") (not (listContains? given "ASL_NATIVE_TEST_CACHE")))
+                 (filter (fn [(row String)] -> Bool (= (nameOf row) "ASL_NATIVE_TEST_CACHE")) (cacheEnv!))
+                 (list)))
+        (rows (listAppend overrides cache))
+        (names (map nameOf rows))]
+    (listAppend rows
       (filter (fn [(row String)] -> Bool
                 (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
               (envList))))
@@ -162,19 +191,64 @@ fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
               ((err e) (err (str "wait failed: " e)))
               ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "exit " o.exitCode ": " (stringTrim o.stderr))))))))
 
+; (:m :ref NODE2-SIGSTOP-RC :do "a user manager (comm systemd) or an sshd process is never a snapshot row, so no tree killer can reach it or walk through it")
+fn guardedComm? comm: String -> Bool
+  (let [(base (optionOr (listLast (stringSplit comm "/")) comm))]
+    (or (= base "systemd") (stringStartsWith? base "sshd")))
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "ps etime ([[dd-]hh:]mm:ss, the only elapsed-time column both procps and BSD ps print) as seconds; anything else is -1, unknown")
+fn etimeSeconds text: String -> Int64
+  (let [(dayParts (stringSplit text "-"))
+        (days (if (= (listLength dayParts) 2) (optionOr (stringToInt64 (optionOr (listHead dayParts) "")) -1) 0))
+        (clock (stringSplit (optionOr (listLast dayParts) "") ":"))
+        (nums (map (fn [(c String)] -> Int64 (optionOr (stringToInt64 c) -1)) clock))]
+    (if (or (stringEmpty? text) (or (> (listLength dayParts) 2) (or (< days 0) (or (< (listLength nums) 2) (or (> (listLength nums) 3) (listAny? (fn [(n Int64)] -> Bool (< n 0)) nums))))))
+      -1
+      (+ (* days 86400) (fold (fn [(acc Int64) (n Int64)] -> Int64 (+ (* acc 60) n)) 0 nums))))
+
 fn procRow acc: (List Proc) line: String -> (List Proc)
   (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
         (stat (optionOr (listGet ws 3) ""))
         (num (fn [(i Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (listGet ws i) "")) -1)))]
-    (if (or (stringStartsWith? stat "Z") (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0))))
+    (if (or (stringStartsWith? stat "Z") (or (guardedComm? (optionOr (listGet ws 5) "")) (or (< (num 0) 1) (or (< (num 1) 0) (< (num 2) 0)))))
       acc
-      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2)) acc)))
+      (cons (Proc :pid (num 0) :ppid (num 1) :pgid (num 2) :age (etimeSeconds (optionOr (listGet ws 4) ""))) acc)))
 
 fn procsOf text: String -> (List Proc)
   (fold procRow (list) (stringLines text))
 
+; (:m :ref KILL-SETSID-ESCAPEE :do "rows of a ps text taken at nowSec: born is nowSec minus etime, -1 when etime is unknown; the snapshot uses the wall clock, a test passes its own")
+fn procsAt text: String nowSec: Int64 -> (List Proc)
+  (map (fn [(p Proc)] -> Proc (Proc :pid p.pid :ppid p.ppid :pgid p.pgid :age p.age :born (if (< p.age 0) -1 (- nowSec p.age)))) (procsOf text))
+
+fn pinBase -> Int64
+  8388608
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "a known entry is a bare pid or a pin, born * 2^23 + pid, recorded when the pid was seen in the tree; pids stay below 2^23 on Linux and macOS")
+; (:m :ref PIN-PID-BITS :do "a pid outside 1..2^23-1 stays bare, so it can never decode as another pid; Linux caps pid_max at 2^22 (PID_MAX_LIMIT) and macOS pids stay below 100000, so no live pid is left unpinned")
+fn pinOf pid: Int64 born: Int64 -> Int64
+  (if (or (< born 0) (or (< pid 1) (>= pid (pinBase)))) pid (+ (* born (pinBase)) pid))
+
+fn pinPid k: Int64 -> Int64
+  (- k (* (/ k (pinBase)) (pinBase)))
+
+fn pinBorn k: Int64 -> Int64
+  (/ k (pinBase))
+
+fn pinsOf procs: (List Proc) pids: (List Int64) -> (List Int64)
+  (map (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) (pinOf pid p.born)) ((none) pid))) pids)
+
+fn knownPid? known: (List Int64) pid: Int64 -> Bool
+  (listAny? (fn [(k Int64)] -> Bool (= (pinPid k) pid)) known)
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "g is the very process that was recorded: a pin for g whose birth matches g's current birth within 2 s; a reused pid has a later birth and a bare pid never matches")
+fn pinnedLive? procs: (List Proc) known: (List Int64) g: Int64 -> Bool
+  (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
+    ((none) false)
+    ((some p) (and (>= p.born 0) (listAny? (fn [(k Int64)] -> Bool (and (= (pinPid k) g) (and (> (pinBorn k) 0) (and (<= (- (pinBorn k) p.born) 2) (>= (- (pinBorn k) p.born) -2))))) known))))
+
 fn ! procSnapshot -> (List Proc)
-  (procsOf (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat=" 10000) ""))
+  (procsAt (resultOr (shellOut "ps -A -o pid= -o ppid= -o pgid= -o stat= -o etime= -o comm=" 10000) "") (/ (nowNs) 1000000000))
 
 fn ! psSnapshot -> (List (Pair Int64 Int64))
   (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) (procSnapshot))
@@ -185,28 +259,62 @@ fn addNew xs: (List Int64) ys: (List Int64) -> (List Int64)
 fn ownGroup procs: (List Proc) self: Int64 -> Int64
   (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid self)) procs)) ((some p) p.pgid) ((none) -1))
 
-fn treeStep procs: (List Proc) members: (List Int64) groups: (List Int64) own: Int64 rounds: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(gs (addNew groups (filter (fn [(g Int64)] -> Bool (and (> g 1) (!= g own)))
-                                   (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? members p.pid)) procs)))))
+fn lineageUp procs: (List Proc) pid: Int64 acc: (List Int64) -> (List Int64)
+  (if (or (<= pid 1) (or (listContains? acc pid) (> (listLength acc) 512)))
+    acc
+    (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs))
+      ((some p) (lineageUp procs p.ppid (cons pid acc)))
+      ((none) (cons pid acc))))
+
+; (:m :ref NODE2-SIGSTOP-RC :do "the fence of a killer: itself and every ancestor up to init, and the groups they are in; no tree walk adds a fenced pid or group, so a killer never stops itself, its parent chain or a group one of them sits in")
+fn fenceOf procs: (List Proc) self: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(up (lineageUp procs self (list)))]
+    (pair up (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? up p.pid)) procs))))
+
+fn fenced? procs: (List Proc) root: Int64 self: Int64 -> Bool
+  (or (<= root 1) (listContains? (pairFirst (fenceOf procs self)) root))
+
+fn leaderGone? procs: (List Proc) g: Int64 -> Bool
+  (listEmpty? (filter (fn [(p Proc)] -> Bool (= p.pid g)) procs))
+
+; (:m :ref KILL-SETSID-ESCAPEE :do "g started no earlier than the root (ps etime, 1 s resolution): a known pid that setsid away from the job is younger than the job, a foreign process that ended up in known is older; unknown ages never qualify")
+fn bornAfter? procs: (List Proc) root: Int64 g: Int64 -> Bool
+  (let [(ageOf (fn [(pid Int64)] -> Int64 (match (listHead (filter (fn [(p Proc)] -> Bool (= p.pid pid)) procs)) ((some p) p.age) ((none) -1))))
+        (rootAge (ageOf root))
+        (age (ageOf g))]
+    (and (>= rootAge 0) (and (>= age 0) (<= age rootAge))))
+
+; (:m :ref NODE2-SIGSTOP-RC :do "a member's group joins the tree only when its leader is a member, or was one (known) and is gone or started no earlier than the root (bornAfter?): a member sitting in a foreign group no longer pulls that whole group, and everything hanging off it, into the kill")
+fn treeStep procs: (List Proc) root: Int64 members: (List Int64) groups: (List Int64) known: (List Int64) fence: (Pair (List Int64) (List Int64)) rounds: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(adopt (fn [(g Int64)] -> Bool (and (> g 1) (and (not (listContains? (pairSecond fence) g)) (or (listContains? members g) (or (and (knownPid? known g) (leaderGone? procs g)) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))))
+        (gs (addNew groups (filter adopt (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? members p.pid)) procs)))))
         (more (map (fn [(p Proc)] -> Int64 p.pid)
-                   (filter (fn [(p Proc)] -> Bool (and (not (listContains? members p.pid))
-                                                       (or (listContains? members p.ppid) (listContains? gs p.pgid))))
+                   (filter (fn [(p Proc)] -> Bool (and (> p.pid 1)
+                                                       (and (not (listContains? (pairFirst fence) p.pid))
+                                                            (and (not (listContains? members p.pid))
+                                                                 (or (listContains? members p.ppid) (listContains? gs p.pgid))))))
                            procs)))]
     (if (or (listEmpty? more) (<= rounds 0))
       (pair members gs)
-      (treeStep procs (addNew members more) gs own (- rounds 1))))
+      (treeStep procs root (addNew members more) gs known fence (- rounds 1))))
 
-fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) -> (List Int64)
-  (let [(lineage (cons root (descendantsOf (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) procs) root)))
-        (anchors (filter (fn [(p Proc)] -> Bool (and (listContains? known p.pid) (or (= p.ppid 1) (listContains? lineage p.ppid)))) procs))
-        (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))]
-    (filter (fn [(g Int64)] -> Bool (or (= g root) (listContains? held g))) groups))
+; (:m :ref NODE2-SIGSTOP-RC :do "a remembered group stays only when a known pid still holds it (an orphan of init or a child in the lineage, or a pinned pid whose birth still matches: an orphan a subreaper such as systemd --user adopted has a ppid that is neither 1 nor in the lineage) and its leader is gone, in the lineage, or known and started no earlier than the root (a setsid escapee); a live leader older than the root (a foreign sleeper or a user manager that ended up in known) never anchors its group")
+fn anchoredGroups procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) lineage: (List Int64) -> (List Int64)
+  (let [(anchors (filter (fn [(p Proc)] -> Bool (and (knownPid? known p.pid) (or (= p.ppid 1) (or (listContains? lineage p.ppid) (pinnedLive? procs known p.pid))))) procs))
+        (held (map (fn [(p Proc)] -> Int64 p.pgid) anchors))
+        (ours (fn [(g Int64)] -> Bool (or (listContains? lineage g) (or (leaderGone? procs g) (and (pinnedLive? procs known g) (bornAfter? procs root g))))))]
+    (filter (fn [(g Int64)] -> Bool (or (= g root) (and (listContains? held g) (ours g)))) groups))
 
-fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) own: Int64 -> (Pair (List Int64) (List Int64))
-  (let [(start (filter (fn [(g Int64)] -> Bool (and (> g 1) (!= g own))) (addNew (anchoredGroups procs root groups known) (list root))))
-        (seed (cons root (map (fn [(p Proc)] -> Int64 p.pid) (filter (fn [(p Proc)] -> Bool (and (!= p.pid root) (listContains? start p.pgid))) procs))))
-        (t (treeStep procs seed start own 10000))]
-    (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))
+; (:m :ref NODE2-SIGSTOP-RC :do "self is the killer's pid: a root of 0 or 1 (every process descends from them; a failed pid parse once froze all of node2's user processes) or a root in the killer's fence gives an empty tree")
+fn treeOf procs: (List Proc) root: Int64 groups: (List Int64) known: (List Int64) self: Int64 -> (Pair (List Int64) (List Int64))
+  (let [(fence (fenceOf procs self))]
+    (if (fenced? procs root self)
+      (pair (list) (list))
+      (let [(lineage (cons root (filter (fn [(p Int64)] -> Bool (not (listContains? (pairFirst fence) p))) (descendantsOf (map (fn [(p Proc)] -> (Pair Int64 Int64) (pair p.pid p.ppid)) procs) root))))
+            (start (filter (fn [(g Int64)] -> Bool (and (> g 1) (not (listContains? (pairSecond fence) g)))) (addNew (anchoredGroups procs root groups known lineage) (list root))))
+            (seed (cons root (map (fn [(p Proc)] -> Int64 p.pid) (filter (fn [(p Proc)] -> Bool (and (> p.pid 1) (and (!= p.pid root) (and (not (listContains? (pairFirst fence) p.pid)) (listContains? start p.pgid))))) procs))))
+            (t (treeStep procs root seed start known fence 10000))]
+        (pair (filter (fn [(p Int64)] -> Bool (!= p root)) (pairFirst t)) (pairSecond t)))))
 
 fn ! signalAll pids: (List Int64) sig: String -> Int64
   (fold (fn [(n Int64) (p Int64)] -> Int64 (match (procKill p sig) ((ok _) (+ n 1)) ((err _) n))) 0 pids)
@@ -216,7 +324,7 @@ fn ! signalGroups groups: (List Int64) sig: String -> Int64
 
 fn ! freeze! root: Int64 seen: (List Int64) groups: (List Int64) known: (List Int64) rounds: Int64 -> (Pair (List Int64) (List Int64))
   (let [(snap (procSnapshot))
-        (t (treeOf snap root groups (addNew known seen) (ownGroup snap (procSelf))))
+        (t (treeOf snap root groups (addNew known seen) (procSelf)))
         (gs (pairSecond t))
         (now (cons root (pairFirst t)))
         (fresh (filter (fn [(p Int64)] -> Bool (not (listContains? seen p))) now))
@@ -226,23 +334,30 @@ fn ! freeze! root: Int64 seen: (List Int64) groups: (List Int64) known: (List In
       (pair (addNew seen fresh) gs)
       (freeze! root (addNew seen fresh) gs known (- rounds 1))))
 
+; (:m :ref NODE2-SIGSTOP-RC :do "a fenced root signals nothing; otherwise every pid and group a freeze stopped gets SIGKILL in the same round, and the killer is never among them")
 fn ! killRounds root: Int64 groups: (List Int64) known: (List Int64) rounds: Int64 -> Int64
-  (let [(frozen (freeze! root (list) groups known 20))
-        (gs (pairSecond frozen))
-        (_ (signalGroups gs "SIGKILL"))
-        (_ (signalAll (pairFirst frozen) "SIGKILL"))
-        (_ (sleepMs 50))
-        (snap (procSnapshot))
-        (left (pairFirst (treeOf snap root gs (addNew known (pairFirst frozen)) (ownGroup snap (procSelf)))))]
-    (if (or (listEmpty? left) (<= rounds 0))
-      (listLength left)
-      (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1))))
+  (if (fenced? (procSnapshot) root (procSelf))
+    0
+    (let [(frozen (freeze! root (list) groups known 20))
+          (gs (pairSecond frozen))
+          (_ (signalGroups gs "SIGKILL"))
+          (_ (signalAll (pairFirst frozen) "SIGKILL"))
+          (_ (sleepMs 50))
+          (snap (procSnapshot))
+          (left (pairFirst (treeOf snap root gs (addNew known (pairFirst frozen)) (procSelf))))]
+      (if (or (listEmpty? left) (<= rounds 0))
+        (listLength left)
+        (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1)))))
 
 fn ! killTreeWith! root: Int64 groups: (List Int64) known: (List Int64) -> Int64
   (killRounds root groups known 5)
 
 fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
+
+; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
+fn ! stopGuard! g: Guarded -> Int64
+  (killTreeWith! g.run.pid g.run.groups g.run.known)
 
 fn ! pumpOne r: Running -> (Pair Bool Running)
   (let [(o (readChunk r.outFd r.outOpen))
@@ -252,20 +367,72 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
 
-fn ! judge lim: Limits now: Int64 snap: (List Proc) own: Int64 checked: Bool r: Running -> Running
+fn leadDigits s: String n: Int64 i: Int64 -> String
+  (if (and (< i n) (stringContains? "0123456789" (optionOr (stringSlice s i (+ i 1)) "x")))
+    (leadDigits s n (+ i 1))
+    (optionOr (stringSlice s 0 i) ""))
+
+(schema Drain
+  (:f bytes Int64)
+  (:f ms Int64))
+
+; (:m :ref FR-KILL-DRAIN :do "the :fleet group starts at :fleet followed by a space and an opening paren or by an opening paren, so :fleetRun or another key that begins with fleet is not the group")
+fn fleetGroupAt text: String -> (Option Int64)
+  (match (stringIndexOf text ":fleet (")
+    ((some g) (some g))
+    ((none) (stringIndexOf text ":fleet(")))
+
+; (:m :ref FR-KILL-DRAIN :do "a value of the :fleet group of .asl.config.asn under the root (ASL_ROOT, else the working directory): the digits after :KEY inside the group, the default when the file, the group or the key is absent or the value is outside lo..hi")
+fn fleetInt text: String key: String dflt: Int64 lo: Int64 hi: Int64 -> Int64
+  (match (fleetGroupAt text)
+    ((none) dflt)
+    ((some g)
+      (let [(rest (optionOr (stringSlice text g (stringLength text)) ""))
+            (end (optionOr (stringIndexOf rest ")") (stringLength rest)))
+            (grp (optionOr (stringSlice rest 0 end) ""))]
+        (match (stringIndexOf grp (str ":" key " "))
+          ((none) dflt)
+          ((some i)
+            (let [(tail (stringTrim (optionOr (stringSlice grp (+ i (+ (stringLength key) 2)) (stringLength grp)) "")))
+                  (digits (leadDigits tail (stringLength tail) 0))
+                  (v (optionOr (stringToInt64 digits) -1))]
+              (if (and (>= v lo) (<= v hi)) v dflt)))))))
+
+; (:m :ref FR-KILL-DRAIN :do "after a judge kill the pipes are read on, bounded by :fleet :drainBytes (default 1048576, 0 turns the drain off) and :fleet :drainMs (default 300): the child died with output still in its pipes and the pump had not read it yet")
+fn ! drainConfig! -> Drain
+  (let [(text (resultOr (fileReadString (str (optionOr (envGet "ASL_ROOT") ".") "/.asl.config.asn")) ""))]
+    (Drain :bytes (fleetInt text "drainBytes" 1048576 0 67108864) :ms (fleetInt text "drainMs" 300 0 5000)))
+
+fn ! drainFd fd: Int64 isOpen: Bool cap: Int64 deadlineNs: Int64 acc: String -> (Pair Bool String)
+  (cond
+    ((not isOpen) (pair false acc))
+    ((>= (stringLength acc) cap) (pair true acc))
+    ((>= (monotonicNs) deadlineNs) (pair true acc))
+    (else
+      (let [(c (readChunk fd true))]
+        (cond
+          ((not (pairFirst c)) (pair false (str acc (pairSecond c))))
+          ((stringEmpty? (pairSecond c)) (do (fdPoll (list (pair fd 1)) 10) (drainFd fd true cap deadlineNs acc)))
+          (else (drainFd fd true cap deadlineNs (str acc (pairSecond c))))))))
+
+fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: Running -> Running
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
-        (tree (if checked (treeOf snap r.pid r.groups r.known own) (pair (list) r.groups)))
+        (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
         (groups (pairSecond tree))
-        (known (if checked (pairFirst tree) r.known))
+        (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
                :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
       (let [(left (killTreeWith! r.pid groups known))
+            (dc (drainConfig!))
+            (dl (+ (monotonicNs) (* dc.ms 1000000)))
+            (o (drainFd r.outFd r.outOpen dc.bytes dl ""))
+            (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
-        (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text note)
-                 :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed verdict :groups groups :known known))))
+        (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text (pairSecond o) (pairSecond e) note)
+                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
 
 fn ! closeIfOpen fd: Int64 isOpen: Bool -> Int64
   (if isOpen (do (fdClose fd) 1) 0)
@@ -301,27 +468,32 @@ fn ! pumpOneSep r: RunningSep -> (Pair Bool RunningSep)
                       :outOpen (pairFirst o) :errOpen (pairFirst e)
                       :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
 
-fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) own: Int64 checked: Bool r: RunningSep -> RunningSep
+fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: RunningSep -> RunningSep
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
-        (tree (if checked (treeOf snap r.pid r.groups r.known own) (pair (list) r.groups)))
+        (tree (if checked (treeOf snap r.pid r.groups r.known self) (pair (list) r.groups)))
         (groups (pairSecond tree))
-        (known (if checked (pairFirst tree) r.known))
+        (known (if checked (addNew r.known (pinsOf snap (pairFirst tree))) r.known))
         (descN (if (and checked (> lim.maxDesc 0)) (listLength (pairFirst tree)) 0))
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText
                   :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
       (let [(left (killTreeWith! r.pid groups known))
+            (dc (drainConfig!))
+            (dl (+ (monotonicNs) (* dc.ms 1000000)))
+            (o (drainFd r.outFd r.outOpen dc.bytes dl ""))
+            (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
-        (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText (str r.errText note)
-                    :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed verdict :groups groups :known known))))
+        (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e) note)
+                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
 
 fn ! finishSep r: RunningSep -> ProcOut
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
         (killed (not (stringEmpty? r.killed)))]
-    (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText))
+    (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText
+             :timedOut (= r.killed "timeout")))
 
 fn ! spawnSep argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
   (let [(start (monotonicNs))]
@@ -349,11 +521,28 @@ fn ! parseLease text: String -> Lease
   (Lease :pgid (optionOr (fieldInt text ":pgid ") 0)
          :ownerPid (optionOr (fieldInt text ":ownerPid ") 0)
          :startNs (optionOr (fieldInt text ":startNs ") 0)
-         :deadlineNs (optionOr (fieldInt text ":deadlineNs ") 0))
+         :deadlineNs (optionOr (fieldInt text ":deadlineNs ") 0)
+         :wroteNs (optionOr (fieldInt text ":wroteNs ") 0)
+         :pgidBorn (optionOr (fieldInt text ":pgidBorn ") 0)
+         :ownerBorn (optionOr (fieldInt text ":ownerBorn ") 0))
+
+; (:m :ref FR-LEASE-REAPER-RACE :do "a lease carries the wall clock time it was written (:wroteNs) and the start time (seconds, from ps etime) of the group leader and of the owner (:pgidBorn, :ownerBorn, 0 when the process was not in the snapshot): a pid alone is not an identity once pids wrap, so the reaper compares the start time too")
+fn ! writeLeaseAt! pgid: Int64 ownerPid: Int64 startNs: Int64 deadlineNs: Int64 wroteNs: Int64 pgidBorn: Int64 ownerBorn: Int64 -> Bool
+  (and (ok? (dirCreate (leaseDir)))
+       (ok? (fileWrite (leasePath pgid) (str "(:pgid " pgid " :ownerPid " ownerPid " :startNs " startNs " :deadlineNs " deadlineNs " :wroteNs " wroteNs " :pgidBorn " pgidBorn " :ownerBorn " ownerBorn ")\n"))))
+
+fn bornIn snap: (List Proc) pid: Int64 -> Int64
+  (match (listFind (fn [(p Proc)] -> Bool (= p.pid pid)) snap)
+    ((some p) (max 0 p.born))
+    ((none) 0))
+
+fn sameStart? recorded: Int64 live: Int64 -> Bool
+  (let [(d (- recorded live))]
+    (and (> recorded 0) (and (> live 0) (<= (if (< d 0) (- 0 d) d) 2))))
 
 fn ! writeLease! pgid: Int64 ownerPid: Int64 startNs: Int64 deadlineNs: Int64 -> Bool
-  (and (ok? (dirCreate (leaseDir)))
-       (ok? (fileWrite (leasePath pgid) (str "(:pgid " pgid " :ownerPid " ownerPid " :startNs " startNs " :deadlineNs " deadlineNs ")\n"))))
+  (let [(snap (procSnapshot))]
+    (writeLeaseAt! pgid ownerPid startNs deadlineNs (nowNs) (bornIn snap pgid) (bornIn snap ownerPid)))
 
 fn ! removeLease! pgid: Int64 -> Bool
   (ok? (pathRemove (leasePath pgid)))
@@ -362,23 +551,39 @@ fn ! removeLease! pgid: Int64 -> Bool
 fn ! leaseDeadline startNs: Int64 timeoutMs: Int64 -> Int64
   (+ startNs (* (if (> timeoutMs 0) timeoutMs 3600000) 1000000))
 
-fn ! reapLeaseFile! now: Int64 alive: (List Int64) name: String -> Bool
-  (let [(path (str (leaseDir) "/" name))
+; (:m :ref FR-LEASE-REAPER-RACE :do "a lease written after the process snapshot was taken belongs to an owner forked after it, which the snapshot cannot hold: it is kept (parallel starts killed each others live groups, claimFailed exit -9 on node2). The lease names its group leader and owner by pid and start time: a leader pid that is live now with another start time, or a lease row without a recorded start time while its leader pid is live, is a reused pid: the row is dropped and nothing is killed. Otherwise an owner that is not live with the recorded start time, or a lease past its deadline, gets the group killed and the row removed")
+fn ! reapLeaseFile! dir: String now: Int64 snap: (List Proc) snapNs: Int64 name: String -> Bool
+  (let [(path (str dir "/" name))
         (lease (parseLease (resultOr (fileReadString path) "")))
         (expired (and (> lease.deadlineNs 0) (> now lease.deadlineNs)))
-        (ownerGone (not (listContains? alive lease.ownerPid)))]
-    (if (and (> lease.pgid 0) (or ownerGone expired))
-      (let [(_ (killTreeWith! lease.pgid (list lease.pgid) (list)))
-            (_ (removeLease! lease.pgid))]
-        true)
-      false))
+        (newer (> lease.wroteNs snapNs))
+        (leaderLive (bornIn snap lease.pgid))
+        (leaderThere (listAny? (fn [(p Proc)] -> Bool (= p.pid lease.pgid)) snap))
+        (reused (and leaderThere (not (sameStart? lease.pgidBorn leaderLive))))
+        (ownerThere (listAny? (fn [(p Proc)] -> Bool (= p.pid lease.ownerPid)) snap))
+        (ownerSame (and ownerThere (or (<= lease.ownerBorn 0) (sameStart? lease.ownerBorn (bornIn snap lease.ownerPid)))))]
+    (cond
+      ((<= lease.pgid 0) false)
+      (newer false)
+      (reused (do (pathRemove path) true))
+      ((or (not ownerSame) expired)
+        (let [(_ (killTreeWith! lease.pgid (list lease.pgid) (list)))
+              (_ (pathRemove path))]
+          true))
+      (else false)))
 
-; (:m :ref ORPHAN-EVAL-ESCAPE :do "every runGuarded call reaps first: a caller that died mid-job left its lease behind with nothing watching it, so the next call anywhere is what finds and kills the orphaned tree")
-fn ! reapStaleLeases! -> Int64
+fn ! reapLeasesAt! dir: String snap: (List Proc) self: Int64 snapNs: Int64 -> Int64
   (let [(now (monotonicNs))
-        (alive (map (fn [(p Proc)] -> Int64 p.pid) (procSnapshot)))
-        (names (resultOr (dirList (leaseDir)) (list)))]
-    (fold (fn [(n Int64) (name String)] -> Int64 (if (reapLeaseFile! now alive name) (+ n 1) n)) 0 names))
+        (names (if (listAny? (fn [(p Proc)] -> Bool (= p.pid self)) snap) (resultOr (dirList dir) (list)) (list)))]
+    (fold (fn [(n Int64) (name String)] -> Int64 (if (reapLeaseFile! dir now snap snapNs name) (+ n 1) n)) 0 names))
+
+fn ! reapLeasesIn! dir: String snap: (List Proc) self: Int64 -> Int64
+  (reapLeasesAt! dir snap self (nowNs))
+
+fn ! reapStaleLeases! -> Int64
+  (let [(snapNs (nowNs))
+        (snap (procSnapshot))]
+    (reapLeasesAt! (leaseDir) snap (procSelf) snapNs))
 
 ; (:m :ref GW-SESSION-BIND :do "a guarded run a caller steps itself: guardStart! reaps stale leases, spawns and writes the lease; each guardAdvance! pumps output once and judges the limits, returning the ProcOut when the child has ended, so a single-threaded server can park the run and look at it between other work; guardFds is what to poll. guardLoop and runGuarded are this same step in a blocking loop")
 (schema Guarded
@@ -413,8 +618,8 @@ fn ! guardAdvance! g: Guarded -> GuardStep
         (now (monotonicNs))
         (checked (and (> lim.maxDesc 0) (>= (- now g.lastCheck) (checkEveryNs))))
         (snap (if checked (procSnapshot) (list)))
-        (own (if checked (ownGroup snap (procSelf)) -1))
-        (r2 (judgeSep lim now snap own checked r1))
+        (self (if checked (procSelf) -1))
+        (r2 (judgeSep lim now snap self checked r1))
         (over? (or (not (stringEmpty? r2.killed)) (and (not r2.outOpen) (not r2.errOpen))))
         (g2 (Guarded :run r2 :lim lim :lastCheck (if checked now g.lastCheck)))]
     (if over?
@@ -477,8 +682,8 @@ fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (now (monotonicNs))
             (checked (and (> lim.maxDesc 0) (>= (- now lastCheck) (checkEveryNs))))
             (snap (if checked (procSnapshot) (list)))
-            (own (if checked (ownGroup snap (procSelf)) -1))
-            (states (map (fn [(r Running)] -> Running (judge lim now snap own checked r)) (map pairSecond pumped)))
+            (self (if checked (procSelf) -1))
+            (states (map (fn [(r Running)] -> Running (judge lim now snap self checked r)) (map pairSecond pumped)))
             (over? (fn [(r Running)] -> Bool (or (not (stringEmpty? r.killed)) (and (not r.outOpen) (not r.errOpen)))))
             (closed (filter over? states))
             (still (filter (fn [(r Running)] -> Bool (not (over? r))) states))
@@ -615,9 +820,9 @@ fn ! forkAdvance! f: Forked -> ForkStep
             (overTime (and (> f.lim.timeoutMs 0) (> (/ (- now f.startNs) 1000000) f.lim.timeoutMs)))
             (checked (and (> f.lim.maxDesc 0) (>= (- now f.lastCheck) (checkEveryNs))))
             (snap (if checked (procSnapshot) (list)))
-            (tree (if checked (treeOf snap f.pid f.groups f.known (ownGroup snap (procSelf))) (pair f.known f.groups)))
+            (tree (if checked (treeOf snap f.pid f.groups f.known (procSelf)) (pair f.known f.groups)))
             (f2 (Forked :pid f.pid :lim f.lim :startNs f.startNs :lastCheck (if checked now f.lastCheck)
-                        :groups (pairSecond tree) :known (addNew f.known (pairFirst tree))))
+                        :groups (pairSecond tree) :known (addNew f.known (pinsOf snap (pairFirst tree)))))
             (descN (if checked (listLength (pairFirst tree)) 0))]
         (cond
           (overTime (ForkStep :end (some (forkKill! f2 "timeout")) :fork f2))

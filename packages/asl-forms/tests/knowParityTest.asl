@@ -225,7 +225,7 @@ fn ! runTests -> Bool
     (assert (and (= receiptNoStatus.errCount 0) (stringContains? (optionOr (listHead receiptNoStatus.lines) "") ":dim nostatus")) "a valid observe receipt without status is accepted")
     (assert (and (= observeProbe.errCount 0) (stringContains? (optionOr (listHead observeProbe.lines) "") ":dim tokenCost")) (str "observe dispatch reaches tokenCost with its configured tool root: " (optionOr (listHead observeProbe.lines) "none")))
     (assert cleaned "the case directories are removed")
-    (assert (= (s/localDateAt! (some "Europe/Kiev") 1782941400) "2026-07-02") "local date follows the zone offset (python zoneinfo, 2026-09-27)")
+    (assert (= (s/localDateAt! (some "Europe/Helsinki") 1782941400) "2026-07-02") "local date follows the zone offset (Helsinki shares the removed Kiev offsets; python zoneinfo, 2026-09-27)")
     (assert (= (s/localDateAt! (some "America/New_York") 1773540000) "2026-03-14") "local date before a DST switch")
     (assert (= (s/localDateAt! (some "America/New_York") 2240000000) "2040-12-24") "local date past the TZif table uses the footer rule")
     (assert (= (s/localDateAt! (some "EST5EDT,M3.2.0,M11.1.0") 1782941400) "2026-07-01") "a POSIX TZ string is evaluated")

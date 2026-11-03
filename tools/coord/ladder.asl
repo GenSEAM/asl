@@ -1,6 +1,6 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
-  :i [(asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
+  :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
 
@@ -161,11 +161,11 @@ fn coverageProblems rows: (List rd/SExpr) aliases: (List String) unknown: (List 
 fn laneFamily rows: (List rd/SExpr) lane: Lane -> String
   (familyIn rows lane.alias)
 
-fn eligible rows: (List rd/SExpr) wfam: String tier: String lane: Lane -> Bool
+fn eligible rows: (List rd/SExpr) wfams: (List String) tier: String lane: Lane -> Bool
   (and (= lane.tier tier)
        (and (> lane.allowance 0)
             (let [(f (laneFamily rows lane))]
-              (and (not (stringEmpty? f)) (!= f wfam)))))
+              (and (not (stringEmpty? f)) (not (listContains? wfams f))))))
 
 ; (:m :ref COND2 :do "the lane a rung waits for: first lane of the tier that is out of allowance and would be eligible, else the tier name")
 fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
@@ -178,35 +178,37 @@ fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
 fn rankLanes lanes: (List Lane) -> (List Lane)
   (fold (fn [(acc (List Lane)) (l Lane)] -> (List Lane) (insertRanked l acc)) (list) lanes)
 
-fn waitLane rows: (List rd/SExpr) wfam: String tier: String skipFamily: String lanes: (List Lane) -> String
+fn waitLane rows: (List rd/SExpr) wfams: (List String) tier: String skipFamily: String lanes: (List Lane) -> String
   (match (listHead (filter (fn [(l Lane)] -> Bool
                              (let [(f (laneFamily rows l))]
-                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (!= f wfam) (!= f skipFamily))))))
+                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
                            lanes))
     ((some l) l.alias)
     ((none) tier))
 
 fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List Lane) -> Pick
-  (let [(wfam (familyIn rows writerAlias))]
+  (let [(wfams (familiesIn rows writerAlias))
+        (wfam (stringJoin wfams "+"))]
     (cond
-      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
-        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam tier l)) lanes)))
+        (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams tier l)) lanes)))
           ((some l) (pickOk (list l)))
-          ((none) (pickAwait (waitLane rows wfam tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
+          ((none) (pickAwait (waitLane rows wfams tier "" lanes) (str "no " tier " lane with allowance outside family " wfam)))))))
 
 fn selectFree rows: (List rd/SExpr) writerAlias: String lanes: (List Lane) -> Pick
-  (let [(wfam (familyIn rows writerAlias))
-        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfam "free" l)) lanes)))]
+  (let [(wfams (familiesIn rows writerAlias))
+        (wfam (stringJoin wfams "+"))
+        (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams "free" l)) lanes)))]
     (cond
-      ((stringEmpty? wfam) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
         (match (listHead els)
-          ((none) (pickAwait (waitLane rows wfam "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
+          ((none) (pickAwait (waitLane rows wfams "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
           ((some a)
             (let [(af (laneFamily rows a))]
               (match (listHead (filter (fn [(l Lane)] -> Bool (!= (laneFamily rows l) af)) els))
-                ((none) (pickAwait (waitLane rows wfam "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
+                ((none) (pickAwait (waitLane rows wfams "free" af lanes) (str "no second free lane of a family other than " af " and " wfam)))
                 ((some b) (pickOk (list a b))))))))))
 
 fn dropFence s: String -> String
@@ -289,22 +291,28 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
           ((< (rungNum rung) (rungNum finalRung)) (stepEscalate))
           (else (stepMerge))))
       ((> f p) (fixOr "fail after the fix round at the last rung"))
-      (last (stepBlocked "reviewers split at the last rung"))
+      (last (stepBlocked (str "tiebreak: reviewers split at the last rung (pass " (stringFromInt64 p) " fail " (stringFromInt64 f) ")")))
       (else (stepEscalate))))
 
+; (:m :ref SECRET-SCRUB :do "the review brief is stricter than egress, never weaker: any egress hit, plus the bare words below; only the identifiers tokenize and tokensOf are blanked before that match")
 fn secretLike? l: String -> Bool
-  (let [(s (stringLower l))]
+  (or (eg/secretLike? l) (strictHit? l))
+
+fn strictHit? l: String -> Bool
+  (let [(s (stringReplace (stringReplace (stringLower l) "tokeniz" "") "tokensof" ""))]
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
-              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "sk-or-" "sk-ant-" "sk-proj-" "ghp_" "xoxb-" "private key" "authorization:")))
+              (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "\"sk-" " sk-" "=sk-" ":sk-" "sk-or-" "sk-ant-" "sk-proj-" "aizasy" "github_pat_" "ghp_" "xoxb-" "xoxp-" "xoxa-" "passwd" "private key" "authorization:")))
+
+; (:m :ref WRITER-UNKNOWN :do "the writer a review excludes: the unit's model, else the configured writer alias; an unknown writer stays unknown so selection waits instead of guessing a family")
+fn reviewWriter model: String fallback: String -> String
+  (if (or (stringEmpty? model) (= model "unknown")) fallback model)
 
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)
 
 ; (:m :ref COND2 :do "lines that may go to an external model: no memory contents, no secret-looking lines, bounded count and width")
 fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
-  (listTake (map (fn [(l String)] -> String (clip l width))
-                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (secretLike? l)))) (stringLines text)))
-            maxLines)
+  (eg/scrubLinesBy (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
 
 fn reviewBrief u: ReviewUnit diff: String gates: String -> String
   (str "(:review :unit " (fm/asnQuote u.id) " :risk " u.risk
@@ -325,9 +333,15 @@ fn nameList vs: (List Verdict) -> (List String)
 fn atomOf s: String -> String
   (if (or (stringEmpty? s) (listAny? (fn [(c String)] -> Bool (stringContains? s c)) (list " " "(" ")" "\"" ";" "\n"))) (fm/asnQuote s) s)
 
+; (:m :ref REVIEW-TIEBREAK :do "a split at the last rung is not a verdict anyone can act on: its escalation row carries :need tiebreak and the families that already voted, so the lead or the Claude tier decides with a reviewer family not yet used instead of finding a bare blocked unit")
+fn tiebreakNeed why: String vs: (List Verdict) -> String
+  (if (stringStartsWith? why "tiebreak: ")
+    (str " :need tiebreak :usedModels " (fm/asnStrings (map (fn [(v Verdict)] -> String v.model) vs)))
+    "")
+
 ; (:m :ref COND3 :do "an escalation goes to the queue (the autonomous conductor has no one to page), with the tiers still to try in order: the strong lane unless R3 already asked it, and Claude only last")
 fn escalateRow u: ReviewUnit rung: String vs: (List Verdict) why: String -> String
-  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to queue :tiers " (if (listAny? (fn [(v Verdict)] -> Bool (= v.rung "R3")) vs) "(claude)" "(strong claude)") " :why " (fm/asnQuote why)
+  (str "(:escalate :unit " (atomOf u.id) " :rung " rung " :to queue :tiers " (if (listAny? (fn [(v Verdict)] -> Bool (= v.rung "R3")) vs) "(claude)" "(strong claude)") " :why " (fm/asnQuote why) (tiebreakNeed why vs)
        " :seen " (fm/asnStrings (nameList vs))
        " :tried " (fm/asnStrings (map (fn [(v Verdict)] -> String (str v.rung " " v.model)) vs))
        " :disagree " (fm/asnStrings (nameList (filter (fn [(v Verdict)] -> Bool (!= v.outcome "abstain")) vs))) ")")

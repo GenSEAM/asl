@@ -1,4 +1,4 @@
-(module aslPack/release :x [ReleasePlan makeReleasePlan ReleaseStepResult ReleaseReceipt executeReleaseStep! runVerificationGate! prepareDistDirectory! bundleTargetPlatform! generateChecksumManifest! preparePublishMetadata! executeReleasePlan! executeSelfUpdate! emitReleaseScriptSh emitUpgradeScriptSh emitVersionAsn] :i [(platform :a plat) (dist :a dist) (asl-proc :a sh)])
+(module aslPack/release :x [ReleasePlan makeReleasePlan ReleaseStepResult ReleaseReceipt executeReleaseStep! runVerificationGate! prepareDistDirectory! bundleTargetPlatform! generateChecksumManifest! preparePublishMetadata! executeReleasePlan! executeSelfUpdate! emitReleaseScriptSh emitUpgradeScriptSh emitVersionAsn] :i [(dist :a dist) (asl-proc :a sh)])
 
 (schema ReleasePlan (:f version Str) (:f tag Str) (:f releaseDate Str) (:f targetPlatforms (List Str)) (:f distDir Str))
 

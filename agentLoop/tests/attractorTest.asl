@@ -50,7 +50,7 @@ fn names cards: (List (Pair String String)) -> String
 
 fn testCards -> Bool
   (do (assert (= (names (at/attractorCards "asn" "x ERR_USE_RAW y" true false 1)) "rawWrite,stepOnly") "raw rejection and a parse defect")
-      (assert (= (names (at/attractorCards "asn" "" false false 3)) "gateFirst") "no edit after three turns")
+      (assert (= (names (at/attractorCards "asn" "" false false 3)) "") "no gateFirst card after three turns")
       (assert (= (names (at/attractorCards "asn" "" false true 9)) "") "writes done, no card")
       (assert (stringContains? (at/attractorTail (at/attractorCards "asn" "ERR_USE_RAW" false true 0)) "fenced") "the raw card teaches the fence")
       true)

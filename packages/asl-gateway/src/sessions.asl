@@ -108,28 +108,28 @@ fn sessCwdOk? cwd: String -> Bool
 fn sessPropStr g: (Map String rd/SExpr) key: String -> String
   (match (mapGet g key)
     ((none) "")
-    ((some v) (cfg/scalarToString (cfg/asn_scalar v))))
+    ((some v) (cfg/scalarToString (cfg/asnScalar v))))
 
 fn sessPropInt g: (Map String rd/SExpr) key: String -> Int64
   (match (mapGet g key)
     ((none) 0)
-    ((some v) (match (cfg/asn_scalar v) ((cfg/scalarInt n) n) (_ 0))))
+    ((some v) (match (cfg/asnScalar v) ((cfg/scalarInt n) n) (_ 0))))
 
 fn sessPropBool g: (Map String rd/SExpr) key: String default: Bool -> Bool
   (match (mapGet g key)
     ((none) default)
-    ((some v) (match (cfg/asn_scalar v) ((cfg/scalarBool b) b) (_ default))))
+    ((some v) (match (cfg/asnScalar v) ((cfg/scalarBool b) b) (_ default))))
 
 fn sessPropList g: (Map String rd/SExpr) key: String -> (List String)
   (match (mapGet g key)
     ((none) (list))
     ((some v)
      (let [(items (match v ((rd/sexprList l) l) ((rd/sexprVect l) l) (_ (list))))]
-       (map (fn [(it rd/SExpr)] -> String (cfg/scalarToString (cfg/asn_scalar it))) items))))
+       (map (fn [(it rd/SExpr)] -> String (cfg/scalarToString (cfg/asnScalar it))) items))))
 
 ; (:m :do "a vendor row: (:vendor N :bin B :first (ARGS before the prompt on a first turn) :resume (ARGS on a later turn, {id} is the stored id) :idFrom KEY :replyFrom KEY :wrap TEMPLATE :wrapResume TEMPLATE :sep S :env (NAME ...)); the prompt is the last argument, or {prompt} inside a wrap template; nothing is defaulted in code")
 fn sessVendorOf item: rd/SExpr -> (Option SessVendor)
-  (match (cfg/asn_props item none)
+  (match (cfg/asnProps item none)
     ((err _) none)
     ((ok g)
      (let [(name (sessPropStr g "vendor")) (bin (sessPropStr g "bin"))]
@@ -160,7 +160,7 @@ fn sessCtxFromText text: String dir: String env: (List String) -> SessCtx
      (if (!= (listLength forms) 1)
        (sessEmptyCtx dir env)
        (let [(top (optionOr (listHead forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)).expr)]
-         (match (cfg/asn_props top (some ":gateway"))
+         (match (cfg/asnProps top (some ":gateway"))
            ((err _) (sessEmptyCtx dir env))
            ((ok g)
             (let [(t (sessPropInt g "sessionsTimeoutSec"))]
@@ -294,7 +294,7 @@ fn sessKeyValues text: String key: String -> (List String)
   (if (stringEmpty? key) (list) (sessKeyValuesFrom text key 0 (list)))
 
 fn sessRowOf form: rd/SExpr -> (Option SessRow)
-  (match (cfg/asn_props form (some ":session"))
+  (match (cfg/asnProps form (some ":session"))
     ((err _) none)
     ((ok g)
      (let [(name (sessPropStr g "name"))]
@@ -645,7 +645,7 @@ fn ! sessionsCli! args: (List String) -> (Result Int64 String)
              (match (listHead forms)
                ((none) (sessionsRun! (sessCtxHome!) op (mapEmpty)))
                ((some pf)
-                (match (cfg/asn_props pf.expr none)
+                (match (cfg/asnProps pf.expr none)
                   ((err e) (sessErr "badAsn" "argument is not a readable ASN form"))
                   ((ok g) (sessionsRun! (sessCtxHome!) op g))))))))]
     (do (sys/say! receipt)

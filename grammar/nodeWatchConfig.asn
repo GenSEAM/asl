@@ -1,0 +1,10 @@
+(:spec :id nodeWatchConfig :v 1 :date "2026-11-01" :file "~/.asl/remote.asn" :reader "tools/remote/nodeWatch.asl cfgOf" :check "tools/remote/nodeWatch.asl configCheck (tested in tools/remote/tests/nodeWatchTest.asl testConfigCheck; `nodeWatch config-check` runs it on the node)"
+  :doc "thresholds of the node watcher, keys of the one form in ~/.asl/remote.asn next to the host settings; other keys of that file are not checked here, a missing key means the default, an unknown :watch key, a non-integer or an out-of-range value is an error and the whole file is then ignored for the defaults"
+  :watchStaleMin "adopted default 15: minutes without a conductor journal row, while runs are active, before the conductor is restarted; range 2..1440"
+  :watchActivityMin "adopted default 10: minutes since the newest run or lease for the node to count as active; range 1..1440"
+  :watchMemFloorMb "adopted default 1500: available memory in MB under which sched.asn :max is clamped; range 256..65536"
+  :watchLoadX10 "adopted default 20: load per core times ten above which sched.asn :max is clamped; range 5..100"
+  :watchClampMax "adopted default 4: the :max written while the node is under pressure; range 1..64"
+  :watchRestartGapS "adopted default 600: seconds between two restarts of the same service, after that only an escalate row per gap; range 60..86400"
+  :watchJobMaxAgeS "adopted default 90000: age in seconds of a job pid record with no exit record after which the job is killed, by its recorded pid and only while the live start time still equals the recorded one; range 3600..604800"
+  :ranges "unknown :watch keys, non-integers and out-of-range values are errors")

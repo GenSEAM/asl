@@ -209,3 +209,4 @@
 (:doc :symbol "asl/packages/asl-target-sh/tests/installParityTest.asl#runTests" :text "fixture cases selected by INSTALL_PARITY_CASE, else all")
 (:doc :symbol "asl/packages/asl-target-sh/tests/lowerTest.asl#" :text "Unit tests for tree-to-tree ASL-to-ShAst lowering under ADR D133.")
 (:doc :symbol "asl/packages/asl-target-sh/tests/distribTest.asl#L37" :text "1. Real Mach-O headers")
+(:doc :symbol "asl/packages/asl-target-sh/tests/stepCloneTest.asl#runTests" :text "stepClone! keeps an entry already chosen, and in a dry run over an empty clone, an existing clone and a clone carrying the CLI and installer sources ends at bin/asl, bin/asl and the portable host/out/asl entry")

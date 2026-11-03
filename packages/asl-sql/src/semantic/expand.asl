@@ -1,4 +1,4 @@
-(module asl-sql/semantic/expand :x [SemanticQuery ExpandedQuery makeSemanticQuery expandQuery expandExpr] :i [(asl-sql/core :a sql) (asl-sql/semantic/schema :a sem) (asl-text/string :a s)])
+(module asl-sql/semantic/expand :x [SemanticQuery ExpandedQuery makeSemanticQuery expandQuery expandExpr] :i [(asl-sql/core :a sql) (asl-sql/semantic/schema :a sem)])
 
 (schema SemanticQuery (:f fromEntity String) (:f selectFields (List String)) (:f selectMeasures (List String)) (:f whereExpr (Option sql/SqlExpr)) (:f orderBy (Option String)) (:f orderDir sql/OrderDir) (:f limitCount (Option Int64)) (:f offsetCount (Option Int64)))
 

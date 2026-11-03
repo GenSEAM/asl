@@ -1,8 +1,8 @@
-(module asl-parquet/reader :x [parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64] :i [])
+(module asl-parquet/reader :x [parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64 parquetColumnRange parquetWindowGroups parquetLowerBound] :i [])
 
 (schema PqCol (:f name String) (:f ptype Int64) (:f maxDef Int64) (:f int8 Bool))
 
-(schema PqChunk (:f ptype Int64) (:f codec Int64) (:f nvals Int64) (:f dictOff Int64) (:f dataOff Int64) (:f compSize Int64) (:f encodings (List Int64)))
+(schema PqChunk (:f ptype Int64) (:f codec Int64) (:f nvals Int64) (:f dictOff Int64) (:f dataOff Int64) (:f compSize Int64) (:f encodings (List Int64)) (:f stats Int64) (:f statLow Int64) (:f statHigh Int64))
 
 (schema PqFile (:f path String) (:f size Int64) (:f rows Int64) (:f cols (List PqCol)) (:f groupRows (List Int64)) (:f chunks (List PqChunk)) (:f kv (List (Pair String String))))
 
@@ -267,6 +267,23 @@ fn ! pqEncodings tr: PqTr et: Int64 i: Int64 k: Int64 acc: (List Int64) -> (List
     (let [(enc (pqTrInt tr et))]
       (pqEncodings tr et (+ i 1) k (if (< (listLength acc) 16) (listAppend acc (list enc)) acc))))
 
+; (:m :ref PQ-WINDOW-SCAN :do "Statistics min_value (6) and max_value (5) of eight bytes fill slots 7 and 8, slot 6 counts which of the two were seen (3 means both); a chunk without them keeps zero and is never pruned")
+fn ! pqStats tr: PqTr s: Bytes last: Int64 -> Bool
+  (match (pqTrField tr last)
+    ((none) true)
+    ((some f)
+      (let [(id (pairFirst f))
+            (ty (pairSecond f))]
+        (if (and (or (= id 5) (= id 6)) (= ty 8))
+          (let [(b (pqTrBinary tr))]
+            (do
+              (if (and (= (pairSecond b) 8) (not (pqTrErr? tr)))
+                (do (pqSlotSet s (if (= id 6) 7 8) (pqLoad64 tr.data (pairFirst b)))
+                    (pqSlotSet s 6 (+ (pqSlotGet s 6) (if (= id 6) 1 2))))
+                false)
+              (pqStats tr s id)))
+          (do (pqTrSkip tr ty 0) (pqStats tr s id))))))
+
 fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int64)
   (match (pqTrField tr last)
     ((none) encs)
@@ -279,6 +296,7 @@ fn ! pqColumnMeta tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int6
             (if (!= ty 9) (do (pqTrSkip tr ty 0) (pqColumnMeta tr s id encs))
               (let [(l (pqTrList tr))]
                 (pqColumnMeta tr s id (pqEncodings tr (pairSecond l) 0 (pairFirst l) encs)))))
+          ((and (= id 12) (= ty 12)) (do (pqStats tr s 0) (pqColumnMeta tr s id encs)))
           ((>= slot 0) (do (pqSlotSet s slot (pqTrInt tr ty)) (pqColumnMeta tr s id encs)))
           (else (do (pqTrSkip tr ty 0) (pqColumnMeta tr s id encs)))))))
 
@@ -291,9 +309,9 @@ fn ! pqColumnChunk tr: PqTr s: Bytes last: Int64 encs: (List Int64) -> (List Int
         (do (pqTrSkip tr (pairSecond f) 0) (pqColumnChunk tr s (pairFirst f) encs)))))
 
 fn ! pqChunk tr: PqTr -> PqChunk
-  (let [(s (pqSlots 6))
+  (let [(s (pqSlots 9))
         (encs (pqColumnChunk tr s 0 (list)))]
-    (PqChunk :ptype (pqSlotGet s 0) :codec (pqSlotGet s 1) :nvals (pqSlotGet s 2) :dictOff (pqSlotGet s 5) :dataOff (pqSlotGet s 4) :compSize (pqSlotGet s 3) :encodings encs))
+    (PqChunk :ptype (pqSlotGet s 0) :codec (pqSlotGet s 1) :nvals (pqSlotGet s 2) :dictOff (pqSlotGet s 5) :dataOff (pqSlotGet s 4) :compSize (pqSlotGet s 3) :encodings encs :stats (pqSlotGet s 6) :statLow (pqSlotGet s 7) :statHigh (pqSlotGet s 8)))
 
 fn ! pqChunks tr: PqTr j: Int64 c: Int64 acc: (List PqChunk) -> (List PqChunk)
   (if (or (>= j c) (pqTrErr? tr)) acc
@@ -806,3 +824,26 @@ fn ! parquetReadI8 h: PqFile name: String rg: Int64 -> I8Array
     (let [(bad (pqFirstBadI8 cells 0 n))]
       (if (>= bad 0) (trap "ERR_RANGE" (str "parquetReadI8: " (stringFromInt64 (pqLoad64 cells (* bad 8))) " outside Int(8)"))
         (i8ArrayGenerate n (fn [(i Int64)] -> Int64 (pqLoad64 cells (* i 8)))))))
+
+; (:m :ref PQ-WINDOW-SCAN :do "parquetColumnRange is the footer's (min max) of an Int64 column in one row group, none when the file has no statistics for it or the column is not Int64; parquetWindowGroups keeps the row groups that can hold a value in [lo, hi), and keeps every group whose range is unknown, so pruning never drops a row; parquetLowerBound is the first index of an ascending array whose value is at least target, so [lowerBound lo, lowerBound hi) are the rows of a window")
+fn parquetColumnRange h: PqFile name: String rg: Int64 -> (Option (Pair Int64 Int64))
+  (let [(i (pqColIndex h name "parquetColumnRange"))
+        (c (pqChunkAt h i rg))]
+    (if (and (= (pqColAt h i).ptype 2) (= c.stats 3)) (some (pair c.statLow c.statHigh)) (none)))
+
+fn parquetWindowGroups h: PqFile name: String lo: Int64 hi: Int64 -> (List Int64)
+  (filter (fn [(rg Int64)] -> Bool
+            (match (parquetColumnRange h name rg)
+              ((none) true)
+              ((some r) (and (< (pairFirst r) hi) (>= (pairSecond r) lo)))))
+          (range 0 (parquetNumRowGroups h)))
+
+fn pqLowerBoundIn values: I64Array lo: Int64 hi: Int64 target: Int64 -> Int64
+  (if (>= lo hi) lo
+    (let [(mid (+ lo (/ (- hi lo) 2)))]
+      (if (< (i64ArrayGet values mid) target)
+        (pqLowerBoundIn values (+ mid 1) hi target)
+        (pqLowerBoundIn values lo mid target))))
+
+fn parquetLowerBound values: I64Array target: Int64 -> Int64
+  (pqLowerBoundIn values 0 (i64ArrayLen values) target)

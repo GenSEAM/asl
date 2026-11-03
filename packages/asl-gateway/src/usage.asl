@@ -776,23 +776,7 @@ fn telemetryLogPath env: (Map String String) cwd: String script: String -> Strin
       (posixJoin (posixDirname (posixDirname (posixAbspath cwd script))) ".asl/log/mesh_telemetry.asnl")
       set))
 
-fn ! drainFd! fd: Int64 -> (Result Bool String)
-  (match (fdRead fd 16777216)
-    ((err e) (err e))
-    ((ok chunk) (if (stringEmpty? chunk) (ok true) (drainFd! fd))))
-
-fn ! writeAll! fd: Int64 text: String -> (Result Bool String)
-  (if (stringEmpty? text)
-    (ok true)
-    (match (fdWrite fd text)
-      ((err e) (err e))
-      ((ok k) (writeAll! fd (u/slice text k (stringLength text))))))
-
-fn ! appendUnderLock! fd: Int64 text: String -> (Result Bool String)
-  (match (drainFd! fd)
-    ((err e) (err e))
-    ((ok _) (writeAll! fd text)))
-
+; (:m :ref GW-LEDGER-READ-COST :do "the flock on path only serialises writers; the text goes through fileAppend's own O_APPEND open, so an append never reads the file to find its end (before, the lock fd was drained, reading the whole ledger on every row)")
 fn ! appendFile! path: String text: String tries: Int64 -> (Result Bool String)
   (match (fileLock path true)
     ((err e)
@@ -800,7 +784,7 @@ fn ! appendFile! path: String text: String tries: Int64 -> (Result Bool String)
        (do (sleepMs 5) (appendFile! path text (- tries 1)))
        (err (str "telemetry log " path ": " e))))
     ((ok fd)
-     (let [(res (appendUnderLock! fd text))
+     (let [(res (fileAppend path text))
            (closed (fdClose fd))]
        (match res
          ((err e) (err (str "telemetry log " path ": " e)))

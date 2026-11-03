@@ -326,12 +326,31 @@ fn ! runIn work: String env: String cmd: String -> ProcessOutput
     (do (assert (= made.exitCode 0) (str "fixture tree built: " made.stderr))
         out))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "the golden is one macOS capture; fields that are the OS or the account, not the route, are masked on both sides before comparing: file mode (umask 022 vs 002 and the mode of a fresh file), directory size (4096 on ext4, 704 on APFS), the long-path message (its text and length follow the platform path limit; only that it is invalidPath is kept), and /private/tmp which is /tmp on Linux; every other byte must match")
+fn maskAt toks: (List String) k: Int64 -> (List String)
+  (map (fn [(i Int64)] -> String (if (= i k) "#" (optionOr (listGet toks i) ""))) (range 0 (listLength toks)))
+
+fn maskTokens line: String fromEnd: Int64 -> String
+  (let [(toks (stringSplit line " "))]
+    (stringJoin (maskAt toks (- (listLength toks) fromEnd)) " "))
+
+fn normalLine raw: String -> String
+  (let [(l (stringReplace raw "/private/tmp/" "/tmp/"))]
+    (cond
+      ((or (stringStartsWith? l "nul stat ") (or (stringStartsWith? l "written stat ") (or (stringStartsWith? l "stat link ") (stringStartsWith? l "value fileStat ")))) (maskTokens l 2))
+      ((stringStartsWith? l "lstat dir ") (maskTokens l 2))
+      ((stringStartsWith? l "long stat ") (if (stringContains? l " invalidPath: ") "long stat # invalidPath" "long stat # other"))
+      (else (stringReplace (stringReplace l "33204" "MODE") "33188" "MODE"))))
+
+fn normalised text: String -> String
+  (stringJoin (map normalLine (stringLines text)) "\n")
+
 fn ! checkParity work: String label: String env: String -> Bool
   (let [(native (runIn work env (str work "/fsRoute")))
         (vm (recordedGolden label work))]
     (do (assert (= native.exitCode vm.exitCode) (str label ": native exit " native.exitCode " equals the recorded asl-host run's " vm.exitCode "; native stderr " native.stderr "; vm stderr " vm.stderr))
-        (assert (= native.stdout vm.stdout) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout))
-        (assert (= native.stderr vm.stderr) (str label ": native stderr equals the recorded asl-host run's; native=" native.stderr " vm=" vm.stderr))
+        (assert (= (normalised native.stdout) (normalised vm.stdout)) (str label ": native stdout equals the recorded asl-host run's; native=" native.stdout " vm=" vm.stdout))
+        (assert (= (normalised native.stderr) (normalised vm.stderr)) (str label ": native stderr equals the recorded asl-host run's; native=" native.stderr " vm=" vm.stderr))
         (assert (= native.exitCode 0) (str label ": native run exits 0; stderr " native.stderr))
         (assert (stringContains? native.stdout "value fileUtime (ok ())") (str label ": native run reaches its last case"))
         true))

@@ -7,7 +7,8 @@
       (asl-target-llvm/arrayRoute :a ar)
       (asl-target-llvm/loopGuard :a lg)
       (asl-target-llvm/ssa :a ssa)
-      (asl-target-llvm/tests/rcTest :a rc)])
+      (asl-target-llvm/tests/rcTest :a rc)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn fixture -> String
   "asl/packages/asl-target-llvm/tests/fixtures/loopGuard/loopGuard.asl"
@@ -113,6 +114,11 @@ fn ! emit! mode: String -> (Result String String)
               ((err ds) (err (str "fixture emits in mode " mode ": " (rc/diagText ds))))
               ((ok code) (ok code)))))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "baseline x86_64 has no vector widen-and-add for a byte sum that the cost model accepts (VectorizationNotBeneficial, llvm 20 measured), so the x86_64 compile asks for AVX2; the loop shape under test is the same, arm64 needs no flag")
+fn ! vectorFlags! -> String
+  (let [(m (rc/sh "uname -m"))]
+    (if (= (stringTrim m.stdout) "x86_64") " -mavx2" ""))
+
 ; (:m :ref LOOPGUARD :do "clang -O2 over the emitted module turns the Bytes loop and the I64Array kernel into vector loops with no call and no overflow check; the base build keeps a scalar loop with a range check and an overflow trap per element")
 fn ! testIr dir: String -> Bool
   (match (emit! "0")
@@ -121,7 +127,7 @@ fn ! testIr dir: String -> Bool
       (let [(ll (str dir "/loopGuard.ir.ll")) (opt (str dir "/loopGuard.opt.ll"))]
         (if (not (write! ll code))
           false
-          (let [(r (rc/sh (str "/usr/bin/clang -O2 -S -emit-llvm -Wno-override-module -x ir " (rc/shellQuote ll) " -o " (rc/shellQuote opt))))
+          (let [(r (rc/sh (str (lt/clangPath!) (vectorFlags!) " -O2 -S -emit-llvm -Wno-override-module -x ir " (rc/shellQuote ll) " -o " (rc/shellQuote opt))))
                 (text (resultOr (fileReadString opt) ""))
                 (kernel (lg/kernelName "loopGuard.sumInts"))]
             (do (assert (= r.exitCode 0) (str "clang -O2 -emit-llvm exits 0: " r.stderr))

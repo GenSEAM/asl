@@ -41,7 +41,10 @@ fn ! fileSha path: String -> String
   (match (fileReadBytes path) ((ok b) (bytesSha256 b)) ((err e) (str "unreadable " e)))
 
 fn ! job argv: (List String) env: (List String) -> fr/Done
-  (fr/runOneLimited (fr/job argv (root) (fr/childEnv env)) (fr/limits 1500 16))
+  (let [(t0 (monotonicNs))
+        (done (fr/runOneLimited (fr/job argv (root) (fr/childEnv env)) (fr/limits 1500 16)))
+        (_ (do (eprintln (str "rcSelfCompile child " (optionOr (listGet argv (if (= (optionOr (listHead argv) "") "sh") 3 0)) "?") " " done.verdict " " (/ (- (monotonicNs) t0) 1000000000) "s")) true))]
+    done)
 
 fn ! linkWith libs: Libs ll: String out: String asan: Bool -> (Result String String)
   (linkMode libs ll out (if asan "asan" "1"))

@@ -1,5 +1,5 @@
 (module asl-tools/release
-  :x [ReleaseBundle MilestoneReceipt makeReleaseBundle makeMilestoneReceipt buildReleasePackage superviseClosureGate build_release_package supervise_closure_gate release_bundle milestone_receipt]
+  :x [ReleaseBundle MilestoneReceipt makeReleaseBundle makeMilestoneReceipt buildReleasePackage superviseClosureGate release_bundle milestone_receipt]
   :i [(asl-parser/reader :a rd)])
 
 (schema ReleaseBundle
@@ -34,12 +34,6 @@ fn superviseClosureGate passedTiers: Int64 totalTiers: Int64 rootHash: Str -> (R
   (if (and (= passedTiers totalTiers) (> (stringLength rootHash) 0))
       (ok (makeMilestoneReceipt "M09" "CERTIFIED" passedTiers totalTiers rootHash "agent:antigravity:sovereign" 1789459200000))
       (err "Supervise closure gate failed: incomplete tiers or unsealed root hash"))
-
-fn build_release_package version: Str milestone: Str rootHash: Str packageCount: Int64 certified: Bool -> (Result ReleaseBundle Str)
-  (buildReleasePackage version milestone rootHash packageCount certified)
-
-fn supervise_closure_gate passedTiers: Int64 totalTiers: Int64 rootHash: Str -> (Result MilestoneReceipt Str)
-  (superviseClosureGate passedTiers totalTiers rootHash)
 
 fn release_bundle version: Str milestone: Str merkleRoot: Str totalPackages: Int64 isCertified: Bool timestamp: Int64 -> ReleaseBundle
   (makeReleaseBundle version milestone merkleRoot totalPackages isCertified timestamp)

@@ -1,7 +1,6 @@
 (module asl-target-llvm/tests/lowerScaleTest
   :x [runTests]
-  :i [(asl-ir/types :a ir)
-      (asl-ir/lower :a low)
+  :i [(asl-ir/lower :a low)
       (asl-parser/ast :a ast)
       (asl-ir/verify :a vfy)
       (asl-target-llvm :a llvm)])

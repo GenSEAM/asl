@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl/packages/asl-gates/src/dyck :a dyck)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))
@@ -869,7 +869,7 @@ fn ! nativeCheck! base: String path: String -> HostRun
   (let [(full (if (stringStartsWith? path "/") path (k/joinPath base path)))
         (roots (list base (resultOr (realPath base) base)))
         (rel (unroot full roots))
-        (r (cc/checkFileCached! full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/stampedCache!)))]
+        (r (cc/checkFileCachedIn! (resultOr (realPath base) base) full (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) (cc/stampedCache!)))]
     (match (pairFirst r)
       ((err _) (HostRun :code 1 :out "" :errText (str rel ":0:0: ERR_IO cannot open the file or resolve one of its imports\ncheck failed: " rel ": 1 error(s)") :source ""))
       ((ok v)
@@ -898,19 +898,42 @@ fn checkOnce! overlay: String target: String rel: String text: String -> (Pair S
           (let [(lines (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
             (pair "error" (pyTrunc (optionOr (listHead lines) (str "native check exit " (stringFromInt64 h.code))) 300)))))))
 
+; (:m :ref FORMS-FASTPATH :do "the in-process check must accept exactly what asl check accepts: asl check runs the dyck balance pass (parens inside a ; comment count) before the cached checker, so the fast path runs the same pass first; a reader error of the checker keeps its own code and only a failed cached check of the source reports ERR_IO, with the reason")
+fn checkFast! base: String path: String text: String cache: cc/Cache -> (Pair (Pair String String) cc/Cache)
+  (let [(roots (list base (resultOr (realPath base) base)))
+        (rel (unroot path roots))]
+    (match (dyck/checkString text false)
+      ((some d) (pair (pair "error" (str rel ":0:0: ERR_UNBALANCED " (pairSecond d) " at byte " (stringFromInt64 (pairFirst d)))) cache))
+      ((none)
+        (let [(r (cc/checkSourceCachedIn! (resultOr (realPath base) base) path text (list base (k/joinPath base "asl/packages") (k/joinPath base "asl")) cache))]
+          (match (pairFirst r)
+            ((err e) (pair (pair "error" (str rel ":0:0: ERR_IO " (pyTrunc e 200))) (pairSecond r)))
+            ((ok v)
+              (if (listEmpty? v.diags)
+                (pair (pair "ok" "") (pairSecond r))
+                (pair (pair "error" (pyTrunc (unroot (diagLine (optionOr (listHead v.diags) (ty/Diagnostic :code "" :message "" :msg "" :line 0 :col 0 :path rel))) roots) 300)) (pairSecond r)))))))))
+
 fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
-  (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))
-        (self (listAppend others (match (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
-    (match (buildOverlay! env self)
-      ((err e) (list "skipped" (str "native check did not run: " e) ""))
-      ((ok overlay)
-        (let [(rel (relOf env path))
-              (target (k/joinPath overlay (k/relPath path env.root)))
-              (mk (dirCreate (k/dirName target)))
-              (r1 (checkOnce! overlay target rel after))
-              (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (checkOnce! overlay target rel (optionOr before ""))) ""))
-              (gone (pathRemove overlay))]
-          (list (pairFirst r1) (pairSecond r1) pre)))))
+  (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))]
+    (if (listEmpty? others)
+      (let [(c0 (cc/stampedCache!))
+            (r1 (checkFast! env.root path after c0))
+            (res1 (pairFirst r1))
+            (pre (if (and (= (pairFirst res1) "error") (some? before))
+                   (pairFirst (pairFirst (checkFast! env.root path (optionOr before "") (pairSecond r1))))
+                   ""))]
+        (list (pairFirst res1) (pairSecond res1) pre))
+      (let [(self (listAppend others (match (stagedContent env path) ((some c) (list (pair path c))) ((none) (list)))))]
+        (match (buildOverlay! env self)
+          ((err e) (list "skipped" (str "native check did not run: " e) ""))
+          ((ok overlay)
+            (let [(rel (relOf env path))
+                  (target (k/joinPath overlay (k/relPath path env.root)))
+                  (mk (dirCreate (k/dirName target)))
+                  (r1 (checkOnce! overlay target rel after))
+                  (pre (if (and (= (pairFirst r1) "error") (some? before)) (pairFirst (checkOnce! overlay target rel (optionOr before ""))) ""))
+                  (gone (pathRemove overlay))]
+              (list (pairFirst r1) (pairSecond r1) pre)))))))
 
 fn validateStaged! env: GateEnv path: String before: (Option String) after: String force: Bool -> (List String)
   (let [(lang (syntaxLang! path after))]
@@ -1101,6 +1124,24 @@ fn heuristicTier? kw: (Map String String) key: String -> Bool
 fn heuristicAllowed? kw: (Map String String) key: String -> Bool
   (or (listContains? (list "indentation" "heuristic") (kwLower kw key)) (truthy? (optionOr (mapGet kw "indentation") "")) (heuristicTier? kw key))
 
+; (:m :ref PAREN-DESIGN :do "the closer edits indentation implies for the segments that do not balance, so a rejected repair still names each opener and line; empty when indentation implies none")
+fn indentHint text: String -> String
+  (let [(g (ind/guideBroken text))]
+    (if (listEmpty? g.edits) "" (str " :indent " (ind/editsAsn g.edits) " :hint \"(:fix :file F :by :indent :apply true) stages these\"")))
+
+; (:m :ref PAREN-DESIGN :do "(:fix :by :indent) takes closers from indentation: only segments whose delimiters do not balance change unless :scope :all, disagreements in balanced segments come back as :skipped, and :apply true stages a result that balances")
+fn indentFix! id: Int64 kw: (Map String String) path: String rel: String fileF: String text: String apply: Bool -> GateOutcome
+  (let [(g (if (= (kwLower kw "scope") "all") (ind/guide text) (ind/guideBroken text)))
+        (left (aslDelimiterError g.text))
+        (changed (not (listEmpty? g.edits)))
+        (stage (and apply (and changed (stringEmpty? left))))
+        (patch (if changed (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines g.text true) (str "current/" rel) (str "repaired/" rel) 1) "") ""))
+        (skipped (if (listEmpty? g.skipped) "" (str " :skipped " (ind/editsAsn (listTake g.skipped 6)) " :skippedCount " (stringFromInt64 (listLength g.skipped)))))
+        (leftF (if (stringEmpty? left) " :balanced true" (str " :balanced false :left " (q left))))]
+    (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :by :indent :edits " (ind/editsAsn g.edits) skipped leftF " :staged " (if stage "true" "false") (if changed (str " :patch " (q patch)) "") ")"))
+                 :errCount 0
+                 :stage (if stage (some (pair path g.text)) (none))))
+
 fn fixStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) -> GateOutcome
   (let [(raw (fileArg kw args))
         (res (if (stringEmpty? raw) (pair "" "Missing file argument") (k/resolveEditTarget! env.root raw)))
@@ -1117,28 +1158,30 @@ fn fixStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String) -
           (match read
             ((err e) (rejectLine id "fix" ":ERR_READ_FAILED" (msgTail e)))
             ((ok text)
-              (let [(src (if (some? staged) ":staged" ":disk"))
-                    (rel (relOf env path))
-                    (fileF (str " :file " (q rel) " :source " src))
-                    (fault (k/escapeAsnVal (aslDelimiterError text)))
-                    (run (aslRepair text (heuristicTier? kw "apply")))
-                    (status run.status)
-                    (basis run.basis)]
-                (cond
-                  ((= status "none") (okLine (str (head id "fix") " :status \"ok\"" fileF " :balanced true :repair (:none) :staged false)")))
-                  ((= status "unique")
-                    (let [(patch (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines run.text true) (str "current/" rel) (str "repaired/" rel) 1) ""))
-                          (stage (and apply (or (= basis "structural") (heuristicAllowed? kw "apply"))))
-                          (rej (stringJoin (map (fn [(r Repair)] -> String (repairAsn (some r))) run.rejected) " "))
-                          (basisF (str " :basis :" basis (rankAsn run.repair) (if (or (= basis "indentation") (= basis "heuristic")) (str " :rejected [" rej "]") "")))
-                          (note (if (and apply (not stage)) " :message \"indentation-based repair; pass :apply :indentation to stage it\"" ""))]
-                      (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :fault \"" fault "\" :repair " (repairAsn run.repair) basisF " :staged " (if stage "true" "false") note " :patch " (q patch) ")"))
-                                   :errCount 0
-                                   :stage (if stage (some (pair path run.text)) (none)))))
-                  ((= status "ambiguous")
-                    (rejectLine id "fix" ":ERR_AMBIGUOUS_REPAIR" (str fileF " :fault \"" fault "\" :candidates [" (stringJoin (map stringFromInt64 run.candidates) " ")
-                                                                    "] :message \"more than one structurally distinct minimal edit balances the file and indentation does not single one out; edit it at one of the candidate byte offsets\"")))
-                  (else (rejectLine id "fix" ":ERR_UNREPAIRABLE" (str fileF " :fault \"" fault "\" :message \"no single minimal delimiter edit balances the file\"")))))))))))
+              (if (= (kwLower kw "by") "indent")
+                (indentFix! id kw path (relOf env path) (str " :file " (q (relOf env path)) " :source " (if (some? staged) ":staged" ":disk")) text apply)
+                (let [(src (if (some? staged) ":staged" ":disk"))
+                      (rel (relOf env path))
+                      (fileF (str " :file " (q rel) " :source " src))
+                      (fault (k/escapeAsnVal (aslDelimiterError text)))
+                      (run (aslRepair text (heuristicTier? kw "apply")))
+                      (status run.status)
+                      (basis run.basis)]
+                  (cond
+                    ((= status "none") (okLine (str (head id "fix") " :status \"ok\"" fileF " :balanced true :repair (:none) :staged false)")))
+                    ((= status "unique")
+                      (let [(patch (stringJoin (e/unifiedDiff! (pySplitLines text true) (pySplitLines run.text true) (str "current/" rel) (str "repaired/" rel) 1) ""))
+                            (stage (and apply (or (= basis "structural") (heuristicAllowed? kw "apply"))))
+                            (rej (stringJoin (map (fn [(r Repair)] -> String (repairAsn (some r))) run.rejected) " "))
+                            (basisF (str " :basis :" basis (rankAsn run.repair) (if (or (= basis "indentation") (= basis "heuristic")) (str " :rejected [" rej "]") "")))
+                            (note (if (and apply (not stage)) " :message \"indentation-based repair; pass :apply :indentation to stage it\"" ""))]
+                        (GateOutcome :lines (list (str (head id "fix") " :status \"ok\"" fileF " :fault \"" fault "\" :repair " (repairAsn run.repair) basisF " :staged " (if stage "true" "false") note " :patch " (q patch) ")"))
+                                     :errCount 0
+                                     :stage (if stage (some (pair path run.text)) (none)))))
+                    ((= status "ambiguous")
+                      (rejectLine id "fix" ":ERR_AMBIGUOUS_REPAIR" (str fileF " :fault \"" fault "\" :candidates [" (stringJoin (map stringFromInt64 run.candidates) " ")
+                                                                      "] :message \"more than one structurally distinct minimal edit balances the file and indentation does not single one out; edit it at one of the candidate byte offsets\"" (indentHint text))))
+                    (else (rejectLine id "fix" ":ERR_UNREPAIRABLE" (str fileF " :fault \"" fault "\" :message \"no single minimal delimiter edit balances the file\"" (indentHint text)))))))))))))
 
 (schema CapRow (:f id String) (:f status String) (:f probe (Option String)) (:f expect String) (:f end Int64))
 

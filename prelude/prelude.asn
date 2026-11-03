@@ -8,7 +8,7 @@
   )
   :types (
     :$comment "Annotation spellings. The host does not check annotations: a fn declared -> Int64 may return a String."
-    :primitive ["Bool" "Int32" "Int64" "Float64" "String" "Unit" "Bytes" "F64Array" "I64Array" "I8Array" "ParquetHandle"]
+    :primitive ["Bool" "U8" "U16" "U32" "U64" "I8" "I16" "Int32" "Int64" "Float64" "String" "Unit" "Bytes" "F64Array" "I64Array" "I8Array" "ParquetHandle"]
     :constructed ["List" "Option" "Result" "Pair" "Map"]
     :aliases (:Int "Int64" :I64 "Int64" :I32 "Int32" :F64 "Float64" :F32 "Float64" :Num "Float64" :Float "Float64" :Str "String")
     :unions (:IoError ["notFound" "permissionDenied" "alreadyExists" "invalidPath" "interrupted" "other"] :Option ["some" "none"] :Result ["ok" "err"] :Pair ["pair"])
@@ -482,5 +482,41 @@
       :doc "An int8 column of one row group; a wrong type or row group traps.")
     (:name "parquetKvMetadata" :sec "Parquet" :type "ParquetHandle String -> (Result String String)" :src "asl/host/src/parquet.c"
       :doc "Look up a key in the file key-value metadata; err if absent.")
+    (:name "addWrap" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Sum modulo 2^width of the type.")
+    (:name "subWrap" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Difference modulo 2^width of the type.")
+    (:name "mulWrap" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Product modulo 2^width of the type.")
+    (:name "negWrap" :sec "Low-level" :type "I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Negation modulo 2^width of the type.")
+    (:name "addClamp" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Sum saturated to the bounds of the type.")
+    (:name "subClamp" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Difference saturated to the bounds of the type.")
+    (:name "mulClamp" :sec "Low-level" :type "I I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Product saturated to the bounds of the type.")
+    (:name "addChecked" :sec "Low-level" :type "I I -> (Option I)" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Sum, or none where the plain + would trap.")
+    (:name "subChecked" :sec "Low-level" :type "I I -> (Option I)" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Difference, or none where the plain - would trap.")
+    (:name "mulChecked" :sec "Low-level" :type "I I -> (Option I)" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Product, or none where the plain * would trap.")
+    (:name "divChecked" :sec "Low-level" :type "I I -> (Option I)" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Quotient, or none on a zero divisor or an out of range quotient.")
+    (:name "modChecked" :sec "Low-level" :type "I I -> (Option I)" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Floored remainder, or none on a zero divisor.")
+    (:name "rotateLeft" :sec "Low-level" :type "I J -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Rotate left by an amount taken modulo the width.")
+    (:name "rotateRight" :sec "Low-level" :type "I J -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Rotate right by an amount taken modulo the width.")
+    (:name "byteSwap" :sec "Low-level" :type "I -> I" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Reverse the bytes of the value.")
+    (:name "bitCount" :sec "Low-level" :type "I -> Int64" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Number of set bits.")
+    (:name "leadingZeros" :sec "Low-level" :type "I -> Int64" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Count of leading zero bits, the width for zero.")
+    (:name "trailingZeros" :sec "Low-level" :type "I -> Int64" :src "asl/packages/asl-checker/src/lowLevelSigs.asl"
+      :doc "Count of trailing zero bits, the width for zero.")
   ]
 )

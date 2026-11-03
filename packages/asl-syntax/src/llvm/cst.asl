@@ -12,8 +12,7 @@
       nonTriviaTokens
       blockLabel
       tokenSlice]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/llvm/lex :a lx)])
 
 fn isOpenBracket k: String -> Bool

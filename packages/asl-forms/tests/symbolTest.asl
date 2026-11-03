@@ -1,4 +1,4 @@
-(module asl-forms/tests/symbolTest :x [runTests] :i [(asl-forms/symbol :a sy) (asl-forms/kernel :a k) (asl-forms/ops :a ops)])
+(module asl-forms/tests/symbolTest :x [runTests] :i [(asl-forms/symbol :a sy) (asl-forms/ops :a ops)])
 
 fn fixture! -> String
   (resultOr (fileReadString "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn") "")

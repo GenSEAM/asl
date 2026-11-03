@@ -1,7 +1,6 @@
 (module asl-compiler/targetsLlvmDiagTest
   :x [testValidProgramCompilesOk testMissingEntryDiagnostic testPreludeProgramCompiles runTests]
-  :i [(asl-compiler/compiler :a comp)
-      (asl-compiler/targets :a tg)])
+  :i [(asl-compiler/targets :a tg)])
 
 fn validProgramSource -> Str
   "(module validApp :x [entry])\n\n(fn entry [] -> Int64\n  42)\n"

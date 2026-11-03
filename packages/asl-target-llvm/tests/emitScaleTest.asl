@@ -1,7 +1,6 @@
 (module asl-target-llvm/tests/emitScaleTest
   :x [runTests]
   :i [(asl-ir/lower :a low)
-      (asl-parser/ast :a ast)
       (asl-target-llvm :a llvm)])
 
 fn listSource n: Int64 -> String

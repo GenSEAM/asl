@@ -1,4 +1,4 @@
-(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt gateContext!] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-proc/coreProcess :a cp) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-target-py :a pyc) (asl-target-go :a goc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
+(module asl-forms/ops :x [StepOutcome runStep! splitLinesKeepEnds pyInt gateContext!] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/symbol :a sy) (asl-forms/delegate :a d) (asl-forms/search :a s) (asl-forms/tools :a t) (asl-forms/gate :a g) (asl-forms/vfs :a v) (asl-html/convert :a conv) (asl-ir/types :a ty) (asl-target-js/main :a jsc) (asl-target-py :a pyc) (asl-target-go :a goc) (asl-forms/edit :a e) (asl-forms/lens :a l) (asl-forms/evalOp :a ev) (asl-forms/memOp :a m) (asl-forms/docOp :a doc)])
 
 
 (schema StepOutcome (:f lines (List String)) (:f errCount Int64))

@@ -34,6 +34,8 @@ fn ! testTable -> Bool
         (atMax (sc/nextSlots 64 (st 12.0 10.0 0.0 8000 2.0) cfg))
         (atMin (sc/nextSlots 4 (st 10.0 10.0 0.5 1000 2.0) cfg))
         (fromZero (sc/nextSlots 10 (st 3.0 0.0 0.0 8000 2.0) cfg))
+        (lowered (sc/nextSlots 41 (st 10.0 10.0 0.0 8000 2.0) (sc/parseCfg "(:sched :min 4 :max 8)")))
+        (raised (sc/nextSlots 2 (st 10.0 10.0 0.0 8000 2.0) cfg))
         (f1 (sc/nextFlat (st 10.0 10.0 0.0 8000 2.0) cfg))
         (f0 (sc/nextFlat (st 12.0 10.0 0.0 8000 2.0) cfg))]
     (do (assert (= grow 12) (str "goodput rose, RAM and load fine: plus step: " (stringFromInt64 grow)))
@@ -47,6 +49,8 @@ fn ! testTable -> Bool
         (assert (and (= top 64) (= atMax 64)) "growth clamps to max")
         (assert (= atMin 4) "decrease clamps to min")
         (assert (= fromZero 12) "a first window with goodput and no previous one counts as a rise")
+        (assert (= lowered 8) (str "a persisted count above a lowered :max clamps at once: " (stringFromInt64 lowered)))
+        (assert (= raised 4) (str "a persisted count below :min lifts at once: " (stringFromInt64 raised)))
         (assert (and (= f1 1) (= f0 0)) "flat counter increments on flat and resets on a rise")
         true))
 

@@ -255,8 +255,21 @@ fn commitHint -> String
 fn refuse name: String hint: String -> (Option (Pair String String))
   (some (pair name hint))
 
-fn gitVerdict args: (List String) -> (Option (Pair String String))
-  (let [plain (filter (fn [a] (not (isFlag a))) args)
+; (:m :ref LEON-GIT-C-BYPASS :do "git global options that take the next word as their value; the subcommand comes after them")
+fn gitValueOpts -> (List String)
+  (list "-c" "-C" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env" "--exec-path" "--list-cmds")
+
+; (:m :ref LEON-GIT-C-BYPASS :do "drops the global options before the subcommand: a valued option with its value word (-c K=V, -C DIR, --git-dir DIR, ...), and any other leading flag (--no-pager, --git-dir=DIR, -p); git -c user.email=x commit took user.email=x for the subcommand and slipped past the guard")
+fn dropGitGlobals args: (List String) -> (List String)
+  (cond
+    ((listEmpty? args) args)
+    ((and (memberOf (c/firstOf args) (gitValueOpts)) (not (listEmpty? (c/restOf args)))) (dropGitGlobals (c/restOf (c/restOf args))))
+    ((isFlag (c/firstOf args)) (dropGitGlobals (c/restOf args)))
+    (else args))
+
+fn gitVerdict raw: (List String) -> (Option (Pair String String))
+  (let [args (dropGitGlobals raw)
+        plain (filter (fn [a] (not (isFlag a))) args)
         sub (cond ((not (listEmpty? plain)) (c/firstOf plain)) ((not (listEmpty? args)) (c/firstOf args)) (else ""))
         rest (if (listEmpty? args) (list) (c/restOf args))]
     (cond

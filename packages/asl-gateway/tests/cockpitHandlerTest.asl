@@ -95,7 +95,7 @@ fn testObservatoryCases! cases: (List Case) -> Bool
                   (let [(rawPayload (optionOr (textOf (prop c "payload")) "{}"))
                         (intelJson (resultOr (j/jsonParse rawPayload) (j/jnull)))
                         (transformed (ck/observatoryBlastRadius intelJson))
-                        (transformedSnake (ck/observatory_blast_radius intelJson))
+                        (transformedSnake (ck/observatoryBlastRadius intelJson))
                         (gotJson (ck/pyJsonDump transformed))
                         (gotSnakeJson (ck/pyJsonDump transformedSnake))
                         (wantJson (optionOr (textOf (prop c "body")) ""))
@@ -175,9 +175,9 @@ fn testCaseDispatch! c: Case -> Bool
     (cond
       ((= kind ":dashboard")
         (let [(resp1 (resultOr (ck/serveCockpitDashboard! dummyState dummyEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
-              (resp2 (resultOr (ck/serve_cockpit_dashboard! dummyState dummyEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
+              (resp2 (resultOr (ck/serveCockpitDashboard! dummyState dummyEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (disp (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") true)
@@ -188,10 +188,10 @@ fn testCaseDispatch! c: Case -> Bool
       ((= kind ":observatory")
         (let [(step1 (ck/serveCockpitObservatoryApi! caseCaches.intel dummyState.now dummyEnv))
               (resp1 (pairSecond step1))
-              (step2 (ck/serve_cockpit_observatory_api! caseCaches.intel dummyState.now dummyEnv))
+              (step2 (ck/serveCockpitObservatoryApi! caseCaches.intel dummyState.now dummyEnv))
               (resp2 (pairSecond step2))
               (disp (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -202,10 +202,10 @@ fn testCaseDispatch! c: Case -> Bool
       ((= kind ":intel")
         (let [(step1 (ck/serveCockpitIntelApi! caseCaches.intel dummyState.now dummyEnv))
               (resp1 (pairSecond step1))
-              (step2 (ck/serve_cockpit_intel_api! caseCaches.intel dummyState.now dummyEnv))
+              (step2 (ck/serveCockpitIntelApi! caseCaches.intel dummyState.now dummyEnv))
               (resp2 (pairSecond step2))
               (disp (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -216,10 +216,10 @@ fn testCaseDispatch! c: Case -> Bool
       ((= kind ":vitality")
         (let [(step1 (ck/serveCockpitVitalityApi! caseCaches.vitality dummyState.now dummyEnv))
               (resp1 (pairSecond step1))
-              (step2 (ck/serve_cockpit_vitality_api! caseCaches.vitality dummyState.now dummyEnv))
+              (step2 (ck/serveCockpitVitalityApi! caseCaches.vitality dummyState.now dummyEnv))
               (resp2 (pairSecond step2))
               (disp (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -230,10 +230,10 @@ fn testCaseDispatch! c: Case -> Bool
       ((= kind ":stubs")
         (let [(step1 (ck/serveCockpitStubsApi! caseCaches.stubs dummyState.now dummyEnv))
               (resp1 (pairSecond step1))
-              (step2 (ck/serve_cockpit_stubs_api! caseCaches.stubs dummyState.now dummyEnv))
+              (step2 (ck/serveCockpitStubsApi! caseCaches.stubs dummyState.now dummyEnv))
               (resp2 (pairSecond step2))
               (disp (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -258,9 +258,9 @@ fn testCaseDispatch! c: Case -> Bool
                                        :profile dummyState.profile
                                        :now dummyState.now))
               (resp1 (ck/serveCockpitDaemonsApi cStatus.pid cPort cStatus))
-              (resp2 (ck/serve_cockpit_daemons_api cStatus.pid cPort cStatus))
+              (resp2 (ck/serveCockpitDaemonsApi cStatus.pid cPort cStatus))
               (disp (ck/cockpitDispatchGet! path cState dummyEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path cState dummyEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path cState dummyEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -270,9 +270,9 @@ fn testCaseDispatch! c: Case -> Bool
 
       ((= kind ":tasks")
         (let [(resp1 (resultOr (ck/serveCockpitTasksApi! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
-              (resp2 (resultOr (ck/serve_cockpit_tasks_api! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
+              (resp2 (resultOr (ck/serveCockpitTasksApi! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (disp (ck/cockpitDispatchGet! path dummyState caseEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState caseEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState caseEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)
@@ -282,9 +282,9 @@ fn testCaseDispatch! c: Case -> Bool
 
       ((= kind ":mem")
         (let [(resp1 (resultOr (ck/serveCockpitMemApi! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
-              (resp2 (resultOr (ck/serve_cockpit_mem_api! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
+              (resp2 (resultOr (ck/serveCockpitMemApi! caseEnv) (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (disp (ck/cockpitDispatchGet! path dummyState caseEnv caseCaches))
-              (dispSnake (ck/cockpit_dispatch_get! path dummyState caseEnv caseCaches))
+              (dispSnake (ck/cockpitDispatchGet! path dummyState caseEnv caseCaches))
               (dResp (resultOr (optionOr disp (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))
               (dRespSnake (resultOr (optionOr dispSnake (ck/CockpitDispatchResult :caches caseCaches :response (err "none"))).response (ck/CockpitResponse :status 500 :headers (list) :body "")))]
           (and (and (checkResp! resp1 wantStatus wantHeaders wantBody (str c.id " camel") false)

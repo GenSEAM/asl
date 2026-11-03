@@ -1,4 +1,4 @@
-(module asl-ui/voiceBar :x [VoiceBarState makeVoiceBarState formatDbfsMeter formatVerificationBadge renderAttentionRailDrawer renderVoiceBarTile] :i [(asl-ui/vnode :a ui) (asl-ui/theme :a theme)])
+(module asl-ui/voiceBar :x [VoiceBarState makeVoiceBarState formatDbfsMeter formatVerificationBadge renderAttentionRailDrawer renderVoiceBarTile] :i [(asl-ui/vnode :a ui)])
 
 (schema VoiceBarState
   (:f currentDbfs Float64)

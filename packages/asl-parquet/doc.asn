@@ -3,3 +3,8 @@
 (:doc :symbol "asl/packages/asl-parquet/tests/writerTest.asl#" :text "G17 ASL Parquet writer and compact-footer round trips")
 (:doc :symbol "asl/packages/asl-parquet/src/reader.asl#" :text "Pure-ASL Parquet reader for compact-Thrift footers, row-group pages, levels and typed values")
 (:doc :symbol "asl/packages/asl-parquet/tests/readerNativeTest.asl#compileNative" :text "Links with the same nice -n 15, -O2 and -Wno-override-module flags as asl/packages/asl-cli/src/build.asl's link!, so the reported native build and run timings reflect what asl build ships")
+(:doc :symbol "asl/packages/asl-parquet/src/footer.asl#parquetColumnStatsInt64" :text "Min, max and null count of an Int64 column in one row group, read from the file footer; an error when the column or its statistics are missing.")
+(:doc :symbol "asl/packages/asl-parquet/src/footer.asl#parquetColumnStatsFloat64" :text "Min, max and null count of a Float64 column in one row group, read from the file footer; an error when the column or its statistics are missing.")
+(:doc :symbol "asl/packages/asl-parquet/src/reader.asl#parquetColumnRange" :text "The footer min and max of an Int64 column in one row group; none when the file has no statistics for it or the column is not Int64.")
+(:doc :symbol "asl/packages/asl-parquet/src/reader.asl#parquetWindowGroups" :text "The row groups that can hold a value in [lo, hi); keeps every group whose range is unknown, so pruning never drops a row.")
+(:doc :symbol "asl/packages/asl-parquet/src/reader.asl#parquetLowerBound" :text "First index of an ascending array whose value is at least the target.")

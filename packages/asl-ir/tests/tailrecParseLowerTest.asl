@@ -2,7 +2,6 @@
   :x [runTests]
   :i [(asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
-      (asl-parser/reader :a rd)
       (asl-ir/lower :a low)
       (asl-ir/types :a ty)
       (asl-ir/printer :a prn)])

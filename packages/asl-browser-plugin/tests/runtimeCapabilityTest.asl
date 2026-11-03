@@ -1,0 +1,40 @@
+(module asl-browser-plugin/tests/runtimeCapabilityTest :x [runTests] :i [(aslBrowserPlugin/runtime :a br)])
+
+; (:m :ref COVBATCH5 :do "browser capability table: construction, the fixed list, lookup by id including misses, and trace frame field mapping")
+fn statusOf caps: (List br/BrowserCapability) id: String -> String
+  (match (br/findBrowserCapability caps id)
+    ((some c) c.status)
+    ((none) "missing"))
+
+fn fallbackOf id: String -> String
+  (match (br/queryBrowserCapability id)
+    ((some c) c.fallback)
+    ((none) "missing"))
+
+fn runTests -> Bool
+  (let [(c (br/makeBrowserCapability "x" "partial" "use y"))
+        (all (br/listBrowserCapabilities))
+        (mine (list (br/makeBrowserCapability "a" "works" "") (br/makeBrowserCapability "b" "absent" "fb")))
+        (f (br/makeBrowserTraceFrame "f1" "s1" "snd" "pd" 4 5 6 "write" "a.txt" "ok" "dg"))]
+    (do (assert (and (= c.id "x") (and (= c.status "partial") (= c.fallback "use y"))) "makeBrowserCapability keeps its three fields")
+        (assert (= (listLength all) 8) "the table holds eight capabilities")
+        (assert (= (listLength (filter (fn [(k br/BrowserCapability)] -> Bool (= k.status "works")) all)) 3) "three capabilities work")
+        (assert (= (listLength (filter (fn [(k br/BrowserCapability)] -> Bool (= k.status "absent")) all)) 5) "five capabilities are absent")
+        (assert (= (statusOf all "pathBoundary") "works") "pathBoundary works")
+        (assert (= (statusOf all "nativeFs") "absent") "nativeFs is absent")
+        (assert (= (statusOf mine "b") "absent") "find returns the matching element, not the first")
+        (assert (= (statusOf mine "a") "works") "find returns the first element")
+        (assert (= (statusOf mine "zzz") "missing") "an unknown id is none")
+        (assert (= (statusOf (list) "a") "missing") "an empty list is none")
+        (assert (= (fallbackOf "vdomRender") "vdom is missing") "an absent capability names its fallback")
+        (assert (= (fallbackOf "runCommand") "delegate to local or relay runtime via agent-bus") "runCommand fallback")
+        (assert (= (fallbackOf "astParse") "") "a working capability has no fallback")
+        (assert (= (fallbackOf "nope") "missing") "query of an unknown id is none")
+        (assert (= (statusOf all "procSpawn") "absent") "procSpawn is absent")
+        (assert (= f.runtimeTarget "browser") "frames are for the browser target")
+        (assert (and (= f.frameId "f1") (and (= f.sessionId "s1") (= f.senderId "snd"))) "id fields map in order")
+        (assert (and (= f.parentDigest "pd") (= f.digest "dg")) "digests map")
+        (assert (and (= f.sequence 4) (and (= f.causalClock 5) (= f.timestamp 6))) "sequence, clock and time map in order")
+        (assert (and (= f.op "write") (and (= f.target "a.txt") (= f.status "ok"))) "op, target and status map")
+        (assert (= (br/emitBrowserTraceFrame "f1" "s1" "snd" "pd" 4 5 6 "write" "a.txt" "ok" "dg") f) "emit equals make")
+        true))

@@ -29,7 +29,7 @@ fn cfg chain: String extra: String -> String
   (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\" :rpm 5) (:model :id m2 :provider fp :name \"n2\" :rpm 5)) :profiles ((:profile :id default :routes ((:intent any :chain (" chain "))))) :uses ((:use :for default :profile default))" extra ")")
 
 fn ! run! chain: String extra: String granted: (List String) -> String
-  (match (c/gateway_config_parse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
+  (match (c/gatewayConfigParse! (cfg chain extra) "default" ".asl/mem/calibration/index.asn")
     ((err e) (str "config: " e))
     ((ok table)
       (match (u/upstreamSettings (mapEmpty))
@@ -44,7 +44,7 @@ fn ! runTests -> Bool
         (one (run! "m1" "" (list "n1")))
         (none_ (run! "m1 m2" "" (list)))
         (tuned (run! "m1 m2" " :bucketWaitSec 2" (list "n2")))
-        (bad (c/gateway_config_parse! (cfg "m1" " :bucketWaitSec 0") "default" ".asl/mem/calibration/index.asn"))]
+        (bad (c/gatewayConfigParse! (cfg "m1" " :bucketWaitSec 0") "default" ".asl/mem/calibration/index.asn"))]
     (do (assert (stringContains? tuned "|bucket:n1:2") (str "the configured :bucketWaitSec sets the wait of a member before the last: " tuned))
         (assert (stringContains? tuned "|bucket:n2:30") (str "the last member keeps 30 s whatever :bucketWaitSec says: " tuned))
         (assert (match bad ((ok t) (and (= t.bucketWaitSec 5.0) (listAny? (fn [(w String)] -> Bool (stringContains? w "bucketWaitSec")) t.warnings))) ((err _) false)) "a non-positive :bucketWaitSec warns and keeps the default")

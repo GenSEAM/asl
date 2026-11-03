@@ -4,8 +4,6 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/core/symbols :a sym)
-      (asl-syntax/core/outline :a out)
-      (asl-syntax/html/lex :a hlx)
       (asl-syntax/html/tree :a htr)
       (asl-syntax/html/embed :a emb)])
 

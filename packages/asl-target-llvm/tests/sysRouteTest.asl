@@ -24,6 +24,11 @@ fn probeEnv -> String
   (:f stdout String)
   (:f stderr String))
 
+; (:m :ref LLVM-NODE2-REDS-B :do "the recorded sysInfo line carries the capture machine's uname; the host's own is expected here, and the next recorded line (platformInfo is uname) ties it to /usr/bin/uname")
+fn ! hostPlatform -> String
+  (let [(s (sh "uname -s")) (r (sh "uname -r")) (m (sh "uname -m"))]
+    (str "platformInfo (ok {:os \"" (stringTrim s.stdout) "\" :release \"" (stringTrim r.stdout) "\" :machine \"" (stringTrim m.stdout) "\"})"))
+
 fn ! recordedVm label: String -> Recorded
   (cond
     ((= label "sysFd") (Recorded :exitCode 0 :stdout (lines (list "write empty (ok 0)" "read zero (ok \"\")" "poll idle 0 ok" "poll idle 50 ok" "poll writable ok w:2" "write one (ok 1)" "poll readable ok r:1" "poll both ok r:1 w:2"
@@ -37,7 +42,7 @@ fn ! recordedVm label: String -> Recorded
                "poll items (err \"badFd\") (err \"badFd\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")"
                "poll big timeout ok other:4"
                "poll shapes (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")")) :stderr ""))
-    ((= label "sysInfo") (Recorded :exitCode 0 :stdout (lines (list "cpuCount is getconf true" "platformInfo (ok {:os \"Darwin\" :release \"25.1.0\" :machine \"arm64\"})" "platformInfo is uname true" "localDate is date true"
+    ((= label "sysInfo") (Recorded :exitCode 0 :stdout (lines (list "cpuCount is getconf true" (hostPlatform) "platformInfo is uname true" "localDate is date true"
                "envList has probe true" "envList is env true" "procSelf is sh's parent true" "procAlive? self (ok true)" "procAlive? reaped (ok false)" "procAlive? 1 (ok true)"
                "procAlive? bad (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")" "procKill self (ok ()) (ok ())" "procKill reaped (err \"noProcess\")"
                "procKill bad (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\") (err \"io:22\")"

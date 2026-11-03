@@ -4,7 +4,6 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/core/symbols :a sym)
-      (asl-syntax/core/outline :a otl)
       (asl-syntax/core/corpus :a crp)
       (asl-syntax/json :a jcst)
       (asl-json/json :a j)])

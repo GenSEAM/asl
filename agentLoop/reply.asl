@@ -1284,6 +1284,7 @@ fn applyTok s: String reps: (List Repl) -> String
   (fold (fn [acc r] (match r ((repl a b t) (str (sl acc 0 a) t (sl acc b (stringLength acc)))))) s
     (listReverse (listSortBy rStart reps)))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a :raw field binds the next free fenced blocks after its step; when too few follow it and the reply's free blocks are exactly as many as the step needs, those bind wherever they stand; a step left unbound keeps its text as the model sent it, with no :error marker the model would copy back (node2 2026-10-31: 2130 journalled replies in 337 journals carried it, c925fd5ad8167351 sent it back bare)")
 fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pair Int64 Int64) -> BrState
   (match span ((pair fs fe)
     (let [ftext (sl reply fs fe)
@@ -1298,9 +1299,12 @@ fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pai
       (match st ((brState consumed count missing repls)
         (if (or (not (member op (list "write" "edit"))) (listEmpty? raws))
           st
-          (let [avail (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed)) (>= (fStart (pairSecond p)) fe))) fences)]
+          (let [free (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed))
+                                          (or (>= (fStart (pairSecond p)) fe) (<= (fEnd (pairSecond p)) fs)))) fences)
+                after (filter (fn [p] (>= (fStart (pairSecond p)) fe)) free)
+                avail (if (and (< (listLength after) (listLength raws)) (= (listLength free) (listLength raws))) free after)]
             (if (< (listLength avail) (listLength raws))
-              (brState consumed count (cons (pair op file) missing) (cons (repl fs fe (insertBeforeLast ftext " :error \"ERR_RAW_MISSING\"")) repls))
+              (brState consumed count (cons (pair op file) missing) repls)
               (let [used (listTake avail (listLength raws))
                     pairs (zip raws used)
                     tokReps (map (fn [pr] (match pr ((pair r fp) (match r ((rawField _ ns ne) (match (pairSecond fp) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))))) pairs)
@@ -1316,10 +1320,67 @@ fn assemble reply: String reps: (List Repl) last: Int64 acc: (List String) -> St
     (match (c/firstOf reps) ((repl a b t)
       (assemble reply (c/restOf reps) b (cons t (cons (sl reply last a) acc))))))
 
+fn rawStringRepls toks: (List FormTok) prev: String base: Int64 -> (List Repl)
+  (if (listEmpty? toks)
+    (list)
+    (let [t (c/firstOf toks)
+          rest (c/restOf toks)
+          isStr (and (not (listEmpty? rest)) (stringStartsWith? (tokT (c/firstOf rest)) "\""))]
+      (if (and (= (tokT t) ":raw") (and isStr (member prev (list ":content" ":old" ":new"))))
+        (match t ((formTok _ ns ne) (cons (repl (+ base ns) (+ base ne) "") (rawStringRepls rest (tokT t) base))))
+        (rawStringRepls rest (tokT t) base))))
+
+fn firstIdx text: String from: Int64 lits: (List String) -> Int64
+  (let [rest (sl text from (stringLength text))
+        hits (filter (fn [o] (some? o)) (map (fn [l] (stringIndexOf rest l)) lits))]
+    (+ from (optionOr (listMin (map (fn [o] (optionOr o 0)) hits)) (- (stringLength text) from))))
+
+; (:m :ref LEON-WRITE-REJECT :do "the bare tail ends at the next line that starts a form: any (: line for an .asl target, a (:step or (:done line for an .asn target")
+fn nextBreakAt text: String from: Int64 file: String -> Int64
+  (if (stringEndsWith? file ".asn")
+    (firstIdx text from (list "\n(:step" "\n(:done"))
+    (firstIdx text from (list "\n(:")))
+
+; (:m :ref LEON-WRITE-REJECT :do "a bare tail binds only when it looks like the target: an .asl file starts with a form, fn, enum, schema or comment, an .asn file starts with (:; prose and other extensions keep the unbound refusal")
+fn tailLooksLike file: String tail: String -> Bool
+  (cond
+    ((stringEndsWith? file ".asl")
+      (or (stringStartsWith? tail "(") (or (stringStartsWith? tail "fn ") (or (stringStartsWith? tail "enum ") (or (stringStartsWith? tail "schema ") (stringStartsWith? tail ";"))))))
+    ((stringEndsWith? file ".asn") (and (stringStartsWith? tail "(:") (not (stringStartsWith? tail "(:step"))))
+    (else false))
+
+; (:m :ref LEON-WRITE-REJECT :do "node2 2026-11-01, 57 of 70 ERR_RAW_MISSING: the model sent (:step :op write :content :raw) and its file text right after the closed form with no fence, or :raw followed by the quoted text; the bare tail up to the next (:step is bound as the content, and :raw before a quoted string is dropped")
+fn bareRawRepls text: String fences: (List Fence) span: (Pair Int64 Int64) -> (List Repl)
+  (match span ((pair fs fe)
+    (let [ftext (sl text fs fe)
+          toks (tokenizeForm ftext)
+          head (if (> (listLength toks) 1) (lstripColons (tokT (c/firstOf (c/restOf toks)))) "")
+          op0 (if (member head (list "write" "edit")) (some head) none)
+          scanned (scanFields toks op0 none (list))
+          op (optionOr (pairFirst (pairFirst scanned)) "")
+          raws (pairSecond scanned)
+          strRepls (rawStringRepls toks "" fs)
+          laterFence (listAny? (fn [f] (>= (fStart f) fe)) fences)
+          file (optionOr (pairSecond (pairFirst scanned)) "")
+          nx (nextBreakAt text fe file)
+          tail (pyStrip (sl text fe nx))]
+      (cond
+        ((not (member op (list "write" "edit"))) (list))
+        ((not (listEmpty? strRepls)) strRepls)
+        ((or laterFence (or (stringEmpty? tail) (or (!= (listLength raws) 1) (not (tailLooksLike file tail))))) (list))
+        (else (list (repl fe nx (str "\n```\n" tail "\n```\n"))))))))
+
+fn bareRaw text: String -> String
+  (let [bs (stringToBytes text)
+        fences (rawFences text)
+        forms (brForms text bs (bytesLength bs) 0 fences (list))
+        reps (fold (fn [acc sp] (listAppend acc (bareRawRepls text fences sp))) (list) forms)]
+    (if (listEmpty? reps) text (assemble text (listSortBy rStart reps) 0 (list))))
+
 fn bindRawBlocks reply: String -> RawBind
   (if (= reply "")
     (RawBind :text reply :count 0 :missing (list))
-    (let [text (hoistInlineRaw reply)
+    (let [text (bareRaw (hoistInlineRaw reply))
           bs (stringToBytes text)
           fences (rawFences text)
           forms (brForms text bs (bytesLength bs) 0 fences (list))

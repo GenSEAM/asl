@@ -84,17 +84,17 @@ fn testMilestoneReceiptStructure -> Bool
 
 fn testDualPolarityAliases -> Bool
   (let [(rootHash "2aa30a62efbc5a427d876cbaf97d133d786ceb51a69353a31bd0f7ec88a3a0cd")
-        (pkgRes (rel/build_release_package "0.1.0" "M09" rootHash 38 true))
-        (gateRes (rel/supervise_closure_gate 10 10 rootHash))
+        (pkgRes (rel/buildReleasePackage "0.1.0" "M09" rootHash 38 true))
+        (gateRes (rel/superviseClosureGate 10 10 rootHash))
         (bundle (rel/release_bundle "0.1.0" "M09" rootHash 38 true 1789459200000))
         (rcpt (rel/milestone_receipt "M09" "CERTIFIED" 10 10 rootHash "authority" 1789459200000))]
     (do
-      (assert (ok? pkgRes) "build_release_package alias must succeed")
-      (assert (ok? gateRes) "supervise_closure_gate alias must succeed")
+      (assert (ok? pkgRes) "buildReleasePackage must succeed")
+      (assert (ok? gateRes) "superviseClosureGate must succeed")
       (assert bundle.isCertified "release_bundle alias must yield certified bundle")
       (assert (= rcpt.status "CERTIFIED") "milestone_receipt alias must yield certified receipt")
-      (refute (err? pkgRes) "Must refute err on build_release_package")
-      (refute (err? gateRes) "Must refute err on supervise_closure_gate")
+      (refute (err? pkgRes) "Must refute err on buildReleasePackage")
+      (refute (err? gateRes) "Must refute err on superviseClosureGate")
       true))
 
 

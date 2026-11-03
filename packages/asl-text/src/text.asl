@@ -69,7 +69,7 @@ fn extractJsonKv rawJson: Str source: Str -> ExtractedDoc
   (let [(c1 (extractJsonField rawJson "content")) (c2 (if (stringEmpty? c1) (extractJsonField rawJson "text") c1)) (c3 (if (stringEmpty? c2) (extractJsonField rawJson "snippet") c2)) (c4 (if (stringEmpty? c3) (extractJsonField rawJson "body") c3)) (finalContent (if (stringEmpty? c4) (normalizeWhitespace rawJson) c4)) (t (extractJsonField rawJson "title")) (finalTitle (if (stringEmpty? t) source t))] (ExtractedDoc :title finalTitle :content finalContent :format "json" :source source :charCount (stringLength finalContent)))
 
 fn extractTitleFromTag src: Str openTag: Str closeTag: Str -> Str
-  (match (sliceAfterTag src openTag) ((none) "") ((some afterOpen) (match (stringIndexOf afterOpen closeTag) ((none) "") ((some closeIdx) (let [(rawT (optionOr (stringSlice afterOpen 0 closeIdx) ""))] (decodeHtmlEntities (stringTrim rawT)))))))
+  (match (sliceAfterTag src openTag) ((none) "") ((some afterOpen) (match (stringIndexOf afterOpen closeTag) ((none) "") ((some closeIdx) (let [(rawT (optionOr (stringSlice afterOpen (stringLength openTag) closeIdx) ""))] (decodeHtmlEntities (stringTrim rawT)))))))
 
 fn extractXmlAtom rawXml: Str source: Str -> ExtractedDoc
   (let [(t (extractTitleFromTag rawXml "<title>" "</title>")) (s1 (extractTitleFromTag rawXml "<summary>" "</summary>")) (s2 (if (stringEmpty? s1) (extractTitleFromTag rawXml "<content>" "</content>") s1)) (finalContent (if (stringEmpty? s2) (cleanHtml rawXml) (cleanHtml s2))) (finalTitle (if (stringEmpty? t) source t))] (ExtractedDoc :title finalTitle :content finalContent :format "xml" :source source :charCount (stringLength finalContent)))

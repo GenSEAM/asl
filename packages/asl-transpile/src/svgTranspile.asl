@@ -1,4 +1,4 @@
-(module asl-transpile/svgTranspile :x [SvgTranspileResult asnToSvg svgToAsn makeVectorCard makeVectorFlowchart makeVectorIcon measureSvgCompaction] :i [(asl-text/string :a s) (asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-text/text :a txt)])
+(module asl-transpile/svgTranspile :x [SvgTranspileResult asnToSvg svgToAsn makeVectorCard makeVectorFlowchart makeVectorIcon measureSvgCompaction] :i [(asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-text/text :a txt)])
 
 (schema SvgTranspileResult (:f output Str) (:f originalTokens I64) (:f asnTokens I64) (:f savingsPercent F64) (:f success Bool))
 

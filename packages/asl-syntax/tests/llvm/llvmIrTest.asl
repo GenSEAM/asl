@@ -1,7 +1,6 @@
 (module asl-syntax/tests/llvm/llvmIrTest
   :x [runTests]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/llvm/lex :a lx)
       (asl-syntax/llvm/cst :a cst)

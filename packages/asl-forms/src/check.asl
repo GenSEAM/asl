@@ -23,7 +23,6 @@
       (asl-syntax/json :a jcst)
       (asl-syntax/js/recover :a jsrec)
       (asl-syntax/js/module :a jsm)
-      (asl-syntax/ts/types :a tstypes)
       (asl-syntax/ts/module :a tsm)
       (asl-syntax/jsx :a jsx)
       (asl-syntax/tsx :a tsx)

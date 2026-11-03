@@ -29,10 +29,8 @@
       lintReceipt]
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
-      (asl-syntax/asl/lex :a lx)
       (asl-syntax/asl/paren :a prn)
       (asl-syntax/asl/layout :a lay)
-      (asl-syntax/asl/symbols :a aslsym)
       (asl-forms/repair :a rep)])
 
 (schema QueryPattern

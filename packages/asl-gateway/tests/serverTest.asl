@@ -1,5 +1,5 @@
 (module aslGateway/tests/serverTest :x [testModelsModeRoutesToCli testBreakerEventParks testExtractThinkBlocks testDetectEshViolation testInspectCompletionCleanTurn testInspectCompletionEshRejection testInspectCompletionQuarantine testStatePathIsolation testEnsureSessionHeader testApiKindOf testEffSleepMsDoesNotBlockReactor testEffBucketWaitDoesNotBlockReactor testBucketWaitReservationsAreSpaced testEffUsageNoteRecordsProfile testBudgetRefusalBlocksOverBudgetProfile testSpreadOrderRatioPersistsAcrossRealCalls testSpreadNote429CooldownGatesViaRealLoop runTests]
-  :i [(server :a srv) (aslGateway/config :a c) (aslGateway/usageLedger :a ul) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b) (aslGateway/upstream :a u) (aslGateway/dispatch :a dp) (aslGateway/chat :a ch) (asl-json/json :a j) (aslGateway/omniApi :a om)])
+  :i [(server :a srv) (aslGateway/config :a c) (aslGateway/usageLedger :a ul) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b) (aslGateway/upstream :a u) (aslGateway/dispatch :a dp) (aslGateway/chat :a ch) (asl-json/json :a j) (aslGateway/omniApi :a om) (aslGateway/router :a rt)])
 
 fn testExtractThinkBlocks -> Bool
   (let [(raw "<think>Planning the solution step by step</think>Here is the completed code.") (res (srv/extractThinkBlocks raw)) (thinkPart (pairFirst res)) (uiPart (pairSecond res))] (do (assert (= thinkPart "Planning the solution step by step") "Think content must match") (assert (= uiPart "Here is the completed code.") "UI content must be stripped of think tags") true))
@@ -53,7 +53,7 @@ fn ! testEffSleepMsDoesNotBlockReactor -> Bool
                  :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                  :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
                  :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
+                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
         (step (ch/stepEffect (ch/effSleepMs 5000) (fn [(_ ch/ChatOutcome)] -> ch/ChatStep (ch/stepDone (ch/ChatResponse :head (list (ch/headStatus 200)) :body "{}")))))
         (before (/ (monotonicNs) 1000000))
         (after1 (srv/drive! loop0 42 "" step))
@@ -73,7 +73,7 @@ fn ! testEffBucketWaitDoesNotBlockReactor -> Bool
                  :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                  :buckets seededBuckets :profiles (c/emptyProfilesCache)
                  :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
+                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
         (step (ch/stepEffect (ch/effBucket "bucketTestModel" 12.0 10.0) (fn [(_ ch/ChatOutcome)] -> ch/ChatStep (ch/stepDone (ch/ChatResponse :head (list (ch/headStatus 200)) :body "{}")))))
         (before (/ (monotonicNs) 1000000))
         (after1 (srv/drive! loop0 43 "" step))
@@ -98,7 +98,7 @@ fn ! testBucketWaitReservationsAreSpaced -> Bool
                  :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                  :buckets seededBuckets :profiles (c/emptyProfilesCache)
                  :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
+                 :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
         (step (ch/stepEffect (ch/effBucket "spaceTestModel" 12.0 20.0) (fn [(_ ch/ChatOutcome)] -> ch/ChatStep (ch/stepDone (ch/ChatResponse :head (list (ch/headStatus 200)) :body "{}")))))
         (loop1 (srv/drive! loop0 61 "" step))
         (loop2 (srv/drive! loop1 62 "" step))
@@ -125,18 +125,18 @@ fn ! testEffUsageNoteRecordsProfile -> Bool
         (clearedShared (pathRemove sharedPath))
         (statsPath (ul/defaultLedgerPath home))
         (clearedStats (pathRemove statsPath))
-        (pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "freeBulk"))
+        (pending (srv/PendingCall :intent "coder" :model "m" :latencyMs 10 :charge 0 :tag "" :params (ul/defaultCallParams) :profile "freeBulk" :status 0 :reason ""))
         (loop0 (srv/GatewayLoop :listener -1 :upstreamPort 0 :env (mapEmpty) :home home :rootDir home :registryPath "/tmp/absent.asn"
                  :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                  :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
                  :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-                 :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
+                 :wiringText none :families (list) :outbox (list) :pendingCall (some pending) :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
         (ran (srv/runEffect! loop0 (ch/effUsageNote "fixp" "mAlias" "ok" (j/jnull))))
         (rowsRes (ul/readRows! sharedPath))
         (rows (resultOr rowsRes (list)))
         (fallbackRow (ul/CallRow :atMs 0 :profile "" :intent "" :alias "" :provider "" :model "" :inTokens 0 :cachedTokens 0 :outTokens 0
                        :reasoningTokens 0 :ttftMs none :ms none :outcome "" :charge 0 :tag none :temperature none :topP none :maxTokens none
-                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none))
+                       :effort none :api "" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none))
         (row (optionOr (listHead rows) fallbackRow))
         (cleanedShared (pathRemove sharedPath))
         (cleanedStats (pathRemove statsPath))]
@@ -156,7 +156,7 @@ fn ! testBudgetRefusalBlocksOverBudgetProfile -> Bool
         (seeded (ul/appendCallRow! sharedPath
                   (ul/CallRow :atMs atMs :profile "freeBulk" :intent "coder" :alias "mA" :provider "fixp" :model "m"
                     :inTokens 60 :cachedTokens 0 :outTokens 60 :reasoningTokens 0 :ttftMs none :ms none :outcome "ok" :charge 0
-                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)))
+                    :tag none :temperature none :topP none :maxTokens none :effort none :api "chat" :stream false :toolCount 0 :promptBytes 0 :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)))
         (overBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 100)))")
         (underBudgetText "(:gateway :v 2 :dailyTokenBudgets ((freeBulk 1000)))")
         (noBudgetText "(:gateway :v 2)")
@@ -165,7 +165,7 @@ fn ! testBudgetRefusalBlocksOverBudgetProfile -> Bool
                      :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
                      :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
                      :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-                     :wiringText (some text) :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
+                     :wiringText (some text) :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0))
         )
         (overResult (srv/budgetRefusal! (loopFor overBudgetText) "freeBulk"))
         (underResult (srv/budgetRefusal! (loopFor underBudgetText) "freeBulk"))
@@ -185,12 +185,16 @@ fn ! loopForSpread -> srv/GatewayLoop
     :promptMaxBytes 188000 :conns (list) :pools (pd/emptyPoolRegistry) :replies (list) :breaker (b/defaultBreakerState)
     :buckets (u/emptyBucketRegistry) :profiles (c/emptyProfilesCache)
     :wiring (dp/emptyWiring (u/UpstreamSettings :geminiUrl "" :geminiKey "" :groqUrl "" :ollamaUrl "" :groqKey "" :url "" :key "" :ollamaTimeoutSec 45.0))
-    :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0)
+    :wiringText none :families (list) :outbox (list) :pendingCall none :spreadState (mapEmpty) :spreadLast429 (mapEmpty) :affinity (mapEmpty) :omni (om/emptyOmniState (om/Word64 :hi 0 :lo 0) (om/Word64 :hi 0 :lo 0)) :admitWaits (list) :limitRows (list) :limitSeededMs 0 :startMs 0)
 
 fn stringsOutcome o: ch/ChatOutcome -> (List String)
   (match o ((ch/outStrings xs) xs) (_ (list)))
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "drives 8 real effSpreadOrder calls through the SAME GatewayLoop, threading srv forward exactly as drive! would across 8 separate chat requests, so the SWRR rotation is proven to live in GatewayLoop.spreadState rather than reset per call")
+; (:m :ref SPREADLIVE-TEST-SEED :do "the spread rotation starts at a clock-seeded offset in production (GW-SPREAD-START); the test pins the seed to 0 so the expected order is fixed, and the seeded state is the one effSpreadOrder reads under spreadProf|coder")
+fn ! seededSpreadLoop -> srv/GatewayLoop
+  (with (loopForSpread) :spreadState (mapSet (mapEmpty) "spreadProf|coder" (rt/spreadSeedState (list (pair "a" 3) (pair "b" 1)) 0)))
+
 fn ! pickOverCalls! srv: srv/GatewayLoop n: Int64 acc: (List String) -> (List String)
   (if (<= n 0) (listReverse acc)
     (let [(ran (srv/runEffect! srv (ch/effSpreadOrder "spreadProf" "coder" (list (pair "a" 3) (pair "b" 1)) 60 (list))))
@@ -200,7 +204,7 @@ fn ! pickOverCalls! srv: srv/GatewayLoop n: Int64 acc: (List String) -> (List St
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "GW-SPREAD-LIVE recorded-provider-stub gate: weights (3 1) through runEffect!'s real GatewayLoop-persisted state give exactly the 6:2 (a a b a a a b a) ratio router.asl's own pure simulation proved in isolation -- without GatewayLoop persistence this would instead pick the same top-weight member every single call")
 fn ! testSpreadOrderRatioPersistsAcrossRealCalls -> Bool
-  (let [(picks (pickOverCalls! (loopForSpread) 8 (list)))]
+  (let [(picks (pickOverCalls! (seededSpreadLoop) 8 (list)))]
     (do
       (assert (= picks (list "a" "a" "b" "a" "a" "a" "b" "a")) (str "SPREADLIVE: weights (3 1) through the real server path must give a a b a a a b a over 8 calls, got " picks))
       true))

@@ -1,6 +1,6 @@
 (module asl-target-sh/tests/lowerTest
   :x [runTests]
-  :i [(asl-target-sh/ast :a ast) (asl-target-sh/emitSh :a em) (asl-target-sh/lower :a low)])
+  :i [(asl-target-sh/emitSh :a em) (asl-target-sh/lower :a low)])
 
 fn testLowerExpr -> Bool
   (let [(eStr (low/lowerExpr "\"hello\""))

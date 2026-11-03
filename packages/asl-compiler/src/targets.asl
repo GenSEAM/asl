@@ -1,4 +1,4 @@
-(module asl-compiler/targets :x [compileSourceTarget compileSource compileStandaloneTarget compileStandaloneSource transpileTarget] :i [(asl-parser/ast :a a) (reader :a rd) (asl-checker/types :a ty) (check :a chk) (resolve :a r) (compiler :a comp) (c99Emit :a c99) (asl-target-c :a c11) (asl-target-llvm/main :a llvm) (asl-target-swift/emitSwift :a sw) (asl-target-sh/lower :a shLow)])
+(module asl-compiler/targets :x [compileSourceTarget compileSource compileStandaloneTarget compileStandaloneSource transpileTarget] :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (check :a chk) (resolve :a r) (compiler :a comp) (c99Emit :a c99) (asl-target-c :a c11) (asl-target-llvm/main :a llvm) (asl-target-swift/emitSwift :a sw) (asl-target-sh/lower :a shLow)])
 
 fn targetEntryName forms: (List a/TopForm) -> Str
   (let [(defNames (fold (fn [(acc (List Str)) (tf a/TopForm)] (match tf ((a/topDefun d) (listAppend acc (list d.name))) (else acc))) (list) forms))]

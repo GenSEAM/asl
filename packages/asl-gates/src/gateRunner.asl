@@ -1,4 +1,4 @@
-(module asl-gates/gateRunner :x [GateVerdict GateSummary makeVerdict runAll runAllGates runAllSevenGates commandLines checkPaths manifestCheck! balanceCheck! skillCheck! auditSuitePaths runLiveGateAudit formatGateSummary auditDeadCode auditExtensionlessBinaries getTeleologicalRules formatAssistiveOntology] :i [(gates :a g) (shebangAudit :a sa) (siteClaims :a sc) (dyck :a dyck) (asl-tools/fleet/run :a fr)])
+(module asl-gates/gateRunner :x [GateVerdict GateSummary makeVerdict runAll runAllGates runAllSevenGates commandLines checkPaths manifestCheck! balanceCheck! skillCheck! auditSuitePaths runLiveGateAudit formatGateSummary auditDeadCode auditExtensionlessBinaries getTeleologicalRules formatAssistiveOntology] :i [(gates :a g) (siteClaims :a sc) (dyck :a dyck) (asl-tools/fleet/run :a fr)])
 
 (schema GateVerdict (:f gateNum I64) (:f gateName Str) (:f passed Bool) (:f message Str))
 

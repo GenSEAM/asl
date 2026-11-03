@@ -1,9 +1,9 @@
 (module asl/agentLoop/providers
-  :x [ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
-      ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
+  :x [retryAfterSec withRetryAfter ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
+      ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (asl/agentLoop/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (asl/agentLoop/nativeTools :a nt)])
 
 enum ProviderError
@@ -45,7 +45,8 @@ enum ProviderError
   (:f defer Bool :default false)
   (:f hub (Option HubCall) :default none)
   ; (:m :ref TOOLS-400-FALLBACK :do "set once a route answered HTTP 400 to a request carrying tools: cfgTools then keeps the tool list empty for the rest of the session, so every later turn speaks the text protocol")
-  (:f noTools Bool :default false))
+  (:f noTools Bool :default false)
+  (:f excludeModel String :default ""))
 
 enum Provider
   (scriptProvider name: String turns: (List String) index: Int64)
@@ -459,7 +460,7 @@ fn servedFields fields: (List (Pair String j/Json)) -> (Option (List (Pair Strin
                         ((some v) (match v ((j/jnull) false) ((j/jstr s) (not (stringEmpty? s))) (_ true)))
                         (none false))))
         (out (map (fn [k] (pair k (pyStr (optionOr (dictGet fields k) (j/jnull)))))
-                  (filter keep (list "alias" "model" "effort" "temperature"))))]
+                  (filter keep (list "alias" "model" "effort" "temperature" "contextTokens"))))]
     (if (or (some? (dictGet out "alias")) (some? (dictGet out "model"))) (some out) none))
 
 fn isSchemeByte b: Int64 -> Bool
@@ -566,6 +567,29 @@ fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option Str
                                                          (and (!= (bytesGet bs i) 40) (!= (bytesGet bs i) 41))))))]
                   (if (= e v) none (some (sub text v e)))))))))))
 
+; (:m :ref LEON-RAW-PROTOCOL :do "a turn's :error is looked up outside its :reply string, so a canned reply that itself carries :error (a model echoing a receipt code) stays a reply instead of becoming a scripted provider failure")
+fn quotedFieldEnd text: String key: String from: Int64 limit: Int64 -> Int64
+  (match (indexFrom text key from)
+    (none from)
+    ((some p)
+      (let [(bs (stringToBytes text))
+            (v (runWhile bs limit (+ p (stringLength key)) isPySpace))]
+        (if (and (< v limit) (= (bytesGet bs v) 34))
+          (match (quotedBodyEnd bs limit (+ v 1))
+            (none from)
+            ((some e) (+ e 1)))
+          from))))
+
+fn fieldOutsideReply text: String key: String from: Int64 limit: Int64 -> (Option String)
+  (match (indexFrom text ":reply" from)
+    (none (fixtureField text key from limit))
+    ((some r)
+      (if (>= r limit)
+        (fixtureField text key from limit)
+        (match (fixtureField text key from r)
+          ((some v) (some v))
+          (none (fixtureField text key (quotedFieldEnd text ":reply" r limit) limit))))))
+
 fn fixtureUsage text: String start: Int64 limit: Int64 -> (Option (List (Pair String j/Json)))
   (let [(input (fixtureField text ":inputTokens" start limit))
         (cached (fixtureField text ":cachedTokens" start limit))
@@ -587,7 +611,7 @@ fn fixtureSteps text: String bs: Bytes n: Int64 from: Int64 acc: (List ScriptSte
           (let [(next (optionOr (indexFrom text ":turn" (+ p 5)) n))
                 (num (fixtureField text ":num" p next))
                 (reply (fixtureField text ":reply" p next))
-                (error (fixtureField text ":error" p next))
+                (error (fieldOutsideReply text ":error" p next))
                 (usage (fixtureUsage text p next))]
             (fixtureSteps text bs n (+ p 5)
               (cons (ScriptStep :num (optionOr (stringToInt64 (optionOr num "0")) 0) :reply reply :error error :usage usage) acc)))))))
@@ -1011,6 +1035,20 @@ fn headerValue lines: (List String) name: String -> String
     ((some l) (pyStrip (sub l (+ (optionOr (stringIndexOf l ":") 0) 1) (stringLength l))))
     (none ""))
 
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "a 502 all-down reply's Retry-After rides along too, so the waiting turn sleeps the gateway's earliest recovery")
+; (:m :ref HUB-QUEUE-PACED :do "a 429's Retry-After header rides in the status reason as [retry-after=N] so the error text carries it to the caller; other statuses are untouched")
+fn withRetryAfter st: (Pair Int64 String) header: String -> (Pair Int64 String)
+  (if (and (or (= (pairFirst st) 429) (or (= (pairFirst st) 502) (= (pairFirst st) 503))) (not (stringEmpty? header)))
+    (pair (pairFirst st) (str (pairSecond st) " [retry-after=" header "]"))
+    st)
+
+fn retryAfterSec message: String -> Int64
+  (match (stringIndexOf message "[retry-after=")
+    ((none) 0)
+    ((some at)
+      (let [(rest (sub message (+ at 13) (stringLength message)))]
+        (optionOr (stringToInt64 (optionOr (listHead (stringSplit rest "]")) "")) 0))))
+
 fn parseCurlResponse out: String -> (Result (Pair (Pair Int64 String) (Pair String String)) String)
   (let [(he (headEnd out))
         (lines (headLines (sub out 0 (pairFirst he))))
@@ -1020,7 +1058,7 @@ fn parseCurlResponse out: String -> (Result (Pair (Pair Int64 String) (Pair Stri
       ((some st)
         (if (and (>= (pairFirst st) 100) (< (pairFirst st) 200))
           (parseCurlResponse rest)
-          (ok (pair st (pair (headerValue (listDrop lines 1) "content-type") rest)))))))
+          (ok (pair (withRetryAfter st (headerValue (listDrop lines 1) "retry-after")) (pair (headerValue (listDrop lines 1) "content-type") rest)))))))
 
 fn illegalAt bs: Bytes n: Int64 k: Int64 -> Bool
   (let [(b (bytesGet bs k))
@@ -1277,10 +1315,11 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
           ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
 ; (:m :ref ORCH-LEON-CLIENT :do "the hub transport is read from HOME/.asl/hub.asn (the home of the gateway config), never from env: a :sock names the unix socket of the one-per-node hub, calls carry X-Asl-Class and X-Asl-Unit, and a refused connection or an HTTP 503 from the hub (its accept limit) is a wait, retried at :backoffMs doubling until :downAfterMs has passed, then ERR_GATEWAY_DOWN for a refused connection and the 503 error itself for a busy hub; with :fallback inProcess the down hub falls back to the in-process link, with no hub.asn the older gateway path is unchanged")
+; (:m :ref GW-BASE-RED-5 :do "an in-process call whose config is not HOME-shaped has no hub: the refusal ERR_CONFIG_PATH stands instead of the process HOME's hub.asn silently taking the call to the live hub and ignoring the named config")
 fn hubAsnPath cfg: VendorConfig -> String
   (match (configHome cfg.env.gatewayConfig)
     ((some home) (str home "/.asl/hub.asn"))
-    (none (str (envOr! "HOME" "") "/.asl/hub.asn")))
+    (none (if cfg.env.inProcess "" (str (envOr! "HOME" "") "/.asl/hub.asn"))))
 
 fn hubAsnString text: String key: String fallback: String -> String
   (match (stringIndexOf text (str ":" key " \""))
@@ -1305,15 +1344,19 @@ fn hubHeaders cfg: VendorConfig class: String headers: (List (Pair String String
       (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-Asl-Unit" cfg.sessionId)))))
 
 ; (:m :effect net)
+; (:m :ref HUB-QUEUE-PACED :do "a 429 whose Retry-After fits what is left of the queue timeout is waited out and reposted; a longer one is the caller's error")
 fn ! hubPost! cfg: VendorConfig sock: String payload: j/Json headers: (List (Pair String String)) delayMs: Int64 waitedMs: Int64 capMs: Int64 -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (let [(r (postUrlVia! cfg "http://hub/v1/chat/completions" sock "Hub" "start the hub (asl/tools/hub/main.asl serve)" payload headers))]
     (match (pairFirst r)
       ((err e)
-        (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))]
+        (let [(busy (stringContains? (errorMessage e) "Hub HTTP error 503"))
+              (askedMs (* 1000 (retryAfterSec (errorMessage e))))]
+          (if (and (or (stringContains? (errorMessage e) "Hub HTTP error 429") (stringContains? (errorMessage e) "Hub HTTP error 503")) (and (> askedMs 0) (<= (+ waitedMs askedMs) (* 1000 cfg.queueTimeout))))
+            (do (sleepMs askedMs) (hubPost! cfg sock payload headers delayMs (+ waitedMs askedMs) capMs))
           (if (not (or busy (= (errorCode e) "ERR_GATEWAY_OFFLINE"))) r
             (if (>= waitedMs capMs)
               (if busy r (pair (err (gatewayError "ERR_GATEWAY_DOWN" (str "hub socket " sock " refused connections for " (stringFromInt64 waitedMs) " ms: " (errorMessage e)) "start the hub or declare :fallback inProcess in hub.asn")) (emptyMeta)))
-              (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs))))))
+              (do (sleepMs delayMs) (hubPost! cfg sock payload headers (* delayMs 2) (+ waitedMs delayMs) capMs)))))))
       (_ r)))
 
 fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
@@ -1371,16 +1414,33 @@ fn toolsField tools: (List j/Json) -> (List (Pair String j/Json))
   (if (listEmpty? tools) (list) (list (pair "tools" (j/jarr tools))))
 
 ; (:m :ref TOOLS-400-FALLBACK :do "a route that answers HTTP 400 to a request carrying tools cannot take native tools (a tool-less model, or a gateway that rejects the schema): the turn is retried once without them, in the text protocol, and the config remembers the route as no-tools; a 400 without tools is an ordinary error")
+; (:m :ref TOOLS-400-OBSERVE :do "a 400 whose body names a context, length or token limit is the request being too big, not the tools being refused: no fallback, the error stands (dropping the tools would not shrink it)")
+fn sizeLimit? text: String -> Bool
+  (let [(low (stringLower text))]
+    (or (stringContains? low "context") (or (stringContains? low "length") (stringContains? low "token"))))
+
 fn toolsRejected? reply: (Result (Option String) ProviderError) -> Bool
   (match reply
-    ((err e) (stringContains? (errorMessage e) "HTTP error 400"))
+    ((err e) (and (stringContains? (errorMessage e) "HTTP error 400") (not (sizeLimit? (errorMessage e)))))
+    ((ok _) false))
+
+; (:m :ref TOOLS-400-OBSERVE :do "records the fallback in the session journal so a run's text-protocol turns are explained after the fact; no session or a failed write records nothing and never fails the turn")
+fn ! noteFallback! cfg: VendorConfig model: String reply: (Result (Option String) ProviderError) -> Bool
+  (match reply
+    ((err e)
+     (if (stringEmpty? cfg.sessionId)
+       false
+       (match (jr/journalWrite (sessionJournal cfg) (jr/fallbackRowText model 400 (errorMessage e)))
+         ((ok _) true)
+         ((err _) false))))
     ((ok _) false))
 
 ; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(once (callProfileOnce! cfg system user model))]
     (if (and (not (listEmpty? cfg.tools)) (toolsRejected? once.reply))
-      (callProfileOnce! (with cfg :tools (list) :noTools true) system user model)
+      (do (noteFallback! cfg model once.reply)
+        (callProfileOnce! (with cfg :tools (list) :noTools true) system user model))
       once))
 
 ; (:m :effect net)
@@ -1439,7 +1499,8 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
 ; (:m :ref LEON-ATTRIB-20261028 :do "every gateway call names its consumer (leon) and, once the first main turn has run, the turn number, so the gateway ledger row joins the session by X-ASL-Session; advisor and grader calls carry the turn of the last main turn, and a call made before any turn carries no turn header")
 fn attribHeaders cfg: VendorConfig -> (List (Pair String String))
   (listAppend (list (pair "X-ASL-Consumer" "leon"))
-    (if (> cfg.turn 0) (list (pair "X-ASL-Turn" (stringFromInt64 cfg.turn))) (list)))
+    (listAppend (if (> cfg.turn 0) (list (pair "X-ASL-Turn" (stringFromInt64 cfg.turn))) (list))
+      (if (stringEmpty? cfg.excludeModel) (list) (list (pair "X-ASL-Exclude-Model" cfg.excludeModel)))))
 
 fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
   (cond
@@ -1454,6 +1515,9 @@ fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
     (none (pair none index)))
 
 ; (:m :ref JOURNAL-USAGE-ROWS :do "appends the reply's usage to the session journal at rootDir/.asl/run/agentLoop/<session>.journal, the path the loop's own rows use; no usage or no session writes nothing, a failed write returns false and never fails the turn")
+fn sessionJournal cfg: VendorConfig -> String
+  (jr/pathJoin (jr/pathJoin cfg.rootDir ".asl/run/agentLoop") (str cfg.sessionId ".journal"))
+
 fn ! logUsage! cfg: VendorConfig meta: TurnMeta -> Bool
   (match meta.usage
     ((none) false)
@@ -1462,7 +1526,7 @@ fn ! logUsage! cfg: VendorConfig meta: TurnMeta -> Bool
        false
        (let [(num (fn [k] (match (optionOr (jsonLookup (j/jobj fields) k) (j/jint 0)) ((j/jint n) n) (_ 0))))
              (model (match meta.served ((some s) (optionOr (dictGet s "model") cfg.model)) ((none) cfg.model)))
-             (path (jr/pathJoin (jr/pathJoin cfg.rootDir ".asl/run/agentLoop") (str cfg.sessionId ".journal")))]
+             (path (sessionJournal cfg))]
          (match (jr/journalWrite path (jr/usageRowText (num "inputTokens") (num "cachedTokens") (num "outputTokens") model))
            ((ok _) true)
            ((err _) false))))))
@@ -1524,6 +1588,12 @@ fn ! nextTurnAsk! p: Provider system: String user: String -> Ask
 fn noToolsProvider cfg: VendorConfig -> Provider
   (vendorProvider (with cfg :tools (list) :noTools true))
 
+; (:m :ref SE5-NONHUB :do "whether a provider's model calls go to the hub socket (nextTurnAsk! returns askHub): a vendor provider whose HOME/.asl/hub.asn names a :sock; script, replay and the other providers answer inside the call, so a pool must not run them as sessions")
+fn ! hubAsk? p: Provider -> Bool
+  (match p
+    ((vendorProvider cfg) (not (stringEmpty? (hubAsnString (resultOr (fileReadString (hubAsnPath cfg)) "") "sock" ""))))
+    (_ false))
+
 fn ! nextTurnReply p: Provider raw: String -> Turn
   (let [(r (readResponse "Hub" raw))
         (logged (match p ((vendorProvider cfg) (logUsage! cfg (pairSecond r))) (_ false)))
@@ -1570,8 +1640,16 @@ fn capTimeouts p: Provider left: Int64 -> Provider
     ((vendorProvider cfg) (vendorProvider (capConfig cfg left)))
     (_ p))
 
-fn graderConfig cfg: VendorConfig intent: String profile: String -> VendorConfig
-  (with cfg :intent intent :model "" :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
+fn setExclude cfg: VendorConfig exclude: String -> VendorConfig
+  (with cfg :excludeModel exclude)
+
+fn withExclude p: Provider exclude: String -> Provider
+  (match p
+    ((vendorProvider cfg) (vendorProvider (setExclude cfg exclude)))
+    (_ p))
+
+fn graderConfig cfg: VendorConfig intent: String profile: String exclude: String -> VendorConfig
+  (with cfg :intent intent :model "" :excludeModel exclude :env (if (stringEmpty? profile) cfg.env (withProfile cfg.env profile)))
 
 fn noGraderChannel p: Provider -> Turn
   (Turn :provider p :reply
@@ -1592,7 +1670,7 @@ fn ! grade! p: Provider intent: String profile: String system: String text: Stri
             ((some message) (Turn :provider p :reply (err (providerError "ERR_VENDOR" message)) :meta (emptyMeta)))
             ((none) (noGraderChannel p))))))
     ((vendorProvider cfg)
-      (let [(r (callVendor! (graderConfig cfg intent profile) system text))]
+      (let [(r (callVendor! (graderConfig cfg intent profile cfg.excludeModel) system text))]
         (Turn :provider p :reply r.reply :meta r.meta)))
     (_ (noGraderChannel p)))
 

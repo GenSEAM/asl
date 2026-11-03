@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! asnEcho testFiles! readStdin!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel)])
 
 (schema Open
   (:f closer String)
@@ -51,7 +51,7 @@ fn first args: (List String) -> String
 
 ; (:m :ref HL-FIXWAVE :do "version! used to shell out to ctx.hostBin --version whenever sys/executable? ctx.hostBin was true, and otherwise print a message naming asl/host/build.sh as how to build asl-host -- a lie after HL-DELETE (build.sh builds libaslrt.a only, never a host) and, worse, a live host touch whenever ctx.hostBin happened to point at something executable (the nativeCliTest.asl witness-stub fix caught this: warmCli!'s plain 'asl version' call hit the stub and returned its exit 97). asl's own version is a native-CLI fact, not something a (possibly absent, possibly stale) second binary needs to confirm, so this prints it and nothing else")
 fn ! version! ctx: sys/Context -> Int64
-  (do (sys/say! "asl 0.1.0 (bin/asl)") 0)
+  (do (sys/say! (rel/versionLine! ctx.root (resultOr (realPath ".") "."))) 0)
 
 fn retired! cmd: String pointer: String -> Int64
   (do (sys/say! (str "(:" cmd " :status :failed :error ERR_RETIRED :message \"asl " cmd " ran bin/asl-core, which is retired; " pointer "\")")) 2)
@@ -562,7 +562,14 @@ fn ! route! ctx: sys/Context args: (List String) -> (Pair String (List String))
       (pair "test" (cons lead (rest args)))
       (pair lead (rest args))))
 
+; (:m :ref INBOX-RELEASE-PIN :do "a workspace pin or minimum release (.asl.config.asn (:release :pin ...)) is checked before every command but the version flags: a mismatch warns on stderr and the command runs, :mode refuse stops it with exit 2")
+fn ! pinRefused? ctx: sys/Context args: (List String) -> Bool
+  (let [(cmd (first args))]
+    (if (or (= cmd "-v") (or (= cmd "--version") (= cmd "version")))
+      false
+      (rel/pinCheck! ctx.root (resultOr (realPath ".") "."))))
+
 fn ! main args: (List String) -> (Result Int64 String)
   (match (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
-    ((ok ctx) (do (nc/hostEntry! ctx args) (ok (entry! ctx args)))))
+    ((ok ctx) (do (nc/hostEntry! ctx args) (ok (if (pinRefused? ctx args) 2 (entry! ctx args))))))

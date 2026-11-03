@@ -1,9 +1,9 @@
 (module asl/agentLoop/main
   :x [withRemote knownParams acceptedKeys nearestKey! tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
-      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt receiptFieldsIn receiptFieldNames
+      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(asl/agentLoop/core :a c)
       (asl/agentLoop/diff :a diff)
       (asl/agentLoop/providers :a pv)
@@ -11,7 +11,7 @@
       (asl/agentLoop/context :a ctx)
       (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go)
-      (asl/agentLoop/runLoop :a rl)
+      (asl/agentLoop/runLoop :a rl) (asl/agentLoop/pathResolve :a pres)
       (asl/agentLoop/loopState :a ls)
       (asl/agentLoop/turn :a tr)
       (asl/agentLoop/exec :a ex)
@@ -107,7 +107,11 @@
   (:f batching (Option Batching))
   (:f plan (Option pl/PlanSummary))
   (:f vacuousGates (List String))
-  (:f specCheck (Option ls/SpecVerdict)))
+  (:f specCheck (Option ls/SpecVerdict))
+  (:f stop (Option String))
+  (:f lastStep (Option String))
+  (:f servedAlias (Option String))
+  (:f servedModel (Option String)))
 
 (schema MainResult
   (:f stdout String)
@@ -132,6 +136,7 @@
   (:f remote String)
   (:f contextTokens (Option Int64))
   (:f plan Bool)
+  (:f commit Bool :default false)
   (:f attractor String :default "")
   (:f nativeTools String :default "")
   (:f prefix String :default "")
@@ -142,7 +147,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote")
+        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -364,7 +369,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
     ((= key "inputTokenBudget") (pair (paramSet ps key (intParam v 0)) none))
     ((= key "timeout") (pair (paramSet ps key (intParam v 600)) none))
     ((= key "queueTimeout") (pair (paramSet ps key (intParam v 1200)) none))
-    ((= key "dryRun")
+    ((or (= key "dryRun") (= key "commit"))
       (pair (paramSet ps key (j/jbool (match v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
     ((= key "contextTokens")
       (pair (paramSet ps key (match (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
@@ -860,8 +865,52 @@ fn unavailableSpecText reasons: (List String) -> String
   (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
 
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite doneNoWrite malformedReply parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
+fn stopCause status: String signal: (Option String) error: (Option String) vacuous: (List String) -> String
+  (match (nonEmpty signal)
+    ((some s) s)
+    ((none)
+      (cond
+        ((some? (nonEmpty error)) "error")
+        ((= status "ok") "done")
+        ((and (= status "failed") (not (listEmpty? vacuous))) "gateVacuous")
+        (else status))))
+
+fn replyOp reply: String -> String
+  (match (stringIndexOf reply ":op \\\"")
+    ((some at)
+      (let [rest (c/sliceOf reply (+ at 6) (stringLength reply))]
+        (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\\") (stringLength rest)))))
+    ((none)
+      (cond
+        ((stringEmpty? (stringTrim reply)) "empty")
+        ((stringStartsWith? reply "(:")
+          (let [rest (c/sliceOf reply 2 (stringLength reply))
+                ends (map (fn [o] (optionOr o 0)) (filter (fn [o] (some? o)) (list (stringIndexOf rest " ") (stringIndexOf rest ")"))))]
+            (c/sliceOf rest 0 (optionOr (listMin ends) (stringLength rest)))))
+        (else "prose"))))
+
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "the last reply the journal holds, as (:turn N :op name): the op of a (:step :op ...) reply, else the head of its first form, empty or prose")
+fn lastStepIn text: String -> (Option String)
+  (let [replies (filter (fn [l] (and (stringStartsWith? l "(:turn ") (stringContains? l " :reply \""))) (stringSplit text "\n"))]
+    (match (listLast replies)
+      ((none) none)
+      ((some l)
+        (let [at (optionOr (stringIndexOf l " :reply \"") 0)
+              body (c/sliceOf l (+ at 9) (max (+ at 9) (- (stringLength l) 2)))]
+          (some (str "(:turn " (c/sliceOf l 7 at) " :op \"" (c/escapeAsn (replyOp body)) "\")"))))))
+
+fn ! liveLastStep! rootDir: String journal: (Option String) -> (Option String)
+  (match journal
+    ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (lastStepIn text)) ((err _) none)))
+    ((none) none))
+
 fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
+       (match (nonEmpty r.stop) ((some s) (str " :stop " s)) ((none) ""))
+       (match (nonEmpty r.lastStep) ((some l) (str " :lastStep " l)) ((none) ""))
+       (match (nonEmpty r.servedAlias) ((some a) (str " :servedAlias \"" (c/escapeAsn a) "\"")) ((none) ""))
+       (match (nonEmpty r.servedModel) ((some m) (str " :servedModel \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.deliver) ((some d) (str " :deliver :" d)) ((none) ""))
        " :phases (" (stringJoin r.phases " ") ")"
@@ -1078,8 +1127,43 @@ fn withCounts st: ls/LoopState counts: (Map String Int64) -> ls/LoopState
 fn repeatFailureCap -> Int64
   3
 
+; (:m :ref LEON-DONE-LOOP :do "a turn that sent only done, wrote nothing and left the run not terminal counts toward the doneNoWrite stop; the count lives in the LoopState doneNoWriteStreak field")
+; (:m :ref LEON-MALFORMED-TOOLTEXT :do "node2 stalls.asn, 8 rows: a model sent a broken tool-call wrapper such as <:step<</arg_value>>>> that holds no parseable step; the first such reply is answered with the expected shape, the second in a row ends the run with stop cause malformedReply, counted in the LoopState malformedStreak field")
+fn brokenWrapper? text: String -> Bool
+  (or (stringContains? text "<:step") (or (stringContains? text "arg_value>") (or (stringContains? text "<arg_key") (or (stringContains? text "tool_call>") (stringContains? text "<step")))))
+
+fn malformedHint -> String
+  "(:malformed :error ERR_NO_STEP :message \"no (:step ...) in that reply; the tool wrapper is not part of the protocol\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
+
+fn malformedStreakOf st: ls/LoopState -> Int64
+  st.malformedStreak
+
+fn withMalformedStreak st: ls/LoopState n: Int64 -> ls/LoopState
+  (with st :malformedStreak n)
+
+fn doneStreakOf st: ls/LoopState -> Int64
+  st.doneNoWriteStreak
+
+fn withDoneStreak st: ls/LoopState n: Int64 -> ls/LoopState
+  (with st :doneNoWriteStreak n)
+
 fn failedReceipts? receipts: String -> Bool
   (or (stringContains? receipts ":status :rejected") (or (stringContains? receipts ":status :error") (stringContains? receipts ":status :failed")))
+
+; (:m :ref LEON-RAW-PROTOCOL :do "a rejected write that only answers an :error code the model copied into its step (:echoed true) is not a new attempt, so it does not count toward the repeat cap")
+fn countedFailures? receipts: String -> Bool
+  (failedReceipts? (stringJoin (filter (fn [l] (not (stringContains? l ":echoed true"))) (stringSplit receipts "\n")) "\n"))
+
+; (:m :ref LEON-RAW-PROTOCOL :do "7de069c5874e6633: gates green from turn 1 on owned files a lower rung had changed, (:step :op done) twice, no session write, so patchReady never held and the run looped to a repeatFailure; owned files differing from HEAD or from the session's start commit count as the patch")
+fn ! ownedChanged! owns: (List String) rootDir: String startHead: (Option String) -> Bool
+  (if (listEmpty? owns)
+    false
+    (or (not (listEmpty? (resultOr (go/changedOwnedFiles! owns rootDir none) (list))))
+      (match startHead
+        ((some h) (match (jr/git! rootDir (listAppend (list "diff" "--name-only" h "HEAD" "--") owns))
+          ((ok o) (and (= o.exitCode 0) (not (stringEmpty? (stringTrim o.stdout)))))
+          ((err _) false)))
+        ((none) false))))
 
 ; (:m :ref PER-TURN-GATE :do "a turn whose ops all only read, or only write and edit without persisting a change (an edit whose :old is not in the file), changes nothing the gates see, so it reuses the last verdict instead of rerunning the task gates (a suite gate cost minutes per read turn; one calibration run repeated a failing edit 24 times and gated each); a turn that wrote, any other op, an unnamed form or (:done) still runs them")
 fn readOnlyOps -> (List String)
@@ -1122,14 +1206,77 @@ fn ! liveAdvisor provider: pv/Provider sys: String msg: String -> (Result (Optio
         ((err e) (err (pv/errorMessage e)))
         ((ok reply) (ok reply)))))
 
+; (:m :ref SERVED-ALIAS :do "node2 2026-11-02: 2589 of about 2817 write rows journalled :model unknown or empty; the gateway names the alias that answered in the served fields of its reply, so the journal's served row and the receipt carry it beside the upstream model")
+fn servedAlias meta: pv/TurnMeta -> (Option String)
+  (match meta.served
+    ((some fields) (optionMap pairSecond (listHead (filter (fn [p] (and (= (pairFirst p) "alias") (not (stringEmpty? (pairSecond p))))) fields))))
+    ((none) none))
+
+fn servedLine turn: Int64 meta: pv/TurnMeta -> (Option String)
+  (let [model (servedModel meta)
+        alias (servedAlias meta)]
+    (if (and (none? model) (none? alias))
+      none
+      (some (str "(:served :turn " (stringFromInt64 turn)
+        (match model ((some m) (str " :model \"" (c/escapeAsn m) "\"")) ((none) ""))
+        (match alias ((some a) (str " :alias \"" (c/escapeAsn a) "\"")) ((none) ""))
+        ")\n"))))
+
+fn quotedAfter line: String key: String -> (Option String)
+  (match (stringIndexOf line (str key " \""))
+    ((none) none)
+    ((some at)
+      (let [rest (c/sliceOf line (+ at (+ (stringLength key) 2)) (stringLength line))]
+        (match (stringIndexOf rest "\"") ((some e) (some (c/asnUnescape (c/sliceOf rest 0 e)))) ((none) none)))))
+
+; (:m :ref SERVED-ALIAS :do "the alias and model of the last served row of a journal text, each none when no row names it")
+fn servedIn text: String -> (Pair (Option String) (Option String))
+  (fold (fn [acc line]
+          (if (stringStartsWith? line "(:served :turn ")
+            (pair (match (quotedAfter line ":alias") ((some a) (some a)) ((none) (pairFirst acc)))
+                  (match (quotedAfter line ":model") ((some m) (some m)) ((none) (pairSecond acc))))
+            acc))
+    (pair none none) (stringLines text))
+
+fn ! liveServed! rootDir: String journal: (Option String) -> (Pair (Option String) (Option String))
+  (match journal
+    ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (servedIn text)) ((err _) (pair none none))))
+    ((none) (pair none none)))
+
 fn servedModel meta: pv/TurnMeta -> (Option String)
   (match meta.served
     ((some fields) (optionMap pairSecond (listHead (filter (fn [p] (= (pairFirst p) "model")) fields))))
     ((none) none))
 
+fn servedContextTokens meta: pv/TurnMeta backend: String -> (Option Int64)
+  (match meta.served
+    ((some fields)
+      (match (listHead (filter (fn [p] (= (pairFirst p) "contextTokens")) fields))
+        ((some p) (match (stringToInt64 (pairSecond p)) ((some n) (if (> n 0) (some n) none)) ((none) none)))
+        ((none)
+          (match (servedModel meta)
+            ((some m) (some (ctx/contextTokensFor (some m) (j/jnull) (listContains? (supportedBackends) backend))))
+            ((none) none)))))
+    ((none) none))
+
 ; (:m :ref LEON-CAPS :do "the grader call is its own gateway request for the configured intent and profile; its served model is journaled as (:graderServed ...) so the spec check can compare it with the writer's")
+fn writerModelFromJournal path: String -> String
+  (let [text (resultOr (fileReadString path) "")]
+    (fold (fn [acc line]
+            (if (stringStartsWith? line "(:served ")
+              (match (stringIndexOf line ":model \"")
+                ((none) acc)
+                ((some k)
+                  (let [rest (optionOr (stringSlice line (+ k 8) (stringLength line)) "")]
+                    (match (stringIndexOf rest "\"")
+                      ((some e) (optionOr (stringSlice rest 0 e) acc))
+                      ((none) acc)))))
+              acc))
+          "" (stringSplit text "\n")))
+
 fn ! liveGrader provider: pv/Provider intent: String profile: String path: String sys: String msg: String -> (Result (Option String) String)
-  (let [turn (pv/grade! provider intent profile sys msg)
+  (let [writer (writerModelFromJournal path)
+        turn (pv/grade! (pv/withExclude provider writer) intent profile sys msg)
         _ (match (servedModel turn.meta)
             ((some model) (ok? (fileAppend path (str "(:graderServed :model \"" (c/escapeAsn model) "\")\n"))))
             ((none) true))]
@@ -1261,6 +1408,26 @@ fn wallLeft wallBudget: (Option Int64) elapsed: Float64 -> (Option Int64)
     ((some w) (if (> w 0) (some (max 1 (- w (optionOr (float64ToInt64 elapsed) 0)))) none))
     ((none) none))
 
+; (:m :ref WALL-GRACEFUL :do "documented defaults of the two wall settings in .asl.config.asn :agentLoop: :wallReserveSec is held back from :wallBudget for the finish (hand-back, grader, commit) and the dispatch kill margin, :wallGateMinSec is the least wall a gate run may start with; a run that cannot start its gate ends with :stop wallBudget instead of being killed")
+fn defaultWallReserveSec -> Int64
+  120
+
+fn defaultWallGateMinSec -> Int64
+  60
+
+fn wallSetting cfgText: String key: String fallback: Int64 -> Int64
+  (match (ac/agentLoopValue cfgText key)
+    ((some v) (optionOr (ac/positiveInt v) fallback))
+    ((none) fallback))
+
+fn reservedWall wallBudget: (Option Int64) reserve: Int64 -> (Option Int64)
+  (match wallBudget
+    ((some w) (if (> w 0) (some (max 1 (- w reserve))) wallBudget))
+    ((none) none))
+
+fn wallTooShort? left: (Option Int64) need: Int64 -> Bool
+  (match left ((some l) (< l need)) ((none) false))
+
 fn wallCapped base: Int64 left: (Option Int64) -> Int64
   (match left ((some l) (max 1 (min base l))) ((none) base))
 
@@ -1289,17 +1456,21 @@ fn validPrefix? v: String -> Bool
 fn prefixDrop v: String -> (List String)
   (filter (fn [t] (not (= t "focus"))) (prefixList v))
 
-fn focusTail v: String task: String gates: (List String) persisted: Bool -> String
+fn focusTail v: String task: String gates: (List String) wroteSinceGate: Bool -> String
   (if (not (listContains? (prefixList v) "focus")) ""
     (str "\n\n(:focus :goal \"" (c/escapeAsn (if (> (stringLength task) 400) (optionOr (stringSlice task 0 400) task) task))
       "\" :gate \"" (c/escapeAsn (optionOr (listHead gates) "")) "\" :next "
-      (if persisted "(:step :op \"gate\")" "(:step :op \"read\"|\"edit\"|\"write\" ...)") ")"))
+      (if wroteSinceGate "(:step :op \"gate\")" "(:step :op \"read\"|\"edit\"|\"write\" ...)") ")"))
 
 fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/Provider
   (if (stringEmpty? prefill) (wallCappedProvider p left) (pv/withPrefill (wallCappedProvider p left) prefill))
 
 fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
+
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "the live turn's retry: the quick retries, then waits on an all-down gateway inside the run root's allDownWaitSec and allDownPauseSec, so the same session resumes instead of the unit ending with :stop provider")
+fn ! liveProviderWait! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) rootDir: String -> (Pair pv/Turn Int64)
+  (rt/retryTurnWaiting! provider call 3 (list 1 2 4) wallBudget sleep now (ctx/allDownWaitSecFor! rootDir) (ctx/allDownPauseSecFor! rootDir))
 
 fn liveWriteStatus out: ex/ExecOut -> Bool
   (match (ex/recGet out.rec "status")
@@ -1336,10 +1507,17 @@ fn ! liveOwnsField! rootDir: String journal: (Option String) -> String
 fn withRemote op: (List (Pair String c/KvVal)) unit: String -> (List (Pair String c/KvVal))
   (if (or (stringEmpty? unit) (listAny? (fn [p] (= (pairFirst p) "remote")) op)) op (listAppend op (list (pair "remote" (c/kvStr unit)))))
 
+; (:m :ref LEON-PATH-RESOLVE :do "node2 2026-11-02: the top repeatFailure ops were tree, write and read on module-name paths (asl-gates/metaAudit.asl) repeated until the stop; a step path that does not exist runs on the one workspace path it names (pathResolve), owns and the write snapshot see that path, and the receipt carries :resolvedFrom with the path as sent")
+fn resolvedOut out: ex/ExecOut from: (Option String) -> ex/ExecOut
+  (match from
+    ((some f) (ex/ExecOut :rec (ex/recSet out.rec "resolvedFrom" (ex/vStr f)) :procs out.procs))
+    ((none) out))
+
 fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: String repoRoot: String sid: String journal: String env: ex/ExecEnv run: rl/LoopRun -> (Pair rl/LoopRun (Pair String Bool))
   (if (listEmpty? ops)
     (pair run (pair "" false))
-    (let [op (c/firstOf ops)
+    (let [resolvedOp (pres/resolveOp! (c/firstOf ops) (liveOpName (c/firstOf ops)) rootDir)
+          op (pairFirst resolvedOp)
           opName (liveOpName op)
           target (liveOpPath op)
           mutating (listContains? (list "write" "edit" "delete") opName)
@@ -1364,6 +1542,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
               (ex/execOp! (withRemote op ra.remote) env run.procs (fn [] (resultOr (newSessionId) sid))
                 (fn [path] (listContains? (rl/writtenPaths written) path))
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
+          out (resolvedOut out (pairSecond resolvedOp))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
@@ -1442,7 +1621,7 @@ fn liveGateSummary gates: (List g/GateResult) -> String
           (c/joinSep (map g/gateCmd (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)) "; ")))))
 
 fn liveDoneOps? ops: (List (List (Pair String c/KvVal))) -> Bool
-  (listAny? (fn [op] (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false))) ops)
+  (listAny? (fn [op] (or (= (liveOpName op) "done") (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false)))) ops)
 
 fn liveIntentDeliver ops: (List (List (Pair String c/KvVal))) current: (Option String) -> (Option String)
   (if (listEmpty? ops)
@@ -1608,10 +1787,16 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
     (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
 
 ; (:m :ref LEON-ECHO-GUARD :do "every user turn ends with one imperative line naming the next required form, so a weak model that continues the prompt text has an instruction to follow")
-fn nextFormLine persisted: Bool -> String
-  (if persisted
-    "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done)."
-    "\n\nReply with ASN forms only; the next form is a (:step :op ...).")
+fn nextFormLine persisted: Bool wroteSinceGate: Bool hasGates: Bool -> String
+  (cond
+    ((and persisted wroteSinceGate)
+      "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done).")
+    ((and persisted hasGates)
+      "\n\nReply with ASN forms only; the last gate was red and nothing was written since -- write or edit an owned file before running the gate again.")
+    (persisted
+      "\n\nReply with ASN forms only; the next form is a (:step :op ...) or the (:done).")
+    (else
+      "\n\nReply with ASN forms only; the next form is a (:step :op ...)."))
 
 ; (:m :ref SE2-LIVETURN-SPLIT :do "what the first half of a turn hands the second: the system and user text and prefill the model call needs, the sent text the history records, the attractor card names the journal logs and whether the advisor hook was acceptable; liveTurn! composes liveAsk!, the blocking call and liveApply! so its behaviour is unchanged, and a pool runs the call between the two")
 (schema LiveAsk
@@ -1626,8 +1811,11 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
   (let [run wrapped.run
         state run.state
         turn state.turn
-        transcript (ctx/renderTranscriptBounded wrapped.history (ctx/contextKeepTurnsFor! rootDir) (ctx/contextToolCapBytesFor! rootDir) (ctx/contextMaxOlderLinesFor! rootDir)
-          (ctx/contextLatestCapBytes (optionOr state.contextTokens 24000)))
+        keepTurns (ctx/contextKeepTurnsFor! rootDir)
+        toolCap (ctx/contextToolCapBytesFor! rootDir)
+        windowTokens (optionOr state.contextTokens 24000)
+        transcript (ctx/renderTranscriptKept wrapped.history keepTurns toolCap (ctx/contextMaxOlderLinesFor! rootDir)
+          (ctx/contextKeptCapBytes windowTokens keepTurns toolCap) (ctx/contextLatestCapBytes windowTokens))
         advisorInvoked (= (optionOr ra.intent "") "reinforce")
         advisorResult (if advisorInvoked
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))
@@ -1648,13 +1836,16 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
         cards (at/attractorCards ra.attractor (gr/lastGot wrapped.history) run.lastDefect state.writesPersisted turnsSoFar)
         tail (at/attractorTail cards)
         expects (gr/rejectHints (gr/lastGot wrapped.history) (ex/opShapes))
-        user (str tail "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+        user (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched)) (if (stringEmpty? transcript) "" (str "\n\n" transcript))
+          (if (stringEmpty? tail) "" (str "\n\n" (stringTrim tail)))
           (if (stringEmpty? expects) "" (str "\n\n" expects))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
           writeNudge
-          (focusTail ra.prefix ra.task ra.gates state.writesPersisted)
-          (nextFormLine state.writesPersisted))
+          (ctx/readStreakNudgeLine state.readStreak (rl/redGateOf env.gates state.lastGates)
+            (ctx/readStreakNudgeFor! rootDir) (ctx/readStreakEscalateFor! rootDir))
+          (focusTail ra.prefix ra.task ra.gates state.wroteSinceGate)
+          (nextFormLine state.writesPersisted state.wroteSinceGate (not (listEmpty? ra.gates))))
         turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
@@ -1679,12 +1870,12 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
         retried (match ra.route
           ((some rs) (routedCall! ra rs rootDir path turn run.session sysA user wrapped.provider
             (fn [text] (routeVerdict! text ra rootDir repoRoot path routeEnvFor run routeLeft))))
-          ((none) (liveProviderRetry! wrapped.provider
+          ((none) (liveProviderWait! wrapped.provider
           (fn [p attempt] (providerCall (attractorProvider p prefill (wallLeft env.wallBudget (- (env.now) state.runStarted))) sysA user))
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
-          env.sleep env.now)))
+          env.sleep env.now rootDir)))
         _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))]
     (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried)))
@@ -1698,8 +1889,8 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
         shapes (map pairSecond (ex/opShapes))
         _usageLogged (match (providerUsageLine response.meta)
           ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))
-        _servedLogged (match (servedModel response.meta)
-          ((some model) (ok? (fileAppend path (str "(:served :turn " (stringFromInt64 turn) " :model \"" (c/escapeAsn model) "\")\n"))))
+        _servedLogged (match (servedLine turn response.meta)
+          ((some line) (ok? (fileAppend path line)))
           ((none) true))]
     (match response.reply
       ((err e)
@@ -1708,7 +1899,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
           (fileAppend path (str "(:err :turn " (stringFromInt64 turn) " :class :" (rt/errorClass (pv/errorCode e) (pv/errorMessage e))
             " :code :" (pv/errorCode e) " :retries " (stringFromInt64 retries) " :message \"" (c/escapeAsn (pv/errorMessage e)) "\")\n"))
           (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
-                    state.allGateResults state.lastGates "failed" none none state.runStarted)
+                    state.allGateResults state.lastGates "failed" (some "provider") none state.runStarted)
                 nextRun (rl/withState run nextState)]
             (pair (rl/ProviderRun :run nextRun :provider response.provider :history wrapped.history) (stop)))))
       ((ok replyOpt)
@@ -1717,7 +1908,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
             (do
               (fileAppend path (str "(:turn " (stringFromInt64 turn) " :error :ERR_NO_REPLY)\n"))
               (let [nextState (rl/withHeadState state turn state.readStreak state.writesPersisted none
-                        state.allGateResults state.lastGates "failed" none none state.runStarted)
+                        state.allGateResults state.lastGates "failed" (some "noReply") none state.runStarted)
                     nextRun (rl/withState run nextState)]
                 (pair (rl/ProviderRun :run nextRun :provider response.provider :history wrapped.history) (stop)))))
           ((some replyRaw)
@@ -1729,14 +1920,24 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   findingForms facts.dataFindings
                   priorFindings (map ctx/pyStr state.findingsList)
                   mergedFindingForms (fold (fn [acc form] (pairFirst (cl/mergeFindings form acc))) priorFindings findingForms)
+                  servedCtx (if state.explicitContext state.contextTokens
+                    (match (servedContextTokens response.meta ra.backend) ((some t) (some t)) ((none) state.contextTokens)))
                   effects (resultOr (tx/loadEffects! repoRoot) (list))
                   execEnv (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
-                    ra.gates effects "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
+                    ra.gates effects "" (list) (ctx/readPayloadChars (optionOr servedCtx 24000))
                     ra.timeout none run.session none)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
+                  malformedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw)))
+                  malformedStreak (if malformedNow (+ 1 (malformedStreakOf state)) 0)
+                  malformedStop (and malformedNow (>= malformedStreak 2))
+                  gateMin (wallSetting (ac/configText! rootDir) ":wallGateMinSec" (defaultWallGateMinSec))
+                  gateOpStop (and (not (listEmpty? ra.gates))
+                    (and (listAny? (fn [o] (= (liveOpName o) "gate")) operations)
+                      (wallTooShort? (wallLeft env.wallBudget (- (env.now) state.runStarted)) gateMin)))
+                  execOps (if gateOpStop (filter (fn [o] (!= (liveOpName o) "gate")) operations) operations)
                   execResult (if parseDefect (pair run (pair "" false))
-                    (liveExecOps! operations ra rootDir repoRoot run.session path execEnv run))
+                    (liveExecOps! execOps ra rootDir repoRoot run.session path execEnv run))
                   executedRaw (pairFirst execResult)
                   executed0 (match (if ra.plan (livePlanJson facts.forms) none)
                     ((some planState) (rl/withState executedRaw (rl/withPlan executedRaw.state planState)))
@@ -1752,19 +1953,20 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   wrote (pairSecond (pairSecond execResult))
                   ; (:m :ref LEON-POOL-ASK-OP :do "between turns the asks other pool tasks sent this one reach the model as a (:poolAsks ...) observation")
                   poolAsks (po/servePending! ra.pool)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)))
-                  newGates (if (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) ""))
+                  gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
+                  wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
+                  wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
+                  newGates (if (or (not wantGates) wallStop) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid))
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
                   turnOpFiles (c/joinSep (filter (fn [p] (not (stringEmpty? p))) (map liveOpPath operations)) " ")
                   turnGateSummary (liveGateSummary newGates)
-                  history (listAppend wrapped.history
-                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
-                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
+                  _ (let [(edits (jr/editReceiptsOf opReceipts))] (if (stringEmpty? edits) true (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :observation \"" (c/escapeAsn edits) "\")\n")))))
                   _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :proseChars " (stringFromInt64 (at/proseChars reply)) ")\n"))
                   _ (if (at/attractorOn? ra.attractor)
@@ -1783,11 +1985,16 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   writesPersisted (or state.writesPersisted wrote)
                   gatesGreen (and (liveGateResultsGreen? newGates)
                     (or (listEmpty? ra.gates) (not (listEmpty? newGates))))
+                  ownedDone (if (and gatesGreen (and (not writesPersisted) (not (listEmpty? ra.gates))))
+                    (ownedChanged! ra.owns rootDir run.written.startHead) false)
                   patchReady (if (listEmpty? ra.gates)
                     (or (!= (optionOr deliver "") "patch") writesPersisted)
-                    writesPersisted)
+                    (or writesPersisted ownedDone))
                   gatesTerminal (and (not (listEmpty? ra.gates)) (not state.commitRequested))
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
+                  history (listAppend wrapped.history
+                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
+                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
                     (or (liveReviewerAvailable? wrapped.provider) (= (optionOr ra.intent "") "reinforce"))))
                   reviewResult (if reviewInvoked
@@ -1805,7 +2012,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   hooksOk (and ask.advisorOk reviewOk)
                   status (if (or (not (pairFirst integrity)) (not hooksOk))
                     "failed" (if terminal "ok" "running"))
-                  nextState0 (rl/withHeadState executed.state turn state.readStreak writesPersisted
+                  wroteSinceGate (if (not (listEmpty? newGates)) false (or state.wroteSinceGate wrote))
+                  nextReadStreak (if wrote 0 (+ state.readStreak 1))
+                  nextStateBase (rl/withTurnContext executed.state servedCtx (ctx/readPayloadChars (optionOr servedCtx 24000)) wroteSinceGate)
+                  nextState0 (rl/withHeadState nextStateBase turn nextReadStreak writesPersisted
                     deliver allGates lastGates
                     status none none state.runStarted)
                   nextState1 (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)
@@ -1818,21 +2028,41 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   notedRun (rl/noteParseTurn (rl/withState withCommit nextState) turn parseDefect)
                   nextRun0 (if (and terminal (not (pairFirst integrity)))
                     (rl/withState notedRun (rl/withHeadState nextState turn nextState.readStreak writesPersisted deliver allGates lastGates
-                      "failed" none (some (pairSecond integrity)) state.runStarted))
+                      "failed" (some "gateIntegrity") (some (pairSecond integrity)) state.runStarted))
                     notedRun)
                   repeatKey (stringTrim normalized)
-                  repeats (if (and (not parseDefect) (and (not wrote) (failedReceipts? opReceipts)))
+                  repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
                     (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
                   counts (if (> repeats 0) (mapSet (mapEmpty) repeatKey repeats) (mapEmpty))
+                  doneOnly (and done (and (not wrote) (and (not terminal) (listEmpty? (filter (fn [o] (!= (liveOpName o) "done")) operations)))))
+                  doneStreak (if doneOnly (+ 1 (doneStreakOf state)) 0)
+                  doneStop (and doneOnly (>= doneStreak (ctx/doneNoWriteTurnsFor! rootDir)))
+                  doneReason (str "the reply was only done " (stringFromInt64 doneStreak) " turns in a row with nothing written and the run not finished")
+                  _ (if doneStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :doneNoWrite :reason \"" doneReason "\")\n"))) true)
+                  malformedReason (str "the reply held no parseable step " (stringFromInt64 malformedStreak) " times in a row, only a broken tool-call wrapper")
+                  _ (if malformedStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :malformedReply :alias \"" (c/escapeAsn (optionOr (servedAlias response.meta) "")) "\" :reason \"" malformedReason "\")\n"))) true)
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
-                  nextRun (if repeatStop
-                    (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
-                      "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts))
-                    (rl/withState nextRun0 (withCounts nextRun0.state counts)))]
+                  wallHalt (and wallStop (not terminal))
+                  wallReason (str (stringFromInt64 (optionOr gateLeft 0)) " s of the wall budget left, under the " (stringFromInt64 gateMin) " s a gate run needs")
+                  _ (if wallHalt (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :wallBudget :reason \"" wallReason "\")\n"))) true)
+                  nextRun (cond
+                    (wallHalt
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
+                    (malformedStop
+                      (rl/withState nextRun0 (withMalformedStreak (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "malformedReply") (some (str "(:escalate :reason \"" malformedReason "\")")) state.runStarted) counts) malformedStreak)))
+                    (doneStop
+                      (rl/withState nextRun0 (withDoneStreak (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "doneNoWrite") (some (str "(:escalate :reason \"" doneReason "\")")) state.runStarted) counts) doneStreak)))
+                    (repeatStop
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
+                    (else (rl/withState nextRun0 (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal repeatStop) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt (or doneStop malformedStop)))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
@@ -1853,7 +2083,7 @@ fn receiptPhases result: ls/RunResult -> (List String)
       ((some phase) (if (listContains? result.phases phase) result.phases (listAppend result.phases (list phase))))
       ((none) result.phases)))
 
-fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option Usage) -> LoopResult
+fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option Usage) lastStep: (Option String) -> LoopResult
   (let [counts result.batching
         countAt (fn [key] (optionOr (intValue (optionOr (j/jsonGet counts key) (j/jint 0))) 0))
         batching (some (Batching :turns (countAt "turns") :ops (countAt "ops") :single (countAt "single")))]
@@ -1870,7 +2100,8 @@ fn loopResultOf ra: RunArgs rootDir: String result: ls/RunResult usage: (Option 
     :findings (some (map pv/pyStr result.findings)) :queueWaitSec result.queueWaitSec
     :execSec result.execSec :usage (match (liveUsage result.usage) ((some u) (some u)) ((none) usage))
     :batching batching :plan (livePlan result.planSummary) :vacuousGates result.vacuousGates
-    :specCheck result.specCheck))
+    :specCheck result.specCheck :stop (some (stopCause result.status result.signal result.error result.vacuousGates)) :lastStep lastStep
+    :servedAlias none :servedModel none))
 
 ; (:m :ref LEON-SPECCHECK-REVIEWER-DOWN :do "exit 0 for an ok run, and for a gated run that only lacks a reviewer: its status stays needsReview in the receipt")
 fn liveExitCode r: LoopResult -> Int64
@@ -1927,7 +2158,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                         :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
-                        :wallBudget ra.wallBudget :resume none :intent ra.intent :plan ra.plan :specCheck specOn
+                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
@@ -1935,7 +2166,9 @@ fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEn
                   (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
 
 fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
-  (let [receipt (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal))]
+  (let [base (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))
+        served (liveServed! ls.rootDir result.journal)
+        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served))]
     (MainResult :stdout (formatReceipt receipt) :exitCode (liveExitCode receipt)))
 
 fn ! liveRun ls: LiveSession -> MainResult
@@ -1978,8 +2211,9 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :base st.base
            :remote ra.remote
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
-           :plan ra.plan :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
+           :plan ra.plan :commit ra.commit :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
 
+; (:m :ref LIVELOOP-COMMIT-RED :do "a run commits only when its form says :commit true (COMMIT-REQUEST-EXPLICIT dropped the task-prose scan and left the live path at :commit false); the flag reaches LoopEnv.commit and survives a resume")
 ; (:m :ref SE3-POOL-DRIVER :do "the run arguments of an invocation's parameters, as dispatch builds them, so a pool driver starts a run from the same parameters")
 fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int64 plan: Bool -> RunArgs
   (RunArgs :task (textValue (paramOr ps "task" (j/jstr ""))) :modeHint (optText (paramGet ps "modeHint"))
@@ -1993,7 +2227,8 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
+                    :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false))
+                    :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
 
 fn ! dispatch ps: (List (Pair String j/Json)) repoRoot: String rootDir: String timeout: Int64 queueTimeout: Int64 plan: Bool -> MainResult

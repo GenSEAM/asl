@@ -2,7 +2,7 @@
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
       makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
-      providerRetryPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! GateRec ReceiptRec AdviceRec SpecVerdict]
+      providerRetryPause hintedPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! retryTurnWaiting! allDown? GateRec ReceiptRec AdviceRec SpecVerdict]
   :i [(asl/agentLoop/context :a ctx) (asl/agentLoop/providers :a pv)])
 
 ; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")
@@ -52,6 +52,16 @@ fn errorTransient code: String message: String -> Bool
 fn errorClass code: String message: String -> String
   (if (errorTransient code message) "transient" "permanent")
 
+; (:m :ref D7-FIX :do "upper bound in seconds on a server Retry-After pause; adopted 300, a larger hint is clipped")
+fn retryAfterCapSec -> Int64
+  300
+
+; (:m :ref RETRY-AFTER-PARITY :do "one decision for a server Retry-After hint, used by retryTurnLoop! and the pool's decide!: none when the raw hint reaches the wall budget left (the retry would fail anyway), else the hint clipped to retryAfterCapSec")
+fn hintedPause hinted: Int64 left: (Option Int64) -> (Option Int64)
+  (match left
+    ((some n) (if (and (> hinted 0) (>= hinted n)) none (some (min hinted (retryAfterCapSec)))))
+    ((none) (some (min hinted (retryAfterCapSec)))))
+
 fn providerRetryPause transient: Bool retryCount: Int64 configured: (List Int64) budgetLeft: (Option Int64) -> Int64
   (let [slot (min retryCount (listLength configured))
         pause (if (and transient (> slot 0)) (optionOr (listGet configured (- slot 1)) 0) 0)]
@@ -77,14 +87,51 @@ fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Tu
       ((ok _) (pair turn retries))
       ((err error)
         (let [transient (errorTransient (pv/errorCode error) (pv/errorMessage error))
-              pause (providerRetryPause transient (+ retries 1) configured afterCall)]
-          (if (and (< retries maxRetries) (and transient (budgetOpen afterCall)))
+              basePause (providerRetryPause transient (+ retries 1) configured afterCall)
+              raPlan (hintedPause (if transient (pv/retryAfterSec (pv/errorMessage error)) 0) afterCall)
+              raSec (optionOr raPlan 0)
+              rawPause (max basePause raSec)
+              pause (match afterCall ((some left) (max 0 (min rawPause left))) ((none) rawPause))
+              raOutlastsBudget (not (some? raPlan))]
+          (if (and (< retries maxRetries) (and transient (and (budgetOpen afterCall) (not raOutlastsBudget))))
             (let [waited (if (> pause 0) (sleep pause) true)
                   left (match afterCall ((some n) (some (max 0 (- n pause)))) ((none) none))]
               (if waited
                 (retryTurnLoop! turn.provider call maxRetries configured left sleep now (+ retries 1))
                 (pair turn retries)))
             (pair turn retries)))))) 
+
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "the gateway answers a call that no model of the route took with 502 no model answered, or 503 when every pool is in breaker cooldown; both are all down, a state that passes in minutes, unlike an auth or request error")
+fn allDown? message: String -> Bool
+  (or (stringContains? message "no model answered") (stringContains? message "in circuit-breaker cooldown"))
+
+fn ! offsetCall call: (fn [pv/Provider Int64] -> pv/Turn) base: Int64 -> (fn [pv/Provider Int64] -> pv/Turn)
+  (fn [p a] (call p (+ a base)))
+
+; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "a turn whose quick retries all got an all-down reply no longer ends the unit: it sleeps the reply's Retry-After, else pauseSec, while that pause fits both the all-down budget waitLeft and the wall budget left, then runs the same call again with the same session and attempt numbers that keep counting; any other error, a spent budget or a pause past the wall returns the turn as before")
+fn ! retryTurnWaiting! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) waitLeft: Int64 pauseSec: Int64 -> (Pair pv/Turn Int64)
+  (waitRound! provider call (max 0 maxRetries) configured budgetLeft sleep now (max 0 waitLeft) (max 1 pauseSec) 0)
+
+fn ! waitRound! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) waitLeft: Int64 pauseSec: Int64 base: Int64 -> (Pair pv/Turn Int64)
+  (let [started (now)
+        res (retryTurnLoop! provider (offsetCall call base) maxRetries configured budgetLeft sleep now 0)
+        turn (pairFirst res)
+        total (+ base (pairSecond res))
+        spent (chargeSeconds (- (now) started))
+        left (match budgetLeft ((some n) (some (max 0 (- n spent)))) ((none) none))]
+    (match turn.reply
+      ((ok _) (pair turn total))
+      ((err e)
+        (let [message (pv/errorMessage e)
+              hint (pv/retryAfterSec message)
+              pause (if (> hint 0) hint pauseSec)
+              fitsWall (match left ((some n) (< pause n)) ((none) true))]
+          (if (and (allDown? message) (and (<= pause waitLeft) fitsWall))
+            (if (sleep pause)
+              (waitRound! turn.provider call maxRetries configured (match left ((some n) (some (- n pause))) ((none) none))
+                sleep now (- waitLeft pause) pauseSec (+ total 1))
+              (pair turn total))
+            (pair turn total))))))
 
 enum GateRec
   (gateRec cmd: String exit: (Option Int64) timeout: Bool seconds: (Option Int64) stdout: String stderr: String)

@@ -6,10 +6,14 @@
 fn paramTypes d: a/DefunNode -> (List String)
   (map (fn [(p a/Param)] -> String p.type) d.params)
 
+; (:m :ref LL-SIZED-CHECK :do "the bit operators are typed over any integral type in types.asl (I and J are integer-kind variables) while prelude.asl declares them over Int64; the two agree when every integer-kind variable is read as Int64")
+fn asInt64 t: String -> String
+  (if (or (= t "I") (= t "J")) "Int64" (if (= t "(Option I)") "(Option Int64)" t))
+
 fn mismatch d: a/DefunNode -> String
   (match (ty/builtinSig d.name)
     ((none) "")
-    ((some sg) (if (and (= (paramTypes d) (pairFirst sg)) (= d.retType (pairSecond (pairSecond sg))))
+    ((some sg) (if (and (= (paramTypes d) (map asInt64 (pairFirst sg))) (= d.retType (asInt64 (pairSecond (pairSecond sg)))))
                  ""
                  (str d.name ": prelude.asl " (stringJoin (paramTypes d) " ") " -> " d.retType ", types.asl " (stringJoin (pairFirst sg) " ") " -> " (pairSecond (pairSecond sg))))))
 

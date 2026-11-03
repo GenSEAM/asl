@@ -6,7 +6,8 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
-      (asl-target-llvm/wasmLink :a wl)])
+      (asl-target-llvm/wasmLink :a wl)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
@@ -15,7 +16,7 @@ fn ! toolPath name: String -> String
   (stringReplace (sh (str "command -v " name " 2>/dev/null")).stdout "\n" "")
 
 fn ! node -> String
-  (toolPath "node")
+  (lt/nodePath!)
 
 fn ! llc -> String
   (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0))
@@ -60,7 +61,7 @@ fn ! nativeRun name: String source: String work: String -> ProcessOutput
       (assert (some? (libc/libcFacts triple)) (str name " has native facts for " triple))
       (assert (ok? nativeText) (str name " native lowering: " (match nativeText ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (ok? (fileWrite ll (text nativeText))) (str name " writes native IR"))
-      (let [(linked (sh (str "/usr/bin/cc -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
+      (let [(linked (sh (str (lt/clangPath!) " -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
         (assert (= linked.exitCode 0) (str name " native link: " linked.stderr))
         (sh (shellQuote bin)))))
 

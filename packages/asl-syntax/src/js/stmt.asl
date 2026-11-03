@@ -8,11 +8,8 @@
       stmtToSExpr
       isStatementNode
       statementKind findChildNodes]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
-      (asl-syntax/core/print :a pr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/js/lex :a lx)
-      (asl-syntax/js/expr :a expr)
       (asl-syntax/js/cover :a cv)])
 
 (schema StmtsResult

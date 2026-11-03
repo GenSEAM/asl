@@ -1,7 +1,8 @@
 (module asl-target-llvm/tests/wasmTailCallTest
   :x [runTests]
   :i [(asl-target-llvm/target :a target)
-      (asl-target-llvm/wasmLink :a wl)])
+      (asl-target-llvm/wasmLink :a wl)
+      (asl-target-llvm/tests/llvmTools :a lt)])
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -20,7 +21,7 @@ fn ! findExecutable name: String knownLocations: (List String) -> String
             "")))))
 
 fn ! node -> String
-  (findExecutable "node" (list "/opt/homebrew/bin/node" "/usr/local/bin/node" "/usr/bin/node"))
+  (lt/nodePath!)
 
 fn ! llc -> String
   (findExecutable "llc" (list "/opt/homebrew/opt/llvm/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc"))
@@ -59,9 +60,9 @@ fn ! runTests -> Bool
           (assert (stringContains? src "call i64 @oddLoop") "fixture has a mutual-tail call")
           (assert (= (sh (str "rm -rf " (shellQuote work))).exitCode 0) "clears build directory")
           (assert (ok? (dirCreate work)) "creates build directory")
-          (assert (ok? (fileWrite input src)) "writes fixture")
+          (assert (ok? (fileWrite input (stringReplace src "@_start" "@wasmEntry"))) "writes the native copy of the fixture, its wasm entry renamed so it does not clash with the C runtime's _start")
           (assert (ok? (fileWrite wasmLl wasmText)) "lowers fixture for wasm32")
-          (let [(nativeLinked (sh (str "/usr/bin/cc -O2 -x ir " (shellQuote input) " -o " (shellQuote nativeBin))))]
+          (let [(nativeLinked (sh (str (lt/clangPath!) " -Wno-override-module -O2 -x ir " (shellQuote input) " -o " (shellQuote nativeBin))))]
             (assert (= nativeLinked.exitCode 0) (str "native fixture compiles: " nativeLinked.stderr)))
           (let [(compiled (sh (str (shellQuote llcBin) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory,+tail-call -filetype=obj " (shellQuote wasmLl) " -o " (shellQuote obj))))]
             (assert (= compiled.exitCode 0) (str "llc compiles with wasm tail-call feature: " compiled.stderr)))

@@ -89,7 +89,7 @@ fn bindLedgerRow name: String v: String model: String inTok: Int64 outTok: Int64
   (ul/CallRow :atMs (/ (nowNs) 1000000) :profile "" :intent "binding" :alias name :provider v :model model
               :inTokens inTok :cachedTokens 0 :outTokens outTok :reasoningTokens 0 :ttftMs none :ms (some ms)
               :outcome outcome :charge 0 :tag (some (str "binding:" name)) :temperature none :topP none :maxTokens none
-              :effort none :api "cliBinding" :stream false :toolCount 0 :promptBytes promptBytes :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none)
+              :effort none :api "cliBinding" :stream false :toolCount 0 :promptBytes promptBytes :sysHash "" :session none :turn none :consumer none :cacheWriteTokens none :status 0 :reason none)
 
 fn ! bindLedger! ctx: s/SessCtx name: String v: String model: String inTok: Int64 outTok: Int64 outcome: String promptBytes: Int64 ms: Int64 -> Unit
   (if (stringEmpty? ctx.ledger)

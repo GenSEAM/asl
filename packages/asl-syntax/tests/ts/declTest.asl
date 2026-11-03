@@ -1,9 +1,7 @@
 (module asl-syntax/tests/ts/declTest
   :x [runTests]
-  :i [(asl-syntax/core/source :a src)
-      (asl-syntax/core/tree :a tr)
+  :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
-      (asl-syntax/js/lex :a lx)
       (asl-syntax/ts/types :a ts)
       (asl-syntax/ts/decl :a decl)])
 

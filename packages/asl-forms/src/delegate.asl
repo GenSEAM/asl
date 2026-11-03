@@ -783,6 +783,10 @@ fn withParentPid stepStr: String pid: Int64 -> String
       stepStr
       (str (optionOr (stringSlice trimmed 0 (- n 1)) "") " :parentPid " (stringFromInt64 pid) ")")))
 
+; (:m :ref WALL-GRACEFUL :do "a Leon child killed at its agentKillSeconds deadline is a timeout, not a rejected dispatch; any other spawn failure stays ERR_AGENT_DISPATCH")
+fn agentFailCode failure: String -> String
+  (if (stringContains? failure "' timed out after ") "ERR_AGENT_TIMEOUT" "ERR_AGENT_DISPATCH")
+
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
   (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
         (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
@@ -794,7 +798,7 @@ fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: Strin
             (out (pyStrip sp.out))
             (bad (if (!= sp.code 0) 1 0))]
         (cond
-          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail sp.failure)))
+          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" (agentFailCode sp.failure) (msgTail sp.failure)))
           ((not (stringEmpty? out))
             (Outcome :line (str (stepHead id "agent") " :status \"" (if (= bad 0) "ok" "failed") "\" :receipt " out ")") :errCount bad))
           (else
@@ -846,7 +850,7 @@ fn ! poolStepWith ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: St
       (let [(sp (run forms))
             (out (pyStrip sp.out))]
         (cond
-          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail sp.failure)))
+          ((not (stringEmpty? sp.failure)) (rejectedLine id "agent" (agentFailCode sp.failure) (msgTail sp.failure)))
           ((stringStartsWith? out "(:poolReceipt ")
             (Outcome :line (str (stepHead id "agent") " :status \"" (if (= sp.code 0) "ok" "failed") "\" :pool true :receipt " out ")")
                      :errCount (if (= sp.code 0) 0 1)))

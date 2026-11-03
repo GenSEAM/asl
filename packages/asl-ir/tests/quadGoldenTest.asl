@@ -1,5 +1,5 @@
 (module asl-ir/tests/quadGoldenTest
-  :x [entries goldenDigests linkedText runTests]
+  :x [entries goldenDigests linkedText sourceText runTests]
   :i [(asl-ir/types :a ty)
       (asl-ir/printer :a prn)
       (asl-ir/link :a lk)])
@@ -26,8 +26,10 @@ fn entries -> (List String)
 ; (:m :ref FFI2 :do "checkSemanticTest linked IR re-recorded on merge sh/INTEG8b into sh/FFI2 (5041040 bytes: BATCH8 plus the foreign checker rules); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG12 :do "checkSemanticTest linked IR re-recorded after the wave12 merges (+242 bytes, 5123186: the compiler closure and prelude changes of LINUXFFI2 and sibling merges); measured by this file own goldenDigests printer")
 ; (:m :ref INTEG13 :do "checkSemanticTest linked IR re-recorded after the wave13 merges (+40100 bytes, 5163286: checker hint names ty/stringBuiltinNames and unknown-symbol hints, indentLexer change); measured by this file own goldenDigests printer")
+; (:m :ref CONFORMANCE-MAIN-REDS :do "checkSemanticTest linked IR re-recorded on main 5fab8c0a0 (+24932 bytes, 5781512): numKinds literal grammar and int kinds (f4e15216e 6535c0608), the lowLevelRoute hub (cd5241d9d), the lexer radix continuation (12d40c785) and the ERR_UNDEFINED_EXPORT checker and :x sweep (db0fe60ae c1ea15a18 fe10c72ed); measured by this file own goldenDigests printer")
+; (:m :ref ASLIR-STALE-GOLDENS :do "checkSemanticTest linked IR re-recorded on 766de3ec0 (+21506 bytes, 5803018): the only source change in its link closure since the 4d09b2c23 pin (which reproduced the old digest) is e84bdce13 sized ints in asl-checker (new module lowLevelSigs, 13 new fns in check and lowLevelSigs, edits in types and resolve); all other linked lines differ only by renumbered string and id indexes; measured by this file own goldenDigests printer")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "7970664847138001670:5756580")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-7498594251269070353:5819819")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
