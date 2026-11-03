@@ -195,7 +195,7 @@ fn isolatedRun! root: String form: String -> g/RunOut
                    (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs")) "ASL_GATEWAY_PORT=1") (fr/cacheEnv!)))]
     (g/runArgv! (list host "--root" root form) (some repo) (some env) 60000 0))
 
-; (:m :ref MAINFIX14-AGENTROUTE-TIMEOUT-20261019 :do "routedAgentRun! sends an :agent step, which agentStep (asl-forms/delegate.asl) handles by building asl/agentLoop/main.asl's native binary via ev/nativeEntry! before it can even spawn the rejection check this test wants -- a strictly heavier path than isolatedRun!'s (forms-host build only), yet this had half isolatedRun!'s 60000ms budget. On a cold .asl/cache/nativeTest (the state after any other suite's cache sweep, or the first worktree to touch this path in a train) that build alone exceeds 30s, g/runArgv! SIGKILLs the still-building subprocess at the deadline (gate.asl#runArgv! graceMs 0), and RunOut.code becomes the kill/wait status, not the ERR_ROLE_DEPRECATED rejection's exit 1 -- reproduced verbatim (same assertion, same 'after 39 asserts') by clearing .asl/cache/nativeTest and rerunning this file. 180000ms matches the run/limits 180s convention used elsewhere for CLI subprocess budgets and comfortably covers the measured ~137s cold-build wall time for this file")
+; (:m :ref MAINFIX14-AGENTROUTE-TIMEOUT-20261019 :do "routedAgentRun! sends an :agent step, which agentStep (asl-forms/delegate.asl) handles by building asl/packages/asl-agent/src/main.asl's native binary via ev/nativeEntry! before it can even spawn the rejection check this test wants -- a strictly heavier path than isolatedRun!'s (forms-host build only), yet this had half isolatedRun!'s 60000ms budget. On a cold .asl/cache/nativeTest (the state after any other suite's cache sweep, or the first worktree to touch this path in a train) that build alone exceeds 30s, g/runArgv! SIGKILLs the still-building subprocess at the deadline (gate.asl#runArgv! graceMs 0), and RunOut.code becomes the kill/wait status, not the ERR_ROLE_DEPRECATED rejection's exit 1 -- reproduced verbatim (same assertion, same 'after 39 asserts') by clearing .asl/cache/nativeTest and rerunning this file. 180000ms matches the run/limits 180s convention used elsewhere for CLI subprocess budgets and comfortably covers the measured ~137s cold-build wall time for this file")
 fn routedAgentRun! root: String form: String -> g/RunOut
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
@@ -207,7 +207,7 @@ fn testAgentGetsRawForm! -> Bool
   (let [(root (scratchDir! "aslOpsAgent"))
         (made (dirCreate (k/joinPath root ".asl/vfs")))
         (repo (resultOr (realPath ".") ""))
-        (mainPath (k/joinPath repo "asl/agentLoop/main.asl"))
+        (mainPath (k/joinPath repo "asl/packages/asl-agent/src/main.asl"))
         (out (routedAgentRun! root "(:agent :task \"route-test\" :role \"agent\" :wallBudget 5)"))
         (dry (routedAgentRun! root "(:agent :task \"route-test\" :wallBudget 5 :dryRun true :backend \"claude\")"))
         (badBudget (routedAgentRun! root "(:agent :task \"route-test\" :wallBudget 999999 :dryRun true)"))]

@@ -347,7 +347,7 @@ fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option 
     ((err e) (err e))
     ((ok routes) (match (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
 
-; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/agentLoop/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
+; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/packages/asl-agent/src/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
 fn researchProfileFromConfig! rootDir: String -> (Option String)
   (cfg/profilePinRead! rootDir)
 
@@ -788,8 +788,8 @@ fn agentFailCode failure: String -> String
   (if (stringContains? failure "' timed out after ") "ERR_AGENT_TIMEOUT" "ERR_AGENT_DISPATCH")
 
 fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
-  (let [(agentMain (k/aslPath! ctx.rootDir "agentLoop/main.asl"))
-        (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
+  (let [(agentMain (k/aslPath! ctx.rootDir "packages/asl-agent/src/main.asl"))
+        (bin (if (k/isFile! agentMain) (ev/nativeEntry! ctx.rootDir "aslAgent/main" true) (err (str "ASL agent loop not installed: " agentMain))))]
     (match bin
       ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
       ((ok b)
@@ -830,7 +830,7 @@ fn itemsFrom cs: (List String) i: Int64 acc: (List String) -> (List String)
         (else (itemsFrom cs (+ i 1) acc)))))
 
 ; (:m :ref LEON-POOL-WIRE :do "the pool binary starts only through fleet/run runGuarded (rule spawnSafety): the kill deadline is the tasks' summed agent wall, the descendant limit 64 per task plus one, and a fleet verdict comes back as the step's ERR_AGENT_DISPATCH")
-; (:m :ref LEON-POOL-WIRE :do "each element of :pool is a (:task ...) or (:agent ...) form; a (:task \"t\" ...) element becomes (:agent :task \"t\" ...), the form asl/agentLoop/pool main takes one per argument")
+; (:m :ref LEON-POOL-WIRE :do "each element of :pool is a (:task ...) or (:agent ...) form; a (:task \"t\" ...) element becomes (:agent :task \"t\" ...), the form aslAgent/pool main takes one per argument")
 fn poolForms stepStr: String -> (Result (List String) String)
   (match (stringIndexOf stepStr ":pool (")
     ((none) (err "no :pool list"))
@@ -862,7 +862,7 @@ fn poolRoute? op: String stepStr: String -> Bool
 fn ! poolStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: String -> Outcome
   (poolStepWith ctx id kw stepStr
     (fn [(forms (List String))] -> Spawned
-      (match (if (k/isFile! (k/aslPath! ctx.rootDir "agentLoop/pool.asl")) (ev/nativeEntry! ctx.rootDir "asl/agentLoop/pool" true) (err "ASL agent pool not installed"))
+      (match (if (k/isFile! (k/aslPath! ctx.rootDir "packages/asl-agent/src/pool.asl")) (ev/nativeEntry! ctx.rootDir "aslAgent/pool" true) (err "ASL agent pool not installed"))
         ((err e) (Spawned :code 2 :out "" :errText "" :failure e))
         ((ok b) (let [(o (fr/runGuarded (cons b forms) ctx.rootDir (fr/childEnv (list (str "ASL_ROOT_DIR=" ctx.wsDir)))
                                         (fr/Limits :timeoutMs (* 1000 (* (listLength forms) (agentKillSeconds kw)))

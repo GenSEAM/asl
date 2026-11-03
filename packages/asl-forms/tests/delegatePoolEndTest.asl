@@ -1,8 +1,8 @@
 (module asl-forms/tests/delegatePoolEndTest
   :x [runTests]
-  :i [(asl-forms/delegate :a d) (aslHarness/tests/agentLoopRecorderKit :a rk) (asl/agentLoop/core :a c) (asl/agentLoop/tests/gitInitKit :a gk)])
+  :i [(asl-forms/delegate :a d) (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk)])
 
-; (:m :ref LEON-POOL-WIRE :do "end to end: runDelegate on an (:agent :pool ...) step builds and starts the asl/agentLoop/pool binary through fleet/run runGuarded, the pool forks its two task children through forkLimited!, and each child runs Leon's loop against a script/<id> fixture (the fake worker: no gateway, no model); the step comes back with one (:poolReceipt ...) and both tasks' files are on disk")
+; (:m :ref LEON-POOL-WIRE :do "end to end: runDelegate on an (:agent :pool ...) step builds and starts the aslAgent/pool binary through fleet/run runGuarded, the pool forks its two task children through forkLimited!, and each child runs Leon's loop against a script/<id> fixture (the fake worker: no gateway, no model); the step comes back with one (:poolReceipt ...) and both tasks' files are on disk")
 
 fn ! repo! tag: String -> String
   (let [(root (rk/freshRecorderRoot! tag))

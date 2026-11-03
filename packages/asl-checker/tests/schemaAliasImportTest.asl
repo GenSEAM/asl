@@ -19,6 +19,6 @@ fn ! runTests -> Bool
       (assert (names? (diagsOf (withField "" "(List pv/Turn)")) missing) "a type argument of a field names pv/Turn")
       (assert (names? (diagsOf (withField "" "(fn [String String] -> pv/Turn)")) missing) "a fn-typed field's return names pv/Turn, as in loopState.asl")
       (assert (names? (diagsOf (withField "" "(fn [pv/Turn] -> Int64)")) missing) "a fn-typed field's parameter names pv/Turn")
-      (assert (names? (diagsOf (withField "(asl/agentLoop/exec :a x)" "(fn [String String] -> pv/Turn)")) missing) "other imports kept do not cover the removed alias")
-      (refute (names? (diagsOf (withField "(asl/agentLoop/providers :a pv)" "(fn [String String] -> pv/Turn)")) "alias pv is not imported") "with the import the alias is not reported")
+      (assert (names? (diagsOf (withField "(aslAgent/exec :a x)" "(fn [String String] -> pv/Turn)")) missing) "other imports kept do not cover the removed alias")
+      (refute (names? (diagsOf (withField "(aslAgent/providers :a pv)" "(fn [String String] -> pv/Turn)")) "alias pv is not imported") "with the import the alias is not reported")
       true))

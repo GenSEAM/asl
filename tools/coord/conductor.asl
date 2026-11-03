@@ -1245,7 +1245,7 @@ fn ! hubGuard! home: String wt: String -> (Option Res)
     ((err e) (some (failRes e)))
     ((ok _) none))
 
-; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a unit worktree must hold the deployed Leon: the last commit touching asl/agentLoop on the deployed main (the conductor's --repo) is an ancestor of the unit's HEAD; a stale clean worktree is rebased onto the deployed main and the write goes on, a dirty one or a rebase conflict (aborted) returns a STALE_NEEDS_REBASE result, which finish! parks as blocked :await rebase with no failure count and no ladder hop; an unreadable deployed head is not a verdict")
+; (:m :ref DEV-PROMOTE-ON-DEPLOY :do "a unit worktree must hold the deployed Leon: the last commit touching asl/packages/asl-agent on the deployed main (the conductor's --repo) is an ancestor of the unit's HEAD; a stale clean worktree is rebased onto the deployed main and the write goes on, a dirty one or a rebase conflict (aborted) returns a STALE_NEEDS_REBASE result, which finish! parks as blocked :await rebase with no failure count and no ladder hop; an unreadable deployed head is not a verdict")
 fn staleSig? sig: String -> Bool
   (stringStartsWith? sig "STALE_NEEDS_REBASE ")
 
@@ -1402,7 +1402,7 @@ fn ! staleWake! ctx: Ctx c: CUnit -> Unit
         ())))
 
 fn ! leonGuard! repo: String wt: String -> (Option Res)
-  (let [(d (gitOut repo (list "log" "-1" "--format=%H" "HEAD" "--" "asl/agentLoop")))
+  (let [(d (gitOut repo (list "log" "-1" "--format=%H" "HEAD" "--" "asl/packages/asl-agent")))
         (sha (stringTrim d.out))
         (short (optionOr (stringSlice sha 0 9) sha))
         (main (stringTrim (gitOut repo (list "rev-parse" "--short=9" "HEAD")).out))]

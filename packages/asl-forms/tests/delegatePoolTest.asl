@@ -1,8 +1,8 @@
 (module asl-forms/tests/delegatePoolTest
   :x [runTests]
-  :i [(asl-forms/delegate :a d) (asl/agentLoop/pool :a pl) (asl/agentLoop/main :a m)])
+  :i [(asl-forms/delegate :a d) (aslAgent/pool :a pl) (aslAgent/main :a m)])
 
-; (:m :ref LEON-POOL-WIRE :do "an (:agent :pool (...)) step routes to the pool: its (:task ...) elements become (:agent :task ...) forms and the pool's one (:poolReceipt ...) line comes back as the step receipt; the runner here is asl/agentLoop/pool poolMainWith! in-process with a fake task runner, so no binary is spawned and no model is called")
+; (:m :ref LEON-POOL-WIRE :do "an (:agent :pool (...)) step routes to the pool: its (:task ...) elements become (:agent :task ...) forms and the pool's one (:poolReceipt ...) line comes back as the step receipt; the runner here is aslAgent/pool poolMainWith! in-process with a fake task runner, so no binary is spawned and no model is called")
 
 fn ctx -> d/DelegateCtx
   (d/DelegateCtx :rootDir "/" :binDir "/" :wsDir "/")

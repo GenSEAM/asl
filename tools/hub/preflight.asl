@@ -6,6 +6,6 @@
 fn ! hubPreflight home: String root: String -> (Result String String)
   (let [(hub (resultOr (fileReadString (str home "/.asl/hub.asn")) ""))]
     (if (not (stringContains? hub ":sock \"")) (ok "noHub")
-      (if (stringContains? (resultOr (fileReadString (str root "/asl/agentLoop/providers.asl")) "") "hubAsnPath")
+      (if (stringContains? (resultOr (fileReadString (str root "/asl/packages/asl-agent/src/providers.asl")) "") "hubAsnPath")
         (ok "hubClient")
-        (err (str "ERR_HUB_CLIENT_MISSING: " root " has no hub client in asl/agentLoop/providers.asl while " home "/.asl/hub.asn names a hub; rebase the unit on a main that has it")))))
+        (err (str "ERR_HUB_CLIENT_MISSING: " root " has no hub client in asl/packages/asl-agent/src/providers.asl while " home "/.asl/hub.asn names a hub; rebase the unit on a main that has it")))))

@@ -34,7 +34,7 @@
 fn surfaces -> (List Surface)
   (list
     (Surface :id "agentLoop" :kind "agentLoopPromptsAndSystemText"
-      :roots (list "asl/agentLoop") :exts (list ".asl" ".asn") :names (list))
+      :roots (list "asl/packages/asl-agent") :exts (list ".asl" ".asn") :names (list))
     (Surface :id "harnessPrompts" :kind "agentLoopPromptsAndSystemText"
       :roots (list "harness/prompts.asn" "harness/skills.asn" "harness/manifest.asn"
                    "harness/auditProtocols.asn" "harness/auditPlaybook.asn" "harness/paradigm.asn"
@@ -56,7 +56,7 @@ fn surfaces -> (List Surface)
     (Surface :id "docRows" :kind "docAsnRowsWithCode"
       :roots (list "asl/packages") :exts (list) :names (list "doc.asn"))
     (Surface :id "modelFixtures" :kind "fixturesFedToModels"
-      :roots (list "asl/agentLoop/tests" "harness/tests") :exts (list ".asn") :names (list)))
+      :roots (list "asl/packages/asl-agent/tests" "harness/tests") :exts (list ".asn") :names (list)))
 
 
 ; (:m :ref AGSURF :do "CMSHAPE's header/paren strict readers are capability-complete but not yet wired into the live checker pipeline (ast/parse never calls hl/normalizeHeader; resolve.asl has no flat-header case), so turning these on here would flag syntax the real compiler cannot accept yet; they stay behind an arm until the SYN-PROBES verdict lands the wiring")
