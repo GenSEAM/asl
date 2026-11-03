@@ -1,7 +1,7 @@
 (module aslAgent/runOps
   :x [RVal rStr rInt rBool rList Proc Procs Snap OpResult KillOut RunCtx
       makeRunCtx newProcs execRunOp! execManageOp! execDeleteOp! killSpawned! rebaseWritten! drainProcs!
-      checkRunGitGuard shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
+      checkRunGitGuard outsideRootVerdict! spawnEnv! jailHome shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
   :i [(aslAgent/core :a c) (aslAgent/gitOps :a g)])
 
 enum RVal
@@ -600,8 +600,30 @@ fn drainProcs! procs: Procs -> Procs
 fn envKey row: String -> String
   (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "the child of a run op gets HOME and TMPDIR inside <root>/.asl/run/agentLoop/home, created here; the real HOME is never passed")
+fn jailHome absRoot: String -> String
+  (str absRoot "/.asl/run/agentLoop/home")
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "a jailed child must still reuse the rebuildable caches (an uncached ./bin/asl test rebuilds the native CLI and prelude for minutes and gigabytes): the six cache variables of fleet/run#cacheRows name the real home's cache directories, each only when it exists, never overriding a value already set; the test compile cache only in a linked worktree, where its default would follow HOME; no config file, key or repo path of the real home is named")
+fn jailCacheRows -> (List (Pair String String))
+  (list (pair "ASL_NATIVE_CLI_CACHE" "/.asl/run/nativeCli") (pair "ASL_HOST_CACHE_DIR" "/.asl/run/hosts")
+        (pair "ASL_NATIVE_ASL1_CACHE" "/.asl/run/asl1") (pair "ASL_CHECK_CACHE" "/.asl/cache/check") (pair "ASL_CORPUS_CACHE" "/.asl/run/corpusCache")
+        (pair "ASL_NATIVE_TEST_CACHE" "/.asl/run/nativeTest"))
+
+fn ! jailCacheEnv! absRoot: String realHome: String present: (List String) -> (List String)
+  (let [linked (isFile! (str absRoot "/.git"))
+        wanted (filter (fn [r] (and (not (memberOf (pairFirst r) present)) (or (!= (pairFirst r) "ASL_NATIVE_TEST_CACHE") linked))) (jailCacheRows))]
+    (if (stringEmpty? realHome)
+      (list)
+      (map (fn [r] (str (pairFirst r) "=" realHome (pairSecond r)))
+        (filter (fn [r] (isDir! (str realHome (pairSecond r)))) wanted))))
+
 fn spawnEnv! ctx: RunCtx absRoot: String -> (List String)
-  (let [base (listAppend (filter (fn [r] (!= (envKey r) "PWD")) (envList)) (list (str "PWD=" absRoot)))
+  (let [home (jailHome absRoot)
+        made (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp"))))
+        kept (filter (fn [r] (not (memberOf (envKey r) (list "PWD" "HOME" "TMPDIR" "TMP" "TEMP")))) (envList))
+        caches (jailCacheEnv! absRoot (optionOr (envGet "HOME") "") (map envKey kept))
+        base (listAppend (listAppend kept caches) (list (str "PWD=" absRoot) (str "HOME=" home) (str "TMPDIR=" home "/tmp")))
         shown (filter (fn [r] (not (memberOf (envKey r) ctx.hidden))) base)]
     (listAppend (filter (fn [r] (!= (envKey r) "PYTHONDONTWRITEBYTECODE")) shown) (list "PYTHONDONTWRITEBYTECODE=1")))
 
@@ -865,6 +887,116 @@ fn waitRun! p: Proc deadline: Int64 -> Proc
       ((>= (monotonicNs) deadline) q)
       (else (waitRun! (pairSecond (pumpOnce! q (max 1 (min 50 (/ (- deadline (monotonicNs)) 1000000))))) deadline))))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "node2 2026-11-03: the repo every worktree links to was deleted while Leon units ran with the real HOME; a run op now refuses rm, mv, ln, chmod, chown, chgrp, cd and git -C/--git-dir/--work-tree whose path is outside :root, any absolute path under the real HOME other than :root, rm or mv of .git, git worktree remove/prune, git prune and git gc --prune, as ERR_RUN_OUTSIDE_ROOT; the child env carries HOME and TMPDIR inside the root")
+fn jailSegments words: (List String) -> (List (List String))
+  (match (fold (fn [st w]
+                 (match st ((pair done cur)
+                   (if (memberOf w (list ";" "&&" "||" "|" "&" "(" ")"))
+                     (pair (cons (listReverse cur) done) (list))
+                     (pair done (cons w cur))))))
+           (pair (list) (list)) words)
+    ((pair done cur) (listReverse (cons (listReverse cur) done))))
+
+fn resolveSegs segs: (List String) acc: (List String) -> (List String)
+  (if (listEmpty? segs)
+    (listReverse acc)
+    (let [s (c/firstOf segs)]
+      (cond
+        ((or (= s "") (= s ".")) (resolveSegs (c/restOf segs) acc))
+        ((= s "..") (resolveSegs (c/restOf segs) (if (listEmpty? acc) acc (c/restOf acc))))
+        (else (resolveSegs (c/restOf segs) (cons s acc))))))
+
+fn absOf p: String root: String -> String
+  (str "/" (c/joinSep (resolveSegs (stringSplit (if (stringStartsWith? p "/") p (str root "/" p)) "/") (list)) "/"))
+
+fn underPath p: String base: String -> Bool
+  (or (= p base) (stringStartsWith? p (str base "/")))
+
+fn expands? w: String -> Bool
+  (or (stringContains? w "$") (or (stringStartsWith? w "~") (stringContains? w "`")))
+
+fn outsideRoot? w: String root: String -> Bool
+  (and (not (stringEmpty? w)) (and (not (expands? w)) (not (underPath (absOf w root) root))))
+
+fn homeOutside? w: String root: String home: String -> Bool
+  (and (stringStartsWith? w "/")
+    (and (not (stringEmpty? home))
+      (let [a (absOf w root)] (and (underPath a home) (not (underPath a root))))))
+
+fn touchesGit? w: String -> Bool
+  (memberOf ".git" (stringSplit w "/"))
+
+fn gitDirArgs args: (List String) -> (List String)
+  (if (listEmpty? args)
+    (list)
+    (let [a (c/firstOf args)
+          rest (c/restOf args)]
+      (cond
+        ((and (memberOf a (list "-C" "--git-dir" "--work-tree")) (not (listEmpty? rest))) (cons (c/firstOf rest) (gitDirArgs (c/restOf rest))))
+        ((stringStartsWith? a "--git-dir=") (cons (c/sliceOf a 10 (stringLength a)) (gitDirArgs rest)))
+        ((stringStartsWith? a "--work-tree=") (cons (c/sliceOf a 12 (stringLength a)) (gitDirArgs rest)))
+        (else (gitDirArgs rest)))))
+
+fn stripWrappers words: (List String) -> (List String)
+  (if (listEmpty? words)
+    words
+    (let [w (c/firstOf words)]
+      (if (or (memberOf w (list "env" "sudo" "command" "nice" "time" "nohup" "exec")) (and (stringContains? w "=") (not (isFlag w))))
+        (stripWrappers (c/restOf words))
+        words)))
+
+fn firstHit hits: (List (Option String)) -> (Option String)
+  (optionOr (listHead (filter (fn [h] (some? h)) hits)) (none))
+
+fn jailGit args: (List String) root: String -> (Option String)
+  (let [plain (filter (fn [a] (not (isFlag a))) (dropGitGlobals args))
+        sub (if (listEmpty? plain) "" (c/firstOf plain))
+        rest (if (listEmpty? plain) (list) (c/restOf plain))
+        out (listHead (filter (fn [d] (outsideRoot? d root)) (gitDirArgs args)))]
+    (cond
+      ((some? out) (some (str "git " (optionOr out "") " is outside :root")))
+      ((and (= sub "worktree") (listAny? (fn [a] (memberOf a (list "remove" "prune"))) rest)) (some "git worktree remove or prune would touch .git internals"))
+      ((= sub "prune") (some "git prune would touch .git internals"))
+      ((and (= sub "gc") (listAny? (fn [a] (stringStartsWith? a "--prune")) args)) (some "git gc --prune would touch .git internals"))
+      (else (none))))
+
+fn jailSegment seg: (List String) root: String home: String -> (Option String)
+  (let [words (stripWrappers seg)]
+    (if (listEmpty? words)
+      (none)
+      (let [prog (c/progName (c/firstOf words))
+            args (c/restOf words)
+            plain (filter (fn [a] (not (isFlag a))) args)
+            outPlain (listHead (filter (fn [a] (outsideRoot? a root)) plain))
+            gitHit (listHead (filter (fn [a] (touchesGit? a)) plain))
+            homeHit (listHead (filter (fn [a] (homeOutside? a root home)) words))]
+        (cond
+          ((and (memberOf prog (list "sh" "bash" "zsh" "dash")) (memberOf "-c" args))
+            (match (listHead (c/restOf (dropWhileNot "-c" args)))
+              ((some inner) (match (shellWords inner) ((ok ws) (jailWords ws root home)) ((err _) (none))))
+              ((none) (none))))
+          ((memberOf prog (list "rm" "mv" "ln" "chmod" "chown" "chgrp"))
+            (cond
+              ((some? outPlain) (some (str prog " of " (optionOr outPlain "") ", outside :root")))
+              ((and (memberOf prog (list "rm" "mv")) (some? gitHit)) (some (str prog " of " (optionOr gitHit "") " would touch .git internals")))
+              (else (none))))
+          ((memberOf prog (list "cd" "pushd"))
+            (if (some? outPlain) (some (str prog " " (optionOr outPlain "") ", outside :root")) (none)))
+          ((= prog "git") (firstHit (list (jailGit args root) (if (some? homeHit) (some (str (optionOr homeHit "") " is under the real HOME, outside :root")) (none)))))
+          ((some? homeHit) (some (str (optionOr homeHit "") " is under the real HOME, outside :root")))
+          (else (none))))))
+
+fn dropWhileNot x: String xs: (List String) -> (List String)
+  (cond ((listEmpty? xs) xs) ((= (c/firstOf xs) x) xs) (else (dropWhileNot x (c/restOf xs))))
+
+fn jailWords words: (List String) root: String home: String -> (Option String)
+  (firstHit (map (fn [seg] (jailSegment seg root home)) (jailSegments words)))
+
+fn ! outsideRootVerdict! cmd: String root: String -> (Option String)
+  (match (shellWords cmd)
+    ((err _) (none))
+    ((ok ws) (jailWords ws (pyAbspath! (rootOrDot root)) (optionOr (envGet "HOME") ""))))
+
 fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [cmd (firstTruthy op (list "argv" "cmd"))]
     (if (stringEmpty? (g/pyStrip cmd))
@@ -875,6 +1007,10 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
                            (str "not run: '" (pairFirst g) "' would discard working-tree changes or alter git history; use " (pairSecond g) " instead"))
             :procs procs))
         ((none)
+          (match (outsideRootVerdict! cmd ctx.root)
+            ((some why)
+              (OpResult :rec (runReject rid "ERR_RUN_OUTSIDE_ROOT" cmd (str "not run: " why "; a run may only touch paths inside :root")) :procs procs))
+            ((none)
           (match (runOutward cmd ctx.owns ctx.root)
             ((err e)
               (OpResult :rec (runReject rid "ERR_RUN_QUOTING" cmd
@@ -883,7 +1019,7 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
             ((ok why)
               (if (not (stringEmpty? why))
                 (OpResult :rec (needsConfirm rid "run" (str "not run: " why "; the run goes on") cmd) :procs procs)
-                (runSpawned! cmd ctx procs rid onKeep))))))))
+                (runSpawned! cmd ctx procs rid onKeep))))))))))
 
 fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [sid (str (sidPrefix ctx) "-run" rid)]
