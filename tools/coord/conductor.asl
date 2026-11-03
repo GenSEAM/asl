@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -519,19 +519,35 @@ fn ! seedGradeCommits! dir: String -> Int64
             ((ok _) (listLength rows))
             ((err _) -1))))))
 
-fn ! ledgerForged! dir: String path: String base: String -> Bool
-  (if (stringEmpty? path) false
+; (:m :ref CONDUCTOR-REPO-HEALTH :do "the ledger verdict of a unit branch: empty when clean, forged when a commit touching the ledger is not in the store's record, ERR_REPO_GIT: TEXT when git could not read the log at all (the repo, not the writer, is broken: a vanished common dir made 45 units LEDGER_FORGED on node2)")
+fn ! ledgerState! dir: String path: String base: String -> String
+  (if (stringEmpty? path) ""
     (let [(r (gitOut path (list "log" "--format=%H" (str base "..HEAD") "--" (al/ledgerPath))))]
-      (or (!= r.exit 0)
-          (listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (gradeCommitRecorded? dir (stringTrim l))))) (stringLines r.out)))))
+      (cond
+        ((!= r.exit 0) (str "ERR_REPO_GIT: git log in " path " exit " (n r.exit) ": " (repoClip r.out)))
+        ((listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (gradeCommitRecorded? dir (stringTrim l))))) (stringLines r.out)) "forged")
+        (else ""))))
+
+fn repoClip text: String -> String
+  (let [(t (stringTrim text))] (if (> (stringLength t) 160) (optionOr (stringSlice t 0 160) t) t))
+
+fn ! ledgerForged! dir: String path: String base: String -> Bool
+  (= (ledgerState! dir path base) "forged")
+
+; (:m :ref CONDUCTOR-REPO-HEALTH :do "the signature a ledger state gives a result: LEDGER_FORGED for a forged branch, the ERR_REPO_GIT text for an unreadable repo, empty when clean")
+fn ! ledgerSig! dir: String path: String base: String -> String
+  (let [(st (ledgerState! dir path base))]
+    (cond
+      ((= st "forged") "LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn")
+      (else st)))
 
 ; (:m :ref LANDED-AUDIT :do "the ledger guard of finish!: a write result that landed commits touching the ledger, or a review pass over such a branch, becomes a failure (LEDGER_FORGED) so it is neither gated, reviewed nor merged")
 fn ! ledgerGuard dir: String u: st/Task c: CUnit res0: Res -> Res
   (cond
-    ((and (= c.st "writing") (and (= res0.ok 1) (ledgerForged! dir res0.wt (baseRef u))))
-      (with res0 :ok 0 :sig "LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn"))
-    ((and (= c.st "reviewing") (and (= res0.verdict "pass") (ledgerForged! dir c.wt (baseRef u))))
-      (with res0 :verdict "fail" :sig "LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn"))
+    ((and (= c.st "writing") (= res0.ok 1))
+      (let [(sig (ledgerSig! dir res0.wt (baseRef u)))] (if (stringEmpty? sig) res0 (with res0 :ok 0 :sig sig))))
+    ((and (= c.st "reviewing") (= res0.verdict "pass"))
+      (let [(sig (ledgerSig! dir c.wt (baseRef u)))] (if (stringEmpty? sig) res0 (with res0 :verdict "fail" :sig sig))))
     (else res0))
 
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
@@ -676,7 +692,41 @@ fn ! stallHooks ctx: Ctx -> stl/Hooks
                  ((some c) (stallRequeue! ctx c lane note)))))
 
 ; (:m :ref CONDUCTOR :do "one tick starts, polls and transitions only, never waits for a stage: every unit moves at most one transition in id order; capacity = pace tokens minus the units already in flight; the result is 1 when any unit row changed, 0 when the tick was idle")
+; (:m :ref CONDUCTOR-REPO-HEALTH :do "<store>/repoBroken.asn marks a repo whose common dir git cannot read (git rev-parse --git-common-dir in --repo fails): on the transition one (:repoBroken :repo :err :at) row goes to the escalations and the journal, no tick admits or steps a unit while it stands, and the first healthy probe journals (:repoHealthy) and removes the mark; a repo path the store does not know is not probed")
+fn repoBrokenPath dir: String -> String
+  (str dir "/repoBroken.asn")
+
+fn ! repoErr! repo: String -> String
+  (let [(r (gitOut repo (list "rev-parse" "--git-common-dir")))]
+    (cond
+      ((!= r.exit 0) (str "git exit " (n r.exit) (if (stringEmpty? (stringTrim r.out)) "" (str ": " (repoClip r.out)))))
+      ((not (worktreeValid? repo)) "the directory is not its own git top level (its .git is gone, an enclosing repo answers)")
+      (else "")))
+
+fn ! repoGate! ctx: Ctx -> Bool
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) true
+      (let [(err (repoErr! repo))
+            (marked (fileExists? (repoBrokenPath ctx.dir)))
+            (now (/ (nowNs) 1000000))]
+        (cond
+          ((and (not (stringEmpty? err)) (not marked))
+            (let [(row (str "(:repoBroken :repo " (st/q repo) " :err " (st/q err) " :at " (n now) ")"))
+                  (_ (fileWrite (repoBrokenPath ctx.dir) (str row "\n")))
+                  (_ (fileAppend (escalationsPath ctx.dir) (str row "\n")))
+                  (_ (fileAppend (journalPath ctx.dir) (str row "\n")))]
+              false))
+          ((not (stringEmpty? err)) false)
+          (marked
+            (let [(_ (fileAppend (journalPath ctx.dir) (str "(:repoHealthy :repo " (st/q repo) " :at " (n now) ")\n")))
+                  (_ (pathRemove (repoBrokenPath ctx.dir)))]
+              true))
+          (else true)))))
+
 fn ! tick! ctx: Ctx -> (Result Int64 String)
+  (if (repoGate! ctx) (tickRepo! ctx) (ok 0))
+
+fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
   (match (st/readUnits! ctx.dir)
     ((err e) (err e))
     ((ok units)
@@ -1430,9 +1480,28 @@ fn ! runWrite! rc: RealCfg lane: String id: String prof: String p: String task: 
       (if (= d.exit 125) (fp/runLeonProfileExtra! prof rc.repo p rc.home task owns gates rc.leaseSec rc.keys extra) d))
     (fp/runLeonProfileExtra! prof rc.repo p rc.home task owns gates rc.leaseSec rc.keys extra))
 
+; (:m :ref CONDUCTOR-REPO-HEALTH :do "a unit worktree directory is valid when git sees it as its own top level; one that exists without a valid .git (a vanished common dir leaves such shells, orphan writes recreate them) is moved aside to BASE/orphan-ID-MS, journaled as (:orphan :unit :moved), and the unit worktree is added again, instead of the writer failing on it as ERR_HUB_CLIENT_MISSING")
+fn ! worktreeValid? path: String -> Bool
+  (let [(r (gitOut path (list "rev-parse" "--show-toplevel")))]
+    (and (= r.exit 0) (= (resultOr (realPath (stringTrim r.out)) (stringTrim r.out)) (resultOr (realPath path) path))))
+
+fn ! settleWt! rc: RealCfg dir: String u: st/Task path: String -> (Result String String)
+  (cond
+    ((not (fileExists? path)) (attachOrAdd rc u path))
+    ((worktreeValid? path) (reuseWt! rc u path))
+    (else
+      (let [(aside (str rc.wt.base "/orphan-" u.id "-" (n (/ (nowNs) 1000000))))
+            (mv (pathRename path aside))]
+        (match mv
+          ((err e) (err (str "orphan worktree dir not movable: " e)))
+          ((ok _)
+            (let [(_ (fileAppend (journalPath dir) (str "(:orphan :unit " (st/q u.id) " :moved " (st/q aside) ")\n")))
+                  (_ (gitOut rc.repo (list "worktree" "prune")))]
+              (attachOrAdd rc u path)))))))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(path (w/wtPath rc.wt u.id))
-        (added (if (fileExists? path) (reuseWt! rc u path) (attachOrAdd rc u path)))]
+        (added (settleWt! rc dir u path))]
     (match added
       ((err e) (failRes e))
       ((ok p)
