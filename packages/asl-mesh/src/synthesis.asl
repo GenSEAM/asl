@@ -1,9 +1,16 @@
 (module asl-mesh/synthesis :x [synthesizeDefects triangulateFindings consensusFilter refutationEngine] :i [])
 
-fn consensusFilter findings: Any threshold: Any -> List
-  (filter (fn [finding] (>= finding.confidence threshold)) findings)
+; (:m :ref BASE-CHECK-DRIFT :do "field access needs a record type the checker can see: a finding with a confidence is a Scored, one with a reproduced flag a Reproducible; the literals callers pass are both")
+(schema Scored
+  (:f confidence Float64))
 
-fn refutationEngine finding: Any -> Map
+(schema Reproducible
+  (:f reproduced Bool))
+
+fn consensusFilter findings: (List Scored) threshold: Any -> List
+  (filter (fn [(finding Scored)] -> Bool (>= finding.confidence threshold)) findings)
+
+fn refutationEngine finding: Reproducible -> Map
   (let [(reproduced finding.reproduced)]
     {:finding finding :reproduced reproduced :status (if reproduced :verified :unverified)})
 
