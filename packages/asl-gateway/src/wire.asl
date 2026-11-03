@@ -506,7 +506,7 @@ fn chatReplyAsn respJson: j/Json -> String
                              (sPart (match (getPropLoop aslKvs "switchedFrom")
                                       ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":switchedFrom " (asnValue v)))))
                                       ((none) (list))))]
-                         (listAppend aPart (listAppend ePart (listAppend tPart (listAppend cPart (listAppend mPart sPart))))))
+                         (listAppend aPart (listAppend ePart (listAppend tPart (listAppend cPart (listAppend mPart sPart)))))))
                       ((none) (list))))
         (partFinish (list (str ":finish \"" (asnEscape finishStr) "\"")))
         (usageOpt (chatReplyUsage respJson))
