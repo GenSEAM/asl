@@ -81,8 +81,9 @@
       gatewayDailyTokenBudget
       gatewayBreakerCooldownSecOverride
       gatewayTopIntOverride
+      gatewayContextCap
       gatewayTopScalarOverride
-      JudgeRules judgeDefault gatewayProfileMode gatewayProfileJudge
+      JudgeRules judgeDefault gatewayProfileMode gatewayProfileJudge gatewayProfileBudgetFirst
       expandUserPath keyFileLookup! resolveProviderKey! resolveProviderCredential! gatewaySecretsPathFromProps isValidSecretId? providerPromptCacheKey? gatewayKeyFilesFromProps keyFilesSuffix
       profilePinPath profilePinRead! writeProfilePin!
       gatewayConfigKey!
@@ -202,7 +203,9 @@ fn judgeDefault -> JudgeRules
   (:f fallback (Option String))
   ; (:m :ref GW-MODES :do "pin: the route's first member only, its failure relayed as is; route (default): chain, spread, limits, breakers; judge: route plus the judge checks")
   (:f mode String)
-  (:f judge JudgeRules))
+  (:f judge JudgeRules)
+  ; (:m :ref CTX-ROUTE :do "prompt estimate in tokens above which the members are tried largest contextBudget first; 0 keeps the chain order")
+  (:f budgetFirstAbove Int64))
 
 (schema GatewayModel
   (:f id String)
@@ -486,7 +489,8 @@ fn gatewayCooldownErrors g: (Map String rd/SExpr) -> (List String)
                  ((none) (list))))]
     (listAppend (listAppend (cooldownErrorOf g "cooldown429Sec" 1 3600) (cooldownErrorOf g "cooldown429MaxSec" 1 90000))
                 (listAppend (listAppend (cooldownErrorOf g "cooldownSlackSec" 0 30) (cooldownErrorOf g "parkMaxSec" 60 2764800))
-                            (listAppend (listAppend (rangeErrorOf g "ledgerMaxBytes" 65536 1073741824 "bytes") (rangeErrorOf g "ledgerKeep" 1 64 "files")) order))))
+                            (listAppend (listAppend (rangeErrorOf g "ledgerMaxBytes" 65536 1073741824 "bytes") (rangeErrorOf g "ledgerKeep" 1 64 "files"))
+                                        (listAppend (rangeErrorOf g "contextCap" 1 10000000 "tokens") order)))))
 
 ; (:m :ref GW-SESSION-AFFINITY :do "config check for the affinity rows: :affinity is true or false, :affinityStickSec 1..86400, :affinityForgetSec 1..604800 and not under :affinityStickSec, :affinitySwitch dropReasoning or keep")
 fn gatewayAffinityErrors g: (Map String rd/SExpr) -> (List String)
@@ -2004,6 +2008,19 @@ fn gatewayProfileMode table: GatewayTable name: String -> String
 fn gatewayProfileJudge table: GatewayTable name: String -> JudgeRules
   (match (mapGet table.profiles name) ((some p) p.judge) ((none) (judgeDefault)))
 
+; (:m :ref CTX-ROUTE :do "a named profile's :budgetFirstAbove, 0 for an unknown profile or none set")
+fn gatewayProfileBudgetFirst table: GatewayTable name: String -> Int64
+  (match (mapGet table.profiles name) ((some p) p.budgetFirstAbove) ((none) 0))
+
+; (:m :ref CTX-ROUTE :do "a profile's :budgetFirstAbove N, a positive integer of tokens; absent is 0, anything else a config error")
+fn profileBudgetFirstOf p: (Map String rd/SExpr) pid: String -> (Pair Int64 (List String))
+  (match (mapGet p "budgetFirstAbove")
+    ((none) (pair 0 (list)))
+    ((some e)
+      (match (asnScalar e)
+        ((scalarInt n) (if (> n 0) (pair n (list)) (pair 0 (list (str "profile " pid ": :budgetFirstAbove must be a positive integer")))))
+        (_ (pair 0 (list (str "profile " pid ": :budgetFirstAbove must be a positive integer")))))))
+
 (schema ProfileAccumulator
   (:f profiles (Map String GatewayProfile))
   (:f order (List String))
@@ -2042,8 +2059,9 @@ fn applyOneProfile acc: ProfileAccumulator p: (Map String rd/SExpr) intents: (Ma
                 (fallback (resultOr fbRes (none)))
                 (modeRes (profileModeOf p pid))
                 (judgeRes (profileJudgeOf p pid))
-                (errs2 (listAppend errs2a (listAppend (pairSecond modeRes) (pairSecond judgeRes))))
-                (profile (GatewayProfile :id pid :routes routes :fallback fallback :mode (pairFirst modeRes) :judge (pairFirst judgeRes)))]
+                (bfRes (profileBudgetFirstOf p pid))
+                (errs2 (listAppend errs2a (listAppend (pairSecond modeRes) (listAppend (pairSecond judgeRes) (pairSecond bfRes)))))
+                (profile (GatewayProfile :id pid :routes routes :fallback fallback :mode (pairFirst modeRes) :judge (pairFirst judgeRes) :budgetFirstAbove (pairFirst bfRes)))]
             (ProfileAccumulator
               :profiles (mapSet acc.profiles pid profile)
               :order (listAppendOne acc.order pid)
@@ -2195,7 +2213,7 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
 
 fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) -> GatewayTable
   (let [(profilesMap (fold (fn [(acc (Map String GatewayProfile)) (pairEntry (Pair String (List GatewayRoute)))] -> (Map String GatewayProfile)
-                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none) :mode "route" :judge (judgeDefault))))
+                             (mapSet acc (pairFirst pairEntry) (GatewayProfile :id (pairFirst pairEntry) :routes (pairSecond pairEntry) :fallback (none) :mode "route" :judge (judgeDefault) :budgetFirstAbove 0)))
                            (mapEmpty)
                            (mapPairs v1.profiles)))
         (profileOrder (mapKeys v1.profiles))]
@@ -2625,6 +2643,10 @@ fn gatewayBreakerCooldownSecOverride text: String -> (Option Int64)
   (gatewayTopIntOverride text "breakerCooldownSec")
 
 ; (:m :ref GW-429-WINDOW-WAIT :do "an optional top-level (:gateway ... :KEY N) int, read the way :breakerCooldownSec always was; absent, unparseable or non-int is none")
+; (:m :ref CTX-ROUTE :do "the top-level (:gateway :contextCap N) row, the ceiling gateway models sync and apply put on a model's :contextBudget; adopted default 200000 when absent or not an integer; config check accepts 1 to 10000000")
+fn gatewayContextCap text: String -> Int64
+  (optionOr (gatewayTopIntOverride text "contextCap") 200000)
+
 fn gatewayTopIntOverride text: String key: String -> (Option Int64)
   (match (gatewayTopScalarOverride text key)
     ((some (scalarInt n)) (some n))

@@ -497,8 +497,12 @@ fn chatReplyAsn respJson: j/Json -> String
                                       ((none) (list))))
                              (cPart (match (getPropLoop aslKvs "contextTokens")
                                       ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":contextTokens " (asnValue v)))))
+                                      ((none) (list))))
+                             ; (:m :ref CTX-ROUTE :do "the largest window of the route, after the served member's own")
+                             (mPart (match (getPropLoop aslKvs "maxContextTokens")
+                                      ((some v) (if (match v ((j/jnull) true) (_ false)) (list) (list (str ":maxContextTokens " (asnValue v)))))
                                       ((none) (list))))]
-                         (listAppend aPart (listAppend ePart (listAppend tPart cPart)))))
+                         (listAppend aPart (listAppend ePart (listAppend tPart (listAppend cPart mPart))))))
                       ((none) (list))))
         (partFinish (list (str ":finish \"" (asnEscape finishStr) "\"")))
         (usageOpt (chatReplyUsage respJson))

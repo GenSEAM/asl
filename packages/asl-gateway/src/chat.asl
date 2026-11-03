@@ -27,6 +27,7 @@
       effPoolHttp
       effCli
       cliCallerKey
+      promptEstimate contextOverflowError? maxBudgetOf byBudget
       CliReply
       HttpReply
       httpOk
@@ -203,7 +204,11 @@
   (:f telBound Bool)
   (:f head (List HeadItem))
   ; (:m :ref HUB-QUEUE-PACED :do "seconds to the next bucket token when the last failure was a refused rpm bucket, else 0; afterLoop answers 429 with this Retry-After")
-  (:f retryAfterSec Int64))
+  (:f retryAfterSec Int64)
+  ; (:m :ref CTX-ROUTE :do "context routing state: ctxNeed is the contextBudget a later member must exceed after a member overflowed its window (0 none), ctxFails the members skipped or failed for context, ctxEst the largest prompt estimate seen")
+  (:f ctxNeed Int64)
+  (:f ctxFails Int64)
+  (:f ctxEst Int64))
 
 (schema Attempt
   (:f entry c/GatewayResolvedEntry)
@@ -856,16 +861,17 @@ fn reorderBySpread models: (List c/GatewayResolvedEntry) order: (List String) ->
 
 
 ; (:m :ref GW-SPREAD-LIVE-20261018 :do "cascadeChosen's own last step: an empty :spread (the default) skips the effect entirely, zero behaviour change for any route without one; otherwise asks the server for this call's spread order and reorders models by it before Loop is built -- the literal 'orders Loop.models by spreadOrder before construction'")
+; (:m :ref CTX-ROUTE :do "a large prompt under a profile with :budgetFirstAbove orders the members by budget after the spread order, so the window preference wins over the spread for that call")
 fn startLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatStep
   (if (listEmpty? cx.spread)
-    (stickLoop cx body models)
+    (stickLoop cx body (budgetOrder cx body models))
     (askStrings (effSpreadOrder cx.profileName cx.intent cx.spread cx.cooldownSec (spreadPools models cx.spread))
-      (fn [(order (List String))] -> ChatStep (stickLoop cx body (reorderBySpread models order)))))
+      (fn [(order (List String))] -> ChatStep (stickLoop cx body (budgetOrder cx body (reorderBySpread models order))))))
 
 ; (:m :ref GW-SESSION-AFFINITY :do "a session's last answering member goes first while it sticks, after the spread order and before the loop, so breakers and limits still skip it when it is down; no session key asks nothing")
 fn stickLoop cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> ChatStep
   (let [(run (fn [(cx2 Ctx) (ms (List c/GatewayResolvedEntry))] -> ChatStep
-               (loopStep cx2 (Loop :body body :models ms :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0))))]
+               (loopStep cx2 (Loop :body body :models ms :idx 0 :lastErr none :skipped (list) :emptyRetries 0 :telBound false :head (list) :retryAfterSec 0 :ctxNeed 0 :ctxFails 0 :ctxEst 0))))]
     (if (stringEmpty? cx.session)
       (run cx models)
       (stepEffect (effAffinity cx.session)
@@ -1399,14 +1405,14 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
         (a (pairSecond prepared))
         (l1 (with l :body body))
         (prov a.upstream.provider)
-        (overBudget (overContextBudget a body))]
+        (overBudget (overContextBudget a body l.ctxNeed))]
     (if (some? overBudget)
       (let [(why (optionOr overBudget ""))]
+        ; (:m :ref CTX-ROUTE :do "a context skip is not a breaker skip: it counts in ctxFails, never in skipped, so a chain no member of which fits ends in contextTooLarge rather than a circuit-breaker cooldown reply")
         (tellAll (list (effLog (str "[Gateway Context] skip " a.alias ": " why "\n")) (usageNote prov a.alias "context budget"))
           (fn [] -> ChatStep
-            (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1) :lastErr (some why)
-                               :skipped (listAppend l1.skipped (list a.alias)) :emptyRetries l1.emptyRetries
-                               :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
+            (loopStep cx (with l1 :idx (+ l1.idx 1) :lastErr (some why) :retryAfterSec 0
+                               :ctxFails (+ l1.ctxFails 1) :ctxEst (max l1.ctxEst (promptEstimate body)))))))
     (withBreakerPools (list a.providerPool a.pool)
       (fn [(left Float64) (downPool String)] -> ChatStep
         (if (!= left 0.0)
@@ -1416,7 +1422,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                 (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                    :lastErr (some (str "circuit breaker open for " downPool " (" secs "s left)"))
                                    :skipped (listAppend l1.skipped (list downPool)) :emptyRetries l1.emptyRetries
-                                   :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
+                                   :telBound l1.telBound :head l1.head :retryAfterSec 0 :ctxNeed l1.ctxNeed :ctxFails l1.ctxFails :ctxEst l1.ctxEst)))))
           (match (missingKey cx a)
             ((some why)
               (tellAll (list (effLog (str "[Gateway Key] skip " a.alias ": " why "\n")) (usageNote prov a.alias "keyMissing"))
@@ -1424,21 +1430,83 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                   (loopStep cx (Loop :body body :models l1.models :idx (+ l1.idx 1)
                                      :lastErr (some why)
                                      :skipped l1.skipped :emptyRetries l1.emptyRetries
-                                     :telBound l1.telBound :head l1.head :retryAfterSec 0)))))
+                                     :telBound l1.telBound :head l1.head :retryAfterSec 0 :ctxNeed l1.ctxNeed :ctxFails l1.ctxFails :ctxEst l1.ctxEst)))))
             ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))
 
 ; (:m :ref GW-CONTEXT-BUDGET :do "an entry whose :contextBudget (tokens) is below the prompt estimate (a quarter of the serialized messages, the gateway's usual chars-per-token guess) is skipped for the next loop member instead of being sent a request its window cannot hold; some carries the reason text")
-fn overContextBudget a: Attempt body: j/Json -> (Option String)
+; (:m :ref CTX-ROUTE :do "the gateway's prompt token estimate: a quarter of the serialized messages")
+fn promptEstimate body: j/Json -> Int64
+  (/ (stringLength (pt/jsonDumps (getOr body "messages" (j/jnull)) -1)) 4)
+
+; (:m :ref CTX-ROUTE :do "need is the budget an earlier member overflowed with; a member whose declared budget is not above it is skipped too, so the loop hops only to a member with a larger window; a member with no declared budget is still tried")
+fn overContextBudget a: Attempt body: j/Json need: Int64 -> (Option String)
   (match a.v2
     ((none) none)
     ((some e)
       (match e.params.contextBudget
         ((none) none)
         ((some budget)
-          (let [(est (/ (stringLength (pt/jsonDumps (getOr body "messages" (j/jnull)) -1)) 4))]
-            (if (> est budget)
-              (some (str "prompt about " (stringFromInt64 est) " tokens exceeds " e.alias " contextBudget " (stringFromInt64 budget)))
-              none))))))
+          (let [(est (promptEstimate body))]
+            (cond
+              ((> est budget)
+               (some (str "prompt about " (stringFromInt64 est) " tokens exceeds " e.alias " contextBudget " (stringFromInt64 budget))))
+              ((and (> need 0) (<= budget need))
+               (some (str e.alias " contextBudget " (stringFromInt64 budget) " is not above the overflowed window " (stringFromInt64 need))))
+              (else none)))))))
+
+; (:m :ref CTX-ROUTE :do "a provider reply that says the prompt overflowed the model's window: a 400, 413 or 422 whose body names a context length, context window or a too long prompt; such a reply is never retried on the same member")
+fn contextOverflowError? status: Int64 body: String -> Bool
+  (and (listContains? (list 400 413 422) status)
+       (let [(low (stringLower body))]
+         (listAny? (fn [(m String)] -> Bool (stringContains? low m))
+                   (list "context_length_exceeded" "context length" "context window" "maximum context" "context_window_exceeded"
+                         "prompt is too long" "input is too long" "too many input tokens" "prompt too long" "exceeds the model's maximum"
+                         "input token count" "reduce the length of the messages"))))
+
+; (:m :ref CTX-ROUTE :do "the largest declared contextBudget among the loop's members, 0 when none declares one")
+fn maxBudgetOf models: (List c/GatewayResolvedEntry) -> Int64
+  (fold (fn [(acc Int64) (m c/GatewayResolvedEntry)] -> Int64
+          (match m
+            ((c/entryResolved e) (match e.params.contextBudget ((some n) (max acc n)) ((none) acc)))
+            ((c/entryUnresolved _) acc)))
+        0 models)
+
+fn entryBudget m: c/GatewayResolvedEntry -> Int64
+  (match m
+    ((c/entryResolved e) (optionOr e.params.contextBudget 0))
+    ((c/entryUnresolved _) 0))
+
+fn insertByBudget m: c/GatewayResolvedEntry sorted: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (match (listHead sorted)
+    ((none) (list m))
+    ((some h) (if (> (entryBudget m) (entryBudget h)) (cons m sorted) (cons h (insertByBudget m (optionOr (listTail sorted) (list)))))))
+
+; (:m :ref CTX-ROUTE :do "members ordered by declared contextBudget, largest first; equal budgets keep their chain order and members without a budget go last")
+fn byBudget models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (fold (fn [(acc (List c/GatewayResolvedEntry)) (m c/GatewayResolvedEntry)] -> (List c/GatewayResolvedEntry) (insertByBudget m acc)) (list) models)
+
+; (:m :ref CTX-ROUTE :do "a profile's :budgetFirstAbove N: when the prompt estimate is above N tokens the members are tried largest budget first; 0 (absent) keeps the chain order")
+fn budgetOrder cx: Ctx body: j/Json models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
+  (let [(above (match cx.world.table ((ok t) (c/gatewayProfileBudgetFirst t cx.profileName)) ((err _) 0)))]
+    (if (and (> above 0) (> (promptEstimate body) above)) (byBudget models) models))
+
+; (:m :ref CTX-ROUTE :do "the typed reply when no member's window holds the prompt: 413 with (:err :code contextTooLarge :need N :maxBudget M) and an X-ASL-Max-Context header, so a client compacts to M and retries; maxBudget is left out when no member declares a budget")
+fn contextTooLarge cx: Ctx l: Loop -> ChatStep
+  (let [(m (maxBudgetOf l.models))
+        (need (max l.ctxEst (promptEstimate l.body)))]
+    (sendError cx (listAppend l.head (if (> m 0) (list (headField "X-ASL-Max-Context" (stringFromInt64 m))) (list)))
+               413 (str "(:err :code contextTooLarge :need " (stringFromInt64 need) (if (> m 0) (str " :maxBudget " (stringFromInt64 m)) "") ")") true))
+
+; (:m :ref CTX-ROUTE :do "a member that overflowed its window: a pin profile answers contextTooLarge at once; otherwise the member's declared budget (else the estimate) becomes the need a later member must exceed and the loop moves on; no breaker event, a too long prompt says nothing about the member's health")
+fn contextOverflowed cx: Ctx l: Loop a: Attempt status: Int64 -> ChatStep
+  (let [(est (promptEstimate l.body))
+        (declared (match a.v2 ((some e) (optionOr e.params.contextBudget 0)) ((none) 0)))
+        (l1 (with l :ctxFails (+ l.ctxFails 1) :ctxEst (max l.ctxEst est) :ctxNeed (max l.ctxNeed (if (> declared 0) declared est))
+                    :lastErr (some (str a.alias " HTTP " (stringFromInt64 status) ": prompt about " (stringFromInt64 est) " tokens overflowed its context window")) :retryAfterSec 0))]
+    (tellAll (list (usageNote a.upstream.provider a.alias "contextOverflow")
+                   (effLog (str "[Gateway Context] " a.alias " overflowed its context window (HTTP " (stringFromInt64 status) "). Trying a larger member...\n")))
+      (fn [] -> ChatStep
+        (if (= cx.mode "pin") (contextTooLarge cx l1) (loopStep cx (advance l1 l1.body))))))
 
 
 fn systemPrompt msgs: (List j/Json) -> (Result String pt/PyErr)
@@ -1875,18 +1943,21 @@ fn sanitizeFirst resp: j/Json f: (fn [String] -> String) -> j/Json
        ((none) resp)))
     (_ resp))
 
-fn servedBy a: Attempt body: j/Json -> (List (Pair String j/Json))
+; (:m :ref CTX-ROUTE :do "maxContext is the largest contextBudget in the loop's chain, sent as maxContextTokens when any member declares one: the largest window this route can serve, so a client knows how far it may grow before compacting harder")
+fn servedBy a: Attempt body: j/Json maxContext: Int64 -> (List (Pair String j/Json))
   (let [(base (list (pair "alias" (j/jstr a.alias))))
         (withEffort (match a.sentEffort
                       ((some e) (match e ((some s) (listAppend base (list (pair "effort" (j/jstr s))))) ((none) base)))
                       ((none) base)))
         (temp (if (isObj? body) (getOr body "temperature" (j/jnull)) (j/jnull)))
         (withTemp (if (isNull? temp) withEffort (listAppend withEffort (list (pair "temperature" temp)))))]
-    (match a.v2
-      ((some e) (match e.params.contextBudget
-                  ((some n) (listAppend withTemp (list (pair "contextTokens" (j/jint n)))))
-                  ((none) withTemp)))
-      ((none) withTemp)))
+    (listAppend
+      (match a.v2
+        ((some e) (match e.params.contextBudget
+                    ((some n) (listAppend withTemp (list (pair "contextTokens" (j/jint n)))))
+                    ((none) withTemp)))
+        ((none) withTemp))
+      (if (> maxContext 0) (list (pair "maxContextTokens" (j/jint maxContext))) (list))))
 
 fn mergeAsl resp: j/Json served: (List (Pair String j/Json)) -> j/Json
   (let [(existing (match (getOr resp "asl" (j/jnull)) ((j/jobj kvs) kvs) (_ (list))))]
@@ -2070,7 +2141,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
            (telemetry cx content m
              (fn [(rec (Option String))] -> ChatStep
                (let [(withModel (if (has? sanitized "model") sanitized (pt/jset sanitized "model" (j/jstr a.target))))
-                     (resp (mergeAsl withModel (servedBy a l.body)))
+                     (resp (mergeAsl withModel (servedBy a l.body (maxBudgetOf l.models))))
                      (lb (with l :telBound true))]
                  (answered cx lb a status headers (pt/jsonDumps resp -1) (some resp) rec))))))))
       ((none) (answered cx l a status headers body none none))))
@@ -2143,9 +2214,11 @@ fn retryHttp cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (L
 
 fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (let [(policy (retryPolicyFor cx a))]
+    (if (contextOverflowError? status body)
+      (contextOverflowed cx l a status)
     (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableHttpStatus? status body))
       (retryHttp cx l a status reason headers body policy)
-      (httpFailedFinal cx l a status reason headers body)))
+      (httpFailedFinal cx l a status reason headers body))))
 
 ; (:m :ref GW-DAILY-PARK :do "a daily-cap 429 asks the clock once so the model is parked until the provider's reset instead of the fixed cooldown; every other failure goes straight on")
 fn httpFailedFinal cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
@@ -2244,6 +2317,7 @@ fn afterLoop cx: Ctx l: Loop -> ChatStep
       ((> l.retryAfterSec 0)
        (sendError cx (listAppend l.head (list (headField "Retry-After" (stringFromInt64 l.retryAfterSec))))
                   429 (str "ERR_RATE_LIMITED: no rate-limit token within the queue budget" (lastErrSuffix l) "; retry in " (stringFromInt64 l.retryAfterSec) "s") true))
+      ((and (> l.ctxFails 0) (>= l.ctxFails cx.cascadeLen)) (contextTooLarge cx l))
       ((and (not (listEmpty? skipped)) (>= (listLength skipped) cx.cascadeLen))
        (let [(pools (uniqueSorted skipped))]
          (askFloats (effBreakerDownAll pools)
