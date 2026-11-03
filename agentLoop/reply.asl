@@ -1330,10 +1330,24 @@ fn rawStringRepls toks: (List FormTok) prev: String base: Int64 -> (List Repl)
         (match t ((formTok _ ns ne) (cons (repl (+ base ns) (+ base ne) "") (rawStringRepls rest (tokT t) base))))
         (rawStringRepls rest (tokT t) base))))
 
-fn nextStepAt text: String from: Int64 -> Int64
-  (match (stringIndexOf (sl text from (stringLength text)) "(:step")
-    ((some k) (+ from k))
-    ((none) (stringLength text)))
+fn firstIdx text: String from: Int64 lits: (List String) -> Int64
+  (let [rest (sl text from (stringLength text))
+        hits (filter (fn [o] (some? o)) (map (fn [l] (stringIndexOf rest l)) lits))]
+    (+ from (optionOr (listMin (map (fn [o] (optionOr o 0)) hits)) (- (stringLength text) from))))
+
+; (:m :ref LEON-WRITE-REJECT :do "the bare tail ends at the next line that starts a form: any (: line for an .asl target, a (:step or (:done line for an .asn target")
+fn nextBreakAt text: String from: Int64 file: String -> Int64
+  (if (stringEndsWith? file ".asn")
+    (firstIdx text from (list "\n(:step" "\n(:done"))
+    (firstIdx text from (list "\n(:")))
+
+; (:m :ref LEON-WRITE-REJECT :do "a bare tail binds only when it looks like the target: an .asl file starts with a form, fn, enum, schema or comment, an .asn file starts with (:; prose and other extensions keep the unbound refusal")
+fn tailLooksLike file: String tail: String -> Bool
+  (cond
+    ((stringEndsWith? file ".asl")
+      (or (stringStartsWith? tail "(") (or (stringStartsWith? tail "fn ") (or (stringStartsWith? tail "enum ") (or (stringStartsWith? tail "schema ") (stringStartsWith? tail ";"))))))
+    ((stringEndsWith? file ".asn") (and (stringStartsWith? tail "(:") (not (stringStartsWith? tail "(:step"))))
+    (else false))
 
 ; (:m :ref LEON-WRITE-REJECT :do "node2 2026-11-01, 57 of 70 ERR_RAW_MISSING: the model sent (:step :op write :content :raw) and its file text right after the closed form with no fence, or :raw followed by the quoted text; the bare tail up to the next (:step is bound as the content, and :raw before a quoted string is dropped")
 fn bareRawRepls text: String fences: (List Fence) span: (Pair Int64 Int64) -> (List Repl)
@@ -1347,12 +1361,13 @@ fn bareRawRepls text: String fences: (List Fence) span: (Pair Int64 Int64) -> (L
           raws (pairSecond scanned)
           strRepls (rawStringRepls toks "" fs)
           laterFence (listAny? (fn [f] (>= (fStart f) fe)) fences)
-          nx (nextStepAt text fe)
+          file (optionOr (pairSecond (pairFirst scanned)) "")
+          nx (nextBreakAt text fe file)
           tail (pyStrip (sl text fe nx))]
       (cond
         ((not (member op (list "write" "edit"))) (list))
         ((not (listEmpty? strRepls)) strRepls)
-        ((or laterFence (or (stringEmpty? tail) (or (!= (listLength raws) 1) (stringStartsWith? tail "(:")))) (list))
+        ((or laterFence (or (stringEmpty? tail) (or (!= (listLength raws) 1) (not (tailLooksLike file tail))))) (list))
         (else (list (repl fe nx (str "\n```\n" tail "\n```\n"))))))))
 
 fn bareRaw text: String -> String

@@ -13,6 +13,15 @@ fn inlineReply -> String
 fn fencedReply -> String
   "(:step :op \"write\" :file \"a/b.asl\" :content :raw)\n```\nhello\n```\n"
 
+fn proseReply -> String
+  "(:step :op \"write\" :file \"docs/a.md\" :content :raw)\nI will now write the file with the new section.\n(:done :summary \"x\")"
+
+fn doneAfterReply -> String
+  "(:step :op \"write\" :file \"a/b.asl\" :content :raw)\n(module a/b :x [] :i [])\n(:done :summary \"x\")"
+
+fn asnReply -> String
+  "(:step :op \"write\" :file \"a/b.asn\" :content :raw)\n(:row :id 1)\n(:row :id 2)\n(:done)"
+
 fn checkerOut -> String
   "(:receipt :op txn :status :aborted :error :ERR_TXN_ABORTED :detail (:step :file \"a/b.asl\" :staged true :bytes 48968 :pendingFlush true :balanced true :syntax :error :checker \"asl-checker\" :forced true :syntaxMessage \"a/b.asl:62:4: ERR_TYPE_MISMATCH if condition: expected Bool, found (Option _)\" :repaired ()))"
 
@@ -20,6 +29,9 @@ fn ! runTests -> Bool
   (let [bare (r/bindRawBlocks (bareReply))
         inl (r/bindRawBlocks (inlineReply))
         fen (r/bindRawBlocks (fencedReply))
+        prs (r/bindRawBlocks (proseReply))
+        dn (r/bindRawBlocks (doneAfterReply))
+        asn (r/bindRawBlocks (asnReply))
         ref (t/txnRefusal (checkerOut) "" "ERR_WRITE_FAILED" none)]
     (do
       (assert (= bare.count 1) "a bare tail after the closed :raw step binds as the one raw block")
@@ -33,4 +45,11 @@ fn ! runTests -> Bool
       (assert (stringContains? fen.text ":content \"hello\\n\"") "the fenced text is the content")
       (assert (stringContains? (pairSecond ref) "ERR_TYPE_MISMATCH if condition") "the checker's syntaxMessage is the refusal message")
       (assert (not (stringContains? (pairSecond ref) "ERR_WRITE_FAILED")) "no cut tail of the nested receipt")
+      (assert (= prs.count 0) "prose after a raw step for a .md target is not bound as content")
+      (assert (stringContains? prs.text "(:done :summary") "the done step after prose is kept")
+      (assert (= dn.count 1) "a form tail followed by (:done binds the module text")
+      (assert (stringContains? dn.text "(:done :summary") "the (:done step is not swallowed into the content")
+      (assert (not (stringContains? dn.text "x\\\")\\n")) "the done form is not inside the content string")
+      (assert (stringContains? asn.text "(:done)") "an .asn tail ends at (:done")
+      (assert (stringContains? asn.text "(:row :id 2)\\n\"") "an .asn tail binds the rows up to the done step")
       true))
