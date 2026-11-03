@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -505,6 +505,19 @@ fn gradeCommitsPath dir: String -> String
 
 fn ! gradeCommitRecorded? dir: String sha: String -> Bool
   (listAny? (fn [(l String)] -> Bool (and (stringStartsWith? l "(:gradeCommit ") (= (al/rowText l "sha") sha))) (stringLines (readOr (gradeCommitsPath dir))))
+
+; (:m :ref GRADE-COMMIT-AUTH :do "one-time migration at conductor start: when <store>/gradeCommits.asn does not exist yet (grade commits of the W1b conductor were never recorded), it is created from the grade commits already on the unit branches sh/* of the repo: committer conductor@localhost, subject starting (:c :a grade :do, touching the ledger, at most 5000 commits; each becomes a (:gradeCommit :unit \"\" :sha S :row \"seed\") row and one (:gradeSeed :n N) row heads the file so it never runs twice; an unreadable log creates nothing and the next start retries. Never run lazily: only the operator's start trusts what is on the branches then; returns the commits seeded, -1 when the file exists or the repo is unknown")
+fn ! seedGradeCommits! dir: String -> Int64
+  (let [(repo (stringTrim (readOr (repoPath dir))))]
+    (if (or (stringEmpty? repo) (fileExists? (gradeCommitsPath dir))) -1
+      (let [(r (gitOut repo (list "log" "--branches=sh/*" "-n" "5000" "--committer=conductor@localhost" "--format=%H %s" "--" (al/ledgerPath))))
+            (shas (map (fn [(l String)] -> String (optionOr (listHead (stringSplit l " ")) ""))
+                       (filter (fn [(l String)] -> Bool (stringContains? l " (:c :a grade :do ")) (stringLines r.out))))
+            (rows (map (fn [(sha String)] -> String (str "(:gradeCommit :unit \"\" :sha " (st/q sha) " :row \"seed\")")) (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) shas)))]
+        (if (!= r.exit 0) -1
+          (match (fileWrite (gradeCommitsPath dir) (str "(:gradeSeed :n " (n (listLength rows)) ")\n" (stringJoin rows "\n") (if (listEmpty? rows) "" "\n")))
+            ((ok _) (listLength rows))
+            ((err _) -1))))))
 
 fn ! ledgerForged! dir: String path: String base: String -> Bool
   (if (stringEmpty? path) false
@@ -1817,6 +1830,8 @@ fn ! main args: (List String) -> (Result Int64 String)
                   (_ (let [(l (st/opt args "ledger" ""))] (if (stringEmpty? l) (ok ()) (fileWrite (ledgerPath dir) (str l "\n" (st/opt args "ledger-base" "HEAD") "\n")))))
                   (_ (fileWrite (repoPath dir) (str rc.repo "\n")))
                   (_ (fileWrite (worktreesPath dir) (str rc.wt.base "\n")))
+                  (seeded (seedGradeCommits! dir))
+                  (_ (if (< seeded 0) (ok ()) (fileAppend (journalPath dir) (str "(:gradeSeed :n " (n seeded) ")\n"))))
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))

@@ -1627,6 +1627,7 @@
 (:doc :symbol "asl/tools/coord/conductor.asl#providerRequeue!" :text "requeue a unit after a provider-class write failure with a backoff and no fail count; the tree is wip-rescued first")
 (:doc :symbol "asl/tools/coord/conductor.asl#worktreesPath" :text "the file in the store naming the worktree base, written by run from --worktrees")
 (:doc :symbol "asl/tools/coord/conductor.asl#wtBase" :text "the conductor worktree base: the store worktrees.path, else repo/../worktrees")
+(:doc :symbol "asl/tools/coord/conductor.asl#seedGradeCommits!" :text "one-time migration at conductor start: creates <store>/gradeCommits.asn from the grade commits already on the sh/* unit branches (committer conductor@localhost, grade subject) when the file does not exist, headed by a (:gradeSeed :n N) row; never lazy, never repeats; returns the count, -1 when skipped")
 (:doc :symbol "asl/tools/coord/conductor.asl#gradeCommitsPath" :text "the store file recording the grade commits the conductor made, gradeCommits.asn")
 (:doc :symbol "asl/tools/coord/conductor.asl#gradeCommitRecorded?" :text "true when the store file records a grade commit with that sha")
 (:doc :symbol "asl/tools/coord/conductor.asl#ledgerForged!" :text "true when a commit past the base touches .asl/mem/grades.asn and its sha is not a grade commit the conductor recorded in the store (author and subject prove nothing), or the log is unreadable")
