@@ -1,8 +1,8 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSince? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -323,6 +323,7 @@ fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -
         (_ (dropLease! ctx c))
         (c1 (with c :fails fails :sig sig :epoch 0))
         (limit (if climb (rungLimit ctx c.lane) ctx.maxSame))
+        (_ (if (and (= stage "review") (< fails limit)) (priorWrite! ctx.dir c.id c.lane sig) ()))
         (hop (if (and climb (>= fails limit)) (nextRung! ctx.dir c.lane (/ (nowNs) 1000000)) (none)))]
     (if (>= fails limit)
       (match hop
@@ -435,7 +436,7 @@ fn ! killRun! dir: String id: String stage: String -> Unit
 fn ! mergeBusy? dir: String id: String -> Bool
   (listAny? (fn [(x CUnit)] -> Bool (and (!= x.id id) (and (= x.st "merging") (!= x.launched 0)))) (readCUnits! dir))
 
-; (:m :ref RES-GUARD-M1 :do "with no slot free (ctx.hold, set by step! when its cap is 0, the disk stop level among the causes) no gate and no review starts: the unit stays gating or reviewing with launched 0 and a later tick starts it; a running stage is untouched")
+; (:m :ref RES-GUARD-M1 :do "while the disk level in slots.asn is stop (ctx.hold, set by step! from sc/levelRead!) no gate and no review starts; plain slot saturation does not hold, because ready claims earlier in store order would take every freed slot and starve gates and reviews: the unit stays gating or reviewing with launched 0 and a later tick starts it; a running stage is untouched")
 fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
   (if (or (draining? ctx.dir) (or (and ctx.hold (listContains? (list "gating" "reviewing") c.st)) (and (= c.st "merging") (mergeBusy? ctx.dir c.id)))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
   (let [(stage (stageName c.st))
@@ -618,7 +619,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
 
 ; (:m :do "returns the in-flight capacity left for the rest of this tick")
 fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
-  (let [(ctx (with ctx0 :hold (<= cap 0)))
+  (let [(ctx (with ctx0 :hold (or ctx0.hold (= (sc/levelRead! ctx0.dir) "stop"))))
         (cus (readCUnits! ctx.dir))
         (c (optionOr (cuOf cus u.id) (newCUnit u)))]
     (cond
@@ -643,7 +644,7 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
                       (_ (launch! ctx u c1))]
                   (- cap 1)))))))
       ((= c.st "awaitReview")
-        (if (or (= c.parked 1) (or (<= cap 0) (draining? ctx.dir))) cap
+        (if (or (= c.parked 1) (or ctx.hold (draining? ctx.dir))) cap
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
                 (_ (launch! ctx u c1))]
             cap)))
@@ -1308,13 +1309,13 @@ fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms:
   (Res :tiers "" :ok (if (= verdict "gating") 1 0) :wt p :branch (str "sh/" id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
        :sig (if (= verdict "gating") "" (vacuousSig gate)) :ms ms :exit 0 :asserts asserts :verdict "")
 
-; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "true when the unit's journal shows, after the last (:ahead) row for this head, a review that failed or blocked it (a :from reviewing row to ready or blocked at stage review); node2 2026-11-04: RELAY-PUSH-SHORTNAME head 0a32c45 went review fail, ready, cached green ahead verdict, gating, review fail four times in a row, because the cached green verdict only says the gate passes, which the failed review already knew")
-fn ! reviewFailedSince? dir: String id: String head: String -> Bool
-  (let [(aheadHead (str "(:ahead :unit " (st/q id) " :head " (st/q head) " "))
+; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "true when the newest review verdict in the unit's journal, a :from reviewing row to ready or blocked at stage review, is newer than its newest writer run, a (:profile :unit ...) row that writeResWith journals before every writer run; keyed on writer runs, not on the head, because a rebase onto a moved main and a writer's own commit both change the head while the failed review still stands (node2 2026-11-04: RELAY-PUSH-SHORTNAME head 0a32c45 failed review four times, each time sent straight back to review by the ahead check)")
+fn ! reviewFailedSinceWriter? dir: String id: String -> Bool
+  (let [(runHead (str "(:profile :unit " (st/q id) " "))
         (tHead (str "(:t :unit " (st/q id) " "))]
     (fold (fn [(failed Bool) (l String)] -> Bool
             (cond
-              ((stringStartsWith? l aheadHead) false)
+              ((stringStartsWith? l runHead) false)
               ((and (stringStartsWith? l tHead) (and (stringContains? l " :from reviewing ") (and (stringContains? l " :stage review ") (or (stringContains? l " :to ready ") (stringContains? l " :to blocked "))))) true)
               (else failed)))
           false (journalLinesOf dir)))
@@ -1324,12 +1325,12 @@ fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Optio
   (let [(_ (pathRemove (runPath dir u.id "ahead" "run")))
         (past (gitOut p (list "rev-list" "--count" (str (baseRef u) "..HEAD"))))
         (mb (stringTrim (gitOut p (list "merge-base" "HEAD" (baseRef u))).out))]
-    (if (or (stringEmpty? u.gate) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (or (stringEmpty? mb) (or (not (listEmpty? (ownedChanges! p u.owns))) (not (listEmpty? (outsideOwned! p mb u.owns)))))))) none
+    (if (or (stringEmpty? u.gate) (or (reviewFailedSinceWriter? dir u.id) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (or (stringEmpty? mb) (or (not (listEmpty? (ownedChanges! p u.owns))) (not (listEmpty? (outsideOwned! p mb u.owns))))))))) none
       (let [(head (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
             (cached (aheadRow! dir u.id))]
         (if (stringContains? cached (str " :head " (st/q head) " :mb " (st/q mb) " :gate " (st/q u.gate) " "))
           (let [(v (sp/tokAfter cached ":verdict"))]
-            (if (or (= v "writer") (and (= v "gating") (reviewFailedSince? dir u.id head))) none (some (aheadRes p u.id v u.gate (optionOr (stringToInt64 (sp/tokAfter cached ":executed")) 0) 0))))
+            (if (= v "writer") none (some (aheadRes p u.id v u.gate (optionOr (stringToInt64 (sp/tokAfter cached ":executed")) 0) 0))))
           (let [(cw (written c p (str "sh/" u.id)))
                 (task (taskText dir u))
                 (_ (dirCreate (runsDir dir)))
@@ -1861,12 +1862,12 @@ fn ! offeredRung! dir: String id: String -> String
     (let [(_ (pathRemove (offerPath dir id)))] "R3")
     "")
 
-; (:m :ref AHEAD-WRITER-UNKNOWN :do "a unit that entered gating through the ahead check has no model on its write-to-gating row, and its failed or blocked write rows, which the stage journals with the served model, were ignored, so the writer stayed unknown and R1 deferred on writerFamily for ever (LL-BUF-RT, STD-CHECKSUMS): every write-stage row from writing counts, failed ones too")
+; (:m :ref AHEAD-WRITER-UNKNOWN :do "a unit that entered gating through the ahead check has no model on its write-to-gating row, and its failed or blocked write rows, which the stage journals with the served model, were ignored, so the writer stayed unknown and R1 deferred on writerFamily for ever (LL-BUF-RT, STD-CHECKSUMS): every write-stage row from writing counts, failed ones too, except a failed one that names no known model (a crashed run says unknown and must not hide an earlier known writer)")
 ; (:m :ref REVIEW-DEFER :do "the writer of the work under review: the newest write-to-gating journal row of the unit that names a writer: its served alias, else its model, unknown included so selection waits rather than fall back to an older round's writer; only a write the ahead check passed (model empty, no alias) is skipped, so the writer before it counts; the unit row's model when the journal names none")
 fn ! writerOf! dir: String c: CUnit -> String
   (let [(head (str "(:t :unit " (st/q c.id) " "))
         (pick (fn [(l String)] -> String (let [(a (quotedAfter l ":alias \""))] (if (stringEmpty? a) (quotedAfter l ":model \"") a))))
-        (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l " :from writing ") (and (stringContains? l " :stage write ") (not (stringEmpty? (pick l))))))) (journalLinesOf dir)))]
+        (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l " :from writing ") (and (stringContains? l " :stage write ") (and (not (stringEmpty? (pick l))) (or (stringContains? l " :to gating ") (!= (pick l) "unknown"))))))) (journalLinesOf dir)))]
     (match (listLast rows) ((some l) (pick l)) ((none) c.model)))
 
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
