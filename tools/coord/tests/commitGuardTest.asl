@@ -199,6 +199,7 @@ fn ! runTests -> Bool
         (assert (commitGates root base) "commit entry")
         (assert (fixPure) "fix-round pure gates")
         (assert (fixFixtures root base) "fix-round fixtures")
+        (assert (fix2 root base) "fix2")
         (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
         true))
 
@@ -283,4 +284,26 @@ fn ! fixFixtures root: String base: String -> Bool
       (assert (not (stringContains? (pairSecond rTr) ":rule :ignoredPath")) "with no ignoredPath row")
       (assert (stringContains? (pairSecond rLone) ":rule :ignoredPath") "a lone ignored new file is still reported")
       (assert (stringContains? (pairSecond rLone) ":sev :warn") "as a warning")
+      true))
+
+; (:m :ref COMMIT-GUARD-FIX2 :do "a checkout-index export that fails (a path not in the index) is a git block row; a Merge first line is exempt only from the line-count and shape rules, never from the trailer rule; a stale native CLI blocks")
+fn ! fix2 root: String base: String -> Bool
+  (let [(ok0 (msgAt base "ok2" (goodMsg)))
+        (dir (fixture base "fExp" (list (pair "a.txt" "x\n"))))
+        (ex (cg/exportStaged! (cfgFor root dir ok0 false) (list "not-in-the-index.txt")))
+        (rows (cg/exportHits (pairSecond ex)))
+        (good (cg/exportStaged! (cfgFor root dir ok0 false) (list "a.txt")))
+        (stale (cg/chunkRows "/src" (list "a.asl") 30 1 "" "/src/a.asl:0:0: ERR_NATIVE_STALE old\n"))]
+    (do
+      (assert (= (listLength rows) 1) (str "a failed export gives one row: " (pairSecond ex)))
+      (assert (= (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.rule) rows)) "") "git") "the row is a git row")
+      (assert (listAll? (fn [(h cg/Hit)] -> Bool h.block) rows) "and it blocks")
+      (assert (stringContains? (pairSecond ex) "checkout-index failed") "naming checkout-index")
+      (assert (stringEmpty? (pairSecond good)) (str "an export of an indexed path succeeds: " (pairSecond good)))
+      (assert (listEmpty? (cg/exportHits (pairSecond good))) "with no row")
+      (assert (= (sh "." (list "rm" "-rf" (pairFirst ex) (pairFirst good))).exit 0) "export dirs removed")
+      (assert (not (listEmpty? (cg/messageHits "Merge x\n\nCo-authored-by: a <a@example.invalid>\n"))) "a Merge first line with a Co-authored-by trailer blocks")
+      (assert (not (listEmpty? (cg/messageHits "Revert \"x\"\n\nSigned-off-by: a\n"))) "a Revert first line with a sign-off blocks")
+      (assert (listEmpty? (cg/messageHits "Merge x\n\nplain body\n")) "a Merge message with a plain body still passes")
+      (assert (listAny? (fn [(h cg/Hit)] -> Bool (and h.block (= h.rule "toolchain"))) stale) "a stale native CLI is a blocking toolchain row")
       true))

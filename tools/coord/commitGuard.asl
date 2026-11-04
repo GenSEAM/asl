@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -164,18 +164,18 @@ fn cleanLines text: String -> (List String)
                            (not (stringStartsWith? l "This reverts commit "))))))
           (map stringTrim (beforeScissors (stringLines text))))
 
-; (:m :do "the commit message: exactly one cleaned line, an ASN form (:c :a AREA :do WHAT ...) with balanced delimiters, no co-author or sign-off text; a Merge or Revert first line, as git writes it, passes")
+; (:m :do "the commit message: exactly one cleaned line, an ASN form (:c :a AREA :do WHAT ...) with balanced delimiters, no co-author or sign-off text; a Merge or Revert first line, as git writes it, is exempt from the one-line and ASN-shape rules only; the trailer and co-author check still runs")
 fn messageHits text: String -> (List Hit)
   (let [(lines (cleanLines text))
         (first (optionOr (listHead lines) ""))
         (low (stringLower (stringJoin lines "\n")))]
     (cond
       ((listEmpty? lines) (list (hit "message" "" "empty message")))
-      ((or (stringStartsWith? first "Merge ") (stringStartsWith? first "Revert \"")) (list))
       (else
-        (let [(multi (if (> (listLength lines) 1) (list (hit "message" "" (str "message has " (stringFromInt64 (listLength lines)) " lines; exactly one ASN line (:c :a AREA :do WHAT) is allowed, no body and no trailers"))) (list)))
+        (let [(exempt (or (stringStartsWith? first "Merge ") (stringStartsWith? first "Revert \"")))
+              (multi (if (and (not exempt) (> (listLength lines) 1)) (list (hit "message" "" (str "message has " (stringFromInt64 (listLength lines)) " lines; exactly one ASN line (:c :a AREA :do WHAT) is allowed, no body and no trailers"))) (list)))
               (trailer (if (or (stringContains? low "co-authored-by") (stringContains? low "signed-off-by")) (list (hit "message" "" "co-author or sign-off trailer")) (list)))
-              (shape (if (and (stringStartsWith? first "(:c ") (and (stringEndsWith? first ")") (and (stringContains? first " :a ") (stringContains? first " :do "))))
+              (shape (if (or exempt (and (stringStartsWith? first "(:c ") (and (stringEndsWith? first ")") (and (stringContains? first " :a ") (stringContains? first " :do ")))))
                        (list)
                        (list (hit "message" "" "the line is not (:c :a AREA :do WHAT ...)"))))
               (bal (if (and (stringStartsWith? first "(:c ") (some? (dyck/check (stringToBytes first) true))) (list (hit "message" "" "unbalanced delimiters in the ASN line")) (list)))]
@@ -235,7 +235,7 @@ fn unchecked path: String why: String -> Hit
 fn firstErr lines: (List String) -> String
   (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) lines)) (optionOr (listHead lines) ""))
 
-; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one toolchain row plus unchecked files, any other failure blocks per file with its first error line")
+; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one BLOCKING toolchain row (fail closed: a stale native CLI is not a verdict on the file) plus unchecked files, any other failure blocks per file with its first error line")
 fn ! checkChunk! cfg: Cfg src: String files: (List String) secs: Int64 -> (List Hit)
   (let [(d (fr/runOneLimited (fr/job (listAppend (list (str cfg.aslRoot "/bin/asl") "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
     (chunkRows src files secs d.exit d.verdict d.out))
@@ -301,6 +301,10 @@ fn ! exportStaged! cfg: Cfg paths: (List String) -> (Pair String String)
       (else (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths)))]
               (pair dir (if (= x.exit 0) "" (str "git checkout-index failed: " x.out)))))))
 
+; (:m :do "the block row for a failed export, none when the export succeeded")
+fn exportHits msg: String -> (List Hit)
+  (if (stringEmpty? msg) (list) (list (hit "git" "" (esc1 msg))))
+
 fn ! dropExport! dir: String -> Bool
   (if (stringContains? dir "/commitGuard-")
     (= (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)
@@ -317,7 +321,7 @@ fn ! gather! cfg: Cfg -> (Pair Int64 (List Hit))
         (paths (map (fn [(c Change)] -> String c.path) changes))
         (ex (if (stringEmpty? cfg.range) (exportStaged! cfg paths) (pair cfg.repo "")))
         (src (pairFirst ex))
-        (exRow (if (stringEmpty? (pairSecond ex)) (list) (list (hit "git" "" (esc1 (pairSecond ex))))))
+        (exRow (exportHits (pairSecond ex)))
         (srcPaths (filter (fn [(p String)] -> Bool (or (aslPath? p) (asnPath? p))) paths))
         (bal (somes! srcPaths (fn [(p String)] -> (Option Hit) (balanceHit! src p))))
         (balBad (map (fn [(h Hit)] -> String h.path) bal))
