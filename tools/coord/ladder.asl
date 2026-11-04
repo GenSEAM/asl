@@ -361,7 +361,7 @@ fn ! askLane callModel: (fn ! [String String] -> (Result String String)) prompt:
 fn awaitRow u: ReviewUnit rung: String lane: String why: String -> String
   (str "(:await :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf lane) " :why " (fm/asnQuote why) ")")
 
-; (:m :ref REVIEW-DEFER :do "a paid rung with no lane falls through to the strong rung with the verdicts so far (node2 2026-11-04: every paid lane outside the writer family was out of allowance and the unit parked on a lane whose window resets in nine days); when the strong rung has no lane either the R2 await stands, its lane the one that wakes it, its why naming both rungs")
+; (:m :ref REVIEW-DEFER :do "a paid rung with no lane falls through to the strong rung with the verdicts so far (node2 2026-11-04: every paid lane outside the writer family was out of allowance and the unit parked on a lane whose window resets in nine days); when the strong rung has no lane either the R2 await stands at R2 with both lanes, space-separated, as its wake set and a reason naming both rungs")
 fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: String receipt: String callModel: (fn ! [String String] -> (Result String String)) rung: String prior: (List Verdict) fixesUsed: Int64 -> (Result Ruling String)
   (let [(pick (cond ((= rung "R1") (selectFree rows u.writerAlias lanes))
                     ((= rung "R2") (selectOne rows u.writerAlias "paid" lanes))
@@ -373,7 +373,9 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
             (match (runRung u rows lanes prompt receipt callModel "R3" prior fixesUsed)
               ((err e) (err e))
               ((ok r3) (if (= r3.action "await")
-                         (let [(both (str why "; R3: " r3.why))] (ok (ruling "await" rung (list) lane (list (awaitRow u rung lane both)) prior both)))
+                         (let [(both (str why "; R3: " r3.why))
+                               (lanes2 (if (= r3.awaitLane lane) lane (str lane " " r3.awaitLane)))]
+                           (ok (ruling "await" rung (list) lanes2 (list (awaitRow u rung lanes2 both)) prior both)))
                          (ok r3)))))))
       ((pickOk ls)
         (let [(cur (map (fn [(l Lane)] -> Verdict (askLane callModel prompt rung l)) ls))
