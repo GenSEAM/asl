@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [Cfg Hit Receipt defaultCfg flagVal hasFlag parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -27,7 +27,7 @@
   (:f path String))
 
 fn defaultCfg repo: String -> Cfg
-  (Cfg :repo repo :aslRoot repo :range "" :msg "" :hasMsg false :paths (list) :warn false :perFileS 20 :totalS 45 :gitS 20)
+  (Cfg :repo repo :aslRoot repo :range "" :msg "" :hasMsg false :paths (list) :warn false :perFileS 30 :totalS 60 :gitS 20)
 
 fn hit rule: String path: String why: String -> Hit
   (Hit :rule rule :path path :why why :block true)
@@ -55,73 +55,130 @@ fn parseNameStatus text: String -> (List Change)
                      :path (optionOr (listGet parts 1) ""))))
          (stringLines text)))
 
-; (:m :do "added lines of a zero-context unified diff as (path, text) pairs; the path comes from the +++ b/ header, binary and header lines are skipped")
-fn addedStep acc: (Pair String (List (Pair String String))) line: String -> (Pair String (List (Pair String String)))
-  (cond
-    ((stringStartsWith? line "+++ b/") (pair (optionOr (stringSlice line 6 (stringLength line)) "") (pairSecond acc)))
-    ((stringStartsWith? line "+++ ") (pair "" (pairSecond acc)))
-    ((stringStartsWith? line "+")
-     (if (stringEmpty? (pairFirst acc)) acc
-       (pair (pairFirst acc) (cons (pair (pairFirst acc) (optionOr (stringSlice line 1 (stringLength line)) "")) (pairSecond acc)))))
-    (else acc))
+(schema Added
+  (:f path String)
+  (:f line Int64)
+  (:f text String))
 
-fn addedLines diff: String -> (List (Pair String String))
-  (listReverse (pairSecond (fold addedStep (pair "" (list)) (stringLines diff))))
+(schema AddState
+  (:f path String)
+  (:f next Int64)
+  (:f rows (List Added)))
+
+; (:m :do "the first new-file line number of a hunk header @@ -a,b +c,d @@, 0 when unreadable")
+fn hunkStart line: String -> Int64
+  (let [(plus (optionOr (listGet (stringSplit line " ") 2) "+0"))
+        (num (optionOr (listHead (stringSplit (optionOr (stringSlice plus 1 (stringLength plus)) "0") ",")) "0"))]
+    (optionOr (stringToInt64 num) 0))
+
+; (:m :do "added lines of a zero-context unified diff with their file and new line number; the path comes from the +++ b/ header, binary and header lines are skipped")
+fn addedStep st: AddState line: String -> AddState
+  (cond
+    ((stringStartsWith? line "+++ b/") (AddState :path (optionOr (stringSlice line 6 (stringLength line)) "") :next st.next :rows st.rows))
+    ((stringStartsWith? line "+++ ") (AddState :path "" :next st.next :rows st.rows))
+    ((stringStartsWith? line "@@ ") (AddState :path st.path :next (hunkStart line) :rows st.rows))
+    ((stringStartsWith? line "+")
+     (AddState :path st.path :next (+ st.next 1)
+               :rows (if (stringEmpty? st.path) st.rows (cons (Added :path st.path :line st.next :text (optionOr (stringSlice line 1 (stringLength line)) "")) st.rows))))
+    (else st))
+
+fn addedLines diff: String -> (List Added)
+  (listReverse (fold addedStep (AddState :path "" :next 0 :rows (list)) (stringLines diff)).rows)
 
 fn marker c: String -> String
   (str c c c c c c c)
 
-; (:m :do "conflict markers: an added line that starts with seven of < or > and a space, or is exactly seven =")
-fn conflictHits added: (List (Pair String String)) -> (List Hit)
-  (map (fn [(a (Pair String String))] -> Hit (hit "conflictMarker" (pairFirst a) (str "added line " (esc1 (pairSecond a)))))
-       (filter (fn [(a (Pair String String))] -> Bool
-                 (let [(l (pairSecond a))]
-                   (or (stringStartsWith? l (str (marker "<") " "))
-                       (or (stringStartsWith? l (str (marker ">") " "))
-                           (= l (marker "="))))))
+; (:m :do "conflict markers: an added line that starts with seven of < or > and a space, or is exactly seven =; the row names the line, never its content")
+fn conflictHits added: (List Added) -> (List Hit)
+  (map (fn [(a Added)] -> Hit (hit "conflictMarker" a.path (str "conflict marker at line " (stringFromInt64 a.line))))
+       (filter (fn [(a Added)] -> Bool
+                 (or (stringStartsWith? a.text (str (marker "<") " "))
+                     (or (stringStartsWith? a.text (str (marker ">") " "))
+                         (= a.text (marker "=")))))
                added))
 
 fn esc1 s: String -> String
   (let [(c (if (> (stringLength s) 160) (str (optionOr (stringSlice s 0 160) "") "...") s))]
     (stringReplace c "\"" "'"))
 
+; (:m :do "provider key shapes; sk- must not follow an alphanumeric, so task-queue... is no key")
 fn secretPatterns -> (List (Pair (List String) String))
-  (list (pair (list "sk-") "sk-[A-Za-z0-9_-]{20,}")
+  (list (pair (list "sk-") "(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}")
         (pair (list "ghp_" "gho_" "ghu_" "ghs_" "ghr_") "gh[pousr]_[A-Za-z0-9]{30,}")
         (pair (list "AKIA") "AKIA[0-9A-Z]{16}")
         (pair (list "xox") "xox[abprs]-[A-Za-z0-9-]{10,}")
-        (pair (list "PRIVATE KEY") "-----BEGIN [A-Z ]*PRIVATE KEY-----")
-        (pair (list "API_KEY" "SECRET" "TOKEN" "PASSWORD") "[A-Z][A-Z0-9_]*(API_KEY|SECRET|TOKEN|PASSWORD)[A-Z0-9_]*=[\"']?[A-Za-z0-9+/_.-]{20,}"))
+        (pair (list "PRIVATE KEY") "-----BEGIN [A-Z ]*PRIVATE KEY-----"))
 
-; (:m :do "one added line looks like a secret value: a provider key shape, a private key header, or NAME_SECRET=longvalue; a cheap needle test runs first so the regex only sees rare lines; lines over 4000 characters are data, not assignments")
+fn alphaChars -> String
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+; (:m :do "a value is high entropy when it mixes letters and digits and has at least 8 distinct characters; a digit run or a word is not a secret")
+fn entropic? v: String -> Bool
+  (let [(cs (stringChars v))
+        (distinct (fold (fn [(acc (List String)) (c String)] -> (List String) (if (listContains? acc c) acc (cons c acc))) (list) cs))]
+    (and (listAny? (fn [(c String)] -> Bool (stringContains? (alphaChars) c)) cs)
+         (and (listAny? (fn [(c String)] -> Bool (stringContains? "0123456789" c)) cs)
+              (>= (listLength distinct) 8))))
+
+; (:m :do "NAME_(API_KEY|SECRET|TOKEN|PASSWORD)=value where the value has no path characters (/ . ~) and is high entropy; MAX_TOKENS=1000000000000000000000 and ASL_TOKEN_FILE=/Users/x are not credentials")
+fn assignSecret? line: String -> Bool
+  (and (stringContains? line "=")
+    (and (listAny? (fn [(n String)] -> Bool (stringContains? line n)) (list "API_KEY" "SECRET" "TOKEN" "PASSWORD"))
+      (match (rx/regex-compile! "[A-Z][A-Z0-9_]*(API_KEY|SECRET|TOKEN|PASSWORD)[A-Z0-9_]*=[\"']?[A-Za-z0-9+_-]{20,}")
+        ((err _) false)
+        ((ok re) (match (rx/regex-search! re line)
+                   ((none) false)
+                   ((some m) (let [(parts (stringSplit m.text "="))
+                                   (v (stringReplace (stringReplace (optionOr (listGet parts (- (listLength parts) 1)) "") "\"" "") "'" ""))]
+                               (entropic? v))))))))
+
+; (:m :do "one added line looks like a secret value; a cheap needle test runs first so the regex only sees rare lines; lines over 4000 characters are data, not assignments")
 fn secretLine? line: String -> Bool
   (and (< (stringLength line) 4000)
-    (listAny? (fn [(p (Pair (List String) String))] -> Bool
-                (and (listAny? (fn [(n String)] -> Bool (stringContains? line n)) (pairFirst p))
-                     (match (rx/regex-compile! (pairSecond p))
-                       ((ok re) (some? (rx/regex-search! re line)))
-                       ((err _) false))))
-              (secretPatterns)))
+    (or (assignSecret? line)
+        (listAny? (fn [(p (Pair (List String) String))] -> Bool
+                    (and (listAny? (fn [(n String)] -> Bool (stringContains? line n)) (pairFirst p))
+                         (match (rx/regex-compile! (pairSecond p))
+                           ((ok re) (some? (rx/regex-search! re line)))
+                           ((err _) false))))
+                  (secretPatterns))))
 
-fn secretHits added: (List (Pair String String)) -> (List Hit)
-  (map (fn [(a (Pair String String))] -> Hit (hit "secret" (pairFirst a) "an added line looks like a credential value"))
-       (filter (fn [(a (Pair String String))] -> Bool (secretLine? (pairSecond a))) (listTake added 20000)))
+fn secretHits added: (List Added) -> (List Hit)
+  (map (fn [(a Added)] -> Hit (hit "secret" a.path (str "credential-looking value at line " (stringFromInt64 a.line))))
+       (filter (fn [(a Added)] -> Bool (secretLine? a.text)) (listTake added 20000)))
 
-; (:m :do "the commit message: exactly one non-comment line, an ASN form (:c :a AREA :do WHAT ...) with balanced delimiters, no co-author or sign-off text; git-made Merge and Revert lines pass")
+fn scissors? l: String -> Bool
+  (and (stringStartsWith? l "# ") (stringContains? l ">8"))
+
+fn beforeScissors lines: (List String) -> (List String)
+  (match (listHead lines)
+    ((none) (list))
+    ((some l) (if (scissors? l) (list) (cons l (beforeScissors (optionOr (listTail lines) (list)))))))
+
+; (:m :do "the message git generates minus noise: cut at the git commit -v scissors line, drop # comment lines, the (cherry picked from commit X) line and the This reverts commit X. line; the rest, trimmed, without blank lines")
+fn cleanLines text: String -> (List String)
+  (filter (fn [(l String)] -> Bool
+            (and (not (stringEmpty? l))
+                 (and (not (stringStartsWith? l "#"))
+                      (and (not (stringStartsWith? l "(cherry picked from commit "))
+                           (not (stringStartsWith? l "This reverts commit "))))))
+          (map stringTrim (beforeScissors (stringLines text))))
+
+; (:m :do "the commit message: exactly one cleaned line, an ASN form (:c :a AREA :do WHAT ...) with balanced delimiters, no co-author or sign-off text; a Merge or Revert first line, as git writes it, passes")
 fn messageHits text: String -> (List Hit)
-  (let [(lines (filter (fn [(l String)] -> Bool (and (not (stringEmpty? l)) (not (stringStartsWith? l "#")))) (map stringTrim (stringLines text))))
-        (low (stringLower text))]
+  (let [(lines (cleanLines text))
+        (first (optionOr (listHead lines) ""))
+        (low (stringLower (stringJoin lines "\n")))]
     (cond
       ((listEmpty? lines) (list (hit "message" "" "empty message")))
-      ((and (= (listLength lines) 1) (or (stringStartsWith? (optionOr (listHead lines) "") "Merge ") (stringStartsWith? (optionOr (listHead lines) "") "Revert \""))) (list))
+      ((or (stringStartsWith? first "Merge ") (stringStartsWith? first "Revert \"")) (list))
       (else
-        (let [(one (optionOr (listHead lines) ""))
-              (multi (if (> (listLength lines) 1) (list (hit "message" "" (str "message has " (stringFromInt64 (listLength lines)) " lines; exactly one ASN line (:c :a AREA :do WHAT) is allowed, no body and no trailers"))) (list)))
+        (let [(multi (if (> (listLength lines) 1) (list (hit "message" "" (str "message has " (stringFromInt64 (listLength lines)) " lines; exactly one ASN line (:c :a AREA :do WHAT) is allowed, no body and no trailers"))) (list)))
               (trailer (if (or (stringContains? low "co-authored-by") (stringContains? low "signed-off-by")) (list (hit "message" "" "co-author or sign-off trailer")) (list)))
-              (shape (if (and (stringStartsWith? one "(:c ") (and (stringEndsWith? one ")") (and (stringContains? one " :a ") (stringContains? one " :do "))))
+              (shape (if (and (stringStartsWith? first "(:c ") (and (stringEndsWith? first ")") (and (stringContains? first " :a ") (stringContains? first " :do "))))
                        (list)
                        (list (hit "message" "" "the line is not (:c :a AREA :do WHAT ...)"))))
-              (bal (if (and (stringStartsWith? one "(:c ") (some? (dyck/check (stringToBytes one) true))) (list (hit "message" "" "unbalanced delimiters in the ASN line")) (list)))]
+              (bal (if (and (stringStartsWith? first "(:c ") (some? (dyck/check (stringToBytes first) true))) (list (hit "message" "" "unbalanced delimiters in the ASN line")) (list)))]
           (listAppend multi (listAppend trailer (listAppend shape bal)))))))
 
 ; (:m :do "balanced delimiters of one .asl or .asn file from the bytes under src (the staged export, or the working tree in range mode); a file that cannot be read is skipped, git owns that")
@@ -153,9 +210,17 @@ fn ! foreignHit! repo: String base: String bt: String path: String status: Strin
                   (else (none))))))))))
 
 
-fn ignoredHits paths: (List String) ignored: String -> (List Hit)
-  (map (fn [(p String)] -> Hit (hit "ignoredPath" p "a new file under an ignored path"))
-       (filter (fn [(p String)] -> Bool (listContains? paths p)) (map stringTrim (stringLines ignored))))
+fn dirOf p: String -> String
+  (let [(parts (stringSplit p "/"))]
+    (stringJoin (listTake parts (- (listLength parts) 1)) "/"))
+
+; (:m :do "new files under an ignored path: allowed when a sibling in the same dir was already tracked (a deliberately tracked ledger or golden), else a warning; tracked is git ls-files -ci --exclude-standard, ignoring the files being added")
+fn ignoredHits paths: (List String) ignored: String tracked: String -> (List Hit)
+  (let [(old (filter (fn [(t String)] -> Bool (not (listContains? paths t))) (map stringTrim (stringLines tracked))))
+        (dirs (map dirOf old))]
+    (map (fn [(p String)] -> Hit (soft "ignoredPath" p "a new file under an ignored path with no tracked sibling"))
+         (filter (fn [(p String)] -> Bool (and (listContains? paths p) (not (listContains? dirs (dirOf p)))))
+                 (map stringTrim (stringLines ignored)))))
 
 
 fn nowMs! -> Int64
@@ -164,27 +229,49 @@ fn nowMs! -> Int64
 fn ! git! cfg: Cfg args: (List String) -> fr/Done
   (fr/runOneLimited (fr/job (listAppend (list "git" "-C" cfg.repo "-c" "core.quotepath=off" "-c" "core.fsmonitor=") args) "." (fr/childEnv (list))) (fr/limits cfg.gitS 16))
 
-; (:m :do "asl check on one .asl file with the workspace of aslRoot, bounded by secs; exit 0 is clean, a timeout or spawn failure is a warning, anything else blocks with the first error line")
-fn ! checkOne! cfg: Cfg src: String path: String secs: Int64 -> (Option Hit)
-  (let [(d (fr/runOneLimited (fr/job (list (str cfg.aslRoot "/bin/asl") "check" (str src "/" path)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))
-        (errLine (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringLines d.out)))
-                           (optionOr (listHead (stringLines d.out)) "")))]
-    (cond
-      ((= d.exit 0) (none))
-      ((= d.verdict "timeout") (some (soft "check" path (str "asl check exceeded " (stringFromInt64 secs) " s"))))
-      ((= d.verdict "spawnFailed") (some (soft "check" path "asl check did not start")))
-      (else (some (hit "check" path (esc1 (stringReplace errLine (str src "/") "")))))))
+fn unchecked path: String why: String -> Hit
+  (soft "unchecked" path why)
 
-fn ! checkLoop! cfg: Cfg src: String paths: (List String) deadline: Int64 acc: (List Hit) -> (List Hit)
-  (match (listHead paths)
-    ((none) (listReverse acc))
-    ((some p)
+fn firstErr lines: (List String) -> String
+  (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) lines)) (optionOr (listHead lines) ""))
+
+; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one toolchain row plus unchecked files, any other failure blocks per file with its first error line")
+fn ! checkChunk! cfg: Cfg src: String files: (List String) secs: Int64 -> (List Hit)
+  (let [(d (fr/runOneLimited (fr/job (listAppend (list (str cfg.aslRoot "/bin/asl") "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
+    (chunkRows src files secs d.exit d.verdict d.out))
+
+; (:m :do "the rows of one asl check chunk from its exit code, verdict and output: pure, so the stale-native and attribution cases are testable")
+fn chunkRows src: String files: (List String) secs: Int64 exit: Int64 verdict: String out: String -> (List Hit)
+  (let [(lines (stringLines out))
+        (all (fn [(why String)] -> (List Hit) (map (fn [(p String)] -> Hit (unchecked p why)) files)))
+        (strip (fn [(s String)] -> String (esc1 (stringReplace s (str src "/") ""))))]
+    (cond
+      ((= exit 0) (list))
+      ((= verdict "timeout") (all (str "asl check exceeded " (stringFromInt64 secs) " s")))
+      ((= verdict "spawnFailed") (all "asl check did not start"))
+      ((listAny? (fn [(l String)] -> Bool (stringContains? l "ERR_NATIVE_STALE")) lines)
+       (cons (hit "toolchain" "" (strip (str "native CLI stale: " (firstErr lines))))
+             (all "asl check could not run: native CLI stale")))
+      (else
+        (let [(rows (filter (fn [(h Hit)] -> Bool (not (stringEmpty? h.why)))
+                      (map (fn [(p String)] -> Hit
+                             (let [(mine (filter (fn [(l String)] -> Bool (stringStartsWith? l (str src "/" p ":"))) lines))]
+                               (if (listEmpty? mine) (hit "check" p "") (hit "check" p (strip (firstErr mine))))))
+                           files)))]
+          (if (listEmpty? rows) (list (hit "check" "" (strip (firstErr lines)))) rows)))))
+
+fn chunksOf xs: (List String) n: Int64 -> (List (List String))
+  (if (listEmpty? xs) (list) (cons (listTake xs n) (chunksOf (listDrop xs n) n)))
+
+fn ! checkLoop! cfg: Cfg src: String chunks: (List (List String)) deadline: Int64 acc: (List Hit) -> (List Hit)
+  (match (listHead chunks)
+    ((none) acc)
+    ((some files)
       (let [(left (- deadline (nowMs!)))
-            (rest (optionOr (listTail paths) (list)))]
+            (rest (optionOr (listTail chunks) (list)))]
         (if (<= left 1000)
-          (listReverse (cons (soft "check" p "total check budget spent; this file and the rest were not checked") acc))
-          (let [(r (checkOne! cfg src p (min cfg.perFileS (/ left 1000))))]
-            (checkLoop! cfg src rest deadline (match r ((some h) (cons h acc)) ((none) acc))))))))
+          (listAppend acc (map (fn [(p String)] -> Hit (unchecked p "total check budget spent")) (listFlatMap (fn [(c (List String))] -> (List String) c) chunks)))
+          (checkLoop! cfg src rest deadline (listAppend acc (checkChunk! cfg src files (min cfg.perFileS (/ left 1000)))))))))
 
 fn aslPath? p: String -> Bool
   (stringEndsWith? p ".asl")
@@ -205,42 +292,51 @@ fn diffBase cfg: Cfg -> (List String)
   (if (stringEmpty? cfg.range) (list "--cached") (list cfg.range))
 
 ; (:m :do "export the index content of the changed paths into a private temp dir (git checkout-index --prefix), so every check judges the blob that will land and a partly staged file is judged by its staged half; the dir is empty when the export failed")
-fn ! exportStaged! cfg: Cfg paths: (List String) -> String
+fn ! exportStaged! cfg: Cfg paths: (List String) -> (Pair String String)
   (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/commitGuard-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (mk (fr/runOneLimited (fr/job (list "mkdir" "-p" dir) "." (fr/childEnv (list))) (fr/limits 20 16)))]
-    (if (or (!= mk.exit 0) (listEmpty? paths)) dir
-      (do (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths))
-          dir)))
+    (cond
+      ((!= mk.exit 0) (pair dir (str "cannot create the export dir: " mk.out)))
+      ((listEmpty? paths) (pair dir ""))
+      (else (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths)))]
+              (pair dir (if (= x.exit 0) "" (str "git checkout-index failed: " x.out)))))))
 
 fn ! dropExport! dir: String -> Bool
   (if (stringContains? dir "/commitGuard-")
     (= (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)
     false)
 
-; (:m :do "every check over the staged change restricted to cfg.paths when given, judged on the staged blobs (or the A..B range read from the working tree at B): the hits, in rule order")
+fn gitRow what: String d: fr/Done -> (List Hit)
+  (if (= d.exit 0) (list) (list (hit "git" "" (esc1 (str what " failed (exit " (stringFromInt64 d.exit) "): " (stringTrim d.out))))))
+
+; (:m :do "every check over the staged change restricted to cfg.paths when given, judged on the staged blobs (or the A..B range read from the working tree at B): the hits, in rule order; any git failure is a block row and nothing after it is judged as clean")
 fn ! gather! cfg: Cfg -> (Pair Int64 (List Hit))
   (let [(t0 (nowMs!))
         (ns (git! cfg (listAppend (list "diff" "--name-status" "--no-renames") (listAppend (diffBase cfg) (scopeArgs cfg)))))
         (changes (if (= ns.exit 0) (parseNameStatus ns.out) (list)))
         (paths (map (fn [(c Change)] -> String c.path) changes))
-        (src (if (stringEmpty? cfg.range) (exportStaged! cfg paths) cfg.repo))
+        (ex (if (stringEmpty? cfg.range) (exportStaged! cfg paths) (pair cfg.repo "")))
+        (src (pairFirst ex))
+        (exRow (if (stringEmpty? (pairSecond ex)) (list) (list (hit "git" "" (esc1 (pairSecond ex))))))
         (srcPaths (filter (fn [(p String)] -> Bool (or (aslPath? p) (asnPath? p))) paths))
         (bal (somes! srcPaths (fn [(p String)] -> (Option Hit) (balanceHit! src p))))
         (balBad (map (fn [(h Hit)] -> String h.path) bal))
         (aslGood (filter (fn [(p String)] -> Bool (and (aslPath? p) (not (listContains? balBad p)))) paths))
-        (chk (checkLoop! cfg src aslGood (+ t0 (* cfg.totalS 1000)) (list)))
+        (chk (if (not (listEmpty? exRow)) (list) (checkLoop! cfg src (chunksOf aslGood 10) (+ t0 (* cfg.totalS 1000)) (list))))
         (bt (readText! (str cfg.repo "/scripts/audit/foreignBaseline.asn")))
-        (fgn (if (stringEmpty? bt) (list)
+        (fgn (if (or (stringEmpty? bt) (not (listEmpty? exRow))) (list)
                (fold (fn [(acc (List Hit)) (c Change)] -> (List Hit)
                        (match (foreignHit! src "" bt c.path c.status) ((some h) (listAppend acc (list h))) ((none) acc)))
                      (list) changes)))
         (df (git! cfg (listAppend (list "diff" "-U0" "--no-color" "--no-ext-diff" "--diff-filter=ACMR") (listAppend (diffBase cfg) (scopeArgs cfg)))))
         (added (if (= df.exit 0) (addedLines df.out) (list)))
         (newPaths (map (fn [(c Change)] -> String c.path) (filter (fn [(c Change)] -> Bool (= c.status "A")) changes)))
-        (ig (if (listEmpty? newPaths) (list)
-              (ignoredHits newPaths (git! cfg (listAppend (list "check-ignore" "--no-index" "--") (listTake newPaths 500))).out)))
+        (ci (if (listEmpty? newPaths) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "") (git! cfg (listAppend (list "check-ignore" "--no-index" "--") (listTake newPaths 500)))))
+        (ciBad (if (> ci.exit 1) (gitRow "git check-ignore" ci) (list)))
+        (tr (if (or (listEmpty? newPaths) (stringEmpty? (stringTrim ci.out))) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "") (git! cfg (list "ls-files" "-ci" "--exclude-standard"))))
+        (ig (if (or (not (listEmpty? ciBad)) (listEmpty? newPaths)) (list) (ignoredHits newPaths ci.out tr.out)))
         (msg (if cfg.hasMsg (messageHits cfg.msg) (list)))
-        (gitBad (if (or (= ns.exit 0) (not cfg.hasMsg)) (list) (list (hit "git" "" "git diff failed; nothing was judged"))))
+        (gitBad (listAppend (gitRow "git diff --name-status" ns) (listAppend exRow (listAppend (gitRow "git diff" df) (listAppend ciBad (gitRow "git ls-files" tr))))))
         (_ (if (stringEmpty? cfg.range) (dropExport! src) true))]
     (pair (listLength paths)
           (listAppend gitBad (listAppend msg (listAppend bal (listAppend chk (listAppend fgn (listAppend (conflictHits added) (listAppend ig (secretHits added))))))))))
@@ -257,11 +353,21 @@ fn esc2 s: String -> String
   (:f rows (List Hit))
   (:f text String))
 
+fn uncheckedOf hits: (List Hit) -> (List String)
+  (map (fn [(h Hit)] -> String h.path) (filter (fn [(h Hit)] -> Bool (= h.rule "unchecked")) hits))
+
+; (:m :do "block when a block row exists (wouldBlock under warn); partial when only unchecked or toolchain rows keep files from being judged; okWarn for other warnings; ok for none")
+fn statusOf hits: (List Hit) warn: Bool -> String
+  (cond
+    ((listAny? (fn [(h Hit)] -> Bool h.block) hits) (if warn "wouldBlock" "block"))
+    ((not (listEmpty? (uncheckedOf hits))) "partial")
+    ((listEmpty? hits) "ok")
+    (else "okWarn"))
+
 fn receiptText cfg: Cfg files: Int64 ms: Int64 hits: (List Hit) extra: String -> String
-  (let [(blocking (listAny? (fn [(h Hit)] -> Bool h.block) hits))
-        (status (cond ((not blocking) (if (listEmpty? hits) ":ok" ":okWarn")) (cfg.warn ":wouldBlock") (else ":block")))]
-    (str "(:commitGuard :v 1 :mode " (if (stringEmpty? cfg.range) ":staged" ":range") " :status " status " :files " (stringFromInt64 files) " :ms " (stringFromInt64 ms) extra
-         " :rows (" (stringJoin (map rowText hits) " ") "))"))
+  (str "(:commitGuard :v 1 :mode " (if (stringEmpty? cfg.range) ":staged" ":range") " :status :" (statusOf hits cfg.warn) " :files " (stringFromInt64 files) " :ms " (stringFromInt64 ms) extra
+       " :unchecked (" (stringJoin (map (fn [(p String)] -> String (str "\"" (esc2 p) "\"")) (uncheckedOf hits)) " ") ")"
+       " :rows (" (stringJoin (map rowText hits) " ") "))")
 
 fn receipt cfg: Cfg files: Int64 ms: Int64 hits: (List Hit) -> String
   (receiptText cfg files ms hits "")
@@ -278,7 +384,7 @@ fn ! judge! cfg: Cfg -> Receipt
         (hits (pairSecond g))
         (blocking (listAny? (fn [(h Hit)] -> Bool h.block) hits))
         (code (if (and blocking (not cfg.warn)) 1 0))]
-    (Receipt :code code :status (if blocking (if cfg.warn "wouldBlock" "block") (if (listEmpty? hits) "ok" "okWarn")) :rows hits
+    (Receipt :code code :status (statusOf hits cfg.warn) :rows hits
              :text (receiptText cfg (pairFirst g) (- (nowMs!) t0) hits "")))
 
 fn ! report! cfg: Cfg -> (Pair Int64 String)
@@ -357,3 +463,6 @@ fn ! main args: (List String) -> (Result Int64 String)
             (_ (println r.text))]
         (ok r.code))
       (ok (run! cfg))))
+
+fn hitBlocks? h: Hit -> Bool
+  h.block

@@ -68,11 +68,11 @@ fn ! pureRules -> Bool
     (assert (= (listLength (cg/parseNameStatus "A\ta.asl\nD\tb.asl\nM\tc/d.sh\n")) 2) "name-status keeps added and modified, drops deleted")
     (assert (= (listLength (cg/addedLines "+++ b/x.asl\n@@ -0,0 +1,2 @@\n+one\n+two\n+++ /dev/null\n+drop\n")) 2) "added lines come with their file and skip /dev/null headers")
     (assert (not (listEmpty? (cg/messageHits "(:c :a x :do \"Co-Authored-By: y\")\n"))) "a co-author text inside the single line blocks")
-    (assert (= (listLength (cg/conflictHits (list (pair "f" (str (strRep "=") "")) (pair "f" (str (strRep ">") " main")) (pair "f" (str (strRep "<") " HEAD")) (pair "f" "a = b") (pair "f" (str (strRep "=") "="))))) 3) "each of the three marker shapes is a hit and near-misses are not")
+    (assert (= (listLength (cg/conflictHits (list (ad (str (strRep "=") "")) (ad (str (strRep ">") " main")) (ad (str (strRep "<") " HEAD")) (ad "a = b") (ad (str (strRep "=") "="))))) 3) "each of the three marker shapes is a hit and near-misses are not")
     (assert (not (cg/secretLine? "let x = 1")) "ordinary code is no secret")
     (assert (cg/secretLine? (str "key " "sk-" "abcdefghijklmnopqrstuvwxyz0123")) "a provider key shape is a secret")
     (assert (cg/secretLine? (str "AK" "IA" "ABCDEFGHIJKLMNOP")) "an access key id is a secret")
-    (assert (cg/secretLine? (str "OPENAI_API_" "KEY=" "abcdefghijklmnopqrstuvwxyz")) "NAME_API_KEY=longvalue is a secret")
+    (assert (cg/secretLine? (str "OPENAI_API_" "KEY=" "abcdefghijklmnopqrstuvwxyz0123")) "NAME_API_KEY=longvalue is a secret")
     (assert (not (cg/secretLine? "(envGet \"OPENAI_API_KEY\")")) "reading a key by name is no secret")
     (assert (cg/secretLine? (str "-----BEGIN RSA " "PRIVATE KEY-----")) "a private key header is a secret")
     true)
@@ -125,7 +125,7 @@ fn ! fixtures root: String base: String -> Bool
       (assert (= (pairFirst rTrailer) 1) (str "a trailer blocks: " (pairSecond rTrailer)))
       (assert (= (pairFirst rConf) 1) (str "a conflict marker blocks: " (pairSecond rConf)))
       (assert (stringContains? (pairSecond rConf) ":rule :conflictMarker") "the row names the marker rule")
-      (assert (= (pairFirst rIgn) 1) (str "a new file under an ignored path blocks: " (pairSecond rIgn)))
+      (assert (= (pairFirst rIgn) 0) (str "a new file under an ignored path with no tracked sibling only warns: " (pairSecond rIgn)))
       (assert (stringContains? (pairSecond rIgn) ":rule :ignoredPath") "the row names the ignored path rule")
       (assert (= (pairFirst rSec) 1) (str "a credential value blocks: " (pairSecond rSec)))
       (assert (stringContains? (pairSecond rSec) ":rule :secret") "the row names the secret rule")
@@ -135,6 +135,9 @@ fn ! fixtures root: String base: String -> Bool
       (assert (stringContains? (pairSecond warnU) ":rule :balance") "--warn keeps the rows")
       (assert (= (pairFirst warnF) 0) "--warn on foreign growth plus a trailer exits 0")
       true))
+
+fn ad text: String -> cg/Added
+  (cg/Added :path "f" :line 1 :text text)
 
 fn ! head dir: String -> String
   (stringTrim (sh dir (list "git" "rev-parse" "HEAD")).out)
@@ -194,8 +197,90 @@ fn ! runTests -> Bool
         (assert (pureRules) "pure rules")
         (assert (fixtures root base) "fixture repos")
         (assert (commitGates root base) "commit entry")
+        (assert (fixPure) "fix-round pure gates")
+        (assert (fixFixtures root base) "fix-round fixtures")
         (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
         true))
 
 fn strRep c: String -> String
   (str c c c c c c c)
+
+fn cherryMsg -> String
+  "(:c :a agentLoop :do \"autofixCloserTest covers the edit-branch repair\" :g \"autofixCloserTest 14 asserts; mutants balanceRepair-off and edit-branch-skip red\" :ev (LEON-AUTOFIX-CLOSER))\n\n(cherry picked from commit 455d350eb)\n"
+
+; (:m :ref COMMIT-GUARD-FIX :do "pure gates built from the real false blocks: the 2612b8fa1 cherry-pick message, scissors and revert bodies, the task-queue-runner-identifier-longname line, MAX_TOKENS and path values, tracked-sibling ledgers, the stale-native and attribution rows, and the partial status")
+fn ! fixPure -> Bool
+  (do
+    (assert (listEmpty? (cg/messageHits (cherryMsg))) (str "the exact 2612b8fa1 cherry-pick message passes: " (stringJoin (map (fn [(h cg/Hit)] -> String h.why) (cg/messageHits (cherryMsg))) ";")))
+    (assert (not (listEmpty? (cg/messageHits (str (goodMsg) "\nsecond real line\n")))) "a real second line still blocks beside the cherry-pick rule")
+    (assert (listEmpty? (cg/messageHits (str (goodMsg) "# ------------------------ >8 ------------------------\ndiff --git a/x b/x\n+Co-Authored-By: a\n"))) "everything after the commit -v scissors line is cut")
+    (assert (listEmpty? (cg/messageHits "Revert \"(:c :a x :do y)\"\n\nThis reverts commit 0123abc.\n")) "a git revert message passes")
+    (assert (not (listEmpty? (cg/messageHits (str (goodMsg) "Merge branch x\n")))) "the Merge exemption is for the first line only")
+    (assert (listEmpty? (cg/messageHits "Merge branch 'x' into main\n\nbody line\n")) "a Merge first line passes with its body")
+    (assert (not (cg/secretLine? "task-queue-runner-identifier-longname")) "task-... is no sk- key")
+    (assert (not (cg/secretLine? "(:task \"task-queue-runner-identifier-longname-extra\")")) "task-... inside a form is no key")
+    (assert (cg/secretLine? (str "x sk-" "abcdefghijklmnopqrstuvwxyz0123")) "a real sk- key after a space is a secret")
+    (assert (cg/secretLine? (str "sk-" "abcdefghijklmnopqrstuvwxyz0123")) "a real sk- key at the line start is a secret")
+    (assert (not (cg/secretLine? "MAX_TOKENS=1000000000000000000000")) "a digit run is no secret")
+    (assert (not (cg/secretLine? "ASL_TOKEN_FILE=/Users/purplelephant/.asl/secrets/tokenfile12345")) "a path value is no secret")
+    (assert (not (cg/secretLine? "ASL_TOKEN_FILE=~/.asl/secrets/tokenfile12345678")) "a home path value is no secret")
+    (assert (cg/secretLine? (str "GH_TOKEN=" "Ab3dEf6hIj9kLm2nOp5qRs8t")) "a high entropy token value is a secret")
+    (let [(rows (cg/secretHits (list (cg/Added :path "e.txt" :line 7 :text (str "OPENAI_API_" "KEY=" "Ab3dEf6hIj9kLm2nOp5qRs8t")))))]
+      (do (assert (= (listLength rows) 1) "one secret row")
+          (assert (stringContains? (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.why) rows)) "") "line 7") "the secret row names its line")
+          (assert (not (stringContains? (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.why) rows)) "") "Ab3dEf6hIj9kLm2n")) "the secret row never prints the value")))
+    (let [(rows (cg/conflictHits (list (cg/Added :path "c.txt" :line 3 :text (str (strRep "<") " leakedBranchName")))))]
+      (do (assert (= (listLength rows) 1) "one conflict row")
+          (assert (not (stringContains? (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.why) rows)) "") "leakedBranchName")) "the conflict row never prints the line")
+          (assert (stringContains? (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.why) rows)) "") "line 3") "the conflict row names the line")))
+    (assert (= (listLength (cg/addedLines "+++ b/x.txt\n@@ -0,0 +5,2 @@\n+a\n+b\n")) 2) "line numbers come from the hunk header")
+    (assert (= (optionOr (listHead (map (fn [(a cg/Added)] -> Int64 a.line) (cg/addedLines "+++ b/x.txt\n@@ -0,0 +5,2 @@\n+a\n+b\n"))) 0) 5) "the first added line is line 5")
+    (let [(newP (list ".asl/mem/work/CAL/kimiCal.asn"))
+          (ign ".asl/mem/work/CAL/kimiCal.asn\n")
+          (sib (cg/ignoredHits newP ign ".asl/mem/work/CAL/kimiCal.asn\n.asl/mem/work/CAL/other.asn\n"))
+          (alone (cg/ignoredHits newP ign ".asl/mem/work/CAL/kimiCal.asn\n.asl/mem/work/X/other.asn\n"))]
+      (do (assert (listEmpty? sib) "the kimiCal path with a tracked sibling is allowed")
+          (assert (= (listLength alone) 1) "an ignored new path with no tracked sibling is reported")
+          (assert (not (cg/hitBlocks? (optionOr (listHead alone) (cg/Hit :rule "" :path "" :why "" :block true)))) "and it is a warning, not a block")))
+    (let [(stale (cg/chunkRows "/src" (list "a.asl" "b.asl") 30 1 "" "/src/a.asl:0:0: ERR_NATIVE_STALE the native CLI is older than the tree\ncheck failed\n"))]
+      (do (assert (= (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.rule) stale)) "") "toolchain") "ERR_NATIVE_STALE is one toolchain row")
+          (assert (stringContains? (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.why) stale)) "") "native CLI stale: a.asl:0:0: ERR_NATIVE_STALE") "the row quotes the first error without the temp prefix")
+          (assert (= (listLength (filter (fn [(h cg/Hit)] -> Bool (= h.rule "unchecked")) stale)) 2) "both files are reported unchecked")
+          (assert (not (listAny? (fn [(h cg/Hit)] -> Bool (and h.block (= h.rule "check"))) stale)) "no file is blamed for a stale toolchain")))
+    (let [(att (cg/chunkRows "/src" (list "a.asl" "b.asl") 30 1 "" "/src/b.asl:2:3: ERR_UNRESOLVED_IMPORT nope not declared\n"))]
+      (do (assert (= (listLength att) 1) "only the failing file gets a row")
+          (assert (= (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.path) att)) "") "b.asl") "the row is attributed to b.asl")))
+    (assert (= (listLength (filter (fn [(h cg/Hit)] -> Bool (= h.rule "unchecked")) (cg/chunkRows "/src" (list "a.asl") 30 124 "timeout" ""))) 1) "a timeout reports the file unchecked, not clean")
+    (assert (= (cg/statusOf (cg/chunkRows "/src" (list "a.asl") 30 124 "timeout" "") false) "partial") "unchecked files give status partial")
+    (assert (= (cg/statusOf (list) false) "ok") "no rows is ok")
+    true)
+
+fn ! fixFixtures root: String base: String -> Bool
+  (let [(ok0 (msgAt base "okF" (goodMsg)))
+        (cm (msgAt base "cherry" (cherryMsg)))
+        (clean (fixture base "fClean" (list (pair "a/good.asl" (goodAsl)))))
+        (rCherry (cg/report! (cfgFor root clean cm false)))
+        (rNo (cg/report! (cg/Cfg :repo clean :aslRoot root :range "nosuch..x" :msg "" :hasMsg false :paths (list) :warn false :perFileS 30 :totalS 90 :gitS 30)))
+        (rNoW (cg/report! (cg/Cfg :repo clean :aslRoot root :range "nosuch..x" :msg "" :hasMsg false :paths (list) :warn true :perFileS 30 :totalS 90 :gitS 30)))
+        (rPart (cg/report! (cg/Cfg :repo clean :aslRoot root :range "" :msg (goodMsg) :hasMsg true :paths (list) :warn false :perFileS 30 :totalS 0 :gitS 30)))
+        (tr (fixture base "fTracked" (list (pair ".asl/mem/sessions/old.asn" "(:s 0)\n"))))
+        (_a (git tr (list "commit" "-q" "-m" "tracked ledger")))
+        (_b (put (str tr "/.asl/mem/sessions/new.asn") "(:s 1)\n"))
+        (_c (git tr (list "add" "-f" ".asl/mem/sessions/new.asn")))
+        (rTr (cg/report! (cfgFor root tr ok0 false)))
+        (lone (fixture base "fLone" (list (pair ".asl/mem/sessions/s.asn" "(:s 1)\n"))))
+        (rLone (cg/report! (cfgFor root lone ok0 false)))]
+    (do
+      (assert (= (pairFirst rCherry) 0) (str "a cherry-pick message commits clean: " (pairSecond rCherry)))
+      (assert (= (pairFirst rNo) 1) (str "an unknown range is a block, not a pass: " (pairSecond rNo)))
+      (assert (stringContains? (pairSecond rNo) ":rule :git") "the row names the git failure")
+      (assert (= (pairFirst rNoW) 0) "an unknown range under --warn exits 0")
+      (assert (stringContains? (pairSecond rNoW) ":status :wouldBlock") "and reports wouldBlock")
+      (assert (= (pairFirst rPart) 0) (str "an exhausted check budget does not block: " (pairSecond rPart)))
+      (assert (stringContains? (pairSecond rPart) ":status :partial") (str "the status is partial: " (pairSecond rPart)))
+      (assert (stringContains? (pairSecond rPart) ":unchecked (\"a/good.asl\")") "the file is listed as unchecked")
+      (assert (= (pairFirst rTr) 0) (str "a new file beside a tracked ignored sibling passes: " (pairSecond rTr)))
+      (assert (not (stringContains? (pairSecond rTr) ":rule :ignoredPath")) "with no ignoredPath row")
+      (assert (stringContains? (pairSecond rLone) ":rule :ignoredPath") "a lone ignored new file is still reported")
+      (assert (stringContains? (pairSecond rLone) ":sev :warn") "as a warning")
+      true))
