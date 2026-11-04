@@ -129,6 +129,8 @@ fn ! testDfParse -> Bool
   (let [(mac (sc/parseDf "Filesystem   1024-blocks      Used Available Capacity  Mounted on\n/dev/disk3s5   482797652 363599076  95907420    80%    /System/Volumes/Data\n"))
         (linux (sc/parseDf "Filesystem     1024-blocks      Used Available Capacity Mounted on\n/dev/sda1        103080888  98765432   454000      100% /\n"))
         (spaced (sc/parseDf "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/x 2048000 1024000 1024000 50% /Volumes/My Disk\n"))
+        (auto (sc/parseDf "Filesystem 1024-blocks Used Available Capacity Mounted on\nmap auto_home 0 0 0 100% /System/Volumes/Data/home\nmap auto master 1024000 512000 512000 50% /net\n"))
+        (autoHome (sc/parseDf "Filesystem 1024-blocks Used Available Capacity Mounted on\nmap auto_home 0 0 0 100% /System/Volumes/Data/home\n"))
         (junk (sc/parseDf "df: no such file\n"))
         (empty (sc/parseDf ""))
         (real (sc/probeDisk! "."))
@@ -137,6 +139,8 @@ fn ! testDfParse -> Bool
     (do (assert (and (= mac.usedPct 80) (= mac.freeMb 93659)) (str "macOS df line: " (stringFromInt64 mac.usedPct) " " (stringFromInt64 mac.freeMb)))
         (assert (and (= linux.usedPct 100) (= linux.freeMb 443)) (str "linux df line: " (stringFromInt64 linux.usedPct) " " (stringFromInt64 linux.freeMb)))
         (assert (and (= spaced.usedPct 50) (= spaced.freeMb 1000)) "a mount point with a space still parses the first five fields")
+        (assert (and (= auto.usedPct 50) (= auto.freeMb 500)) "a filesystem name with spaces parses from the right")
+        (assert (and (= autoHome.usedPct 100) (= autoHome.freeMb 0)) "the map auto_home line: zero blocks, 100 percent")
         (assert (and (= junk.usedPct -1) (= junk.freeMb -1) (= empty.usedPct -1)) "unparseable text is unknown")
         (assert (and (>= real.usedPct 0) (<= real.usedPct 100) (> real.freeMb 0)) (str "the real df of the store dir and TMPDIR parses: " (stringFromInt64 real.usedPct) " " (stringFromInt64 real.freeMb)))
         (assert (and (= worst.usedPct 91) (= worst.freeMb 2500)) "the tighter of two filesystems governs")
@@ -195,6 +199,36 @@ fn ! testDiskTicks -> Bool
         (assert (and (= (countOf j3 "(:resource") 3) (stringContains? j3 "(:resource :level ok :disk 50 :free 90000")) (str "recovery is journalled: " j3))
         true))
 
+; (:m :ref RES-GUARD :do "the production wiring: schedTick! with no disk argument goes through the real probeDisk!, so a floor above the machine's real free space must read stop, zero slots and one resource row")
+fn ! testWiring -> Bool
+  (let [(dir (scratch "wire"))
+        (_ (cleanup dir))
+        (_ (dirCreate dir))
+        (cfg (with (sc/defaultCfg) :diskMinFreeMb 1000000000))
+        (lines (list (call 300000 "nim" "a" "ok" 1) (call 900000 "nim" "a" "ok" 1)))
+        (n (sc/schedTick! dir cfg 1200000 lines 8000 2.0 8))
+        (j (resultOr (fileReadString (str dir "/journal.asn")) ""))
+        (lvl (sc/levelRead! dir))
+        (_ (cleanup dir))]
+    (do (assert (= n 0) (str "a real disk under the floor: zero slots: " (stringFromInt64 n)))
+        (assert (= lvl "stop") (str "the persisted level is stop: " lvl))
+        (assert (and (= (countOf j "(:resource") 1) (stringContains? j "(:resource :level stop :disk")) (str "one resource row: " j))
+        true))
+
+fn ! testCfgIssues -> Bool
+  (let [(good (sc/parseCfg "(:sched :diskLowPct 70 :diskStopPct 80 :diskMinFreeMb 0)"))
+        (inverted (sc/parseCfg "(:sched :diskLowPct 90 :diskStopPct 80)"))
+        (big (sc/parseCfg "(:sched :diskLowPct 50 :diskStopPct 101)"))
+        (zero (sc/parseCfg "(:sched :diskLowPct 0 :diskStopPct 90)"))
+        (neg (sc/parseCfg "(:sched :diskMinFreeMb -5 :diskLowPct 70 :diskStopPct 80)"))]
+    (do (assert (and (= good.diskLowPct 70) (= good.diskMinFreeMb 0)) "a valid row is taken, zero free floor included")
+        (assert (and (= inverted.diskLowPct 85) (= inverted.diskStopPct 93)) "low at or above stop falls back to both defaults")
+        (assert (and (= big.diskLowPct 85) (= big.diskStopPct 93)) "a percent over 100 falls back")
+        (assert (= zero.diskLowPct 85) "a percent of 0 falls back")
+        (assert (and (= neg.diskMinFreeMb 3000) (= neg.diskLowPct 70)) "a negative free floor falls back alone")
+        (assert (and (listEmpty? (sc/cfgIssues "(:sched :diskLowPct 70 :diskStopPct 80)")) (= (listLength (sc/cfgIssues "(:sched :diskLowPct 90 :diskStopPct 80)")) 1) (= (listLength (sc/cfgIssues "(:sched :diskMinFreeMb -5)")) 1)) "cfgIssues reports exactly what fell back")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testTable) "AIMD table")
       (assert (testWindow) "ledger window and config parse")
@@ -204,4 +238,6 @@ fn ! runTests -> Bool
       (assert (testDfParse) "df text parsing")
       (assert (testDiskLevel) "disk level table")
       (assert (testDiskTicks) "disk level in persisted ticks")
+      (assert (testWiring) "schedTick! reads the real disk")
+      (assert (testCfgIssues) "disk thresholds are validated")
       true)

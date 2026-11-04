@@ -1,5 +1,5 @@
 (module asl-tools/coord/sched
-  :x [schedTick! schedTickDisk! slotsDue? slotsRead! baseRead! levelRead! Disk diskLevel diskSlots diskWorst parseDf probeDisk! unknownDisk Cfg Win Stats defaultCfg parseCfg quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
+  :x [schedTick! schedTickDisk! slotsDue? slotsRead! baseRead! levelRead! Disk diskLevel diskSlots diskWorst parseDf probeDisk! unknownDisk Cfg Win Stats defaultCfg parseCfg cfgIssues quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
   :i [(aslGateway/subPace :a sp) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref SCHED :do "the light pool (Leon write slots, network bound) is bounded by machine resources and grows on goodput, the successful calls per minute of the last ledger window against the one before; a 429 share above softShare never halves the pool, it only holds growth or, when goodput is flat too, steps down by one; the strong reaction to 429 is per provider through the health multiplier of the rotation")
@@ -24,6 +24,21 @@ fn floatOr text: String key: String d: Float64 -> Float64
 
 ; (:m :ref SCHED :do "a missing or unreadable file is no config: the caller then keeps today's behaviour, so parseCfg is only called on a present (:sched ...) row")
 fn parseCfg text: String -> Cfg
+  (let [(d (defaultCfg))
+        (raw (rawCfg text))
+        (pctOk (and (and (>= raw.diskLowPct 1) (<= raw.diskLowPct 100)) (and (and (>= raw.diskStopPct 1) (<= raw.diskStopPct 100)) (< raw.diskLowPct raw.diskStopPct))))]
+    (with (with (with raw :diskLowPct (if pctOk raw.diskLowPct d.diskLowPct))
+                :diskStopPct (if pctOk raw.diskStopPct d.diskStopPct))
+          :diskMinFreeMb (if (>= raw.diskMinFreeMb 0) raw.diskMinFreeMb d.diskMinFreeMb)))
+
+; (:m :ref RES-GUARD :do "what parseCfg replaced by defaults: the two disk percentages must each be 1..100 with low under stop, else both fall back; a negative diskMinFreeMb falls back; empty when the row is valid")
+fn cfgIssues text: String -> (List String)
+  (let [(raw (rawCfg text))
+        (pctOk (and (and (>= raw.diskLowPct 1) (<= raw.diskLowPct 100)) (and (and (>= raw.diskStopPct 1) (<= raw.diskStopPct 100)) (< raw.diskLowPct raw.diskStopPct))))]
+    (listAppend (if pctOk (list) (list ":diskLowPct/:diskStopPct need 1..100 with low under stop, defaults used"))
+                (if (>= raw.diskMinFreeMb 0) (list) (list ":diskMinFreeMb must be 0 or more, default used"))))
+
+fn rawCfg text: String -> Cfg
   (let [(d (defaultCfg))]
     (Cfg :min (numOr text ":min" d.min) :max (numOr text ":max" d.max) :step (numOr text ":step" d.step) :start (numOr text ":start" d.start)
          :gainShare (floatOr text ":gainShare" d.gainShare) :flatWindows (numOr text ":flatWindows" d.flatWindows)
@@ -152,15 +167,16 @@ fn concatAll f: (fn [String] -> (List String)) xs: (List String) -> (List String
 fn unknownDisk -> Disk
   (Disk :usedPct -1 :freeMb -1)
 
-; (:m :ref RES-GUARD :do "df -Pk text to a Disk: the last non-empty line, fields Filesystem 1024-blocks Used Available Capacity Mounted; free is Available in MB, used is the Capacity percent; anything unparseable is unknown")
+; (:m :ref RES-GUARD :do "df -Pk text to a Disk: the last non-empty line, fields Filesystem 1024-blocks Used Available Capacity Mounted, located from the right: the last field ending in a percent sign is Capacity and the one before it Available, so a filesystem name or mount point with spaces parses; free is Available in MB, used is the Capacity percent; anything unparseable is unknown")
 fn parseDf text: String -> Disk
   (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines text)))
         (f (match (listLast lines)
              ((none) (list))
              ((some l) (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim l) " ")))))
-        (kb (optionOr (stringToInt64 (optionOr (listGet f 3) "")) -1))
-        (pct (optionOr (stringToInt64 (stringReplace (optionOr (listGet f 4) "") "%" "")) -1))]
-    (if (or (< (listLength f) 6) (or (< kb 0) (or (< pct 0) (> pct 100))))
+        (pi (fold (fn [(acc Int64) (i Int64)] -> Int64 (if (stringEndsWith? (optionOr (listGet f i) "") "%") i acc)) -1 (range 0 (listLength f))))
+        (kb (if (< pi 1) -1 (optionOr (stringToInt64 (optionOr (listGet f (- pi 1)) "")) -1)))
+        (pct (if (< pi 1) -1 (optionOr (stringToInt64 (stringReplace (optionOr (listGet f pi) "") "%" "")) -1)))]
+    (if (or (< pi 3) (or (< kb 0) (or (< pct 0) (> pct 100))))
       (unknownDisk)
       (Disk :usedPct pct :freeMb (/ kb 1024))))
 
@@ -176,7 +192,7 @@ fn diskLevel d: Disk cfg: Cfg -> String
     ((>= d.usedPct cfg.diskLowPct) "low")
     (else "ok"))
 
-; (:m :ref RES-GUARD :do "the slots a level allows over the AIMD base: ok keeps it, low halves it (at least 1), stop is 0 so no new writer or gate starts while in-flight work continues")
+; (:m :ref RES-GUARD :do "the slots a level allows over the AIMD base: ok keeps it, low halves it (at least 1), stop is 0 so no new claim (ready to writing) starts while in-flight work continues; gating and review launches are not gated by the slots today")
 fn diskSlots base: Int64 level: String -> Int64
   (cond
     ((= level "stop") 0)
