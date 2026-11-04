@@ -1,0 +1,3 @@
+#!/usr/bin/env -S ./bin/asl
+(use asl/tools/coord/commitGuard)
+(commitGuard/hook (list "--staged" "--warn" "--msg-file" (argStr args 0 "")))
