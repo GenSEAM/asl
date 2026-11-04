@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid claimWake! claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -756,7 +756,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
             (_ (reapLeases! ctx))
-            (_ (claimWake! ctx))
+            (_ (retryBlocked! ctx units))
             (_ (depWake! ctx units))
             (_ (freeWake! ctx))
             (_ (stl/sweep! ctx.dir (nowMs) (stallProbes ctx) (stallHooks ctx)))
@@ -927,20 +927,70 @@ fn claimFreed? c: CUnit leases: (List st/Lease) now: Int64 -> Bool
            ((stringContains? c.sig " :why owns ") (let [(by (quotedAfter c.sig ":by \""))] (and (not (stringEmpty? by)) (not (liveHas by)))))
            (else false))))
 
-fn ! claimWake! ctx: Ctx -> Int64
+; (:m :ref COND-RECOVER-C3 :do "config of the blocked-unit retry policy, in the (:conductor ...) row of the stores ladder.asn: :blockedRetryMax N automatic retries a blocked unit gets per transient cause (default 2 adopted, 0 turns the policy off), :retryBackoffS S the wait before the first retry, doubled for each later one (default 300 adopted)")
+fn ! blockedRetryMax dir: String -> Int64
+  (let [(row (cdRowOf dir))]
+    (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":blockedRetryMax")) 2) 2))
+
+fn ! retryBackoffS dir: String -> Int64
+  (let [(row (cdRowOf dir))]
+    (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":retryBackoffS")) 300) 300))
+
+; (:m :ref COND-RECOVER-C3 :do "why a blocked unit may be retried by itself, empty when it may not: claim (the lease or owns clash that refused it is gone), provider (the failure signature matches the providerFail patterns), lease (the signature names a lost lease), stall (a stalled writer), vacuous (the vacuous verdict with commits on the unit branch past its base, which gating can now test); every other block, a review block, a stale rebase, deps, a repeated writer failure, waits for a person or the ladder")
+fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 -> String
+  (let [(low (stringLower c.sig))]
+    (cond
+      ((claimFreed? c leases now) "claim")
+      ((stringEmpty? c.sig) "")
+      ((providerFailSig? c.sig (pfPatterns (pfRowOf ctx.dir))) "provider")
+      ((stringContains? low "lease") "lease")
+      ((stringContains? low "stalled") "stall")
+      ((vacuousSig? c.sig)
+        (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
+              (p (str (wtBase ctx.dir repo) "/asex-" c.id))]
+          (if (and (not (stringEmpty? repo)) (and (worktreeValid? p) (commitsPast? p (baseRef (resolved! repo u))))) "vacuous" "")))
+      (else "")))
+
+; (:m :ref COND-RECOVER-C3 :do "an escalated writer failure whose next ladder rung has room again (the per-day cap of a rung rolled over, a rung row was raised) hops there as the failed write would have, one tierHop move to ready with a clean count; the lead rung is left to offerBacklog!; the review block that offerStrong! serves, a stale rebase, deps and the vacuous verdict are not writer failures")
+fn ladderHopSig? sig: String -> Bool
+  (not (or (stringEmpty? sig) (or (stringStartsWith? sig "waitedOut: ") (or (stringStartsWith? sig "review") (or (vacuousSig? sig) (stringStartsWith? sig "STALE"))))))
+
+fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 -> Bool
+  (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (ladderHopSig? c.sig))))
+    (match (nextRung! ctx.dir c.lane now)
+      ((none) false)
+      ((some next)
+        (if (= next "lead") false
+          (let [(_ (priorWrite! ctx.dir c.id c.lane c.sig))
+                (_ (move! ctx (with c :lane next :fails 0 :waited 0 :esc 0 :epoch 0 :sig "") "ready" "retry" "" 0 0 (str "tierHop " c.lane "->" next ": " (verdictSig c.sig)) 0))]
+            true))))
+    false)
+
+; (:m :ref COND-RECOVER-C3 :do "the blocked-unit policy, once per tick: a blocked unit with a transient cause (transientWhy!) goes back to ready with a clean count while it has had fewer than :blockedRetryMax retries and the backoff since its last one (:retryBackoffS doubled per retry) has passed, each retry one row in retries.asn; a unit with no transient cause gets ladderHop!; on node2 2026-11-04 129 of 172 units sat blocked with only dep, lead-backlog, strong-offer and stale wakes to leave by")
+fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 max: Int64 backoffMs: Int64 -> Bool
+  (if (not (and (= c.st "blocked") (stringEmpty? c.await))) false
+    (let [(why (transientWhy! ctx u c leases now))]
+      (if (stringEmpty? why) (ladderHop! ctx c (/ now 1000000))
+        (let [(r (retryLast! ctx.dir c.id))
+              (wait (* backoffMs (fold (fn [(a Int64) (_ Int64)] -> Int64 (* a 2)) 1 (range 0 (pairFirst r)))))]
+          (if (or (>= (pairFirst r) max) (< (- (nowMs) (pairSecond r)) wait)) false
+            (let [(_ (retryNote! ctx.dir c.id why (+ (pairFirst r) 1)))
+                  (_ (pwReset! ctx.dir c.id))
+                  (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "retry" "" 0 0 (str "retry " why) 0))]
+              true))))))
+
+fn ! retryBlocked! ctx: Ctx units: (List st/Task) -> Int64
   (match (st/readLeases! ctx.dir)
     ((err _) 0)
     ((ok leases)
       (let [(now (nowNs))
-            (woken (filter (fn [(c CUnit)] -> Bool
-                             (if (and (= c.st "blocked") (and (stringEmpty? c.await) (claimFreed? c leases now)))
-                               (let [(r (retryLast! ctx.dir c.id))]
-                                 (if (>= (pairFirst r) 1) false
-                                   (let [(_ (retryNote! ctx.dir c.id "claim" (+ (pairFirst r) 1)))
-                                         (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0) "ready" "retry" "" 0 0 "claimFreed" 0))]
-                                     true)))
-                               false))
-                           (readCUnits! ctx.dir)))]
+            (max (blockedRetryMax ctx.dir))
+            (backoffMs (* 1000 (retryBackoffS ctx.dir)))
+            (woken (filter (fn [(u st/Task)] -> Bool
+                             (match (cuOf (readCUnits! ctx.dir) u.id)
+                               ((none) false)
+                               ((some c) (retryOne! ctx u c leases now max backoffMs))))
+                           units))]
         (listLength woken))))
 
 ; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH) row in the store's ladder.asn, a ready unit starts its writer only while the node has a free jobserver token (tokenCount - heldCount > 0) and MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
@@ -1670,11 +1720,17 @@ fn cdRowOf dir: String -> String
 ; (:m :ref COND-REBASE-WAKE-LOOP :do "config check of a (:conductor ...) row: an unknown key or :staleWakeMax outside 1..100 is an error; no error means the row is used")
 fn cdErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (= k ":staleWakeMax"))) keys))
-        (m (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1))]
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":staleWakeMax" ":blockedRetryMax" ":retryBackoffS") k))) keys))
+        (m (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1))
+        (r (optionOr (stringToInt64 (sp/tokAfter row ":blockedRetryMax")) 2))
+        (b (optionOr (stringToInt64 (sp/tokAfter row ":retryBackoffS")) 300))]
     (listAppend
       (map (fn [(k String)] -> String (str "unknown key " k)) bad)
-      (if (or (< m 1) (> m 100)) (list (str ":staleWakeMax " (n m) " outside 1..100")) (list))))
+      (listAppend
+        (if (or (< m 1) (> m 100)) (list (str ":staleWakeMax " (n m) " outside 1..100")) (list))
+        (listAppend
+          (if (or (< r 0) (> r 20)) (list (str ":blockedRetryMax " (n r) " outside 0..20")) (list))
+          (if (or (< b 1) (> b 86400)) (list (str ":retryBackoffS " (n b) " outside 1..86400")) (list))))))
 
 ; (:m :ref COND-REBASE-WAKE-LOOP :do "how many failed wakes a stale unit gets before it parks behind its lead row: (:conductor :staleWakeMax N) in the store's ladder.asn, default 1 (adopted), a row cdErrors rejects means the default")
 fn ! staleWakeMax dir: String -> Int64
