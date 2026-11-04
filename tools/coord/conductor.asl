@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSince? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -28,7 +28,7 @@
 ; (:m :ref CONDUCTOR :do "launch stage unit state -> argv of the detached child that performs the stage and writes its Res row; stageSec is the child deadline recorded in the store run row, maxDesc its descendant limit")
 (schema Ctx
   (:f dir String) (:f holder String) (:f ttlMs Int64) (:f maxWait Int64) (:f maxSame Int64) (:f stageSec Int64) (:f maxDesc Int64)
-  (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace))
+  (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace) (:f hold Bool :default false))
 
 (schema RealCfg
   (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default ""))
@@ -435,8 +435,9 @@ fn ! killRun! dir: String id: String stage: String -> Unit
 fn ! mergeBusy? dir: String id: String -> Bool
   (listAny? (fn [(x CUnit)] -> Bool (and (!= x.id id) (and (= x.st "merging") (!= x.launched 0)))) (readCUnits! dir))
 
+; (:m :ref RES-GUARD-M1 :do "with no slot free (ctx.hold, set by step! when its cap is 0, the disk stop level among the causes) no gate and no review starts: the unit stays gating or reviewing with launched 0 and a later tick starts it; a running stage is untouched")
 fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
-  (if (or (draining? ctx.dir) (and (= c.st "merging") (mergeBusy? ctx.dir c.id))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
+  (if (or (draining? ctx.dir) (or (and ctx.hold (listContains? (list "gating" "reviewing") c.st)) (and (= c.st "merging") (mergeBusy? ctx.dir c.id)))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
   (let [(stage (stageName c.st))
         (mk ctx.launch)
         (argv (mk stage u c))
@@ -616,8 +617,9 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
       (else ())))
 
 ; (:m :do "returns the in-flight capacity left for the rest of this tick")
-fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
-  (let [(cus (readCUnits! ctx.dir))
+fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
+  (let [(ctx (with ctx0 :hold (<= cap 0)))
+        (cus (readCUnits! ctx.dir))
         (c (optionOr (cuOf cus u.id) (newCUnit u)))]
     (cond
       ((= c.st "queued")
@@ -641,7 +643,7 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
                       (_ (launch! ctx u c1))]
                   (- cap 1)))))))
       ((= c.st "awaitReview")
-        (if (or (= c.parked 1) (draining? ctx.dir)) cap
+        (if (or (= c.parked 1) (or (<= cap 0) (draining? ctx.dir))) cap
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
                 (_ (launch! ctx u c1))]
             cap)))
