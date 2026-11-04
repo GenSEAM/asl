@@ -1,7 +1,7 @@
 (module asl-tools/coord/tests/conductorWireTest
   :x [runTests]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/store :a st)
-      (asl-tools/coord/conductorService :a cs) (asl-json/json :a j) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (asl-tools/fleet/run :a fr)])
+      (asl-tools/coord/conductorService :a cs) (asl-json/json :a j) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (asl-tools/fleet/run :a fr) (aslAgent/gateIntegrity :a gi) (aslAgent/gates :a ag) (asl-tools/coord/worktree :a w)])
 
 ; (:m :ref COND3 :do "fakes only: gateway text, lane table, subscription text and a fake model call; no ~/.asl read, no network, store dirs are scratch dirs under this worktree's .asl/cache")
 fn ! scratch name: String -> String
@@ -582,6 +582,104 @@ fn ! testGateCheckTimeout -> Bool
         (assert (not (listEmpty? (cd/gateErrors "(:gate :checkTimeoutS 5)"))) "gateErrors rejects 5 s")
         true))
 
+; (:m :ref UNIT-AHEAD-GATING :do "fixture for the stranded-branch loop: a repo whose gate script check.sh passes when every named file holds impl; base.txt holds it on main, so a gate on base.txt is green on the base; unit worktrees come from attachOrAdd like a claim")
+fn ! aheadRepo root: String -> String
+  (let [(repo (str root "/repo"))
+        (made (resultOr (fr/shellOut (str "mkdir -p " repo " " root "/store/tasks " root "/home && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
+                                         " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"1 assertion(s) executed (1 passed)\"\\n' > check.sh"
+                                         " && printf 'sh check.sh impl.txt\n' > gImpl.sh && printf 'sh check.sh base.txt\n' > gBase.sh && printf 'sh check.sh impl.txt doc.txt\n' > gBoth.sh && printf impl > base.txt && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk") 60000) ""))]
+    (if (stringContains? made "madeOk") repo ""))
+
+fn ! aheadUnit id: String gate: String -> st/Task
+  (st/Task :id id :owns (list "impl.txt" "doc.txt") :reads (list) :gate gate :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
+
+fn aheadCUnit id: String -> cd/CUnit
+  (cd/CUnit :id id :st "writing" :lane "free" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await "")
+
+; (:m :do "the unit worktree with one earlier driver commit of file f on sh/ID, as an earlier attempt left it")
+fn ! aheadWt rc: cd/RealCfg u: st/Task f: String -> String
+  (let [(p (resultOr (cd/attachOrAdd rc u (w/wtPath rc.wt u.id)) ""))
+        (_ (if (stringEmpty? p) () (commitFile p f "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")")))]
+    p)
+
+; (:m :ref UNIT-AHEAD-GATING :do "a branch ahead of its base with a green gate reaches gating with no writer run, and the journal says why; the same branch whose gate is green on the merge-base too is the vacuous verdict and escalates; a branch whose gate is red still gets a writer")
+fn ! testAheadGating -> Bool
+  (let [(root (scratch "ahead"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (seen (str root "/seen"))
+        (run (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (fileAppend seen (str id "\n")))] (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "exit"))))
+        (u1 (aheadUnit "U1" "sh gImpl.sh"))
+        (p1 (aheadWt rc u1 "impl.txt"))
+        (r1 (cd/writeResWith run rc dir u1 (aheadCUnit "U1")))
+        (ctx (cd/Ctx :dir dir :holder "conductorWireTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50
+                     :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (list "true")) :pace (cd/fixedPace 4 4)))
+        (_ (cd/finish! ctx u1 (aheadCUnit "U1") r1))
+        (st1 (match (listFind (fn [(c cd/CUnit)] -> Bool (= c.id "U1")) (cd/readCUnits! dir)) ((some c) c.st) ((none) "none")))
+        (u2 (aheadUnit "U2" "sh gBase.sh"))
+        (p2 (aheadWt rc u2 "doc.txt"))
+        (r2 (cd/writeResWith run rc dir u2 (aheadCUnit "U2")))
+        (u3 (aheadUnit "U3" "sh gBoth.sh"))
+        (p3 (aheadWt rc u3 "impl.txt"))
+        (r3 (cd/writeResWith run rc dir u3 (aheadCUnit "U3")))
+        (journal (resultOr (fileReadString (cd/journalPath dir)) ""))
+        (writers (resultOr (fileReadString seen) ""))
+        (_ (cleanup root))]
+    (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? p1)) (and (not (stringEmpty? p2)) (not (stringEmpty? p3))))) "the fixture repo and unit worktrees exist")
+        (assert (and (= r1.ok 1) (stringEmpty? r1.sig)) (str "an ahead branch with a green gate is written: " r1.sig))
+        (assert (and (= r1.branch "sh/U1") (= r1.wt p1)) "the result names the unit branch and worktree")
+        (assert (not (stringContains? writers "U1")) (str "no writer ran on the finished branch: " writers))
+        (assert (= st1 "gating") (str "the finished branch goes to gating: " st1))
+        (assert (stringContains? journal "(:ahead :unit \"U1\" :commits 1 :gate (:exit 0 :executed 1) :base (:exit 1))") (str "the journal records the ahead verdict: " journal))
+        (assert (and (= r2.ok 0) (cd/vacuousSig? r2.sig)) (str "a gate green on the merge-base too is vacuous: " r2.sig))
+        (assert (not (stringContains? writers "U2")) "the vacuous verdict needs no writer either")
+        (assert (stringContains? writers "U3") (str "a branch whose gate is red gets a writer: " writers))
+        (assert (= r3.ok 0) "and that writer's failure stays a failure")
+        true))
+
+; (:m :ref UNIT-AHEAD-GATING :do "Leon's own gate integrity check, run by the writer inside onBaseRun!, reverts against the merge-base: an earlier committed implementation fails the gate on revert (not vacuous) where the HEAD revert saw only the doc edit and passed; a gate green on the base stays vacuous; afterwards HEAD is the branch tip again and the new edit is on top of it")
+fn ! testIntegrityOnBase -> Bool
+  (let [(root (scratch "onBase"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) (str root "/store")))
+        (owns (list "impl.txt" "doc.txt"))
+        (check (fn [(p String) (gate String)] -> (Pair Bool String)
+                 (let [(_ (fileWrite (str p "/doc.txt") "impl"))]
+                   (gi/gateIntegrity! (list gate) owns p (list (ag/makeGateResult gate 0 "(:gate :asserts 1 :failed 0)" "" false 1)) 60 (none)))))
+        (writer (fn [(p String) (gate String) (out String)] -> fr/Done
+                  (let [(v (check p gate))
+                        (_ (fileWrite out (str (if (pairFirst v) "honest" "vacuous") "\n" (pairSecond v))))]
+                    (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "exit"))))
+        (u1 (aheadUnit "U1" "sh gImpl.sh"))
+        (p1 (aheadWt rc u1 "impl.txt"))
+        (tip1 (stringTrim (git p1 (list "rev-parse" "HEAD")).out))
+        (headOnly (check p1 u1.gate))
+        (_ (git p1 (list "checkout" "--quiet" "--" ".")))
+        (_ (pathRemove (str p1 "/doc.txt")))
+        (d1 (cd/onBaseRun! p1 "main" (fn [] -> fr/Done (writer p1 u1.gate (str root "/v1")))))
+        (v1 (resultOr (fileReadString (str root "/v1")) ""))
+        (after1 (stringTrim (git p1 (list "rev-parse" "HEAD")).out))
+        (status1 (stringTrim (git p1 (list "status" "--porcelain" "--" "impl.txt" "doc.txt")).out))
+        (u2 (aheadUnit "U2" "sh gBase.sh"))
+        (p2 (aheadWt rc u2 "doc.txt"))
+        (d2 (cd/onBaseRun! p2 "main" (fn [] -> fr/Done (writer p2 u2.gate (str root "/v2")))))
+        (v2 (resultOr (fileReadString (str root "/v2")) ""))
+        (_ (cleanup root))]
+    (do (assert (not (pairFirst headOnly)) (str "control: reverting to HEAD calls the doc-only edit vacuous: " (pairSecond headOnly)))
+        (assert (stringStartsWith? v1 "honest") (str "measured against the merge-base the earlier implementation fails the gate on revert: " v1))
+        (assert (stringContains? v1 "failsOnRevert") (str "the verdict is failsOnRevert: " v1))
+        (assert (and (= d1.exit 0) (= after1 tip1)) (str "HEAD is the branch tip again: " after1 " vs " tip1))
+        (assert (= status1 "?? doc.txt") (str "only the new edit is left on top of the tip: " status1))
+        (assert (stringStartsWith? v2 "vacuous") (str "a gate green on the base stays vacuous: " v2))
+        (assert (= d2.exit 0) "the writer's result is passed through")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testAttach) "retry attaches an existing branch")
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
@@ -607,4 +705,6 @@ fn ! runTests -> Bool
       (assert (testCoverage) "coverage refusal")
       (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
       (assert (testLeonGuard) "the write stage refuses a worktree without the deployed Leon")
+      (assert (testAheadGating) "an ahead branch with a green gate goes to gating without a writer")
+      (assert (testIntegrityOnBase) "the writer integrity revert is measured against the merge-base")
       true)

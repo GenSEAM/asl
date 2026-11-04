@@ -2,7 +2,7 @@
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! onBaseRun! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -1277,6 +1277,29 @@ fn ! vacuousAround! p: String base: String owns: (List String) gate: String task
         (d (run))]
     (pair d (and blank (vacuousWrite? d.out gate task))))
 
+; (:m :ref UNIT-AHEAD-GATING :do "a write whose gate failed still had its owned edits driver-committed, so a later claim found the work on sh/UNIT and ran another writer on it, whose doc-only change Leon judged vacuous against HEAD, forever (node2 2026-11-04: 27 of 41 branches ahead, never merged); a branch with commits past its base, no uncommitted owned change and a green unit gate is finished work: the write stage returns it as written without a writer run, unless the gate is also green on the merge-base, which is the vacuous verdict")
+fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Option Res)
+  (let [(past (gitOut p (list "rev-list" "--count" (str (baseRef u) "..HEAD"))))]
+    (if (or (stringEmpty? u.gate) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (not (listEmpty? (ownedChanges! p u.owns)))))) none
+      (let [(cw (written c p (str "sh/" u.id)))
+            (g (gatesRes rc.gateSec (gateCheckS dir) (taskText dir u) u cw))]
+        (if (or (!= g.exit 0) (<= g.asserts 0)) none
+          (let [(before (redBefore! rc dir u cw))
+                (_ (fileAppend (journalPath dir) (str "(:ahead :unit " (st/q u.id) " :commits " (stringTrim past.out) " :gate (:exit 0 :executed " (n g.asserts) ") :base (:exit " (n (pairFirst before)) "))\n")))]
+            (some (Res :tiers "" :ok (if (= (pairFirst before) 0) 0 1) :wt p :branch (str "sh/" u.id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+                       :sig (if (= (pairFirst before) 0) (vacuousSig u.gate) "") :ms g.ms :exit 0 :asserts g.asserts :verdict "")))))))
+
+; (:m :ref UNIT-AHEAD-GATING :do "Leon's gate integrity reverts the changed files to HEAD, so on a branch already holding the unit's earlier commits it saw only the new edit; the writer runs with HEAD soft-reset to the merge-base, the earlier work staged, so the revert is measured against the unit base; when the writer made no commit HEAD goes back to the branch tip with the new edit left on top, and a Leon commit holds the whole unit")
+fn ! onBaseRun! p: String base: String run: (fn ! [] -> fr/Done) -> fr/Done
+  (let [(head (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
+        (mb (stringTrim (gitOut p (list "merge-base" "HEAD" base)).out))]
+    (if (or (stringEmpty? mb) (or (stringEmpty? head) (= mb head))) (run)
+      (if (!= (gitOut p (list "reset" "-q" "--soft" mb)).exit 0) (run)
+        (let [(d (run))
+              (now (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
+              (_ (if (= now mb) (= (gitOut p (list "reset" "-q" "--soft" head)).exit 0) false))]
+          d))))
+
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "a unit worktree kept across retries was reused as it stood, so a unit created in the morning ran Leon and its gates on the morning's tree all day (NODE2-ASEX-DETACHED at ace2ae8ec while main moved on); a reused worktree with no tracked change is brought onto its base like a re-attached one")
 fn ! reuseWt! rc: RealCfg u: st/Task path: String -> (Result String String)
   (if (stringEmpty? (stringTrim (gitOut path (list "status" "--porcelain" "--untracked-files=no")).out))
@@ -1523,12 +1546,15 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
        (match (writeGuard! rc.home rc.repo p dir u.id)
         ((some refused) refused)
         ((none)
+        (match (aheadGreen! rc dir u c p)
+        ((some done) done)
+        ((none)
         (let [(prior (priorNote! dir u.id))
               (task (briefTask! p dir u prior))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (pv (vacuousAround! p u.base u.owns u.gate task (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))))
+              (pv (vacuousAround! p u.base u.owns u.gate task (fn [] -> fr/Done (onBaseRun! p (baseRef u) (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))))))
               (d (pairFirst pv))
               (model (servedModel d.out))
               (vacuous (pairSecond pv))
@@ -1536,7 +1562,7 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
               (noEdit (and (= d.exit 0) (not (commitsPast? p u.base))))]
           (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (not vacuous))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
-               :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))
+               :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))))
 
 fn ! currentBranch dir: String -> String
   (let [(d (fr/runOne (fr/job (list "git" "-C" dir "rev-parse" "--abbrev-ref" "HEAD") dir (fr/childEnv (list)))))]
