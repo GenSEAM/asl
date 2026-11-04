@@ -6,7 +6,7 @@
   :packageManager "pnpm@11.25.0"
   :engines (:node ">=20.0.0")
   :scripts (
-    :build:web "sh web/build.sh"
-    :build "sh web/build.sh"
+    :build:web "asl run asl/web/tools/build.asl"
+    :build "asl run asl/web/tools/build.asl"
     :preview:web "npx --yes serve web/dist -l 4173"
   ))

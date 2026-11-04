@@ -42,6 +42,6 @@
     (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
     (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")
     (:task :name "telemetry" :cmd "asl telemetry" :doc "Collect performance telemetry and token metrics")
-    (:task :name "web:build" :cmd "sh web/build.sh" :doc "Prerender aslang.dev and compile web/site to site.wasm into web/dist")
+    (:task :name "web:build" :cmd "asl run asl/web/tools/build.asl" :doc "Prerender aslang.dev and compile web/site to site.wasm into web/dist")
     (:task :name "web:test" :cmd "asl test web/tests" :doc "Run the site's ASL test suites")
   ])
