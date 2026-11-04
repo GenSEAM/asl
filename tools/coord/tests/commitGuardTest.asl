@@ -29,6 +29,8 @@ fn ! fixture base: String name: String files: (List (Pair String String)) -> Str
   (let [(dir (str base "/" name))]
     (do (assert (= (sh "." (list "mkdir" "-p" (str dir "/scripts/audit"))).exit 0) (str name ": dir"))
         (assert (git dir (list "init" "-q" "-b" "main")) (str name ": init"))
+        (assert (git dir (list "config" "user.name" "t")) (str name ": user"))
+        (assert (git dir (list "config" "user.email" "t@example.invalid")) (str name ": email"))
         (assert (put (str dir "/scripts/audit/foreignBaseline.asn") (baseline)) (str name ": baseline"))
         (assert (put (str dir "/keep.sh") "#!/bin/sh\necho a\n") (str name ": keep.sh"))
         (assert (put (str dir "/.gitignore") ".asl/mem/sessions/\n") (str name ": gitignore"))
@@ -46,7 +48,7 @@ fn parentOf p: String -> String
     (if (<= (listLength parts) 1) "." (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
 
 fn ! cfgFor root: String dir: String msgFile: String warn: Bool -> cg/Cfg
-  (cg/Cfg :repo dir :aslRoot root :range "" :msgFile msgFile :warn warn :perFileS 30 :totalS 90 :gitS 30)
+  (cg/Cfg :repo dir :aslRoot root :range "" :msg (resultOr (fileReadString msgFile) "") :hasMsg true :paths (list) :warn warn :perFileS 30 :totalS 90 :gitS 30)
 
 fn ! msgAt base: String name: String text: String -> String
   (let [(p (str base "/" name ".msg"))]
@@ -134,12 +136,64 @@ fn ! fixtures root: String base: String -> Bool
       (assert (= (pairFirst warnF) 0) "--warn on foreign growth plus a trailer exits 0")
       true))
 
+fn ! head dir: String -> String
+  (stringTrim (sh dir (list "git" "rev-parse" "HEAD")).out)
+
+fn ! committed dir: String -> String
+  (stringTrim (sh dir (list "git" "show" "--name-only" "--format=" "HEAD")).out)
+
+; (:m :do "the own commit entry over fixture repos: ok commits only the named paths, a block commits nothing and leaves HEAD, a partly staged broken blob is blocked though the working copy is fine, warn commits and records the rows")
+fn ! commitGates root: String base: String -> Bool
+  (let [(c1 (fixture base "cOk" (list)))
+        (_a (put (str c1 "/good.asl") (goodAsl)))
+        (_b (put (str c1 "/note.txt") "not named\n"))
+        (_c (put (str c1 "/other.asl") "(module fx/other\n"))
+        (_d (git c1 (list "add" "other.asl")))
+        (h1 (head c1))
+        (r1 (cg/commit! c1 root (list "good.asl") (goodMsg) false))
+        (c2 (fixture base "cBlock" (list)))
+        (_e (put (str c2 "/bad.asl") "(module fx/bad\n  :x [f]\n"))
+        (h2 (head c2))
+        (r2 (cg/commit! c2 root (list "bad.asl") (goodMsg) false))
+        (r2b (cg/commit! c2 root (list) (goodMsg) false))
+        (c3 (fixture base "cPart" (list (pair "p.asl" "(module fx/p\n  :x [f]\n"))))
+        (_f (put (str c3 "/p.asl") (goodAsl)))
+        (r3 (cg/guard! c3 root (list "p.asl") (goodMsg) false))
+        (c4 (fixture base "cWarn" (list)))
+        (_g (put (str c4 "/bad.asl") "(module fx/bad\n  :x [f]\n"))
+        (h4 (head c4))
+        (r4 (cg/commit! c4 root (list "bad.asl") (goodMsg) true))
+        (c5 (fixture base "cDel" (list)))
+        (_h (sh c5 (list "rm" "-f" "keep.sh")))
+        (r5 (cg/commit! c5 root (list "keep.sh") (goodMsg) false))
+        (log4 (resultOr (fileReadString (str c4 "/.asl/log/commitGuard.asn")) ""))]
+    (do
+      (assert (= r1.code 0) (str "a clean named path commits: " r1.text))
+      (assert (stringContains? r1.text ":commit :done :sha ") "the receipt says done with a sha")
+      (assert (!= (head c1) h1) "HEAD moved on ok")
+      (assert (= (committed c1) "good.asl") (str "only the named path is in the commit: " (committed c1)))
+      (assert (= r2.code 1) (str "a broken named path is refused: " r2.text))
+      (assert (stringContains? r2.text ":commit :refused") "the receipt says refused")
+      (assert (= (head c2) h2) "HEAD is unchanged after a refusal")
+      (assert (= r2b.code 1) "no paths named is refused")
+      (assert (= r3.code 1) (str "a partly staged broken blob is blocked though the working copy is good: " r3.text))
+      (assert (stringContains? r3.text ":rule :balance") "the blob row names balance")
+      (assert (= r5.code 0) (str "a deleted path commits: " r5.text))
+      (assert (= (committed c5) "keep.sh") "the deletion is the commit")
+      (assert (= r4.code 0) (str "--warn commits anyway: " r4.text))
+      (assert (!= (head c4) h4) "HEAD moved under --warn")
+      (assert (stringContains? r4.text ":status :wouldBlock") "the warn receipt keeps the rows")
+      (assert (stringContains? r4.text ":commit :done") "the warn receipt says done")
+      (assert (stringContains? log4 ":rule :balance") (str "the rows are recorded in .asl/log/commitGuard.asn: " log4))
+      true))
+
 fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
     (do (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (pureRules) "pure rules")
         (assert (fixtures root base) "fixture repos")
+        (assert (commitGates root base) "commit entry")
         (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
         true))
 
