@@ -249,6 +249,34 @@ fn ! testBriefTask -> Bool
         (assert (stringContains? stored "SMALL EDITS ONLY") "the stored task text is untouched")
         true))
 
+; (:m :ref COND-TASK-SPEC :do "the write stage builds the writer's task through briefTask!: a fake Leon run records the task text it is handed; the owned-paths block (exists and missing) is in it and the size advice is not, and the prior note follows; reverting writeResWith's task line to the stored text turns this red")
+fn ! testWriteResBrief -> Bool
+  (let [(root (scratch "writeBrief"))
+        (repo (str root "/repo"))
+        (dir (str root "/store"))
+        (home (str root "/home"))
+        (sh (fn [(c String)] -> String (resultOr (fr/shellOut c 60000) "")))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (made (sh (str "mkdir -p " repo " " dir "/tasks " home " && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t && mkdir -p asl && printf 'a\\nb\\n' > asl/have.asl && git add -A && git commit -qm a && echo madeOk")))
+        (rc (cd/realCfg (list "--repo" repo "--home" home "--worktrees" (str root "/wts")) dir))
+        (_ (fileWrite (str dir "/tasks/U1.txt") "Build it.\nSMALL EDITS ONLY in large files."))
+        (u (st/Task :id "U1" :owns (list "asl/have.asl" "asl/packages/asl-utils/src/textdiff.asl") :reads (list) :gate "" :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt ""))
+        (c (cd/CUnit :id "U1" :st "ready" :lane "free" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await ""))
+        (seen (str root "/seenTask"))
+        (run (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (fileWrite seen task))] (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "exit"))))
+        (res (cd/writeResWith run rc dir u c))
+        (task (resultOr (fileReadString seen) "NOTASK"))
+        (_ (cleanup root))]
+    (do (assert (stringContains? made "madeOk") "the fixture repo exists")
+        (assert (stringContains? task "- asl/have.asl: exists (") (str "existing owned path reaches the writer task: " task))
+        (assert (stringContains? task "asl/packages/asl-utils/src/textdiff.asl: missing, create it with one write; module asl-utils/textdiff") (str "missing owned path reaches the writer task: " task))
+        (assert (not (stringContains? task "SMALL EDITS ONLY")) (str "size advice stripped from the writer task: " task))
+        (assert (= (listLength (stringSplit task "Owned paths at claim")) 2) "exactly one owned-paths block")
+        (assert (stringContains? task "Build it.") "the stored task text is still the base of the brief")
+        true))
+
 ; (:m :ref COND3 :do "a dev clone made by git clone lists origin and the train's audit consistency is red on that (workspaceIsolation), so the VPS merge never passed; the conductor drops the dev repo's remotes before the train")
 fn ! testDropRemotes -> Bool
   (let [(root (scratch "dropRemotes"))
@@ -559,6 +587,7 @@ fn ! runTests -> Bool
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
       (assert (testOrphanWt) "an orphan unit dir is moved aside and re-added")
       (assert (testBriefTask) "the brief carries owned path states")
+      (assert (testWriteResBrief) "the write stage hands the writer the brief")
       (assert (testDropRemotes) "the dev repo's remotes are dropped before a train")
       (assert (testSpend) "token spend from provider usage and Leon's usage row")
       (assert (testMergeEnv) "the train cannot start a nested e2e")

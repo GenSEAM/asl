@@ -1850,5 +1850,6 @@
 (:doc :symbol "asl/tools/coord/brief.asl#sizeAdviceFree" :text "the task text without the lines carrying SMALL EDITS ONLY size advice")
 (:doc :symbol "asl/tools/coord/brief.asl#briefFor" :text "task owned: the stored task text with size advice dropped when an owned file is missing and an owned-paths block (state at claim, module name) added; no owned paths returns the text unchanged")
 (:doc :symbol "asl/tools/coord/conductor.asl#ownedStates!" :text "wt owns: each owned file with its line count in the unit worktree, -1 when it does not exist yet; directory entries are left out")
+(:doc :symbol "asl/tools/coord/conductor.asl#writeResWith" :text "run rc dir u c: the write stage with the Leon run injected (rc lane id prof wt task owns gates extra), writeRes passes runWrite!; a gate records the task text the writer receives")
 (:doc :symbol "asl/tools/coord/conductor.asl#briefTask!" :text "wt dir u prior: the writer brief, the stored task text plus the owned paths facts, then the prior note; the store text is not rewritten")
 (:doc :symbol "asl/tools/coord/tests/briefTest.asl#runTests" :text "runs the brief suite: module names from paths and the owned-state block on fake states")
