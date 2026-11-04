@@ -2,7 +2,7 @@
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! onBaseRun! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! onBaseRun! onBaseEnter! onBaseHeal! onBaseRestore! outsideOwned! checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -171,6 +171,7 @@ fn ! wipSave! ctx: Ctx id: String reason: String -> Unit
             (path (if (stringEmpty? recorded) (w/wtPath cfg id) recorded))
             (live (w/isWorktreeOf! cfg path))
             (owns (match (st/readUnits! ctx.dir) ((ok us) (match (listFind (fn [(u st/Task)] -> Bool (= u.id id)) us) ((some u) u.owns) ((none) (list)))) ((err _) (list))))
+            (_ (if live (onBaseHeal! path) false))
             (res (if live (w/wipCommitOwned! cfg id path reason owns) (err "notAWorktree")))
             (left (if live (listLength (w/secretUntracked! path)) 0))
             (outside (if live (listLength (w/outsideUntracked! path owns)) 0))
@@ -1277,28 +1278,106 @@ fn ! vacuousAround! p: String base: String owns: (List String) gate: String task
         (d (run))]
     (pair d (and blank (vacuousWrite? d.out gate task))))
 
-; (:m :ref UNIT-AHEAD-GATING :do "a write whose gate failed still had its owned edits driver-committed, so a later claim found the work on sh/UNIT and ran another writer on it, whose doc-only change Leon judged vacuous against HEAD, forever (node2 2026-11-04: 27 of 41 branches ahead, never merged); a branch with commits past its base, no uncommitted owned change and a green unit gate is finished work: the write stage returns it as written without a writer run, unless the gate is also green on the merge-base, which is the vacuous verdict")
-fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Option Res)
-  (let [(past (gitOut p (list "rev-list" "--count" (str (baseRef u) "..HEAD"))))]
-    (if (or (stringEmpty? u.gate) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (not (listEmpty? (ownedChanges! p u.owns)))))) none
-      (let [(cw (written c p (str "sh/" u.id)))
-            (g (gatesRes rc.gateSec (gateCheckS dir) (taskText dir u) u cw))]
-        (if (or (!= g.exit 0) (<= g.asserts 0)) none
-          (let [(before (redBefore! rc dir u cw))
-                (_ (fileAppend (journalPath dir) (str "(:ahead :unit " (st/q u.id) " :commits " (stringTrim past.out) " :gate (:exit 0 :executed " (n g.asserts) ") :base (:exit " (n (pairFirst before)) "))\n")))]
-            (some (Res :tiers "" :ok (if (= (pairFirst before) 0) 0 1) :wt p :branch (str "sh/" u.id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
-                       :sig (if (= (pairFirst before) 0) (vacuousSig u.gate) "") :ms g.ms :exit 0 :asserts g.asserts :verdict "")))))))
+; (:m :ref UNIT-AHEAD-GATING :do "the paths the branch changed past the merge-base that lie outside the unit's :owns (git pathspecs, as ownedChanges! reads them), the grade ledger excepted; empty owns means every path is owned")
+fn ! outsideOwned! p: String mb: String owns: (List String) -> (List String)
+  (if (listEmpty? owns) (list)
+    (let [(names (fn [(d fr/Done)] -> (List String) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out)))))
+          (all (names (gitOut p (list "diff" "--name-only" "--no-renames" mb "HEAD"))))
+          (owned (names (gitOut p (listAppend (list "diff" "--name-only" "--no-renames" mb "HEAD" "--") owns))))]
+      (filter (fn [(f String)] -> Bool (and (not (listContains? owned f)) (!= f ".asl/mem/grades.asn"))) all)))
 
-; (:m :ref UNIT-AHEAD-GATING :do "Leon's gate integrity reverts the changed files to HEAD, so on a branch already holding the unit's earlier commits it saw only the new edit; the writer runs with HEAD soft-reset to the merge-base, the earlier work staged, so the revert is measured against the unit base; when the writer made no commit HEAD goes back to the branch tip with the new edit left on top, and a Leon commit holds the whole unit")
+; (:m :ref UNIT-AHEAD-GATING :do "the newest (:ahead ...) journal row of the unit, empty when none")
+fn ! aheadRow! dir: String id: String -> String
+  (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:ahead :unit " (st/q id) " "))) (stringLines (readOr (journalPath dir))))) "")
+
+fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms: Int64 -> Res
+  (Res :tiers "" :ok (if (= verdict "gating") 1 0) :wt p :branch (str "sh/" id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+       :sig (if (= verdict "gating") "" (vacuousSig gate)) :ms ms :exit 0 :asserts asserts :verdict "")
+
+; (:m :ref UNIT-AHEAD-GATING :do "a write whose gate failed still had its owned edits driver-committed, so a later claim found the work on sh/UNIT and ran another writer on it, whose doc-only change Leon judged vacuous against HEAD, forever (node2 2026-11-04: 27 of 41 branches ahead, never merged); a branch with commits past its base, no uncommitted owned change, no committed path outside :owns and a green unit gate is finished work: the write stage returns it as written without a writer run; a gate green on the merge-base too is the vacuous verdict unless the task is a regression guard, which goes to gating for the ladder; each verdict is one (:ahead ... :head SHA ... :verdict V) row, and a later claim on the same HEAD reuses it instead of running the gate and the base again, so the stage deadline is not spent twice")
+fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Option Res)
+  (let [(past (gitOut p (list "rev-list" "--count" (str (baseRef u) "..HEAD"))))
+        (mb (stringTrim (gitOut p (list "merge-base" "HEAD" (baseRef u))).out))]
+    (if (or (stringEmpty? u.gate) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (or (stringEmpty? mb) (or (not (listEmpty? (ownedChanges! p u.owns))) (not (listEmpty? (outsideOwned! p mb u.owns)))))))) none
+      (let [(head (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
+            (cached (aheadRow! dir u.id))]
+        (if (stringContains? cached (str " :head " (st/q head) " "))
+          (let [(v (sp/tokAfter cached ":verdict"))]
+            (if (= v "writer") none (some (aheadRes p u.id v u.gate (optionOr (stringToInt64 (sp/tokAfter cached ":executed")) 0) 0))))
+          (let [(cw (written c p (str "sh/" u.id)))
+                (task (taskText dir u))
+                (g (gatesRes rc.gateSec (gateCheckS dir) task u cw))
+                (green (and (= g.exit 0) (> g.asserts 0)))
+                (before (if green (redBefore! rc dir u cw) (pair -1 0)))
+                (verdict (cond ((not green) "writer") ((and (= (pairFirst before) 0) (not (regressionGuard? task))) "vacuous") (else "gating")))
+                (_ (fileAppend (journalPath dir) (str "(:ahead :unit " (st/q u.id) " :head " (st/q head) " :commits " (stringTrim past.out) " :gateExit " (n g.exit) " :executed " (n g.asserts) " :baseExit " (n (pairFirst before)) " :verdict " verdict ")\n")))]
+            (if (= verdict "writer") none (some (aheadRes p u.id verdict u.gate g.asserts g.ms))))))))
+
+fn onBaseRef branch: String -> String
+  (str "refs/asex/preOnBase/" branch)
+
+fn ! headOf! p: String -> String
+  (stringTrim (gitOut p (list "rev-parse" "HEAD")).out)
+
+; (:m :ref UNIT-AHEAD-GATING :do "a writer that committed under onBaseRun! made commits on the merge-base holding only the paths it wrote; the branch becomes the old tip plus one commit whose tree is the old tip's with each path the writer changed past the merge-base taken from the writer's HEAD (removed when the writer removed it), built in a scratch index, with the writer's message; the real index is then reset to it and the work tree is untouched")
+fn ! onBaseRebuild! p: String old: String mb: String -> Bool
+  (let [(head (headOf! p))
+        (idx (stringTrim (gitOut p (list "rev-parse" "--path-format=absolute" "--git-path" "onBaseIndex")).out))
+        (gi (fn [(argv (List String))] -> fr/Done (fr/runOne (fr/job (listAppend (list "git" "-C" p) argv) p (fr/childEnv (list (str "GIT_INDEX_FILE=" idx)))))))
+        (paths (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (gitOut p (list "diff" "--name-only" "--no-renames" mb head)).out)))
+        (read (= (gi (list "read-tree" old)).exit 0))
+        (staged (fold (fn [(ok Bool) (f String)] -> Bool
+                        (and ok (let [(ls (stringTrim (gitOut p (list "ls-tree" head "--" f)).out))
+                                      (words (stringSplit (optionOr (listHead (stringSplit ls "\t")) "") " "))]
+                                  (if (stringEmpty? ls)
+                                    (= (gi (list "update-index" "--force-remove" "--" f)).exit 0)
+                                    (= (gi (list "update-index" "--add" "--cacheinfo" (str (optionOr (listHead words) "") "," (optionOr (listLast words) "") "," f))).exit 0)))))
+                      read paths))
+        (tree (if staged (stringTrim (gi (list "write-tree")).out) ""))
+        (_ (pathRemove idx))
+        (msg (stringTrim (gitOut p (list "log" "-1" "--format=%B" head)).out))
+        (made (if (stringEmpty? tree) (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "exit") (gitOut p (list "commit-tree" tree "-p" old "-m" (if (stringEmpty? msg) "onBase rebuild" msg)))))
+        (sha (stringTrim made.out))]
+    (and (= made.exit 0) (and (not (stringEmpty? sha)) (= (gitOut p (list "reset" "-q" sha)).exit 0))))
+
+; (:m :ref UNIT-AHEAD-GATING :do "brings HEAD back after a writer ran on the merge-base: still at the base means a soft reset to the old tip (the new edits stay staged or in the tree on top of it), commits past the base are rebuilt onto the old tip; the saved ref is dropped only when that worked, so a later heal can retry")
+fn ! onBaseRestore! p: String old: String mb: String ref: String -> Bool
+  (let [(head (headOf! p))
+        (done (cond ((= head old) true)
+                    ((= head mb) (= (gitOut p (list "reset" "-q" "--soft" old)).exit 0))
+                    (else (onBaseRebuild! p old mb))))
+        (_ (if done (gitOut p (list "update-ref" "-d" ref)) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "exit")))]
+    done)
+
+; (:m :ref UNIT-AHEAD-GATING :do "the write stage is a detached child that a stall kill, stop, lease loss or deadline can end inside the writer, leaving sh/UNIT at the merge-base with the earlier work only in the index; the old tip saved as refs/asex/preOnBase/BRANCH is restored on the next claim (settleWt!) and before a wip rescue (wipSave!); no saved ref, nothing to do")
+fn ! onBaseHeal! p: String -> Bool
+  (let [(branch (stringTrim (gitOut p (list "rev-parse" "--abbrev-ref" "HEAD")).out))
+        (ref (onBaseRef branch))
+        (saved (gitOut p (list "rev-parse" "--verify" "--quiet" (str ref "^{commit}"))))
+        (old (stringTrim saved.out))]
+    (if (or (!= saved.exit 0) (stringEmpty? old)) false
+      (let [(mb (stringTrim (gitOut p (list "merge-base" old "HEAD")).out))]
+        (if (stringEmpty? mb) false (onBaseRestore! p old mb ref)))))
+
+; (:m :ref UNIT-AHEAD-GATING :do "Leon's gate integrity reverts the changed files to HEAD, so on a branch already holding the unit's earlier commits it saw only the new edit; the writer runs with HEAD soft-reset to the merge-base, the earlier work staged, so the revert is measured against the unit base; the old tip is saved as a ref first (onBaseHeal! restores it when the stage dies mid-run) and onBaseRestore! brings the branch back afterwards")
+fn ! onBaseEnter! p: String base: String -> (Option (Pair String String))
+  (let [(head (headOf! p))
+        (mb (stringTrim (gitOut p (list "merge-base" "HEAD" base)).out))
+        (ref (onBaseRef (stringTrim (gitOut p (list "rev-parse" "--abbrev-ref" "HEAD")).out)))]
+    (cond
+      ((or (stringEmpty? mb) (or (stringEmpty? head) (= mb head))) none)
+      ((!= (gitOut p (list "update-ref" ref head)).exit 0) none)
+      ((!= (gitOut p (list "reset" "-q" "--soft" mb)).exit 0) (let [(_ (gitOut p (list "update-ref" "-d" ref)))] none))
+      (else (some (pair head mb)))))
+
 fn ! onBaseRun! p: String base: String run: (fn ! [] -> fr/Done) -> fr/Done
-  (let [(head (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
-        (mb (stringTrim (gitOut p (list "merge-base" "HEAD" base)).out))]
-    (if (or (stringEmpty? mb) (or (stringEmpty? head) (= mb head))) (run)
-      (if (!= (gitOut p (list "reset" "-q" "--soft" mb)).exit 0) (run)
-        (let [(d (run))
-              (now (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
-              (_ (if (= now mb) (= (gitOut p (list "reset" "-q" "--soft" head)).exit 0) false))]
-          d))))
+  (match (onBaseEnter! p base)
+    ((none) (run))
+    ((some hm)
+      (let [(d (run))
+            (ref (onBaseRef (stringTrim (gitOut p (list "rev-parse" "--abbrev-ref" "HEAD")).out)))
+            (_ (onBaseRestore! p (pairFirst hm) (pairSecond hm) ref))]
+        d)))
 
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "a unit worktree kept across retries was reused as it stood, so a unit created in the morning ran Leon and its gates on the morning's tree all day (NODE2-ASEX-DETACHED at ace2ae8ec while main moved on); a reused worktree with no tracked change is brought onto its base like a re-attached one")
 fn ! reuseWt! rc: RealCfg u: st/Task path: String -> (Result String String)
@@ -1511,7 +1590,7 @@ fn ! worktreeValid? path: String -> Bool
 fn ! settleWt! rc: RealCfg dir: String u: st/Task path: String -> (Result String String)
   (cond
     ((not (fileExists? path)) (attachOrAdd rc u path))
-    ((worktreeValid? path) (reuseWt! rc u path))
+    ((worktreeValid? path) (let [(_ (onBaseHeal! path))] (reuseWt! rc u path)))
     (else
       (let [(aside (str rc.wt.base "/orphan-" u.id "-" (n (/ (nowNs) 1000000))))
             (mv (pathRename path aside))]
