@@ -17,13 +17,13 @@ fn ! git dir: String args: (List String) -> Bool
 
 fn cfg0 -> j/Cfg
   (j/Cfg :tmp "/t" :runDir "/r" :modePath "/m" :storeDir "/s" :repo "/repo" :wtBase "/wts"
-         :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20)
+         :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30)
 
 fn sc name: String age: Int64 -> j/Scratch
   (j/Scratch :name name :path (str "/t/" name) :bytes 1000 :mtimeS (- 1000000 age))
 
 fn wt unit: String dirty: Int64 merged: Bool st: String -> j/WtFact
-  (j/WtFact :unit unit :path (str "/wts/asex-" unit) :bytes 5000 :dirty dirty :merged merged :st st)
+  (j/WtFact :unit unit :path (str "/wts/asex-" unit) :bytes 5000 :dirty dirty :merged merged :detached false :foreign 0 :st st)
 
 fn lst level: String scratch: (List j/Scratch) alive: (List Int64) wts: (List j/WtFact) -> j/Listing
   (j/Listing :nowS 1000000 :level level :scratch scratch :alive alive :wts wts)
@@ -59,6 +59,22 @@ fn ! testPure -> Bool
       (assert (= (listLength (j/plan c (lst "ok" (list) (list) (list (wt "u1" 0 true "merged"))))) 0) "level ok reclaims no worktree")
       (assert (= (listLength (j/plan c (lst "low" (list) (list) (list (wt "main" 0 true "merged"))))) 0) "a protected unit is kept")
       (assert (= (listLength (j/plan (with c :maxPaths 2) (lst "low" (list (sc "cmdTest-4242" old) (sc "cmdTest-4243" old) (sc "cmdTest-4244" old)) (list) (list)))) 2) "the plan is bounded by maxPaths")
+      (assert (= (j/scratchPid "aslOpsTest_55") -1) "aslOpsTest_ is not a pid name")
+      (assert (= (j/scratchPid "aslNCacheLockTest_55") -1) "aslNCacheLockTest_ is not a pid name")
+      (assert (= (j/foreignIgnored (list "!! asl/host/out/" "!! .asl/cache/x.bin" "!! .asl/build/" "?? new.txt")) 0) "ignored build allowlist is not foreign")
+      (assert (= (j/foreignIgnored (list "!! asl/host/out/" "!! .asl/mem/work/x.asn")) 1) "an ignored mem ledger file is foreign")
+      (assert (= (j/foreignIgnored (list "!! .asl/mem/sessions/" "!! a.local.asn" "!! .asl/")) 3) "sessions, local asn and a collapsed .asl dir are foreign")
+      (assert (= (j/foreignIgnored (list "!! asl/host/outside/")) 1) "a prefix lookalike of the allowlist is foreign")
+      (assert (= (j/modeOf "(:janitor :mode apply)\n") "apply") "a form with a trailing newline reads apply")
+      (assert (= (j/modeOf "; (:janitor :mode apply)\n") "dry") "a comment alone reads dry")
+      (assert (= (j/modeOf "; note :mode apply\n(:janitor :mode dry)\n") "dry") "a comment never overrides the form")
+      (assert (= (j/modeOf "") "dry") "no text reads dry")
+      (assert (not (= (j/modeOf "(:janitor :mode applyx)") "apply")) "a lookalike token is not apply")
+      (assert (j/aliveFrom (err "probe failed")) "a failed liveness probe counts as alive")
+      (assert (not (j/aliveFrom (ok false))) "a dead pid reads dead")
+      (assert (j/aliveFrom (ok true)) "a live pid reads alive")
+      (assert (= (listLength (j/plan c (lst "stop" (list) (list) (list (with (wt "u1" 0 true "merged") :foreign 1))))) 0) "a merged clean worktree with a foreign ignored file is kept")
+      (assert (= (listLength (j/plan c (lst "stop" (list) (list) (list (with (wt "u1" 0 true "merged") :detached true))))) 0) "a detached worktree is kept")
       (assert (stringContains? (j/renderRow (j/Row :class "a" :path "/t/x" :bytes 7 :why "w" :unit "")) "(:reclaim :path \"/t/x\" :bytes 7") "row rendering")
       true))
 
@@ -76,13 +92,17 @@ fn ! testE2e base: String -> Bool
         (wts (str base "/wts"))
         (store (str base "/store"))
         (c (j/Cfg :tmp tmp :runDir (str base "/run") :modePath (str base "/mode.asn") :storeDir store :repo repo :wtBase wts
-                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20))
+                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30))
         (dead (str tmp "/cmdTest-3999999"))
         (live (str tmp "/cmdTest-" (stringFromInt64 (procSelf))))
         (look (str tmp "/cmdTestX"))
         (young (str tmp "/cmdTest-3999998"))
         (sib (str tmp "/sibling.txt"))
         (wtDone (str wts "/asex-done"))
+        (wtIgn (str wts "/asex-ign"))
+        (wtCache (str wts "/asex-cache"))
+        (link (str tmp "/cmdTest-3999997"))
+        (target (str base "/target"))
         (wtBlocked (str wts "/asex-blocked"))]
     (do
       (assert (not (resultOr (procAlive? 3999999) false)) "the fixture pid is not alive")
@@ -95,10 +115,20 @@ fn ! testE2e base: String -> Bool
       (assert (= (sh "." (list "mkdir" "-p" repo)).exit 0) "repo dir")
       (assert (git repo (list "init" "-q" "-b" "main")) "repo init")
       (assert (put (str repo "/a.txt") "1\n") "repo file")
+      (assert (put (str repo "/.gitignore") ".asl/mem/work/\n.asl/cache/\n") "gitignore")
       (assert (git repo (list "add" "-A")) "repo add")
       (assert (git repo (list "commit" "-q" "-m" "base")) "repo commit")
       (assert (git repo (list "worktree" "add" "-q" "-b" "sh/done" wtDone "main")) "merged worktree")
       (assert (git repo (list "worktree" "add" "-q" "-b" "sh/blocked" wtBlocked "main")) "blocked worktree")
+      (assert (git repo (list "worktree" "add" "-q" "-b" "sh/ign" wtIgn "main")) "worktree with ignored ledger")
+      (assert (git repo (list "worktree" "add" "-q" "-b" "sh/cache" wtCache "main")) "worktree with ignored cache")
+      (assert (= (sh "." (list "mkdir" "-p" (str wtIgn "/.asl/mem/work") (str wtCache "/.asl/cache"))).exit 0) "ignored dirs")
+      (assert (put (str wtIgn "/.asl/mem/work/x.asn") "plan") "ignored ledger file")
+      (assert (put (str wtCache "/.asl/cache/c.bin") "obj") "ignored cache file")
+      (assert (put (str store "/cond/ign.asn") "(:cu :id \"ign\" :st merged :wt \"\")") "cond row ign merged")
+      (assert (put (str store "/cond/cache.asn") "(:cu :id \"cache\" :st merged :wt \"\")") "cond row cache merged")
+      (assert (mkOld! target) "symlink target dir")
+      (assert (= (sh "." (list "ln" "-s" target link)).exit 0) "dead-pid symlink into another dir")
       (assert (put (str store "/cond/done.asn") "(:cu :id \"done\" :st merged :wt \"\")") "cond row merged")
       (assert (put (str store "/cond/blocked.asn") "(:cu :id \"blocked\" :st blocked :wt \"\")") "cond row blocked")
       (assert (put (str store "/slots.asn") "(:slots :base 4 :level low)") "level low")
@@ -109,7 +139,26 @@ fn ! testE2e base: String -> Bool
           (assert (stringContains? t1 "asex-done") "dry plan names the merged worktree")
           (assert (and (exists? dead) (and (exists? wtDone) (exists? sib))) "dry-run deletes nothing")
           (assert (exists? (str base "/run/janitor.asn")) "dry-run writes the plan file")
-          (assert (put (str base "/mode.asn") "(:janitor :mode apply)") "mode file in the private base")
+          (assert (put (str base "/mode.asn") "; (:janitor :mode apply)\n") "comment-only mode file")
+          (assert (not (j/modeApply? c)) "a comment holding :mode apply does not enable deletion")
+          (assert (put (str base "/mode.asn") "(:janitor :mode apply)\n") "mode file in the private base")
+          (assert (j/modeApply? c) "the mode form with a trailing newline enables apply")
+          (let [(stale (j/apply! c (list (j/Row :class "b" :path wtIgn :bytes 1 :why "stale" :unit "ign")
+                                         (j/Row :class "b" :path wtBlocked :bytes 1 :why "stale" :unit "blocked")
+                                         (j/Row :class "a" :path live :bytes 1 :why "stale" :unit "")
+                                         (j/Row :class "a" :path young :bytes 1 :why "stale" :unit ""))))]
+            (do
+              (assert (= stale 0) "a stale plan is fully processed within the budget")
+              (assert (and (exists? wtIgn) (exists? (str wtIgn "/.asl/mem/work/x.asn"))) "apply re-checks ignored files before removal")
+              (assert (exists? wtBlocked) "apply re-checks the conductor state before removal")
+              (assert (and (exists? live) (exists? young)) "apply re-checks pid liveness and age before removal")
+              true))
+          (let [(t0 (j/tick! (with c :budgetS 0)))]
+            (do
+              (assert (stringContains? t0 ":mode apply") "apply mode read under a zero budget")
+              (assert (and (exists? dead) (exists? wtDone)) "a zero budget defers every removal")
+              (assert (stringContains? (resultOr (fileReadString (str base "/run/janitor.asn")) "") "(:deferred :n") "deferred rows are recorded")
+              true))
           (let [(t2 (j/tick! c))]
             (do
               (assert (stringContains? t2 ":mode apply") "apply mode read")
@@ -120,6 +169,12 @@ fn ! testE2e base: String -> Bool
               (assert (exists? young) "a young dir survives")
               (assert (exists? wtBlocked) "a blocked unit worktree survives")
               (assert (exists? sib) "a sibling file survives")
+              (assert (exists? wtIgn) "a worktree holding an ignored ledger file survives")
+              (assert (exists? (str wtIgn "/.asl/mem/work/x.asn")) "the ignored ledger file survives")
+              (assert (not (exists? wtCache)) "a worktree with only allowlisted ignored files is removed")
+              (assert (exists? link) "a symlink into another dir survives")
+              (assert (exists? (str target "/f.txt")) "the symlink target survives")
+              (assert (stringContains? (resultOr (fileReadString (str base "/run/janitor.asn")) "") (str "(:removed :path \"" dead "\"")) "a removed row is appended per removal")
               (assert (exists? repo) "the repo survives")
               true))))))
 
