@@ -5,7 +5,7 @@
       (config :a c)
       (wire :a w)])
 
-; (:m :ref CTX-ROUTE :do "context routing proved on the pure chat state machine with scripted effects: a provider context overflow hops to a member with a larger window, a chain no member of which fits answers a typed contextTooLarge 413 instead of a breaker cooldown, a pin profile answers it at once, the reply names the route's largest window, and :budgetFirstAbove tries the largest window first for a large prompt")
+; (:m :ref CTX-ROUTE :do "context routing proved on the pure chat state machine with scripted effects: a provider context overflow hops to a member with a larger window, a chain no member of which fits answers a typed contextTooLarge 413 instead of a breaker cooldown, a pin profile relays the upstream overflow unchanged, the reply names the route's largest window, and :budgetFirstAbove tries the largest window first for a large prompt")
 (schema Seen
   (:f labels String)
   (:f body String)
@@ -112,7 +112,7 @@ fn ! runTests -> Bool
       (assert (and (stringContains? hop.labels "http:n1") (stringContains? hop.labels "http:n3")) (str "the overflowed member and the larger one are sent: " hop.labels))
       (assert (not (stringContains? hop.labels "http:n2")) (str "a member whose budget is not above the overflowed window is skipped: " hop.labels))
       (assert (stringContains? hop.labels "note:m1:contextOverflow") (str "the overflow is charged to its member as contextOverflow: " hop.labels))
-      (assert (not (stringContains? hop.labels "bk:reset503:cr:m1")) (str "an overflow sends its member no breaker event: " hop.labels))
+      (assert (stringContains? hop.labels "bk:reset503:cr:m1") (str "CTX-PIN-RELAY: an overflow still sends its member the breaker event of a plain 4xx: " hop.labels))
       (assert (= noneFit.status 413) (str "no member whose budget holds the prompt answers 413: " (stringFromInt64 noneFit.status) " " noneFit.body))
       (assert (stringContains? noneFit.body "(:err :code contextTooLarge :need ") (str "the 413 is the typed contextTooLarge error: " noneFit.body))
       (assert (stringContains? noneFit.body ":maxBudget 30)") (str "the error names the largest budget of the chain: " noneFit.body))
@@ -122,7 +122,8 @@ fn ! runTests -> Bool
       (assert (and (= allOverflow.status 413) (stringContains? allOverflow.body "contextTooLarge")) (str "every member overflowing answers contextTooLarge: " (stringFromInt64 allOverflow.status) " " allOverflow.body))
       (assert (not (stringContains? allOverflow.body ":maxBudget")) (str "no declared budget leaves maxBudget out: " allOverflow.body))
       (assert (= (listLength (stringSplit allOverflow.labels "http:")) 4) (str "each of the three members is tried once: " allOverflow.labels))
-      (assert (and (= pinned.status 413) (stringContains? pinned.body "contextTooLarge")) (str "a pin profile answers contextTooLarge on its member's overflow: " pinned.body))
+      (assert (= pinned.status 400) (str "CTX-PIN-RELAY: a pin profile relays its member's overflow with the upstream status: " (stringFromInt64 pinned.status) " " pinned.body))
+      (assert (and (stringContains? pinned.body "context_length_exceeded") (not (stringContains? pinned.body "contextTooLarge"))) (str "CTX-PIN-RELAY: the relayed body is the upstream one, not the gateway's contextTooLarge: " pinned.body))
       (assert (= (listLength (stringSplit pinned.labels "http:")) 2) (str "a pin profile sends once: " pinned.labels))
       (assert (and (= plain400.status 200) (not (stringContains? plain400.labels "contextOverflow"))) (str "a 400 without a context marker keeps the plain profile fallback: " plain400.labels))
       (assert (stringContains? served.body "\"maxContextTokens\": 64000") (str "a reply names the route's largest window: " served.body))

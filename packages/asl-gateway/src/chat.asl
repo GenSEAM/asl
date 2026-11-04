@@ -1503,16 +1503,26 @@ fn contextTooLarge cx: Ctx l: Loop -> ChatStep
     (sendError cx (listAppend l.head (if (> m 0) (list (headField "X-ASL-Max-Context" (stringFromInt64 m))) (list)))
                413 (str "(:err :code contextTooLarge :need " (stringFromInt64 need) (if (> m 0) (str " :maxBudget " (stringFromInt64 m)) "") ")") true))
 
-; (:m :ref CTX-ROUTE :do "a member that overflowed its window: a pin profile answers contextTooLarge at once; otherwise the member's declared budget (else the estimate) becomes the need a later member must exceed and the loop moves on; no breaker event, a too long prompt says nothing about the member's health")
-fn contextOverflowed cx: Ctx l: Loop a: Attempt status: Int64 -> ChatStep
+; (:m :ref CTX-PIN-RELAY :do "a route-mode member that overflowed its window: its declared budget (else the estimate) becomes the need a later member must exceed and the loop moves on; the breaker gets the same event the plain HTTP failure path sends (reset503 for a 4xx), so a config with no budget rows keeps its breaker state as before; a pin profile never comes here, httpFailed relays its reply unchanged")
+fn contextOverflowed cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> ChatStep
   (let [(est (promptEstimate l.body))
         (declared (match a.v2 ((some e) (optionOr e.params.contextBudget 0)) ((none) 0)))
         (l1 (with l :ctxFails (+ l.ctxFails 1) :ctxEst (max l.ctxEst est) :ctxNeed (max l.ctxNeed (if (> declared 0) declared est))
                     :lastErr (some (str a.alias " HTTP " (stringFromInt64 status) ": prompt about " (stringFromInt64 est) " tokens overflowed its context window")) :retryAfterSec 0))]
-    (tellAll (list (usageNote a.upstream.provider a.alias "contextOverflow")
-                   (effLog (str "[Gateway Context] " a.alias " overflowed its context window (HTTP " (stringFromInt64 status) "). Trying a larger member...\n")))
-      (fn [] -> ChatStep
-        (if (= cx.mode "pin") (contextTooLarge cx l1) (loopStep cx (advance l1 l1.body))))))
+    (tellAll (listAppend (overflowBreakerEffects a status headers body)
+                         (list (usageNote a.upstream.provider a.alias "contextOverflow")
+                               (effLog (str "[Gateway Context] " a.alias " overflowed its context window (HTTP " (stringFromInt64 status) "). Trying a larger member...\n"))))
+      (fn [] -> ChatStep (loopStep cx (advance l1 l1.body)))))
+
+; (:m :ref CTX-PIN-RELAY :do "the breaker event httpFailedParked would send for this failure, none for an empty pool or a reply the gateway made itself")
+fn overflowBreakerEffects a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> (List ChatEffect)
+  (let [(pool (b/breakerScope status body a.providerPool a.pool))
+        (event (cond
+                 ((or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))) "markDown")
+                 ((or (= status 429) (b/breakerIsQuotaError body)) "note429")
+                 ((= status 503) "note503")
+                 (else "reset503")))]
+    (if (or (stringEmpty? pool) (gatewayOrigin? headers)) (list) (list (effBreakerEvent event pool 0))))
 
 
 fn systemPrompt msgs: (List j/Json) -> (Result String pt/PyErr)
@@ -2238,8 +2248,9 @@ fn retryHttp cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (L
 
 fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (let [(policy (retryPolicyFor cx a))]
-    (if (contextOverflowError? status body)
-      (contextOverflowed cx l a status)
+    ; (:m :ref CTX-PIN-RELAY :do "a pin profile relays an overflow like any other failure (GW-MODES); only route and judge hop to a larger window")
+    (if (and (!= cx.mode "pin") (contextOverflowError? status body))
+      (contextOverflowed cx l a status headers body)
     (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableHttpStatus? status body))
       (retryHttp cx l a status reason headers body policy)
       (httpFailedFinal cx l a status reason headers body))))
