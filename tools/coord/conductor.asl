@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid claimWake! claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -755,6 +755,8 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
     ((err e) (err e))
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
+            (_ (reapLeases! ctx))
+            (_ (claimWake! ctx))
             (_ (depWake! ctx units))
             (_ (freeWake! ctx))
             (_ (stl/sweep! ctx.dir (nowMs) (stallProbes ctx) (stallHooks ctx)))
@@ -876,6 +878,70 @@ fn ! depWake! ctx: Ctx units: (List st/Task) -> Int64
                       units))
         (done (filter (fn [(u st/Task)] -> Bool (requeueOne! ctx units u.id)) wake))]
     (listLength done))
+
+; (:m :ref COND-RECOVER-C2 :do "the pid in a holder name conductorPID, 0 for any other holder (a test, a hand claim), which then lives or dies by its beat alone")
+fn holderPid holder: String -> Int64
+  (if (stringStartsWith? holder "conductor") (optionOr (stringToInt64 (optionOr (stringSlice holder 9 (stringLength holder)) "")) 0) 0)
+
+; (:m :ref COND-RECOVER-C2 :do "a lease is dead when another holder owns it and either its beat is older than its ttl or its holder process is gone, and no in-flight stage of this store still runs on it: a restarted conductor adopts the stage rows of the old one through heartbeat, which this must not undo (node2 2026-11-04: conductor1177356 died holding 38 leases, 32 units refused behind them, nothing freed them for the ttl hour)")
+fn ! leaseDead? ctx: Ctx cus: (List CUnit) l: st/Lease now: Int64 -> Bool
+  (and (!= l.holder ctx.holder)
+       (and (not (listAny? (fn [(c CUnit)] -> Bool (and (= c.id l.id) (and (active? c) (= c.epoch l.epoch)))) cus))
+            (or (not (st/live? l now))
+                (let [(pid (holderPid l.holder))] (and (> pid 0) (not (alive? pid)))))))
+
+; (:m :ref COND-RECOVER-C2 :do "the lease reaper: every dead lease is released through the stores fenced release (unit back to queued, lease file removed, one log row) and journalled as a leaseReaped row naming unit, holder, epoch and cause; returns the units freed")
+fn ! reapLeases! ctx: Ctx -> (List String)
+  (match (st/readLeases! ctx.dir)
+    ((err _) (list))
+    ((ok leases)
+      (let [(now (nowNs))
+            (cus (readCUnits! ctx.dir))
+            (dead (filter (fn [(l st/Lease)] -> Bool (leaseDead? ctx cus l now)) leases))
+            (freed (filter (fn [(l st/Lease)] -> Bool
+                             (match (st/release! ctx.dir l.id l.epoch)
+                               ((ok _) (let [(_ (fileAppend (journalPath ctx.dir) (str "(:leaseReaped :unit " (st/q l.id) " :holder " (st/q l.holder) " :epoch " (n l.epoch) " :why " (st/q (if (st/live? l now) "holderGone" "expired")) " :at " (n (nowMs)) ")\n")))] true))
+                               ((err _) false)))
+                           dead))]
+        (map (fn [(l st/Lease)] -> String l.id) freed))))
+
+; (:m :ref COND-RECOVER-C2 :do "<store>/retries.asn keeps (:retry :unit ID :n N :at MS) rows, the newest per unit wins: N automatic retries a blocked unit has had, MS the last one")
+fn retriesPath dir: String -> String
+  (str dir "/retries.asn")
+
+fn ! retryLast! dir: String id: String -> (Pair Int64 Int64)
+  (match (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:retry :unit " (st/q id) " "))) (stringLines (readOr (retriesPath dir)))))
+    ((none) (pair 0 0))
+    ((some l) (pair (optionOr (stringToInt64 (sp/tokAfter l ":n")) 0) (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0))))
+
+fn ! retryNote! dir: String id: String why: String count: Int64 -> Bool
+  (ok? (fileAppend (retriesPath dir) (str "(:retry :unit " (st/q id) " :why " (st/q why) " :n " (n count) " :at " (n (nowMs)) ")\n")))
+
+; (:m :ref COND-RECOVER-C2 :do "a unit blocked waitedOut on a claim refusal (held by a lease, or its :owns clashing with another unit's lease) whose blocker no longer holds a live lease goes back to ready once: the blocker was a dead holder's lease the reaper freed, and nothing else ever woke it (32 units on node2 behind conductor1177356)")
+fn claimFreed? c: CUnit leases: (List st/Lease) now: Int64 -> Bool
+  (and (stringStartsWith? c.sig "waitedOut: (:refused ")
+       (let [(live (filter (fn [(l st/Lease)] -> Bool (st/live? l now)) leases))
+             (liveHas (fn [(id String)] -> Bool (listAny? (fn [(l st/Lease)] -> Bool (= l.id id)) live)))]
+         (cond
+           ((stringContains? c.sig " :why held ") (not (liveHas c.id)))
+           ((stringContains? c.sig " :why owns ") (let [(by (quotedAfter c.sig ":by \""))] (and (not (stringEmpty? by)) (not (liveHas by)))))
+           (else false))))
+
+fn ! claimWake! ctx: Ctx -> Int64
+  (match (st/readLeases! ctx.dir)
+    ((err _) 0)
+    ((ok leases)
+      (let [(now (nowNs))
+            (woken (filter (fn [(c CUnit)] -> Bool
+                             (if (and (= c.st "blocked") (and (stringEmpty? c.await) (claimFreed? c leases now)))
+                               (let [(r (retryLast! ctx.dir c.id))]
+                                 (if (>= (pairFirst r) 1) false
+                                   (let [(_ (retryNote! ctx.dir c.id "claim" (+ (pairFirst r) 1)))
+                                         (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0) "ready" "retry" "" 0 0 "claimFreed" 0))]
+                                     true)))
+                               false))
+                           (readCUnits! ctx.dir)))]
+        (listLength woken))))
 
 ; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH) row in the store's ladder.asn, a ready unit starts its writer only while the node has a free jobserver token (tokenCount - heldCount > 0) and MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
 fn wrRowOf dir: String -> String
