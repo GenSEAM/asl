@@ -1,6 +1,6 @@
 (module asl-tools/coord/janitor
-  :x [Cfg Scratch WtFact Listing Row defaultCfg digitsOnly? scratchPid levelOpen? foreignIgnored modeOf aliveFrom wtOk? planRows renderRow renderPlan plan applyAllowed? modeApply? gatherScratch! gatherWts! gather! apply! tick! main]
-  :i [(asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (aslGateway/subPace :a sp) (tools/remote/form :a fm)])
+  :x [Cfg Scratch WtFact Listing Row defaultCfg digitsOnly? scratchPid levelOpen? foreignIgnored modeOf aliveFrom wtOk? planRows renderRow renderPlan plan applyAllowed? modeApply? gatherScratch! gatherWts! gather! apply! removedTotals leadReport! tick! main]
+  :i [(asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (aslGateway/subPace :a sp) (tools/remote/form :a fm) (asl-tools/coord/leadStream :a ls)])
 
 ; (:m :ref RES-JANITOR :do "the node reclaims only its own leftovers: (a) test scratch dirs of a dead pid under TMPDIR and (b) worktrees of conductor units whose state is merged, clean and not ahead of main; plan is pure over a listing, dry-run is the default and writes ~/.asl/run/janitor.asn, deletion needs `:mode apply` in ~/.asl/conductor/janitor.asn; no caches, no nativeCli, no journals")
 (schema Cfg
@@ -278,6 +278,26 @@ fn ! applyLoop! cfg: Cfg rows: (List Row) deadline: Int64 planPath: String -> In
 fn ! apply! cfg: Cfg rows: (List Row) -> Int64
   (applyLoop! cfg rows (+ (nowMs!) (* cfg.budgetS 1000)) (str cfg.runDir "/janitor.asn"))
 
+; (:m :ref LEAD-STREAM :do "the run's totals from its plan file: the count and the bytes of the (:removed ... :ok true) rows, one pass, so a run is one event and never one per path")
+fn removedTotals text: String -> (Pair Int64 Int64)
+  (fold (fn [(a (Pair Int64 Int64)) (l String)] -> (Pair Int64 Int64)
+          (if (and (stringStartsWith? l "(:removed ") (stringContains? l " :ok true"))
+            (pair (+ (pairFirst a) 1)
+                  (+ (pairSecond a)
+                     (match (stringIndexOf l " :bytes ")
+                       ((none) 0)
+                       ((some i) (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice l (+ i 8) (stringLength l)) "") " ")) "")) 0)))))
+            a))
+        (pair 0 0) (stringLines text))
+
+; (:m :ref LEAD-STREAM :do "an apply run that removed something lands one info event (key run) with the count and bytes; a dry run or an empty run lands none")
+fn ! leadReport! cfg: Cfg -> Bool
+  (let [(t (removedTotals (resultOr (fileReadString (str cfg.runDir "/janitor.asn")) "")))]
+    (if (> (pairFirst t) 0)
+      (ls/emitAt! cfg.runDir (nowMs!) "janitor" "info" "removed" "run" ""
+                  (str "removed " (stringFromInt64 (pairFirst t)) " paths, " (stringFromInt64 (pairSecond t)) " bytes"))
+      false))
+
 ; (:m :ref RES-JANITOR :do "one tick: the level comes from sched (levelRead! of the store dir), the plan is written to <runDir>/janitor.asn first, then deletes only when the mode file says apply; returns the plan text")
 fn ! tick! cfg: Cfg -> String
   (let [(nowS (/ (nowNs) 1000000000))
@@ -289,7 +309,8 @@ fn ! tick! cfg: Cfg -> String
         (_ (dirCreate cfg.runDir))
         (_ (fileWrite (str cfg.runDir "/janitor.asn") (str head "\n")))
         (deferred (if apply (apply! cfg rows) 0))
-        (_ (if (> deferred 0) (ok? (fileAppend (str cfg.runDir "/janitor.asn") (stringToBytes (str "(:deferred :n " (stringFromInt64 deferred) ")\n")))) false))]
+        (_ (if (> deferred 0) (ok? (fileAppend (str cfg.runDir "/janitor.asn") (stringToBytes (str "(:deferred :n " (stringFromInt64 deferred) ")\n")))) false))
+        (_ (if apply (leadReport! cfg) false))]
     head)
 
 fn ! main args: (List String) -> (Result Int64 String)
