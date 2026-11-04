@@ -190,7 +190,7 @@ fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List
   (let [(wfams (familiesIn rows writerAlias))
         (wfam (stringJoin wfams "+"))]
     (cond
-      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((and (listEmpty? wfams) (not (stringEmpty? writerAlias))) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
         (match (listHead (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams tier l)) lanes)))
           ((some l) (pickOk (list l)))
@@ -201,7 +201,7 @@ fn selectFree rows: (List rd/SExpr) writerAlias: String lanes: (List Lane) -> Pi
         (wfam (stringJoin wfams "+"))
         (els (rankLanes (filter (fn [(l Lane)] -> Bool (eligible rows wfams "free" l)) lanes)))]
     (cond
-      ((listEmpty? wfams) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
+      ((and (listEmpty? wfams) (not (stringEmpty? writerAlias))) (pickAwait "writerFamily" (str "writer " writerAlias ": unknown model family")))
       (else
         (match (listHead els)
           ((none) (pickAwait (waitLane rows wfams "free" "" lanes) (str "no free lane with allowance outside family " wfam)))
@@ -303,9 +303,13 @@ fn strictHit? l: String -> Bool
     (listAny? (fn [(n String)] -> Bool (stringContains? s n))
               (list ".asl/mem" "secret" "token" "password" "apikey" "api_key" "api-key" "_key" "bearer" "\"sk-" " sk-" "=sk-" ":sk-" "sk-or-" "sk-ant-" "sk-proj-" "aizasy" "github_pat_" "ghp_" "xoxb-" "xoxp-" "xoxa-" "passwd" "private key" "authorization:")))
 
+; (:m :ref AHEAD-WRITER-UNKNOWN :do "an empty writer alias means no writer evidence exists at all (no write row of the unit, no unit model, no configured alias), so there is no family to stay independent of and any lane may review; the literal unknown, a writer the journal names but nobody can place, and an alias with no family still wait, so a misconfigured family table never reviews its own work")
 ; (:m :ref WRITER-UNKNOWN :do "the writer a review excludes: the unit's model, else the configured writer alias; an unknown writer stays unknown so selection waits instead of guessing a family")
 fn reviewWriter model: String fallback: String -> String
-  (if (or (stringEmpty? model) (= model "unknown")) fallback model)
+  (cond
+    ((and (= model "unknown") (stringEmpty? fallback)) "unknown")
+    ((or (stringEmpty? model) (= model "unknown")) fallback)
+    (else model))
 
 fn clip s: String n: Int64 -> String
   (if (> (stringLength s) n) (optionOr (stringSlice s 0 n) s) s)

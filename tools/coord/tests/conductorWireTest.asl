@@ -836,6 +836,59 @@ fn ! testReviewWriter -> Bool
         (assert (= reviewed.model "ccZAiGlm53Flash") (str "a review transition keeps the writer's model: " reviewed.model))
         true))
 
+; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "a head whose review failed or blocked it is not sent to review again by the cached green ahead verdict: the writer runs; a failure of another unit, a defer, or a fail before a later ahead row for the head does not suppress the shortcut; and a unit never reviewed keeps it")
+fn ! testAheadReviewFail -> Bool
+  (let [(root (scratch "aheadFail"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (seen (str root "/seen"))
+        (run (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (fileAppend seen (str id "\n")))] (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "exit"))))
+        (j (cd/journalPath dir))
+        (row (fn [(id String) (to String) (stage String)] -> String
+               (str "(:t :unit \"" id "\" :from reviewing :to " to " :stage " stage " :model \"m\" :tokens 0 :costUsd 0 :verdict \"fail: x\" :ms 0 :at 3)\n")))
+        (units (map (fn [(id String)] -> st/Task (aheadUnit id "sh gImpl.sh")) (list "F1" "F2" "F3" "F4" "F5")))
+        (wts (map (fn [(u st/Task)] -> String (aheadWt rc u "impl.txt")) units))
+        (claim (fn [(id String)] -> cd/Res (cd/writeResWith run rc dir (optionOr (listFind (fn [(u st/Task)] -> Bool (= u.id id)) units) (aheadUnit id "")) (aheadCUnit id))))
+        (first (map claim (list "F1" "F2" "F3" "F4" "F5")))
+        (firstWriters (resultOr (fileReadString seen) ""))
+        (okAt (fn [(rs (List cd/Res)) (i Int64)] -> Int64 (match (listGet rs i) ((some r) r.ok) ((none) -1))))
+        (_ (fileAppend j (str (row "F1" "ready" "review") (row "F2" "blocked" "review") (row "F3" "awaitReview" "review") (row "F4" "ready" "gates") (row "F9" "ready" "review"))))
+        (again (map claim (list "F1" "F2" "F3" "F4" "F5")))
+        (writers (resultOr (fileReadString seen) ""))
+        (_ (cleanup root))]
+    (do (assert (listAll? (fn [(r cd/Res)] -> Bool (and (= r.ok 1) (stringEmpty? r.sig))) first) "every fresh ahead branch with a green gate goes to gating")
+        (assert (stringEmpty? firstWriters) (str "no writer ran on the first claims: " firstWriters))
+        (assert (and (stringContains? writers "F1") (= (okAt again 0) 0)) (str "a head whose review failed gets a writer: " writers))
+        (assert (stringContains? writers "F2") (str "a head whose review blocked it gets a writer: " writers))
+        (assert (not (stringContains? writers "F3")) "a review defer is not a failure")
+        (assert (not (stringContains? writers "F4")) "a gates failure row is not a review failure")
+        (assert (and (not (stringContains? writers "F5")) (= (okAt again 4) 1)) "a unit never reviewed keeps the shortcut, whatever another unit's review did")
+        true))
+
+; (:m :ref AHEAD-WRITER-UNKNOWN :do "the writer of a unit that entered gating through the ahead check is the newest write row naming one, a failed write too; with none at all it is the unit row's model, empty when that is empty")
+fn ! testWriterFromFailedWrite -> Bool
+  (let [(root (scratch "writerFail"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (j (cd/journalPath root))
+        (_ (fileWrite j (str "(:t :unit \"A\" :from writing :to ready :stage write :model \"ccZAiGlm53Flash\" :tokens 1 :costUsd 0 :verdict \"fail: exit\" :ms 1 :at 1)\n"
+                             "(:t :unit \"A\" :from writing :to gating :stage write :model \"\" :tokens 0 :costUsd 0 :verdict \"written\" :ms 1 :at 2)\n"
+                             "(:t :unit \"B\" :from writing :to blocked :stage write :model \"kmK31Pro\" :alias \"kmK31Pro\" :tokens 1 :costUsd 0 :verdict \"escalated: x\" :ms 1 :at 3)\n"
+                             "(:t :unit \"B\" :from reviewing :to ready :stage review :model \"hzQwen3827bGrade\" :tokens 0 :costUsd 0 :verdict \"fail: x\" :ms 1 :at 4)\n"
+                             "(:t :unit \"C\" :from writing :to gating :stage write :model \"\" :tokens 0 :costUsd 0 :verdict \"written\" :ms 1 :at 5)\n")))
+        (a (cd/writerOf! root (aheadCUnit "A")))
+        (b (cd/writerOf! root (aheadCUnit "B")))
+        (c (cd/writerOf! root (aheadCUnit "C")))
+        (_ (cleanup root))]
+    (do (assert (= a "ccZAiGlm53Flash") (str "the ahead-gated unit takes the writer of its failed write row: " a))
+        (assert (= b "kmK31Pro") (str "a blocked write row names the writer, not the later reviewer: " b))
+        (assert (= c "") (str "no write row names a writer: empty, which the ladder reads as no writer to exclude: " c))
+        true))
+
 ; (:m :ref REVIEW-DEFER :do "a unit stored with :base HEAD is measured against main: an ahead branch with a green gate reaches gating, a writer commit is progress, not noEdit; the ahead check runs with its stall marker in place and leaves none behind, and a marked unit is not stall-probed")
 fn ! testBaseHead -> Bool
   (let [(root (scratch "baseHead"))
@@ -974,5 +1027,7 @@ fn ! runTests -> Bool
       (assert (testOnBaseRefs) "saved pre-onBase state is per unit, never overwritten, healed before rebase, kept when stale")
       (assert (testReviewWriter) "the review writer is the unit's writer, resolved to an alias with a family")
       (assert (testBaseHead) "a :base HEAD unit is measured against main")
+      (assert (testAheadReviewFail) "a head whose review failed is not shortcut to review again")
+      (assert (testWriterFromFailedWrite) "the writer comes from a failed write row too")
       (assert (testReviewDeferFix) "base resolves to the repo branch, counts need a top level, unknown writers wait, stale markers, two-lane wake")
       true)
