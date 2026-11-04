@@ -894,6 +894,7 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                                            ((ok rel) (if (stringEmpty? rel) "" (str " :recorded \"" rel "\"")))
                                            ((err _) "")))
                            (runHead (str head " :suites " (itos (listLength results))
+                                          " :skippedSuites " (itos (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))
                                           " :notEvaluated " (itos reconciled.notEvaluated)
                                           " :knownRedHeld " (itos reconciled.held)
                                           " :executedAsserts " (itos (countAsserts results))

@@ -126,6 +126,7 @@ fn reconcile! results: (List sr/SuiteResult) ledger: (List LedgerEntry) root: St
                              (heldCount (pairSecond acc))
                              (entries (findSuiteEntries ledger r.suite))]
                          (cond
+                           ((= r.cause "SKIPPED") acc)
                            ((= r.cause "OK")
                             (if (not (listEmpty? entries))
                               (pair (cons (ReconcileCheck :err "ERR_STALE_KNOWN_RED" :suite r.suite :ev "listed in knownRed but passed") chkList) heldCount)
@@ -166,7 +167,9 @@ fn reconcile! results: (List sr/SuiteResult) ledger: (List LedgerEntry) root: St
                      :held held))
 
 fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvaluated: Int64 held: Int64 deltaForm: String excluded: String scope: String frozen: Int64 -> (Pair String Bool)
-  (let [(passed (and (listEmpty? checks) (not (listEmpty? results))))
+  (let [(skipped (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))
+        (allSkipped (and (not (listEmpty? results)) (= skipped (listLength results))))
+        (passed (and (listEmpty? checks) (not (listEmpty? results)) (not allSkipped)))
         (status (if passed ":passed" ":failed"))
         (passedSuites (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64
                               (if (= r.cause "OK") (+ acc 1) acc))
@@ -182,11 +185,13 @@ fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvalu
                    " :executedAsserts " (stringFromInt64 executedAsserts)
                    " :executedRefutes " (stringFromInt64 executedRefutes)
                    " :declaredAsserts " (stringFromInt64 declaredAsserts)
-                   " :frozen " (stringFromInt64 frozen)))
+                   " :frozen " (stringFromInt64 frozen)
+                   (if (> skipped 0) (str " :skippedSuites " (stringFromInt64 skipped)) "")))
         (parts1 (list head))
-        (parts2 (if (listEmpty? results)
-                  (cons "(:check :id discovery :status :failed :err ERR_NO_SUITES :ev \"no suite discovered in scope\")" parts1)
-                  parts1))
+        (parts2 (cond
+                  ((listEmpty? results) (cons "(:check :id discovery :status :failed :err ERR_NO_SUITES :ev \"no suite discovered in scope\")" parts1))
+                  (allSkipped (cons "(:check :id discovery :status :failed :err ERR_ALL_SKIPPED :ev \"every suite in scope skipped, nothing executed\")" parts1))
+                  (else parts1)))
         (parts3 (fold (fn [(acc (List String)) (c ReconcileCheck)] -> (List String)
                         (cons (str "(:check :id suite :status :failed :err " c.err
                                    " :suite \"" (sr/esc c.suite 400)

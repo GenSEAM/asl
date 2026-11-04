@@ -74,5 +74,9 @@ fn ! e2e -> Bool
 
 fn ! runTests -> Bool
   (let [(on (enabled))]
-    (do (assert (or (not on) (e2e)) (if on "e2e smoke" "skipped: ASL_E2E is not 1"))
-        true))
+    (if on
+      (do (assert (e2e) "e2e smoke")
+          true)
+      (do (println "(:skip :suite e2eSmokeTest :why \"ASL_E2E is not 1\")")
+          (assert (not (enabled)) "the skip cause holds: ASL_E2E is not 1")
+          true)))

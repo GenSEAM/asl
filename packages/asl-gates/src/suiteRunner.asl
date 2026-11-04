@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady?]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! skipRow countConstant!]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -281,6 +281,31 @@ fn declaredAsserts! path: String -> Int64
   (match (fileReadBytes path)
     ((ok data) (countDeclaredLoop data (bytesLength data) 0 false 0 0))
     ((err _) 0))
+
+; (:m :ref SKIP-AND-CONSTANT :do "a constant assert is one whose condition is the literal true; a suite whose executed asserts are all constant is ERR_CONSTANT_ASSERT, since it can only pass")
+fn countConstantLoop data: Bytes n: Int64 i: Int64 inStr: Bool acc: Int64 -> Int64
+  (if (>= i n)
+    acc
+    (let [(b (bytesGet data i))]
+      (cond
+        (inStr
+          (cond
+            ((= b 92) (countConstantLoop data n (+ i 2) true acc))
+            ((= b 34) (countConstantLoop data n (+ i 1) false acc))
+            (else (countConstantLoop data n (+ i 1) true acc))))
+        ((= b 34) (countConstantLoop data n (+ i 1) true acc))
+        ((and (= b 40) (< (+ i 7) n) (litAt data n (+ i 1) "assert") (isSpaceByte (bytesGet data (+ i 7))))
+         (countConstantLoop data n (+ i 7) false (+ acc (checkGuard data n (+ i 7) "true"))))
+        (else (countConstantLoop data n (+ i 1) false acc)))))
+
+fn countConstant! path: String -> Int64
+  (match (fileReadBytes path)
+    ((ok data) (countConstantLoop data (bytesLength data) 0 false 0))
+    ((err _) 0))
+
+; (:m :ref SKIP-AND-CONSTANT :do "a suite that prints a (:skip :suite ...) row (a case-level (:skip :case ...) leaves the suite as it is) ran nothing: its result is SKIPPED, counted apart from passed and failed, with zero executed asserts")
+fn skipRow out: String -> (Option String)
+  (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? (pyStrip l) "(:skip :suite ")) (pyLines out)))
 
 (schema SpawnedProc
   (:f pid Int64)
@@ -745,6 +770,7 @@ fn computeDigest cause: String failLine: String -> String
 
 fn gateCounts cause: String declared: Int64 asserts: Int64 refutes: Int64 failedCount: Int64 -> (Pair Int64 Int64)
   (cond
+    ((= cause "SKIPPED") (pair 0 0))
     ((= cause "OK") (pair (+ asserts refutes) 0))
     ((= cause "ERR_DECLARED_GAP") (pair declared (- declared (+ asserts refutes))))
     (else
@@ -894,8 +920,16 @@ fn aslResult! snap: String suite: String code: Int64 out: String -> SuiteResult
         (asserts v.asserts)
         (refutes v.refutes)
         (declared (declaredAsserts! (str snap "/" suite)))
+        (skip (skipRow out))
+        (constant (countConstant! (str snap "/" suite)))
         (gap (- declared (+ asserts refutes)))]
     (cond
+      ((and (some? skip) (or (= cause "OK") (= cause "ERR_VACUOUS_SUITE")))
+       (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts 0 :refutes 0 :declared 0 :failed 0))
+      ((and (= cause "OK") (> asserts 0) (>= constant asserts))
+       (let [(failLine (str "constant=" (stringFromInt64 constant) " of " (stringFromInt64 asserts)))]
+         (SuiteResult :suite suite :cause "ERR_CONSTANT_ASSERT" :digest (computeDigest "ERR_CONSTANT_ASSERT" failLine) :failLine failLine
+                      :asserts asserts :refutes refutes :declared declared :failed 1)))
       ((and (= cause "OK") (> gap 0))
        (let [(failLine (str "gap=" (stringFromInt64 gap)))]
          (SuiteResult :suite suite :cause "ERR_DECLARED_GAP" :digest (computeDigest "ERR_DECLARED_GAP" failLine) :failLine failLine
@@ -1313,7 +1347,7 @@ fn ! gate root: String arg: String -> Int64
            (println (str "(:gateCause :suite \"" (esc suite 400) "\" :cause " r.cause " :digest \"" r.digest "\" :ev \"" (esc r.failLine 400) "\""
                          (if (stringEndsWith? suite ".asl") (str " " (trustForm)) "") ")"))
            (println (str "(:gate :name \"" (esc suite 400) "\" :asserts " (stringFromInt64 (pairFirst counts)) " :failed " (stringFromInt64 (pairSecond counts)) ")"))
-           (if (= r.cause "OK") 0 1))))))
+           (if (or (= r.cause "OK") (= r.cause "SKIPPED")) 0 1))))))
 
 fn printLines! lines: (List String) -> Unit
   (fold (fn [(u Unit) (l String)] -> Unit (println l)) () lines)

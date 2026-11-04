@@ -447,7 +447,7 @@ fn sumBy results: (List sr/SuiteResult) pick: (fn [sr/SuiteResult] -> Int64) -> 
 
 fn causeCounts results: (List sr/SuiteResult) -> (List String)
   (let [(causes (listSortUnique (map (fn [(r sr/SuiteResult)] -> String r.cause)
-                                     (filter (fn [(r sr/SuiteResult)] -> Bool (!= r.cause "OK")) results))))]
+                                     (filter (fn [(r sr/SuiteResult)] -> Bool (and (!= r.cause "OK") (!= r.cause "SKIPPED"))) results))))]
     (map (fn [(c String)] -> String
            (str "    (:cause \"" c "\" :count " (stringFromInt64 (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause c)) results))) ")\n"))
          causes))
@@ -472,7 +472,8 @@ fn ! writeTelemetry path: String results: (List sr/SuiteResult) wallMs: Int64 ->
         (refuted (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.refutes)))
         (declared (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.declared)))
         (passed (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "OK")) results)))
-        (failed (- (listLength results) passed))
+        (skipped (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))
+        (failed (- (listLength results) (+ passed skipped)))
         (n (fn [(i Int64)] -> String (stringFromInt64 i)))
         (digest (optionOr (stringSlice (bytesSha256 (stringToBytes (str (n executed) ":" (n refuted) ":" (n passed) ":" (n failed)))) 0 16) ""))]
     (match (today!)
@@ -487,7 +488,7 @@ fn ! writeTelemetry path: String results: (List sr/SuiteResult) wallMs: Int64 ->
              (writeFile! path
                (str "(:testTelemetry :v 3 :date \"" date "\" :method \"scripts/audit/runner.py: tracked suites run from a snapshot, per-suite cause and declared gap\"\n"
                     "  :runnerDigest \"" digest "\"\n"
-                    "  :suites " (n (listLength results)) " :passedSuites " (n passed) " :failedSuites " (n failed) "\n"
+                    "  :suites " (n (listLength results)) " :passedSuites " (n passed) " :skippedSuites " (n skipped) " :failedSuites " (n failed) "\n"
                     "  :declaredAsserts " (n declared) " :executedAsserts " (n executed) " :executedRefutes " (n refuted)
                     " :verifiedTotal " (n (+ executed refuted)) " :declaredVerifiedGap " (n (- declared (+ executed refuted))) " :totalWallMs " (n wallMs) "\n"
                     "  :failureCauses [\n"
