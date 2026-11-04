@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -865,7 +865,7 @@ fn unavailableSpecText reasons: (List String) -> String
   (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons ("
        (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) reasons) " ") "))")
 
-; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak noWrite doneNoWrite malformedReply parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
+; (:m :ref LEON-WRITE-FAIL-CLASSIFY :do "why the run stopped, for a receipt the conductor journal cuts short: the loop signal that ended it (turnBudget wallBudget tokenBudget readStreak modelEscalated noWrite doneNoWrite malformedReply parseDefect repeatFailure provider noReply gateIntegrity), else error for a run that failed with an error, gateVacuous for a failed run whose declared gates were green before any write, done for ok, and the status otherwise")
 fn stopCause status: String signal: (Option String) error: (Option String) vacuous: (List String) -> String
   (match (nonEmpty signal)
     ((some s) s)
@@ -1641,6 +1641,56 @@ fn liveGateSummary gates: (List g/GateResult) -> String
 fn liveDoneOps? ops: (List (List (Pair String c/KvVal))) -> Bool
   (listAny? (fn [op] (or (= (liveOpName op) "done") (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "done")) (_ false))) ((none) false)))) ops)
 
+; (:m :ref LEON-YIELD-F3 :do "node2 2026-11-04: 17 runs stopped as readStreak after the model itself sent (:escalate ...), because the escalate op ended nothing; a model escalation is its own stop, signal modelEscalated, carrying the model's reason, seen and tried")
+fn liveEscalateOp? op: (List (Pair String c/KvVal)) -> Bool
+  (or (= (liveOpName op) "escalate") (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "escalate")) (_ false))) ((none) false)))
+
+fn kvTextOf kv: (List (Pair String c/KvVal)) key: String -> String
+  (match (c/dictGet kv key) ((some v) (match v ((c/kvStr t) t) ((c/kvInt t) t))) ((none) ""))
+
+fn modelEscalationKv op: (List (Pair String c/KvVal)) -> (List (Pair String c/KvVal))
+  (match (c/dictGet op "form") ((some v) (match v ((c/kvStr f) (c/parseKv f)) ((c/kvInt _) op))) ((none) op))
+
+fn modelEscalationReason ops: (List (List (Pair String c/KvVal))) -> (Option String)
+  (match (listHead (filter liveEscalateOp? ops))
+    ((some op) (some (kvTextOf (modelEscalationKv op) "reason")))
+    ((none) none))
+
+fn modelEscalationReceipt ops: (List (List (Pair String c/KvVal))) -> (Option String)
+  (match (listHead (filter liveEscalateOp? ops))
+    ((some op)
+      (let [kv (modelEscalationKv op)]
+        (some (str "(:escalate :reason \"" (c/escapeAsn (kvTextOf kv "reason")) "\" :seen \"" (c/escapeAsn (kvTextOf kv "seen")) "\" :tried \"" (c/escapeAsn (kvTextOf kv "tried")) "\")"))))
+    ((none) none))
+
+; (:m :ref LEON-YIELD-F4 :do "node2 2026-11-04: one turn sent 724 reads of one file over 16 turns; a read-only step identical to an earlier one in the same reply ignoring its :id (parse already drops byte-identical steps and counts them in facts.repeated), with no write, edit, run or other mutating step between them, runs once, and the reply says how many were dropped")
+fn opKey op: (List (Pair String c/KvVal)) -> String
+  (stringJoin (map (fn [p] (str (pairFirst p) "=" (match (pairSecond p) ((c/kvStr t) t) ((c/kvInt t) t))))
+    (filter (fn [p] (not (listContains? (list "form" "id") (pairFirst p)))) op)) "\n")
+
+fn dedupeReadOps ops: (List (List (Pair String c/KvVal))) seen: (List String) kept: (List (List (Pair String c/KvVal))) dropped: Int64 -> (Pair (List (List (Pair String c/KvVal))) Int64)
+  (if (listEmpty? ops)
+    (pair kept dropped)
+    (let [op (c/firstOf ops)
+          rest (c/restOf ops)
+          key (opKey op)]
+      (cond
+        ((not (listContains? (readOnlyOps) (liveOpName op))) (dedupeReadOps rest (list) (listAppend kept (list op)) dropped))
+        ((listContains? seen key) (dedupeReadOps rest seen kept (+ dropped 1)))
+        (else (dedupeReadOps rest (listAppend seen (list key)) (listAppend kept (list op)) dropped)))))
+
+fn duplicateOpsNote dropped: Int64 -> String
+  (if (> dropped 0)
+    (str "(:duplicateOps :dropped " (stringFromInt64 dropped) " :do \"identical read steps in one reply run once; send each step once\")")
+    "")
+
+; (:m :ref LEON-YIELD-F2 :do "node2 2026-11-04: in 123 of 217 readStreak stops the model was writing and every write was refused, yet only a persisted write reset the streak; a turn that attempted a write or edit and persisted nothing counts like a not-found read, extending the streak at most notFoundStreakCap turns in a row; repeatFailure still guards identical refused content")
+fn writeAttempt? ops: (List (List (Pair String c/KvVal))) -> Bool
+  (listAny? (fn [o] (listContains? (list "write" "edit") (liveOpName o))) ops)
+
+fn nextReadStreakOf wrote: Bool stalledTurn: Bool stalledStreak: Int64 readStreak: Int64 -> Int64
+  (cond (wrote 0) ((and stalledTurn (> stalledStreak (notFoundStreakCap))) readStreak) (else (+ readStreak 1)))
+
 fn liveIntentDeliver ops: (List (List (Pair String c/KvVal))) current: (Option String) -> (Option String)
   (if (listEmpty? ops)
     current
@@ -1934,7 +1984,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   clean (tr/turnReply reply (some ra.gates))
                   normalized clean.text
                   facts clean.facts
-                  operations facts.ops
+                  opsDeduped (dedupeReadOps facts.ops (list) (list) 0)
+                  operations (pairFirst opsDeduped)
+                  droppedOps (pairSecond opsDeduped)
                   findingForms facts.dataFindings
                   priorFindings (map ctx/pyStr state.findingsList)
                   mergedFindingForms (fold (fn [acc form] (pairFirst (cl/mergeFindings form acc))) priorFindings findingForms)
@@ -1974,7 +2026,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   repeatKey (stringTrim normalized)
                   repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
                     (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (> (+ droppedOps facts.repeated) 0) (str "\n" (duplicateOpsNote (+ droppedOps facts.repeated))) "") (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
@@ -2034,9 +2086,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   status (if (or (not (pairFirst integrity)) (not hooksOk))
                     "failed" (if terminal "ok" "running"))
                   wroteSinceGate (if (not (listEmpty? newGates)) false (or state.wroteSinceGate wrote))
-                  notFoundTurn (and (not wrote) (notFoundReceipts? opReceipts))
+                  notFoundTurn (and (not wrote) (or (notFoundReceipts? opReceipts) (writeAttempt? operations)))
                   notFoundStreak (if notFoundTurn (+ 1 state.notFoundStreak) 0)
-                  nextReadStreak (cond (wrote 0) ((and notFoundTurn (> notFoundStreak (notFoundStreakCap))) state.readStreak) (else (+ state.readStreak 1)))
+                  nextReadStreak (nextReadStreakOf wrote notFoundTurn notFoundStreak state.readStreak)
                   nextStateBase (rl/withTurnContext executed.state servedCtx (ctx/readPayloadChars (optionOr servedCtx 24000)) wroteSinceGate)
                   nextState0 (rl/withHeadState nextStateBase turn nextReadStreak writesPersisted
                     deliver allGates lastGates
@@ -2064,10 +2116,17 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
+                  modelEscalation (modelEscalationReceipt operations)
+                  modelReason (optionOr (modelEscalationReason operations) "")
+                  modelStop (and (some? modelEscalation) (not terminal))
+                  _ (if modelStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :modelEscalated :reason \"" (c/escapeAsn modelReason) "\")\n"))) true)
                   wallHalt (and wallStop (not terminal))
                   wallReason (str (stringFromInt64 (optionOr gateLeft 0)) " s of the wall budget left, under the " (stringFromInt64 gateMin) " s a gate run needs")
                   _ (if wallHalt (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :wallBudget :reason \"" wallReason "\")\n"))) true)
                   nextRun (cond
+                    (modelStop
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "modelEscalated") modelEscalation state.runStarted) counts)))
                     (wallHalt
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
@@ -2082,7 +2141,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
                     (else (rl/withState nextRun0 (with (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak) :notFoundStreak notFoundStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal (or repeatStop (or wallHalt (or doneStop malformedStop)))) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt (or doneStop (or malformedStop modelStop))))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
