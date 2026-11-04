@@ -96,10 +96,26 @@ fn ! scanSwallowedErrors! root: String written: (List (Pair String (Option Strin
               (uniqueStrings (listSort (map (fn [path] (scanPath root path)) (listAppend (map pairFirst normalizedWritten) extra))) (list)))]
     (scanSwallowedLoop! root normalizedWritten all))
 
-fn ! rawHead! root: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
-  (match (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env (none))
+fn ! rawHead! root: String rev: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
+  (match (io/runBounded! (list "git" "show" (str rev ":" rel)) (some root) (some timeout) env (none))
     ((ok b) (if (= (optionOr b.code 1) 0) (some b.out) (none)))
     ((err _) (none)))
+
+; (:m :ref LEON-YIELD-F1 :do "the revision the revert check restores files to: the merge-base of HEAD and the run's base branch, so an implementation the driver committed in an earlier round still differs from it; HEAD when the run has no base, the base is HEAD or the merge-base cannot be resolved (then the old behaviour)")
+fn ! revertRev! root: String base: String timeout: Int64 env: (Option (List String)) -> String
+  (if (or (stringEmpty? base) (= base "HEAD"))
+    "HEAD"
+    (match (io/runBounded! (list "git" "merge-base" "HEAD" base) (some root) (some timeout) env (none))
+      ((ok b) (let [sha (stringTrim b.out)] (if (and (= (optionOr b.code 1) 0) (not (stringEmpty? sha))) sha "HEAD")))
+      ((err _) "HEAD")))
+
+; (:m :ref LEON-YIELD-F1 :do "files of the owned paths committed on the branch since the revert revision; git status lists only uncommitted ones, so a committed implementation was invisible and only doc.asn was reverted")
+fn ! committedSince! owns: (List String) root: String rev: String timeout: Int64 env: (Option (List String)) -> (List String)
+  (if (or (= rev "HEAD") (listEmpty? owns))
+    (list)
+    (match (io/runBounded! (listAppend (list "git" "diff" "--name-only" rev "HEAD" "--") owns) (some root) (some timeout) env (none))
+      ((ok b) (if (= (optionOr b.code 1) 0) (map io/pyStrip (filter (fn [l] (not (stringEmpty? (io/pyStrip l)))) (io/pySplitLines b.out false))) (list)))
+      ((err _) (list))))
 
 fn rstr rec: (List (Pair String io/RVal)) key: String -> String
   (match (io/recGet rec key)
@@ -198,17 +214,20 @@ fn vacuousRetry integrity: (Pair Bool String) rounds: Int64 cap: Int64 -> (Optio
 fn unionPaths a: (List String) b: (List String) -> (List String)
   (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
 
-fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) -> (Pair Bool String)
+fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env (unionPaths changed (map (fn [f] (scanPath root f)) written)) watch)))
+    ((ok changed)
+      (let [rev (revertRev! root base timeout env)
+            all (unionPaths (unionPaths changed (committedSince! owns root rev timeout env)) (map (fn [f] (scanPath root f)) written))]
+        (gateIntegrityWithChanged! gates root gateResults timeout env all watch rev))))
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none))))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none) "HEAD")))
 
-fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) -> (Pair Bool String)
+fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
@@ -218,7 +237,7 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
         (if (listEmpty? impl)
           (pair true "revertCheck skipped: the change is only the gate files")
           (let [saved (map (fn [f] (pair f (match (fileReadBytes (str root "/" f)) ((ok b) (some b)) ((err _) (none))))) impl)
-              headText (map (fn [f] (pair f (rawHead! root f timeout env))) impl)
+              headText (map (fn [f] (pair f (rawHead! root rev f timeout env))) impl)
               existing (filter (fn [p] (some? (pairSecond p))) headText)
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
               wroteHead (writeTexts! root existing)

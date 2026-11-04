@@ -2024,7 +2024,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (ok none))
                   reviewLogged (if reviewInvoked (appendLiveHook! path turn "reviewer" reviewResult) true)
                   integrity (if (and terminal (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid)
+                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base)
                     (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")

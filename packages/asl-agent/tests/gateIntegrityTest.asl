@@ -150,6 +150,35 @@ fn ! testChangedFilesError! -> Bool
         result (gi/gateIntegrity! (list) (list "missing.txt") root (list) 1 (none))]
     (and removed (and (not (pairFirst result)) (stringStartsWith? (pairSecond result) "changedOwnedFiles failed:"))))
 
+; (:m :ref LEON-YIELD-F1 :do "a committed implementation: base commit on main holds impl.txt old, branch unit commits impl.txt new, only doc.asn is dirty. The revert target is the merge-base, so a gate that needs the new impl fails on revert (true); a gate green either way still passes on revert (false); without a base the old HEAD revert reverts only doc.asn and calls the real gate vacuous")
+fn ! committedImpl! script: String base: String -> (Pair Bool String)
+  (let [root (makeRoot)
+        git (str "git -C " root " -c user.email=t@t -c user.name=t ")
+        s1 (and (write root "impl.txt" "old\n") (and (write root "gate.sh" script) (write root "doc.asn" "a\n")))
+        s2 (and (= (run (str git "init -q -b main")).exitCode 0) (= (run (str git "add -A")).exitCode 0))
+        s3 (and (= (run (str git "commit -qm base")).exitCode 0) (= (run (str git "checkout -q -b unit")).exitCode 0))
+        s4 (and (write root "impl.txt" "new\n") (= (run (str git "commit -qam impl")).exitCode 0))
+        s5 (write root "doc.asn" "b\n")
+        setup (and s1 (and s2 (and s3 (and s4 s5))))
+        result (gi/gateIntegrityWritten! (list "sh gate.sh") (list "impl.txt" "doc.asn" "gate.sh") root
+          (list (g/makeGateResult "sh gate.sh" 0 "(:gate :asserts 1 :failed 0)\n" "" false 0)) 30 (none) (list) (none) base)
+        impl (resultOr (fileReadString (str root "/impl.txt")) "")
+        doc (resultOr (fileReadString (str root "/doc.asn")) "")
+        cleaned (cleanRoot root)]
+    (if (and setup (and (= impl "new\n") (and (= doc "b\n") cleaned)))
+      result
+      (pair false "fixture or restore failed")))
+
+fn ! testCommittedImpl! -> Bool
+  (let [needs "if grep -qx new impl.txt; then echo '(:gate :asserts 1 :failed 0)'; else echo '(:gate :asserts 1 :failed 1)'; exit 1; fi\n"
+        vacuous "echo '(:gate :asserts 1 :failed 0)'\n"
+        withBase (committedImpl! needs "main")
+        vacuousBase (committedImpl! vacuous "main")
+        noBase (committedImpl! needs "")]
+    (and (and (pairFirst withBase) (stringContains? (pairSecond withBase) ":failsOnRevert"))
+      (and (and (not (pairFirst vacuousBase)) (stringContains? (pairSecond vacuousBase) ":passesOnRevert"))
+        (and (not (pairFirst noBase)) (stringContains? (pairSecond noBase) ":passesOnRevert")))))
+
 fn ! runTests -> Bool
   (let [root (resultOr (realPath ".") ".")
         fixture (resultOr (fileReadString (str root "/asl/packages/asl-agent/tests/gateIntegrityFixture.asn")) "")]
@@ -163,6 +192,7 @@ fn ! runTests -> Bool
       (assert (testRedOnHead! fixture) "red on HEAD content proves a green implementation after one gate run")
       (assert (mixedRevert! fixture "mixedKeptNew" "if grep -qx new impl.txt; then echo '(:gate :asserts 1 :failed 0)'; else echo '(:gate :asserts 1 :failed 1)'; exit 1; fi\n") "a first-run failure with a new file kept names it, and both files are restored")
       (assert (mixedRevert! fixture "gateNeedsNewFile" "if [ -f added.txt ]; then echo '(:gate :asserts 1 :failed 0)'; else echo '(:gate :asserts 1 :failed 1)'; exit 1; fi\n") "the second run removes the new file, so a gate that needs it fails on revert")
+      (assert (testCommittedImpl!) "an implementation committed on the branch is reverted to the merge-base with the run base: the gate fails on revert, a vacuous gate still passes on revert, and no base keeps the old HEAD behaviour")
       (assert (testChangedFilesError!) "changed-owned-files failure is not treated as a skipped pass")
       (assert (testTimeoutMetadata!) "gate timeout metadata survives the revert check")
       true))
