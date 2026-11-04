@@ -588,6 +588,29 @@ fn ! ledgerFixture dir: String id: String -> String
         (_ (fileWrite (str dir "/repo.path") repo))]
     wt)
 
+; (:m :ref COND-RECOVER-C1 :do "a rebase rewrites the sha of the conductor's recorded grade commit (TEXT-WRAP node2: LEDGER_FORGED four times); the rewritten commit, committed by conductor@localhost with a grade subject and adding only a recorded row, is no forgery, while the same rewrite carrying a row the store never recorded still is")
+fn ! testRebasedGrade bin: String -> Bool
+  (let [(dir (scratch "rebased"))
+        (_ (cleanup dir))
+        (wt (ledgerFixture dir "R1"))
+        (ctx (ctxOf dir bin 5 5 50))
+        (_ (cd/gradeLand! ctx (with (cuSt "R1" "reviewing") :wt wt) "R1" "gemini-flash"))
+        (recordedSha (stringTrim (gitIn wt (list "rev-parse" "HEAD")).out))
+        (recorded (cd/ledgerForged! dir wt "main"))
+        (_ (gitIn wt (list "-c" "user.name=conductor" "-c" "user.email=conductor@localhost" "commit" "--amend" "-q" "--no-edit" "--reset-author" "--date=2001-01-01T00:00:00")))
+        (rewrittenSha (stringTrim (gitIn wt (list "rev-parse" "HEAD")).out))
+        (rewritten (cd/ledgerForged! dir wt "main"))
+        (_ (fileWrite (str wt "/.asl/mem/grades.asn") (str (resultOr (fileReadString (str wt "/.asl/mem/grades.asn")) "") "(:grade :ev \"EVIL\" :sha \"x\" :verdict pass :by \"me\" :at \"t\")\n")))
+        (_ (gitIn wt (list "add" "-A")))
+        (_ (gitIn wt (list "-c" "user.name=conductor" "-c" "user.email=conductor@localhost" "commit" "--amend" "-q" "--no-edit" "--reset-author" "--date=2002-01-01T00:00:00")))
+        (laundered (cd/ledgerForged! dir wt "main"))
+        (_ (cleanup dir))]
+    (do (assert (not recorded) "control: the recorded grade commit is clean")
+        (assert (not (= recordedSha rewrittenSha)) "the rewrite changed the sha, so the store no longer matches it")
+        (assert (not rewritten) "a rewritten conductor grade commit that adds only a recorded row is no forgery")
+        (assert laundered "a rewritten grade commit that also adds an unrecorded row is a forgery")
+        true))
+
 fn ! testLedgerForge bin: String -> Bool
   (let [(dir (scratch "forge"))
         (_ (cleanup dir))
@@ -1578,6 +1601,7 @@ fn ! runTests -> Bool
         (assert (testOwnsSerialised bin) "overlapping owns serialised")
         (assert (testServed) "the served alias is journalled")
         (assert (testLedgerForge bin) "a writer cannot forge a pass row")
+        (assert (testRebasedGrade bin) "a rebased conductor grade commit is no forgery")
         (assert (testGradeLand bin) "a review pass lands its grade row on the unit branch")
         (assert (testWipPaths bin) "every writer-ending path rescues the tree")
         (assert (testStaleDirtyWake bin) "a dirty stale unit wakes after its wip rescue")

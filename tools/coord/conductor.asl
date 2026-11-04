@@ -524,12 +524,25 @@ fn ! seedGradeCommits! dir: String -> Int64
             ((err _) -1))))))
 
 ; (:m :ref CONDUCTOR-REPO-HEALTH :do "the ledger verdict of a unit branch: empty when clean, forged when a commit touching the ledger is not in the store's record, ERR_REPO_GIT: TEXT when git could not read the log at all (the repo, not the writer, is broken: a vanished common dir made 45 units LEDGER_FORGED on node2)")
+; (:m :ref COND-RECOVER-C1 :do "a grade commit the store recorded under another sha is still the conductor's own: a rebase of the unit branch (onBaseRebuild!, freshBase!) rewrites every sha, so the recorded one no longer matches (TEXT-WRAP node2 2026-11-04: LEDGER_FORGED four times on a branch whose only ledger commit was the conductor's rebased grade); such a commit passes when its committer is conductor@localhost, its subject is a grade subject and every line it adds to the ledger is a row the store recorded, so a writer cannot launder its own row through it")
+fn ! rebasedGradeCommit? dir: String path: String sha: String -> Bool
+  (let [(meta (gitOut path (list "show" "-s" "--format=%ce%x09%s" sha)))
+        (diff (gitOut path (list "show" "--format=" "-U0" sha "--" (al/ledgerPath))))
+        (recorded (readOr (gradeCommitsPath dir)))
+        (lines (stringLines diff.out))
+        (added (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "+") (not (stringStartsWith? l "+++")))) lines))
+        (dropped (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "-") (not (stringStartsWith? l "---")))) lines))]
+    (and (and (= meta.exit 0) (= diff.exit 0))
+      (and (stringStartsWith? (stringTrim meta.out) "conductor@localhost\t(:c :a grade :do ")
+        (and (and (not (listEmpty? added)) (listEmpty? dropped))
+          (listAll? (fn [(l String)] -> Bool (stringContains? recorded (str ":row " (st/q (optionOr (stringSlice l 1 (stringLength l)) "")) ")"))) added)))))
+
 fn ! ledgerState! dir: String path: String base: String -> String
   (if (stringEmpty? path) ""
     (let [(r (gitOut path (list "log" "--format=%H" (str base "..HEAD") "--" (al/ledgerPath))))]
       (cond
         ((!= r.exit 0) (str "ERR_REPO_GIT: git log in " path " exit " (n r.exit) ": " (repoClip r.out)))
-        ((listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (gradeCommitRecorded? dir (stringTrim l))))) (stringLines r.out)) "forged")
+        ((listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (and (not (gradeCommitRecorded? dir (stringTrim l))) (not (rebasedGradeCommit? dir path (stringTrim l)))))) (stringLines r.out)) "forged")
         (else ""))))
 
 fn repoClip text: String -> String
@@ -1700,7 +1713,8 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))))))
               (d (pairFirst pv))
               (model (servedModel d.out))
-              (vacuous (pairSecond pv))
+              ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
+              (vacuous (and (pairSecond pv) (not (commitsPast? p (baseRef u)))))
               (_ (if vacuous false (commitWrite! p u.owns u.id model)))
               ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
               (noEdit (and (= d.exit 0) (not (commitsPast? p (baseRef u)))))]

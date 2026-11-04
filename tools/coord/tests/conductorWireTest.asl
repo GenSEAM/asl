@@ -602,6 +602,30 @@ fn ! aheadWt rc: cd/RealCfg u: st/Task f: String -> String
         (_ (if (stringEmpty? p) () (commitFile p f "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")")))]
     p)
 
+; (:m :ref COND-RECOVER-C1 :do "a vacuous receipt on a blank branch whose run left a gate-passed commit past the base is no vacuous verdict: the write goes to gating; the same receipt with no commit is still vacuous")
+fn ! testVacuousWithCommit -> Bool
+  (let [(root (scratch "vaccommit"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (gate "sh gImpl.sh")
+        (out (str "(:agent :status :ok :receipt (:agentReceipt :status :ok :vacuousGates (\"" gate "\") :usage (:input 1)))"))
+        (committing (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (commitFile p "impl.txt" "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")"))]
+                 (fr/Done :idx 0 :exit 0 :out out :ms 0 :verdict "exit"))))
+        (idle (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (fr/Done :idx 0 :exit 0 :out out :ms 0 :verdict "exit")))
+        (u1 (aheadUnit "V1" gate))
+        (r1 (cd/writeResWith committing rc dir u1 (aheadCUnit "V1")))
+        (u2 (aheadUnit "V2" gate))
+        (r2 (cd/writeResWith idle rc dir u2 (aheadCUnit "V2")))
+        (_ (cleanup root))]
+    (do (assert (and (= r1.ok 1) (stringEmpty? r1.sig)) (str "a gate-passed commit past the base goes to gating, not vacuous: ok " (stringFromInt64 r1.ok) " sig " r1.sig))
+        (assert (and (= r2.ok 0) (cd/vacuousSig? r2.sig)) (str "the same receipt with no commit stays vacuous: " r2.sig))
+        true))
+
 ; (:m :ref UNIT-AHEAD-GATING :do "a branch ahead of its base with a green gate reaches gating with no writer run, and the journal says why; the same branch whose gate is green on the merge-base too is the vacuous verdict and escalates; a branch whose gate is red still gets a writer")
 fn ! testAheadGating -> Bool
   (let [(root (scratch "ahead"))
@@ -1181,6 +1205,7 @@ fn ! runTests -> Bool
       (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
       (assert (testLeonGuard) "the write stage refuses a worktree without the deployed Leon")
       (assert (testAheadGating) "an ahead branch with a green gate goes to gating without a writer")
+      (assert (testVacuousWithCommit) "a vacuous receipt over a gate-passed commit goes to gating")
       (assert (testIntegrityOnBase) "the writer integrity revert is measured against the merge-base")
       (assert (testOnBaseRefs) "saved pre-onBase state is per unit, never overwritten, healed before rebase, kept when stale")
       (assert (testReviewWriter) "the review writer is the unit's writer, resolved to an alias with a family")
