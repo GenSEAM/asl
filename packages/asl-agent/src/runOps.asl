@@ -1,7 +1,7 @@
 (module aslAgent/runOps
   :x [RVal rStr rInt rBool rList Proc Procs Snap OpResult KillOut RunCtx
       makeRunCtx newProcs execRunOp! execManageOp! execDeleteOp! killSpawned! rebaseWritten! drainProcs!
-      checkRunGitGuard outsideRootVerdict! spawnEnv! jailHome shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
+      checkRunGitGuard outsideRootVerdict! jailCacheEnv! spawnEnv! jailHome shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
   :i [(aslAgent/core :a c) (aslAgent/gitOps :a g)])
 
 enum RVal
@@ -887,7 +887,7 @@ fn waitRun! p: Proc deadline: Int64 -> Proc
       ((>= (monotonicNs) deadline) q)
       (else (waitRun! (pairSecond (pumpOnce! q (max 1 (min 50 (/ (- deadline (monotonicNs)) 1000000))))) deadline))))
 
-; (:m :ref LEON-RUN-HOME-JAIL :do "node2 2026-11-03: the repo every worktree links to was deleted while Leon units ran with the real HOME; a run op now refuses rm, mv, ln, chmod, chown, chgrp, cd and git -C/--git-dir/--work-tree whose path is outside :root, any absolute path under the real HOME other than :root, rm or mv of .git, git worktree remove/prune, git prune and git gc --prune, as ERR_RUN_OUTSIDE_ROOT; the child env carries HOME and TMPDIR inside the root")
+; (:m :ref LEON-RUN-HOME-JAIL :do "node2 2026-11-03: the repo every worktree links to was deleted while Leon units ran with the real HOME; a run op now refuses rm, mv, ln, rmdir, unlink, chmod, chown, chgrp, truncate, tee, cp, install, rsync, dd, find delete or exec, xargs writers, eval, shell -c and inline interpreter code, looking through wrappers, symlinks, ~name and $ words, cd and git -C/--git-dir/--work-tree whose path is outside :root, any absolute path under the real HOME other than :root, rm or mv of .git, git worktree remove/prune, git prune and git gc --prune, as ERR_RUN_OUTSIDE_ROOT; the child env carries HOME and TMPDIR inside the root")
 fn jailSegments words: (List String) -> (List (List String))
   (match (fold (fn [st w]
                  (match st ((pair done cur)
@@ -915,8 +915,111 @@ fn underPath p: String base: String -> Bool
 fn expands? w: String -> Bool
   (or (stringContains? w "$") (or (stringStartsWith? w "~") (stringContains? w "`")))
 
-fn outsideRoot? w: String root: String -> Bool
-  (and (not (stringEmpty? w)) (and (not (expands? w)) (not (underPath (absOf w root) root))))
+; (:m :ref LEON-RUN-HOME-JAIL :do "a leading ~, $HOME or ${HOME} names the child's jail HOME and $PWD or ${PWD} the root, so they are substituted before the check; any other ~name, $ or backtick cannot be resolved here and counts as outside, so rm -rf ~pi/asex, $PWD/.. and a command substitution are refused")
+fn substPrefix w: String pre: String repl: String -> (Option String)
+  (let [n (stringLength pre)]
+    (if (and (stringStartsWith? w pre) (or (= (stringLength w) n) (= (c/sliceOf w n (+ n 1)) "/")))
+      (some (str repl (c/sliceOf w n (stringLength w))))
+      (none)))
+
+fn substWord w: String root: String -> String
+  (let [home (jailHome root)]
+    (optionOr (firstHit (list (substPrefix w "~" home) (substPrefix w "$HOME" home) (substPrefix w "${HOME}" home) (substPrefix w "$PWD" root) (substPrefix w "${PWD}" root))) w))
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "the real path of the longest existing prefix of a path, so a symlink inside :root that points outside is seen; the unresolved rest is appended lexically; noFollow keeps the last component unresolved, as rm, mv and ln act on the link itself")
+fn ! realOf! rsegs: (List String) rest: (List String) -> String
+  (match (realPath (str "/" (c/joinSep (listReverse rsegs) "/")))
+    ((ok r) (absOf (str r "/" (c/joinSep rest "/")) "/"))
+    ((err _) (if (listEmpty? rsegs) "/" (realOf! (c/restOf rsegs) (cons (c/firstOf rsegs) rest)))))
+
+fn ! canon! s: String root: String noFollow: Bool -> String
+  (let [raw (if (stringStartsWith? s "/") s (str root "/" s))
+        rsegs (listReverse (filter (fn [x] (not (or (= x "") (= x ".")))) (stringSplit raw "/")))]
+    (if (and noFollow (and (not (stringEndsWith? s "/")) (and (not (listEmpty? rsegs)) (not (= (c/firstOf rsegs) "..")))))
+      (absOf (str (realOf! (c/restOf rsegs) (list)) "/" (c/firstOf rsegs)) "/")
+      (realOf! rsegs (list))))
+
+fn ! outsideRoot! w: String root: String noFollow: Bool -> Bool
+  (if (stringEmpty? w)
+    false
+    (let [s (substWord w root)]
+      (if (expands? s)
+        true
+        (not (underPath (canon! s root noFollow) (canon! root root false))))))
+
+fn ! anyOutside! ws: (List String) root: String noFollow: Bool -> (Option String)
+  (if (listEmpty? ws)
+    (none)
+    (if (outsideRoot! (c/firstOf ws) root noFollow) (some (c/firstOf ws)) (anyOutside! (c/restOf ws) root noFollow)))
+
+fn afterEq a: String -> String
+  (c/joinSep (c/restOf (stringSplit a "=")) "=")
+
+fn targetPaths args: (List String) -> (List String)
+  (if (listEmpty? args)
+    (list)
+    (let [a (c/firstOf args) rest (c/restOf args)]
+      (cond
+        ((and (memberOf a (list "-t" "--target-directory")) (not (listEmpty? rest))) (cons (c/firstOf rest) (targetPaths (c/restOf rest))))
+        ((and (isFlag a) (stringContains? a "=")) (cons (afterEq a) (targetPaths rest)))
+        ((isFlag a) (targetPaths rest))
+        (else (cons a (targetPaths rest))))))
+
+fn targetValues args: (List String) -> (List String)
+  (if (listEmpty? args)
+    (list)
+    (let [a (c/firstOf args) rest (c/restOf args)]
+      (cond
+        ((and (memberOf a (list "-t" "--target-directory")) (not (listEmpty? rest))) (cons (c/firstOf rest) (targetValues (c/restOf rest))))
+        ((stringStartsWith? a "--target-directory=") (cons (afterEq a) (targetValues rest)))
+        (else (targetValues rest)))))
+
+fn lastOf xs: (List String) -> (List String)
+  (match (listLast xs) ((some x) (list x)) ((none) (list)))
+
+fn dropOpts ws: (List String) vals: (List String) -> (List String)
+  (cond
+    ((listEmpty? ws) ws)
+    ((isFlag (c/firstOf ws)) (if (and (memberOf (c/firstOf ws) vals) (not (listEmpty? (c/restOf ws)))) (dropOpts (c/restOf (c/restOf ws)) vals) (dropOpts (c/restOf ws) vals)))
+    (else ws))
+
+fn clusterC? a: String chars: (List String) -> Bool
+  (and (isFlag a) (and (not (stringStartsWith? a "--")) (listAny? (fn [ch] (stringContains? a ch)) chars)))
+
+fn afterCluster args: (List String) chars: (List String) -> (Option (List String))
+  (cond ((listEmpty? args) (none)) ((clusterC? (c/firstOf args) chars) (some (c/restOf args))) (else (afterCluster (c/restOf args) chars)))
+
+fn codeEscapes? code: String root: String -> Bool
+  (let [toks (stringSplit (fold (fn [s ch] (stringReplace s ch " ")) code (list "'" "\"" "(" ")" "," "=" ";" "[" "]" "{" "}" ":" "\n" "\t")) " ")]
+    (or (listAny? (fn [m] (stringContains? code m)) (list "../" "/.." "'..'" "\"..\"" "~" "HOME" "expanduser" "chdir" "dirname" "getcwd" ".parent" "Dir.pwd"))
+        (listAny? (fn [t] (and (stringStartsWith? t "/") (and (> (stringLength t) 1) (and (not (stringStartsWith? t "//")) (and (not (stringStartsWith? t "/dev/null")) (not (underPath (absOf t root) root))))))) toks)))
+
+fn assignment? w: String -> Bool
+  (and (stringContains? w "=") (not (isFlag w)))
+
+fn stripWrappers words: (List String) -> (List String)
+  (if (listEmpty? words)
+    words
+    (let [w (c/firstOf words) rest (c/restOf words)]
+      (cond
+        ((assignment? w) (stripWrappers rest))
+        ((= w "env") (stripWrappers (dropOpts rest (list "-u" "-C" "-S" "--unset" "--chdir"))))
+        ((= w "sudo") (stripWrappers (dropOpts rest (list "-u" "-g" "-h" "-p" "-C" "-D" "-r" "-t" "-U" "-R" "-T"))))
+        ((= w "nice") (stripWrappers (dropOpts rest (list "-n"))))
+        ((= w "ionice") (stripWrappers (dropOpts rest (list "-c" "-n" "-t" "-p" "-P" "-u"))))
+        ((= w "stdbuf") (stripWrappers (dropOpts rest (list "-i" "-o" "-e"))))
+        ((= w "timeout") (let [r (dropOpts rest (list "-s" "-k" "--signal" "--kill-after"))] (stripWrappers (if (listEmpty? r) r (c/restOf r)))))
+        ((memberOf w (list "time" "nohup" "setsid" "command" "exec" "builtin")) (stripWrappers (dropOpts rest (list))))
+        (else words))))
+
+fn ! gitEnvHit! seg: (List String) root: String -> (Option String)
+  (if (listEmpty? seg)
+    (none)
+    (let [w (c/firstOf seg)
+          pre (listHead (filter (fn [p] (stringStartsWith? w p)) (list "GIT_DIR=" "GIT_WORK_TREE=" "GIT_COMMON_DIR=")))]
+      (if (and (some? pre) (outsideRoot! (afterEq w) root false))
+        (some (str w " is outside :root"))
+        (gitEnvHit! (c/restOf seg) root))))
 
 fn homeOutside? w: String root: String home: String -> Bool
   (and (stringStartsWith? w "/")
@@ -932,27 +1035,20 @@ fn gitDirArgs args: (List String) -> (List String)
     (let [a (c/firstOf args)
           rest (c/restOf args)]
       (cond
+        ((and (= a "-c") (not (listEmpty? rest)) (stringStartsWith? (c/firstOf rest) "core.worktree=")) (cons (afterEq (c/firstOf rest)) (gitDirArgs (c/restOf rest))))
         ((and (memberOf a (list "-C" "--git-dir" "--work-tree")) (not (listEmpty? rest))) (cons (c/firstOf rest) (gitDirArgs (c/restOf rest))))
         ((stringStartsWith? a "--git-dir=") (cons (c/sliceOf a 10 (stringLength a)) (gitDirArgs rest)))
         ((stringStartsWith? a "--work-tree=") (cons (c/sliceOf a 12 (stringLength a)) (gitDirArgs rest)))
         (else (gitDirArgs rest)))))
 
-fn stripWrappers words: (List String) -> (List String)
-  (if (listEmpty? words)
-    words
-    (let [w (c/firstOf words)]
-      (if (or (memberOf w (list "env" "sudo" "command" "nice" "time" "nohup" "exec")) (and (stringContains? w "=") (not (isFlag w))))
-        (stripWrappers (c/restOf words))
-        words)))
-
 fn firstHit hits: (List (Option String)) -> (Option String)
   (optionOr (listHead (filter (fn [h] (some? h)) hits)) (none))
 
-fn jailGit args: (List String) root: String -> (Option String)
+fn ! jailGit! args: (List String) root: String -> (Option String)
   (let [plain (filter (fn [a] (not (isFlag a))) (dropGitGlobals args))
         sub (if (listEmpty? plain) "" (c/firstOf plain))
         rest (if (listEmpty? plain) (list) (c/restOf plain))
-        out (listHead (filter (fn [d] (outsideRoot? d root)) (gitDirArgs args)))]
+        out (anyOutside! (gitDirArgs args) root false)]
     (cond
       ((some? out) (some (str "git " (optionOr out "") " is outside :root")))
       ((and (= sub "worktree") (listAny? (fn [a] (memberOf a (list "remove" "prune"))) rest)) (some "git worktree remove or prune would touch .git internals"))
@@ -960,42 +1056,136 @@ fn jailGit args: (List String) root: String -> (Option String)
       ((and (= sub "gc") (listAny? (fn [a] (stringStartsWith? a "--prune")) args)) (some "git gc --prune would touch .git internals"))
       (else (none))))
 
-fn jailSegment seg: (List String) root: String home: String -> (Option String)
-  (let [words (stripWrappers seg)]
-    (if (listEmpty? words)
+fn shellProgs -> (List String)
+  (list "sh" "bash" "zsh" "dash" "ksh" "fish" "csh" "tcsh")
+
+fn writerProgs -> (List String)
+  (list "rm" "mv" "ln" "chmod" "chown" "chgrp" "rmdir" "unlink" "truncate" "tee" "touch" "mkdir" "cp" "install" "rsync" "dd" "find" "eval" "xargs")
+
+fn interpProgs -> (List String)
+  (list "python" "python3" "perl" "ruby" "node" "php" "pwsh")
+
+fn readsStdin? args: (List String) -> Bool
+  (and (not (listAny? (fn [a] (memberOf a (list "-V" "-v" "-h" "--version" "--help"))) args))
+    (or (listAny? (fn [a] (or (memberOf a (list "-s" "-")) (stringStartsWith? a "<"))) args)
+        (listEmpty? (filter (fn [a] (not (isFlag a))) args))))
+
+fn isInterp? prog: String -> Bool
+  (listAny? (fn [p] (stringStartsWith? prog p)) (interpProgs))
+
+fn xargsCommand args: (List String) -> (List String)
+  (dropOpts args (list "-n" "-I" "-P" "-d" "-L" "-E" "-s" "-a" "-l" "-i"))
+
+fn subInner w: String -> (Option String)
+  (cond
+    ((stringContains? w "$(") (some (c/joinSep (c/restOf (stringSplit w "$(")) "$(")))
+    ((stringContains? w "`") (let [p (stringSplit w "`")] (if (> (listLength p) 1) (some (c/firstOf (c/restOf p))) (none))))
+    (else (none)))
+
+fn ! subHit! ws: (List String) root: String home: String -> (Option String)
+  (if (listEmpty? ws)
+    (none)
+    (match (subInner (c/firstOf ws))
+      ((some inner)
+        (match (shellWords inner)
+          ((ok x) (match (jailWords! x root home) ((some h) (some h)) ((none) (subHit! (c/restOf ws) root home))))
+          ((err _) (subHit! (c/restOf ws) root home))))
+      ((none) (subHit! (c/restOf ws) root home))))
+
+fn ! jailShellInner! rest: (Option (List String)) root: String home: String -> (Option String)
+  (match rest
+    ((some r) (match (listHead r) ((some inner) (match (shellWords inner) ((ok ws) (jailWords! ws root home)) ((err _) (none)))) ((none) (none))))
+    ((none) (none)))
+
+fn ! jailFind! args: (List String) root: String home: String -> (Option String)
+  (let [acts (list "-delete" "-exec" "-execdir" "-ok" "-okdir" "-fprint" "-fprintf" "-fprint0" "-fls")
+        hasAct (listAny? (fn [a] (memberOf a acts)) args)]
+    (if (not hasAct)
       (none)
-      (let [prog (c/progName (c/firstOf words))
-            args (c/restOf words)
-            plain (filter (fn [a] (not (isFlag a))) args)
-            outPlain (listHead (filter (fn [a] (outsideRoot? a root)) plain))
-            gitHit (listHead (filter (fn [a] (touchesGit? a)) plain))
-            homeHit (listHead (filter (fn [a] (homeOutside? a root home)) words))]
-        (cond
-          ((and (memberOf prog (list "sh" "bash" "zsh" "dash")) (memberOf "-c" args))
-            (match (listHead (c/restOf (dropWhileNot "-c" args)))
-              ((some inner) (match (shellWords inner) ((ok ws) (jailWords ws root home)) ((err _) (none))))
-              ((none) (none))))
-          ((memberOf prog (list "rm" "mv" "ln" "chmod" "chown" "chgrp"))
-            (cond
-              ((some? outPlain) (some (str prog " of " (optionOr outPlain "") ", outside :root")))
-              ((and (memberOf prog (list "rm" "mv")) (some? gitHit)) (some (str prog " of " (optionOr gitHit "") " would touch .git internals")))
-              (else (none))))
-          ((memberOf prog (list "cd" "pushd"))
-            (if (some? outPlain) (some (str prog " " (optionOr outPlain "") ", outside :root")) (none)))
-          ((= prog "git") (firstHit (list (jailGit args root) (if (some? homeHit) (some (str (optionOr homeHit "") " is under the real HOME, outside :root")) (none)))))
-          ((some? homeHit) (some (str (optionOr homeHit "") " is under the real HOME, outside :root")))
-          (else (none))))))
+      (match (anyOutside! (targetPaths args) root false)
+        ((some w) (some (str "find with a delete or exec action reaches " w ", outside :root")))
+        ((none)
+          (let [from (dropWhileNot "-exec" args) sub (if (listEmpty? from) from (c/restOf from))]
+            (if (listEmpty? sub) (none) (jailSegment! sub root home)))))))
+
+fn ! jailInterp! args: (List String) root: String -> (Option String)
+  (match (afterCluster args (list "c" "e" "E" "p"))
+    ((some r)
+      (match (listHead r)
+        ((some code) (if (codeEscapes? code root) (some "inline interpreter code names a path outside :root, .., ~ or HOME") (none)))
+        ((none) (none))))
+    ((none) (none)))
+
+fn ! jailCmd! words: (List String) root: String home: String -> (Option String)
+  (let [prog (c/progName (c/firstOf words))
+        args (c/restOf words)
+        plain (filter (fn [a] (not (isFlag a))) args)
+        paths (targetPaths args)
+        gitHit (listHead (filter (fn [a] (touchesGit? a)) plain))
+        homeHit (listHead (filter (fn [a] (homeOutside? a root home)) words))
+        homeMsg (if (some? homeHit) (some (str (optionOr homeHit "") " is under the real HOME, outside :root")) (none))]
+    (cond
+      ((and (memberOf prog (shellProgs)) (some? (afterCluster args (list "c"))))
+        (jailShellInner! (afterCluster args (list "c")) root home))
+      ((and (listAny? (fn [p] (= p prog)) (listAppend (shellProgs) (interpProgs))) (readsStdin? args)
+             (not (and (isInterp? prog) (some? (afterCluster args (list "c" "e" "E" "p"))))))
+        (some (str prog " reading a pipe, heredoc or stdin runs text that cannot be checked against :root; give it a script file inside :root")))
+      ((= prog "eval")
+        (match (shellWords (c/joinSep args " ")) ((ok ws) (jailWords! ws root home)) ((err _) (none))))
+      ((= prog "xargs")
+        (let [cmd (xargsCommand args)]
+          (if (and (not (listEmpty? cmd)) (memberOf (c/progName (c/firstOf cmd)) (listAppend (writerProgs) (listAppend (shellProgs) (interpProgs)))))
+            (some (str "xargs feeding " (c/firstOf cmd) " cannot be checked against :root; run it on explicit paths inside :root"))
+            (if (listEmpty? cmd) (none) (jailSegment! cmd root home)))))
+      ((= prog "find") (match (jailFind! args root home) ((some h) (some h)) ((none) homeMsg)))
+      ((isInterp? prog) (match (jailInterp! args root) ((some h) (some h)) ((none) homeMsg)))
+      ((memberOf prog (list "rm" "mv" "ln" "rmdir" "unlink"))
+        (match (anyOutside! paths root true)
+          ((some w) (some (str prog " of " w ", outside :root")))
+          ((none) (if (and (memberOf prog (list "rm" "mv")) (some? gitHit)) (some (str prog " of " (optionOr gitHit "") " would touch .git internals")) (none)))))
+      ((memberOf prog (list "chmod" "chown" "chgrp" "truncate" "tee" "touch" "mkdir"))
+        (match (anyOutside! paths root false)
+          ((some w) (some (str prog " of " w ", outside :root")))
+          ((none) (none))))
+      ((memberOf prog (list "cp" "install" "rsync"))
+        (match (anyOutside! (listAppend (lastOf plain) (listAppend (targetValues args) (if (listAny? (fn [a] (= a "--remove-source-files")) args) plain (list)))) root false)
+          ((some w) (some (str prog " into " w ", outside :root")))
+          ((none) (none))))
+      ((= prog "dd")
+        (match (anyOutside! (map afterEq (filter (fn [a] (stringStartsWith? a "of=")) args)) root false)
+          ((some w) (some (str "dd of=" w ", outside :root")))
+          ((none) (none))))
+      ((memberOf prog (list "cd" "pushd"))
+        (match (anyOutside! plain root false) ((some w) (some (str prog " " w ", outside :root"))) ((none) (none))))
+      ((= prog "git")
+        (match (jailGit! args root) ((some h) (some h)) ((none) homeMsg)))
+      ((some? homeHit) homeMsg)
+      (else (subHit! words root home))))
+
+fn ! jailSegment! seg: (List String) root: String home: String -> (Option String)
+  (match (gitEnvHit! seg root)
+    ((some h) (some h))
+    ((none)
+      (let [words (stripWrappers seg)]
+        (if (listEmpty? words) (none) (jailCmd! words root home)))))
 
 fn dropWhileNot x: String xs: (List String) -> (List String)
   (cond ((listEmpty? xs) xs) ((= (c/firstOf xs) x) xs) (else (dropWhileNot x (c/restOf xs))))
 
-fn jailWords words: (List String) root: String home: String -> (Option String)
-  (firstHit (map (fn [seg] (jailSegment seg root home)) (jailSegments words)))
+fn ! jailSegs! segs: (List (List String)) root: String home: String -> (Option String)
+  (if (listEmpty? segs)
+    (none)
+    (match (jailSegment! (c/firstOf segs) root home)
+      ((some h) (some h))
+      ((none) (jailSegs! (c/restOf segs) root home))))
+
+fn ! jailWords! words: (List String) root: String home: String -> (Option String)
+  (jailSegs! (jailSegments words) root home)
 
 fn ! outsideRootVerdict! cmd: String root: String -> (Option String)
   (match (shellWords cmd)
     ((err _) (none))
-    ((ok ws) (jailWords ws (pyAbspath! (rootOrDot root)) (optionOr (envGet "HOME") ""))))
+    ((ok ws) (jailWords! ws (pyAbspath! (rootOrDot root)) (optionOr (envGet "HOME") ""))))
 
 fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [cmd (firstTruthy op (list "argv" "cmd"))]
