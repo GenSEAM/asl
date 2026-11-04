@@ -1,10 +1,10 @@
 (module asl-tools/coord/sched
-  :x [schedTick! slotsDue? slotsRead! Cfg Win Stats defaultCfg parseCfg quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
-  :i [(aslGateway/subPace :a sp)])
+  :x [schedTick! schedTickDisk! slotsDue? slotsRead! baseRead! levelRead! Disk diskLevel diskSlots diskWorst parseDf probeDisk! unknownDisk Cfg Win Stats defaultCfg parseCfg quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
+  :i [(aslGateway/subPace :a sp) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref SCHED :do "the light pool (Leon write slots, network bound) is bounded by machine resources and grows on goodput, the successful calls per minute of the last ledger window against the one before; a 429 share above softShare never halves the pool, it only holds growth or, when goodput is flat too, steps down by one; the strong reaction to 429 is per provider through the health multiplier of the rotation")
 (schema Cfg
-  (:f min Int64) (:f max Int64) (:f step Int64) (:f start Int64) (:f gainShare Float64) (:f flatWindows Int64) (:f softShare Float64) (:f minFreeMB Int64) (:f windowSec Int64))
+  (:f min Int64) (:f max Int64) (:f step Int64) (:f start Int64) (:f gainShare Float64) (:f flatWindows Int64) (:f softShare Float64) (:f minFreeMB Int64) (:f windowSec Int64) (:f diskLowPct Int64) (:f diskStopPct Int64) (:f diskMinFreeMb Int64))
 
 (schema Win
   (:f ok Int64) (:f total Int64) (:f rate Int64) (:f okOut Int64))
@@ -14,7 +14,7 @@
   (:f goodput Float64) (:f prev Float64) (:f rateShare Float64) (:f freeMB Int64) (:f load Float64) (:f cores Int64) (:f flat Int64))
 
 fn defaultCfg -> Cfg
-  (Cfg :min 4 :max 64 :step 2 :start 16 :gainShare 0.05 :flatWindows 3 :softShare 0.30 :minFreeMB 3000 :windowSec 600)
+  (Cfg :min 4 :max 64 :step 2 :start 16 :gainShare 0.05 :flatWindows 3 :softShare 0.30 :minFreeMB 3000 :windowSec 600 :diskLowPct 85 :diskStopPct 93 :diskMinFreeMb 3000)
 
 fn numOr text: String key: String d: Int64 -> Int64
   (optionOr (stringToInt64 (stringTrim (sp/tokAfter text key))) d)
@@ -27,7 +27,8 @@ fn parseCfg text: String -> Cfg
   (let [(d (defaultCfg))]
     (Cfg :min (numOr text ":min" d.min) :max (numOr text ":max" d.max) :step (numOr text ":step" d.step) :start (numOr text ":start" d.start)
          :gainShare (floatOr text ":gainShare" d.gainShare) :flatWindows (numOr text ":flatWindows" d.flatWindows)
-         :softShare (floatOr text ":softShare" d.softShare) :minFreeMB (numOr text ":minFreeMB" d.minFreeMB) :windowSec (numOr text ":windowSec" d.windowSec)))
+         :softShare (floatOr text ":softShare" d.softShare) :minFreeMB (numOr text ":minFreeMB" d.minFreeMB) :windowSec (numOr text ":windowSec" d.windowSec)
+         :diskLowPct (numOr text ":diskLowPct" d.diskLowPct) :diskStopPct (numOr text ":diskStopPct" d.diskStopPct) :diskMinFreeMb (numOr text ":diskMinFreeMb" d.diskMinFreeMb)))
 
 fn clampF x: Float64 lo: Float64 hi: Float64 -> Float64
   (if (< x lo) lo (if (> x hi) hi x))
@@ -144,6 +145,53 @@ fn uniq xs: (List String) -> (List String)
 fn concatAll f: (fn [String] -> (List String)) xs: (List String) -> (List String)
   (fold (fn [(acc (List String)) (x String)] -> (List String) (listAppend acc (f x))) (list) xs)
 
+; (:m :ref RES-GUARD :do "a disk reading: used percent and free MB of one filesystem, both -1 when unknown; unknown is no pressure, like unknown RAM")
+(schema Disk
+  (:f usedPct Int64) (:f freeMb Int64))
+
+fn unknownDisk -> Disk
+  (Disk :usedPct -1 :freeMb -1)
+
+; (:m :ref RES-GUARD :do "df -Pk text to a Disk: the last non-empty line, fields Filesystem 1024-blocks Used Available Capacity Mounted; free is Available in MB, used is the Capacity percent; anything unparseable is unknown")
+fn parseDf text: String -> Disk
+  (let [(lines (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines text)))
+        (f (match (listLast lines)
+             ((none) (list))
+             ((some l) (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim l) " ")))))
+        (kb (optionOr (stringToInt64 (optionOr (listGet f 3) "")) -1))
+        (pct (optionOr (stringToInt64 (stringReplace (optionOr (listGet f 4) "") "%" "")) -1))]
+    (if (or (< (listLength f) 6) (or (< kb 0) (or (< pct 0) (> pct 100))))
+      (unknownDisk)
+      (Disk :usedPct pct :freeMb (/ kb 1024))))
+
+; (:m :ref RES-GUARD :do "of two readings the tighter one: the higher used percent and the lower free MB, an unknown field yielding to a known one; the store home and TMPDIR may be two filesystems and the worse one governs")
+fn diskWorst a: Disk b: Disk -> Disk
+  (Disk :usedPct (max a.usedPct b.usedPct)
+        :freeMb (cond ((< a.freeMb 0) b.freeMb) ((< b.freeMb 0) a.freeMb) (else (min a.freeMb b.freeMb))))
+
+; (:m :ref RES-GUARD :do "ok, low or stop: stop at or above diskStopPct or with free under diskMinFreeMb, low at or above diskLowPct; unknown readings never raise a level")
+fn diskLevel d: Disk cfg: Cfg -> String
+  (cond
+    ((or (>= d.usedPct cfg.diskStopPct) (and (>= d.freeMb 0) (< d.freeMb cfg.diskMinFreeMb))) "stop")
+    ((>= d.usedPct cfg.diskLowPct) "low")
+    (else "ok"))
+
+; (:m :ref RES-GUARD :do "the slots a level allows over the AIMD base: ok keeps it, low halves it (at least 1), stop is 0 so no new writer or gate starts while in-flight work continues")
+fn diskSlots base: Int64 level: String -> Int64
+  (cond
+    ((= level "stop") 0)
+    ((= level "low") (max 1 (/ base 2)))
+    (else base))
+
+; (:m :ref RES-GUARD :do "df -Pk of one path through fr/runOneLimited, no shell; a failing df is unknown")
+fn ! dfOf! path: String -> Disk
+  (let [(d (fr/runOneLimited (fr/job (list "/bin/df" "-Pk" path) "." (fr/childEnv (list))) (fr/limits 20 8)))]
+    (if (= d.exit 0) (parseDf d.out) (unknownDisk)))
+
+; (:m :ref RES-GUARD :do "the filesystems that fill: the one holding the store dir and the one holding TMPDIR (/tmp when unset); the worse reading governs")
+fn ! probeDisk! dir: String -> Disk
+  (diskWorst (dfOf! (if (stringEmpty? dir) "." dir)) (dfOf! (optionOr (envGet "TMPDIR") "/tmp")))
+
 fn slotsPath dir: String -> String
   (str dir "/slots.asn")
 
@@ -154,22 +202,43 @@ fn ! slotsRead! dir: String -> (Pair Int64 (Pair Int64 Int64))
       (pair -1 (pair 0 0))
       (pair (numOr t ":n" -1) (pair (numOr t ":flat" 0) (numOr t ":at" 0)))))
 
+; (:m :ref RES-GUARD :do "slots.asn keeps :n, the effective count the conductor reads, and :base, the AIMD value the disk level scales; a file without :base (older) has base = n")
+fn ! baseRead! dir: String -> Int64
+  (let [(t (resultOr (fileReadString (slotsPath dir)) ""))]
+    (numOr t ":base" (numOr t ":n" -1)))
+
+fn ! levelRead! dir: String -> String
+  (let [(l (sp/tokAfter (resultOr (fileReadString (slotsPath dir)) "") ":level"))]
+    (if (stringEmpty? l) "ok" l))
+
 fn ! slotsDue? dir: String now: Int64 periodMs: Int64 -> Bool
   (let [(s (slotsRead! dir))]
     (or (< (pairFirst s) 0) (>= (- now (pairSecond (pairSecond s))) periodMs)))
 
 ; (:m :ref SCHED :do "one sample: the ledger lines of the last two windows give goodput and the 429 share, nextSlots moves the persisted value, a change is journalled as (:slots :n :goodput :prev :freeMB :load), and the per provider health file is rewritten at most once per window; returns the new slot count")
 fn ! schedTick! dir: String cfg: Cfg now: Int64 lines: (List String) freeMB: Int64 load: Float64 cores: Int64 -> Int64
+  (schedTickDisk! dir cfg now lines freeMB load cores (probeDisk! dir))
+
+; (:m :ref RES-GUARD :do "the tick with the disk reading passed in: the AIMD base moves as before; the level of the disk scales it into the effective :n (ok full, low half, stop 0) and recovery is the next sample under the thresholds; only a level change is journalled, as (:resource :level :disk :free :at), so a steady level writes nothing; returns the effective count")
+fn ! schedTickDisk! dir: String cfg: Cfg now: Int64 lines: (List String) freeMB: Int64 load: Float64 cores: Int64 disk: Disk -> Int64
   (let [(prior (slotsRead! dir))
-        (cur (if (< (pairFirst prior) 0) cfg.start (pairFirst prior)))
+        (prevBase (baseRead! dir))
+        (prevLevel (levelRead! dir))
+        (cur (if (< prevBase 0) cfg.start prevBase))
         (w (* cfg.windowSec 1000))
         (w1 (winOf lines (- now w) now))
         (w0 (winOf lines (- now (* 2 w)) (- now w)))
         (s (Stats :goodput (okPerMin w1 cfg.windowSec) :prev (okPerMin w0 cfg.windowSec) :rateShare (rateShare w1) :freeMB freeMB :load load :cores cores :flat (pairFirst (pairSecond prior))))
-        (n (nextSlots cur s cfg))
+        (base (nextSlots cur s cfg))
+        (level (diskLevel disk cfg))
+        (n (diskSlots base level))
         (flat (nextFlat s cfg))
-        (_ (fileWrite (slotsPath dir) (str "(:slots :n " (stringFromInt64 n) " :flat " (stringFromInt64 flat) " :at " (stringFromInt64 now) ")\n")))
-        (_ (if (or (!= n cur) (< (pairFirst prior) 0))
+        (_ (fileWrite (slotsPath dir) (str "(:slots :n " (stringFromInt64 n) " :base " (stringFromInt64 base) " :level " level " :flat " (stringFromInt64 flat) " :at " (stringFromInt64 now) ")\n")))
+        (_ (if (!= level prevLevel)
+             (fileAppend (str dir "/journal.asn")
+               (str "(:resource :level " level " :disk " (stringFromInt64 disk.usedPct) " :free " (stringFromInt64 disk.freeMb) " :at " (stringFromInt64 now) ")\n"))
+             (ok ())))
+        (_ (if (or (!= base cur) (< prevBase 0))
              (fileAppend (str dir "/journal.asn")
                (str "(:slots :n " (stringFromInt64 n) " :goodput " (stringFromFloat64 s.goodput) " :prev " (stringFromFloat64 s.prev) " :nonOk " (stringFromFloat64 s.rateShare) " :freeMB " (stringFromInt64 freeMB) " :load " (stringFromFloat64 load) " :at " (stringFromInt64 now) ")\n"))
              (ok ())))
