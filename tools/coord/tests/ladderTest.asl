@@ -271,6 +271,18 @@ fn testRank -> Bool
           ((l/pickAwait a w) (assert false "R1 should pick")))
         true))
 
+; (:m :ref REVIEW-DEFER :do "a paid rung with no lane falls through to the strong rung instead of parking: high risk with paid allowance 0 and a strong lane merges on one R3 pass; with no strong lane either the R2 await stands on its paid lane and its row names both rungs")
+fn testFallThrough -> Bool
+  (let [(open (run (unit "high" false) (goodGates) (list (lane "ocDeepseekFlash" "paid" 0) (lane "ccKimi31Pro" "strong" 5)) (list (pair "ccKimi31Pro" (passReply)))))
+        (shut (run (unit "high" false) (goodGates) (list (lane "ocDeepseekFlash" "paid" 0) (lane "ccKimi31Pro" "strong" 0)) (list)))
+        (row (optionOr (listHead shut.rows) ""))]
+    (do (assert (= (rungs open) (list "R3")) (str "the strong rung is asked when the paid rung has no lane: " (stringJoin (rungs open) ",")))
+        (assert (= open.action "merge") (str "and its pass merges: " open.action))
+        (assert (and (= shut.action "await") (and (= shut.rung "R2") (= shut.awaitLane "ocDeepseekFlash"))) (str "no strong lane either: the R2 await on the paid lane stands: " shut.rung " " shut.awaitLane))
+        (assert (stringStartsWith? row "(:await :unit U1 :rung R2 :lane ocDeepseekFlash :why ") (str "the await is a journal row: " row))
+        (assert (and (stringContains? row "no paid lane") (stringContains? row "R3: no strong lane")) (str "naming both rungs: " row))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testFamilies) "families")
       (assert (testTokens) "tokens")
@@ -283,6 +295,7 @@ fn ! runTests -> Bool
       (assert (testFixCap) "fix cap")
       (assert (testRisk) "risk and closure")
       (assert (testAwait) "await")
+      (assert (testFallThrough) "paid falls through to strong")
       (assert (testBlocked) "blocked")
       (assert (testBrief) "brief")
       true)

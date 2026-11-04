@@ -1,5 +1,5 @@
 (module asl-tools/coord/reviewStage
-  :x [LaneRow RevOut tableFor modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum callModelFor! reviewUnit! allowanceMap risingLanes]
+  :x [LaneRow RevOut tableFor writerAliasFor modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum callModelFor! reviewUnit! allowanceMap risingLanes]
   :i [(asl-tools/coord/ladder :a l) (tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (aslAgent/providers :a prov) (asl-json/json :a j)])
 
 ; (:m :ref COND3 :do "the conductor's real review stage over the COND2 ladder: lanes come from the lane table (alias, tier, quality, default allowance) with the allowance of subscription-backed aliases taken from subPace, the model call is the in-process gateway call Leon's provider uses, and the verdict goes back as a plain RevOut so the conductor owns the state machine")
@@ -38,6 +38,27 @@ fn costRows text: String lanesText: String -> (List (Pair String Int64))
                                              (if (stringEmpty? name) (list) (list (pair name price)))))))
                    (list)
                    (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":models") (fm/makeEmpty))))))))
+
+; (:m :ref REVIEW-DEFER :do "alias and served model name of every gateway model row")
+fn modelNames text: String -> (List (Pair String String))
+  (match (fm/parseForms text)
+    ((err _) (list))
+    ((ok forms)
+      (match (listHead forms)
+        ((none) (list))
+        ((some form)
+          (map (fn [(m rd/SExpr)] -> (Pair String String)
+                 (let [(items (fm/itemsOf m))]
+                   (pair (fm/textOf (optionOr (fm/kvGet items ":id") (fm/makeEmpty))) (fm/textOf (optionOr (fm/kvGet items ":name") (fm/makeEmpty))))))
+               (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":models") (fm/makeEmpty))))))))
+
+; (:m :ref REVIEW-DEFER :do "the writer a review excludes, as an alias with a family: Leon's receipt names the served model (k3.1-pro), which no family row matches, so the review parked on writerFamily for good (node2 CACHE-BY-TURN); a name with no family resolves to the first gateway alias serving that model name that has one family; with none it stays as given and selection still waits")
+fn writerAliasFor gatewayText: String lanesText: String writer: String -> String
+  (let [(rows (l/familyRows (tableFor lanesText)))]
+    (if (not (listEmpty? (l/familiesIn rows writer))) writer
+      (match (listFind (fn [(p (Pair String String))] -> Bool (and (= (pairSecond p) writer) (not (stringEmpty? (l/familyIn rows (pairFirst p)))))) (modelNames gatewayText))
+        ((some p) (pairFirst p))
+        ((none) writer))))
 
 ; (:m :ref COND4 :do "sum of the :costMicros of the usage rows; -1 (priced false) as soon as one call had no price, 0 for no calls")
 fn usageCost text: String -> Int64

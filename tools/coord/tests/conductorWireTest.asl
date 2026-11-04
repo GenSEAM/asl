@@ -1,7 +1,7 @@
 (module asl-tools/coord/tests/conductorWireTest
   :x [runTests]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/store :a st)
-      (asl-tools/coord/conductorService :a cs) (asl-json/json :a j) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (asl-tools/fleet/run :a fr) (aslAgent/gateIntegrity :a gi) (aslAgent/gates :a ag) (asl-tools/coord/worktree :a w)])
+      (asl-tools/coord/conductorService :a cs) (asl-json/json :a j) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (asl-tools/fleet/run :a fr) (aslAgent/gateIntegrity :a gi) (aslAgent/gates :a ag) (asl-tools/coord/worktree :a w) (asl-tools/coord/stall :a stl)])
 
 ; (:m :ref COND3 :do "fakes only: gateway text, lane table, subscription text and a fake model call; no ~/.asl read, no network, store dirs are scratch dirs under this worktree's .asl/cache")
 fn ! scratch name: String -> String
@@ -587,7 +587,7 @@ fn ! aheadRepo root: String -> String
   (let [(repo (str root "/repo"))
         (made (resultOr (fr/shellOut (str "mkdir -p " repo " " root "/store/tasks " root "/home && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
                                          " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"1 assertion(s) executed (1 passed)\"\\n' > check.sh"
-                                         " && printf 'echo run >> ../../gateRuns\nsh check.sh impl.txt\n' > gImpl.sh && printf 'sh check.sh base.txt\n' > gBase.sh && printf 'sh check.sh impl.txt doc.txt\n' > gBoth.sh && printf impl > base.txt && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk") 60000) ""))]
+                                         " && printf 'echo run >> ../../gateRuns\nsh check.sh impl.txt\n' > gImpl.sh && printf 'ls ../../store/runs > ../../markSeen 2>&1\nsh check.sh impl.txt\n' > gMark.sh && printf 'sh check.sh base.txt\n' > gBase.sh && printf 'sh check.sh impl.txt doc.txt\n' > gBoth.sh && printf impl > base.txt && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk") 60000) ""))]
     (if (stringContains? made "madeOk") repo ""))
 
 fn ! aheadUnit id: String gate: String -> st/Task
@@ -804,6 +804,80 @@ fn ! testOnBaseRefs -> Bool
         (assert (stringContains? journal "(:onBaseStale :unit \"U12\"") (str "the stale state is journaled: " journal))
         true))
 
+; (:m :ref REVIEW-DEFER :do "the review writer: a served model name with no family (k3.1-pro) resolves to the gateway alias serving it (kmK31Pro, moonshot via familyExtra); the writer is the newest write-to-gating journal row with a model, skipping the ahead check's empty one, never the reviewer list a review left on the unit row; and a review transition no longer writes its reviewers into the unit row")
+fn ! testReviewWriter -> Bool
+  (let [(root (scratch "reviewWriter"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (gw "(:gateway :v 2 :models ((:model :id kmK31Pro :provider kimiCode :name \"k3.1-pro\") (:model :id ccZAiGlm53Flash :provider commandCode :name \"z-ai/glm-5.3-flash\")))")
+        (lanes "(:reviewLanes :v 1 :familyExtra \"(:f :match km :family moonshot)\" :unknown () :lanes ((:lane :alias ccZAiGlm53Flash :tier free :quality 0 :allowance 1)))")
+        (resolved (rs/writerAliasFor gw lanes "k3.1-pro"))
+        (kept (rs/writerAliasFor gw lanes "ccZAiGlm53Flash"))
+        (unknown (rs/writerAliasFor gw lanes "mystery-model"))
+        (j (cd/journalPath root))
+        (_ (fileWrite j (str "(:t :unit \"U1\" :from writing :to gating :stage write :model \"ccZAiGlm53Flash\" :alias \"ccZAiGlm53Flash\" :tokens 1 :costUsd 0 :verdict \"written\" :ms 1 :at 1)\n"
+                             "(:t :unit \"U2\" :from writing :to gating :stage write :model \"other\" :tokens 1 :costUsd 0 :verdict \"written\" :ms 1 :at 2)\n"
+                             "(:t :unit \"U1\" :from reviewing :to ready :stage review :model \"hzQwen3827bGrade+ovhGptOss120b\" :tokens 0 :costUsd 0 :verdict \"fail: x\" :ms 0 :at 3)\n"
+                             "(:t :unit \"U1\" :from writing :to gating :stage write :model \"\" :tokens 0 :costUsd 0 :verdict \"written\" :ms 1 :at 4)\n")))
+        (c (with (aheadCUnit "U1") :model "hzQwen3827bGrade+ovhGptOss120b"))
+        (w (cd/writerOf! root c))
+        (none (cd/writerOf! root (with (aheadCUnit "U9") :model "fallbackModel")))
+        (ctx (cd/Ctx :dir root :holder "conductorWireTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50
+                     :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (list "true")) :pace (cd/fixedPace 4 4)))
+        (written (cd/moveA! ctx (aheadCUnit "U3") "gating" "write" "ccZAiGlm53Flash" "ccZAiGlm53Flash" 0 0 "written" 0))
+        (reviewed (cd/move! ctx written "awaitReview" "review" "zaiGlm47Flash+kiloCohereNorthMiniCode" 0 0 "defer" 0))
+        (_ (cleanup root))]
+    (do (assert (= resolved "kmK31Pro") (str "a served model name resolves to its gateway alias: " resolved))
+        (assert (= kept "ccZAiGlm53Flash") "an alias with a family stays")
+        (assert (= unknown "mystery-model") "a name no gateway row serves stays unknown")
+        (assert (= w "ccZAiGlm53Flash") (str "the writer is the last write with a model, not the reviewer list: " w))
+        (assert (= none "fallbackModel") "no write row: the unit row's model")
+        (assert (= written.model "ccZAiGlm53Flash") "the write stage sets the unit's model")
+        (assert (= reviewed.model "ccZAiGlm53Flash") (str "a review transition keeps the writer's model: " reviewed.model))
+        true))
+
+; (:m :ref REVIEW-DEFER :do "a unit stored with :base HEAD is measured against main: an ahead branch with a green gate reaches gating, a writer commit is progress, not noEdit; the ahead check runs with its stall marker in place and leaves none behind, and a marked unit is not stall-probed")
+fn ! testBaseHead -> Bool
+  (let [(root (scratch "baseHead"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (_ (fileWrite (str dir "/repo.path") repo))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (head (fn [(u st/Task)] -> st/Task (with u :base "HEAD")))
+        (seen (str root "/seen"))
+        (run (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (fileAppend seen (str id "\n")))
+                     (_ (fileWrite (str p "/doc.txt") "impl"))]
+                 (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "exit"))))
+        (u1 (head (aheadUnit "U1" "sh gMark.sh")))
+        (p1 (aheadWt rc u1 "impl.txt"))
+        (r1 (cd/writeResWith run rc dir u1 (aheadCUnit "U1")))
+        (marks (resultOr (fileReadString (str root "/markSeen")) ""))
+        (left (fileExists? (str dir "/runs/U1-ahead.run")))
+        (u2 (head (aheadUnit "U2" "sh gBoth.sh")))
+        (p2 (aheadWt rc u2 "impl.txt"))
+        (r2 (cd/writeResWith run rc dir u2 (aheadCUnit "U2")))
+        (count2 (stringTrim (git p2 (list "rev-list" "--count" "main..HEAD")).out))
+        (ctx (cd/Ctx :dir dir :holder "conductorWireTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50
+                     :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (list "true")) :pace (cd/fixedPace 4 4)))
+        (_ (cd/writeCUnit! dir (with (aheadCUnit "U5") :launched 1)))
+        (probed (listLength (filter (fn [(pr stl/Probe)] -> Bool (= pr.id "U5")) (cd/stallProbes ctx))))
+        (_ (fileWrite (str dir "/runs/U5-ahead.run") "(:aheadCheck)\n"))
+        (marked (listLength (filter (fn [(pr stl/Probe)] -> Bool (= pr.id "U5")) (cd/stallProbes ctx))))
+        (_ (cleanup root))]
+    (do (assert (and (not (stringEmpty? p1)) (not (stringEmpty? p2))) "the fixture worktrees exist")
+        (assert (and (= r1.ok 1) (stringEmpty? r1.sig)) (str "a :base HEAD branch ahead of main with a green gate goes to gating: " r1.sig))
+        (assert (not (stringContains? (resultOr (fileReadString seen) "") "U1")) "without a writer run")
+        (assert (stringContains? marks "U1-ahead.run\n") (str "the stall marker is in place while the ahead check runs the gate: " marks))
+        (assert (not left) "and gone afterwards")
+        (assert (and (= r2.ok 1) (stringEmpty? r2.sig)) (str "a writer commit on a :base HEAD unit is progress, not noEdit: " r2.sig))
+        (assert (= count2 "2") (str "the earlier work and the writer's commit are on the branch: " count2))
+        (assert (= probed 1) "a writing unit is stall-probed")
+        (assert (= marked 0) "not while its ahead check runs")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testAttach) "retry attaches an existing branch")
       (assert (testAttachMissing) "a registered but missing worktree is pruned and attached")
@@ -832,4 +906,6 @@ fn ! runTests -> Bool
       (assert (testAheadGating) "an ahead branch with a green gate goes to gating without a writer")
       (assert (testIntegrityOnBase) "the writer integrity revert is measured against the merge-base")
       (assert (testOnBaseRefs) "saved pre-onBase state is per unit, never overwritten, healed before rebase, kept when stale")
+      (assert (testReviewWriter) "the review writer is the unit's writer, resolved to an alias with a family")
+      (assert (testBaseHead) "a :base HEAD unit is measured against main")
       true)
