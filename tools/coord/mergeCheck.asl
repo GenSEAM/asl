@@ -161,6 +161,12 @@ fn ! runSuite! side: String cli: String path: String deadlineNs: Int64 stepS: In
       (let [(d (fr/runOneLimited (fr/job (list (cliOf side cli) "test" path) side (fr/sideEnv side)) (fr/limits s 64)))]
         (some (SuiteRun :path path :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict d.verdict :why (whyOf d.out))))))
 
+; (:m :do "a suite that fails at head runs once more and the second result counts: a heavy suite under machine load flaked once on the first real run (exit 1 after 2 asserts, then 7 of 7 on its own), and only a failure that repeats blocks a merge")
+fn ! runSuiteTwice! side: String cli: String path: String deadlineNs: Int64 stepS: Int64 -> (Option SuiteRun)
+  (match (runSuite! side cli path deadlineNs stepS)
+    ((none) (none))
+    ((some r) (if (and (!= r.exit 0) (= r.verdict "exit")) (match (runSuite! side cli path deadlineNs stepS) ((some r2) (some r2)) ((none) (some r))) (some r))))
+
 fn ! lines! dir: String argv: (List String) -> (List String)
   (let [(d (gitOut! dir argv))]
     (if (= d.exit 0) (nonEmpty (map stringTrim (stringLines d.out))) (list)))
@@ -238,7 +244,7 @@ fn ! run! repoArg: String base: String head: String ledger: String cli: String t
                 (mods (nonEmpty (map (fn [(p String)] -> String (gg/moduleName (resultOr (fileReadString (str hd "/" p)) ""))) (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (not (isSuite? p)))) files))))
                 (imp (importerSuites! repo hd headSha mods))
                 (suites (if (listEmpty? only) (touchedSuites hd files imp maxSuites) only))
-                (headRuns (map (fn [(p String)] -> (Option SuiteRun) (if (fileExists? (str hd "/" p)) (runSuite! hd cli p deadlineNs stepS) (none))) suites))
+                (headRuns (map (fn [(p String)] -> (Option SuiteRun) (if (fileExists? (str hd "/" p)) (runSuiteTwice! hd cli p deadlineNs stepS) (none))) suites))
                 (ran (filter (fn [(o (Option SuiteRun))] -> Bool (match o ((some _) true) ((none) false))) headRuns))
                 (hRows (map (fn [(o (Option SuiteRun))] -> SuiteRun (optionOr o (SuiteRun :path "" :exit 0 :asserts 0 :verdict ""))) ran))
                 (failedFirst (listAppend (filter (fn [(r SuiteRun)] -> Bool (!= r.exit 0)) hRows) (filter (fn [(r SuiteRun)] -> Bool (= r.exit 0)) hRows)))
