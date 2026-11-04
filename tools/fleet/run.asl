@@ -38,7 +38,8 @@
   (:f startNs Int64)
   (:f killed String)
   (:f groups (List Int64))
-  (:f known (List Int64)))
+  (:f known (List Int64))
+  (:f tmp String :default ""))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "the ProcOut shape asl/tools/nativeTest.asl's runProc/runProcIn already returns, kept separate here so a bounded guarded spawn can hand it straight back without that file importing a Running it does not need")
 (schema ProcOut
@@ -58,7 +59,8 @@
   (:f startNs Int64)
   (:f killed String)
   (:f groups (List Int64))
-  (:f known (List Int64)))
+  (:f known (List Int64))
+  (:f tmp String :default ""))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "a row-keyed lease (by pgid) under ~/.asl/run/fleet/leases, per the ledger/coordination rules: no extra watchdog process and no shell script in the tree (D157, spawnSafety), just a record a later runGuarded call can find and act on")
 (schema Lease
@@ -357,7 +359,9 @@ fn ! killTree! root: Int64 -> Int64
 
 ; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
 fn ! stopGuard! g: Guarded -> Int64
-  (killTreeWith! g.run.pid g.run.groups g.run.known)
+  (let [(left (killTreeWith! g.run.pid g.run.groups g.run.known))
+        (_ (dropTmp g.run.tmp))]
+    left)
 
 fn ! pumpOne r: Running -> (Pair Bool Running)
   (let [(o (readChunk r.outFd r.outOpen))
@@ -365,7 +369,7 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
         (got (str (pairSecond o) (pairSecond e)))]
     (pair (not (stringEmpty? got))
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
-                   :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
+                   :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp r.tmp)))
 
 fn leadDigits s: String n: Int64 i: Int64 -> String
   (if (and (< i n) (stringContains? "0123456789" (optionOr (stringSlice s i (+ i 1)) "x")))
@@ -424,7 +428,7 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
-               :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
+               :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known :tmp r.tmp)
       (let [(left (killTreeWith! r.pid groups known))
             (dc (drainConfig!))
             (dl (+ (monotonicNs) (* dc.ms 1000000)))
@@ -432,7 +436,7 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
             (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
         (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text (pairSecond o) (pairSecond e) note)
-                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
+                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known :tmp r.tmp))))
 
 fn ! closeIfOpen fd: Int64 isOpen: Bool -> Int64
   (if isOpen (do (fdClose fd) 1) 0)
@@ -444,16 +448,41 @@ fn ! finish r: Running -> Done
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
+        (_ (dropTmp r.tmp))
         (killed (not (stringEmpty? r.killed)))]
     (Done :idx r.idx :exit (if killed (killedExit r.killed) code) :out r.text :ms (/ (- (monotonicNs) r.startNs) 1000000)
           :verdict (if killed r.killed "exit")))
 
 ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "exported so a long-lived server/stub a test needs to interact with WHILE it runs (not just supervise start-to-finish like runOneLimited) still starts only through this module, per rule spawnSafety; the caller owns draining or redirecting Running's outFd/errFd (fr/spawn makes them non-blocking pipes, same as runOneLimited's own pool loop does) and must call killTree! on Running.pid at cleanup, never a bare procKill, so a verdict (or an explicit stop) takes the whole process tree, not just the one pid")
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "spawn no longer calls procSpawnv itself: spawnSep is the one process-spawning site in this file, and spawn builds on it (nice-prefixing its own argv first, same as before), converting the RunningSep it gets back into the Running shape poolLoop's pumpOne/judge/finish already consume (an empty text seed; pumpOne appends combined stdout+stderr into it a chunk at a time exactly as it already did when spawn held the pipes directly)")
+; (:m :ref TMP-LEAK-RUNNER :do "every pooled or guarded child gets its own scratch dir <base>/aslRun-<pid>-<ns> in ASL_RUN_TMP (base: the job's TMPDIR row, else this process's, else /tmp; TMPDIR itself is never changed, so caches that live under it survive), and the runner removes exactly that dir after every verdict (exit, timeout, runaway): a test killed by the watchdog cannot clean up its own scratch, which left 200-400MB dirs per run in /tmp on node2")
+fn tmpName dir: String -> Bool
+  (and (stringContains? dir "/aslRun-") (not (stringEndsWith? dir "/")))
+
+fn ! freshTmp env: (List String) -> (Pair String (List String))
+  (let [(rows (filter (fn [(r String)] -> Bool (stringStartsWith? r "TMPDIR=")) env))
+        (given (optionOr (listHead (map (fn [(r String)] -> String (stringReplace r "TMPDIR=" "")) rows)) ""))
+        (raw (if (stringEmpty? given) (optionOr (envGet "TMPDIR") "/tmp") given))
+        (base (if (and (> (stringLength raw) 1) (stringEndsWith? raw "/")) (optionOr (stringSlice raw 0 (- (stringLength raw) 1)) raw) raw))
+        (dir (str base "/aslRun-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (monotonicNs))))]
+    (if (ok? (dirCreate dir))
+      (pair dir (cons (str "ASL_RUN_TMP=" dir) (filter (fn [(r String)] -> Bool (not (stringStartsWith? r "ASL_RUN_TMP="))) env)))
+      (pair "" env)))
+
+fn ! dropTmp dir: String -> Bool
+  (if (tmpName dir) (ok? (pathRemove dir)) false)
+
 fn ! spawn idx: Int64 j: Job -> (Result Running Done)
-  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd j.env)
-    ((err po) (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed")))
-    ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known))))
+  (spawnIn idx j "" j.env)
+
+fn ! spawnPooled idx: Int64 j: Job -> (Result Running Done)
+  (let [(t (freshTmp j.env))]
+    (spawnIn idx j (pairFirst t) (pairSecond t)))
+
+fn ! spawnIn idx: Int64 j: Job tmp: String env: (List String) -> (Result Running Done)
+  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd env)
+    ((err po) (let [(_ (dropTmp tmp))] (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed"))))
+    ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp tmp))))
 
 fn checkEveryNs -> Int64
   250000000
@@ -466,7 +495,7 @@ fn ! pumpOneSep r: RunningSep -> (Pair Bool RunningSep)
           (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd
                       :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e))
                       :outOpen (pairFirst o) :errOpen (pairFirst e)
-                      :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
+                      :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp r.tmp)))
 
 fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: RunningSep -> RunningSep
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
@@ -477,7 +506,7 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText
-                  :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
+                  :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known :tmp r.tmp)
       (let [(left (killTreeWith! r.pid groups known))
             (dc (drainConfig!))
             (dl (+ (monotonicNs) (* dc.ms 1000000)))
@@ -485,12 +514,13 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
             (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
         (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e) note)
-                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
+                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known :tmp r.tmp))))
 
 fn ! finishSep r: RunningSep -> ProcOut
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
+        (_ (dropTmp r.tmp))
         (killed (not (stringEmpty? r.killed)))]
     (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText
              :timedOut (= r.killed "timeout")))
@@ -596,12 +626,18 @@ fn ! reapStaleLeases! -> Int64
   (:f guard Guarded)
   (:f progress Bool))
 
+fn ! guardSpawn argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
+  (let [(t (freshTmp env))]
+    (match (spawnSep argv cwd (pairSecond t))
+      ((err d) (let [(_ (dropTmp (pairFirst t)))] (err d)))
+      ((ok r) (ok (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp (pairFirst t))))))
+
 fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits -> (Result Guarded ProcOut)
   (let [(_ (reapStaleLeases!))
         (g (js/acquire lim.jsDir lim.class (stringFromInt64 (monotonicNs)) lim.timeoutMs))]
     (if (= g.state "expired")
       (err (ProcOut :exitCode 124 :stdout "" :stderr (str "(:fleetRun :verdict :tokenWait :class " lim.class " :timeoutMs " lim.timeoutMs ")\n")))
-      (match (spawnSep argv cwd env)
+      (match (guardSpawn argv cwd env)
         ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (err d)))
         ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAtSep r0 g.startNs))))
                        (_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
@@ -662,17 +698,17 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
              (let [(_ (sleepMs (js/backoffMs g.startNs)))] (poolLoop jobs next slots lim running done lastCheck admit onDone state))
              (poolPump jobs next slots lim running done lastCheck admit onDone state)))
           (else
-           (match (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
+           (match (spawnPooled next (optionOr (listGet jobs next) (job (list) "." (list))))
              ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d))))
              ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAt r0 g.startNs))))]
                         (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))))))
     (poolPump jobs next slots lim running done lastCheck admit onDone state))
 
 fn startedAt r: Running ns: Int64 -> Running
-  (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+  (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known :tmp r.tmp)
 
 fn startedAtSep r: RunningSep ns: Int64 -> RunningSep
-  (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+  (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known :tmp r.tmp)
 
 fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (List Running) done: (List Done) lastCheck: Int64 admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
     (if (listEmpty? running)

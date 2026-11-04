@@ -69,7 +69,7 @@ fn ! shapes -> Bool
 fn ! runTests -> Bool
   (let [(ok1 (shapes))
         (here (resultOr (realPath ".") "."))
-        (base (resultOr (realPath (optionOr (envGet "TMPDIR") "/tmp")) "/tmp"))
+        (base (resultOr (realPath (optionOr (listHead (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (list (optionOr (envGet "ASL_RUN_TMP") "") (optionOr (envGet "TMPDIR") "")))) "/tmp")) "/tmp"))
         (scratch (str base "/formsPin-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (cache (str scratch "-cache"))
         (log (str scratch "-stub.log"))

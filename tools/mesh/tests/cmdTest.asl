@@ -338,7 +338,7 @@ fn enumerate xs: (List String) -> (List (Pair Int64 String))
   (map (fn [k] (pair (+ k 1) (at xs k))) (range 0 (listLength xs)))
 
 fn scratchBase! -> String
-  (let [t (optionOr (envGet "TMPDIR") "/tmp")]
+  (let [t (optionOr (listHead (filter (fn [x] (not (stringEmpty? x))) (list (optionOr (envGet "ASL_RUN_TMP") "") (optionOr (envGet "TMPDIR") "")))) "/tmp")]
     (str (if (stringEndsWith? t "/") (sub t 0 (- (stringLength t) 1)) t) "/cmdTest-" (stringFromInt64 (procSelf))))
 
 fn selected! cid: String -> Bool
