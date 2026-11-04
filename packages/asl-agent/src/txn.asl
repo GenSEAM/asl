@@ -351,36 +351,49 @@ fn quoteOdd raw: String n: Int64 i: Int64 inStr: Bool inCmt: Bool -> Bool
         ((= x "\"") (quoteOdd raw n (+ i 1) true false))
         (else (quoteOdd raw n (+ i 1) inStr false)))))
 
-fn dropCharAt text: String line: Int64 col: Int64 x: String -> (Option String)
-  (let [lines (stringSplit text "\n")
-        k (- line 1)
-        cur (optionOr (listGet lines k) "")]
-    (if (or (< k 0) (or (< col 1) (!= (ch cur (- col 1)) x)))
-      none
-      (let [cut (str (c/sliceOf cur 0 (- col 1)) (tailFrom cur col))]
-        (some (stringJoin (listAppend (optionOr (listSlice lines 0 k) (list)) (cons cut (optionOr (listSlice lines (+ k 1) (listLength lines)) (list)))) "\n")))))
+fn candidatesFrom text: String i: Int64 b: Int64 x: String acc: (List String) -> (List String)
+  (if (or (> i b) (> (listLength acc) 1))
+    acc
+    (if (= (ch text i) x)
+      (let [cand (str (c/sliceOf text 0 i) (tailFrom text (+ i 1)))]
+        (candidatesFrom text (+ i 1) b x (if (and (none? (balanceAid cand)) (not (listContains? acc cand))) (cons cand acc) acc)))
+      (candidatesFrom text (+ i 1) b x acc)))
 
-; (:m :ref LEON-AUTOFIX-CLOSER :do "node2 2026-11-03: 11 of 18 repeatFailure sessions resent byte-identical content after a hint naming the one stray closer; exactly one stray closer is deleted, or exactly one unclosed opener at the end of the text is closed, and the result is accepted only when it balances and the quotes pair")
-fn balanceRepair text: String -> (Option String)
+fn lineStart lines: (List String) k: Int64 -> Int64
+  (if (<= k 0) 0 (+ 1 (stringLength (stringJoin (optionOr (listSlice lines 0 k) (list)) "\n"))))
+
+fn deletionCandidates text: String startLine: Int64 line: Int64 col: Int64 x: String -> (List String)
+  (let [lines (stringSplit text "\n")
+        a (lineStart lines (- startLine 1))
+        b (+ (lineStart lines (- line 1)) (- col 1))]
+    (if (or (< startLine 1) (or (< col 1) (!= (ch text b) x))) (list) (candidatesFrom text a b x (list))))
+
+; (:m :ref REPAIR-FIX :do "W2C audit: the first negative-depth closer is not always the stray one when the extra closer sits mid-form, so a deletion is applied only when every closer of that kind in the stray form whose deletion balances the text gives the same result; ambiguous cases keep the refusal")
+; (:m :ref LEON-AUTOFIX-CLOSER :do "node2 2026-11-03: 11 of 18 repeatFailure sessions resent byte-identical content after a hint naming the one stray closer; exactly one stray closer is deleted, or exactly one unclosed opener at the end of the text is closed, and the result is accepted only when it balances and the quotes pair; the pair holds the repaired text and the (:repaired ...) note naming the line and column")
+fn balanceRepair text: String -> (Option (Pair String String))
   (if (quoteOdd text (stringLength text) 0 false false)
     none
     (match (balanceAid text)
       ((none) none)
       ((some m)
-        (let [fixed (if (stringContains? m " opens a ")
-                      (if (and (= (numAfter m "never closed: ") "1") (not (stringContains? m " before line ")))
-                        (let [i (optionOr (stringIndexOf m " opens a ") 0)
-                              o (c/sliceOf m (+ i 9) (+ i 10))
-                              cut (stripRightAt text (stringLength text))]
-                          (some (str (c/sliceOf text 0 cut) (closerOf o) (tailFrom text cut))))
-                        none)
-                      (if (= (numAfter m "closes ") "1")
-                        (let [i (optionOr (stringIndexOf m " more ") 0)]
-                          (dropCharAt text (optionOr (stringToInt64 (numAfter m "line ")) 0) (optionOr (stringToInt64 (numAfter m "column ")) 0) (c/sliceOf m (+ i 6) (+ i 7))))
-                        none))]
-          (match fixed
-            ((some f) (if (none? (balanceAid f)) fixed none))
-            ((none) none))))))
+        (if (stringContains? m " opens a ")
+          (if (and (= (numAfter m "never closed: ") "1") (not (stringContains? m " before line ")))
+            (let [i (optionOr (stringIndexOf m " opens a ") 0)
+                  o (c/sliceOf m (+ i 9) (+ i 10))
+                  cut (stripRightAt text (stringLength text))
+                  f (str (c/sliceOf text 0 cut) (closerOf o) (tailFrom text cut))]
+              (if (none? (balanceAid f)) (some (pair f (str "(:repaired (delimiterCloser :appended \"" (closerOf o) "\" :opensAtLine " (numAfter m "line ") ") :left ())"))) none))
+            none)
+          (if (= (numAfter m "closes ") "1")
+            (let [i (optionOr (stringIndexOf m " more ") 0)
+                  x (c/sliceOf m (+ i 6) (+ i 7))
+                  ln (optionOr (stringToInt64 (numAfter m "line ")) 0)
+                  col (optionOr (stringToInt64 (numAfter m "column ")) 0)
+                  cands (deletionCandidates text (optionOr (stringToInt64 (numAfter m "starts at line ")) 0) ln col x)]
+              (if (= (listLength cands) 1)
+                (some (pair (c/firstOf cands) (str "(:repaired (delimiterCloser :deleted \"" x "\" :line " (stringFromInt64 ln) " :column " (stringFromInt64 col) ") :left ())")))
+                none))
+            none)))))
 
 fn endLen line: String -> Int64
   (let [n (stringLength line)

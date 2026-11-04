@@ -539,6 +539,9 @@ fn validIntelSubop? sub: String -> Bool
   (listContains? (intelSubops) sub)
 
 ; (:m :tags (owns) :do "no :owns on the session means the session may write anywhere inside :root; an empty owns list sends the unrestricted \"**\" scope instead of an empty one")
+fn repairNote fixed: (Option (Pair String String)) -> String
+  (match fixed ((some f) (pairSecond f)) ((none) ""))
+
 fn buildWriteForm filePath: String content: String force: Bool owns: (List String) -> String
   (let [ownsAsn (stringJoin (map (fn [o] (str "\"" (pyStrip o) "\"")) (if (listEmpty? owns) (list "**") owns)) " ")
         forceAsn (if force " :force true" "")]
@@ -773,9 +776,9 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               ref0 (if (!= (aslRunCode res0) 0) (t/txnRefusal (aslRunOut res0) (aslRunErr res0) "ERR_WRITE_FAILED" (some content0)) (pair "" ""))
               delim0 (and (!= (aslRunCode res0) 0) (or (stringContains? (aslRunOut res0) "ERR_TXN_FLUSH_FAILED") (stringContains? (pairSecond ref0) "refused: the delimiters")))
               fixed (if delim0 (t/balanceRepair content0) (none))
-              res1 (match fixed ((some f) (run (buildWriteForm filePath f force owns) root)) ((none) res0))
+              res1 (match fixed ((some f) (run (buildWriteForm filePath (pairFirst f) force owns) root)) ((none) res0))
               usable (and (some? fixed) (= (aslRunCode res1) 0))
-              content (if usable (optionOr fixed content0) content0)
+              content (match fixed ((some f) (if usable (pairFirst f) content0)) ((none) content0))
               res (if usable res1 res0)
               code (aslRunCode res)
               out (aslRunOut res)
@@ -810,7 +813,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
                 (pair "error" (if (= code 0) (rNone) (rStr err0)))
                 (pair "message" (if (= code 0) (rNone) (rStr refMsg)))
                 (pair "cmd" (rStr (str "asl txn write " filePath))))
-              (if usable (list (pair "repaired" (rStr "(:repaired (delimiterCloser) :left ())"))) (list)))
+              (if usable (list (pair "repaired" (rStr (repairNote fixed)))) (list)))
             (listAppend
               (match balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
               (listAppend
@@ -836,7 +839,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               ref0 (if (!= (aslRunCode res0) 0) (t/txnRefusal (aslRunOut res0) (aslRunErr res0) "ERR_EDIT_FAILED" afterEdit) (pair "" ""))
               delim0 (and (!= (aslRunCode res0) 0) (or (stringContains? (aslRunOut res0) "ERR_TXN_FLUSH_FAILED") (stringContains? (pairSecond ref0) "refused: the delimiters")))
               fixed (if delim0 (t/balanceRepair (optionOr afterEdit "")) (none))
-              res1 (match fixed ((some f) (run (buildWriteForm filePath f false owns) root)) ((none) res0))
+              res1 (match fixed ((some f) (run (buildWriteForm filePath (pairFirst f) false owns) root)) ((none) res0))
               usable (and (some? fixed) (= (aslRunCode res1) 0))
               res (if usable res1 res0)
               code (aslRunCode res)
@@ -877,7 +880,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
                   (pair "error" (if (= code 0) (rNone) (rStr err0)))
                   (pair "message" (if (= code 0) (rNone) (rStr finalMsg)))
                   (pair "cmd" (rStr (str "asl txn edit " filePath))))
-                (if usable (list (pair "repaired" (rStr "(:repaired (delimiterCloser) :left ())"))) (list)))
+                (if usable (list (pair "repaired" (rStr (repairNote fixed)))) (list)))
               (listAppend
                 (match balance ((some b) (list (pair "balance" (rStr b)))) ((none) (list)))
                 (listAppend

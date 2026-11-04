@@ -23,6 +23,12 @@ fn ! editRec! -> String
         cleaned (pathRemove root)]
     rec)
 
+fn repText r: (Option (Pair String String)) -> String
+  (match r ((some p) (pairFirst p)) ((none) ""))
+
+fn repNote r: (Option (Pair String String)) -> String
+  (match r ((some p) (pairSecond p)) ((none) ""))
+
 fn wr content: String -> String
   (str "(:step :op \"write\" :file \"x.asl\" :content \"" (c/escapeAsn content) "\")")
 
@@ -36,10 +42,14 @@ fn ! runTests -> Bool
         okText "fn a -> Int64\n  (f 1)\n"
         recExtra (recOf (wr extra))
         recTwo (recOf (wr two))
-        recEdit (editRec!)]
+        recEdit (editRec!)
+        audit1 "fn a -> Int64\n  (let [x 1] (f x)) (g x))\n"
+        audit2 "fn a -> Int64\n  (do (f 1))\n    (g 2))\n"
+        lateQuote "fn a -> Int64\n  (f 1))\n\"unterminated\n"
+        recAudit (recOf (wr audit2))]
     (do
-      (assert (= (optionOr (t/balanceRepair extra) "") okText) "one stray closer is deleted")
-      (assert (= (optionOr (t/balanceRepair open) "") okText) "one unclosed opener at the end is closed")
+      (assert (= (repText (t/balanceRepair extra)) okText) "one stray closer is deleted")
+      (assert (= (repText (t/balanceRepair open)) okText) "one unclosed opener at the end is closed")
       (assert (none? (t/balanceRepair two)) "two stray closers are not repaired")
       (assert (none? (t/balanceRepair twoOpen)) "two unclosed openers are not repaired")
       (assert (none? (t/balanceRepair quote)) "an unpaired quote is not repaired")
@@ -50,6 +60,14 @@ fn ! runTests -> Bool
       (assert (not (stringContains? recExtra "ERR_TXN_FLUSH_FAILED")) "no refusal for the repaired write")
       (assert (stringContains? recTwo "persisted false") "an ambiguous write keeps the refusal")
       (assert (not (stringContains? recTwo "repaired")) "an ambiguous write has no repaired")
+      (assert (none? (t/balanceRepair audit1)) "an extra closer mid-form whose deletion has two results is refused")
+      (assert (none? (t/balanceRepair audit2)) "an extra closer after a closed form whose deletion has two results is refused")
+      (assert (stringContains? recAudit "persisted false") "an ambiguous write is not persisted")
+      (assert (not (stringContains? recAudit "repaired")) "an ambiguous write carries no repaired")
+      (assert (none? (t/balanceAid "fn a -> Int64\n  (f 1)\n\"unterminated\n")) "the late-quote text balances once the stray closer is gone, so only the quote guard can reject it")
+      (assert (none? (t/balanceRepair lateQuote)) "a stray closer in text with an unterminated string is not repaired")
+      (assert (stringContains? (repNote (t/balanceRepair extra)) ":line 2 :column 8") "the repaired note names the line and column")
+      (assert (stringContains? (repNote (t/balanceRepair open)) ":opensAtLine 2") "the opener note names the line")
       (assert (stringContains? recEdit "repaired") "the edit receipt carries repaired")
       (assert (stringContains? recEdit "persisted true") "the repaired edit persisted")
       true))
