@@ -21,7 +21,7 @@ fn validText -> String
     "  :native (:parts 8 :level :dev :rc :notrace :clang \"/usr/bin/clang\" :llc \"/usr/bin/llc\" :opt \"/usr/bin/opt\" :wasmLd \"/usr/bin/wasm-ld\" :llvmNm \"/usr/bin/llvm-nm\" :node \"/usr/bin/node\" :storeCap 2G :storeMinAge 60m :sweep false :claimWaitS 900 :lockGraceS 10 :buildPool \"/tmp/pool\" :buildTokens 2)"
     "  :fleet (:drainBytes 1048576 :drainMs 300)"
     "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :formsPin true :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
-    "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/agentLoop/leonServe.asl\"])"
+    "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/packages/asl-agent/src/leonServe.asl\"])"
     "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
     "  :agentLoop (:parseDefectEscalate 8 :readOutlineBytes 16384 :baseline true :specCheck false :toolMemo false :graderIntent grade :graderProfile \"p\" :gatewayConfig \"/tmp/g.asn\" :wallReserveSec 120 :wallGateMinSec 60 :gateVacuousRounds 2 :gateMaxDescendants 512 :contextKeepTurns 8 :contextToolCapBytes 1500 :contextMaxOlderLines 50 :readStreakNudge 6 :readStreakEscalate 12 :allDownWaitSec 1200 :allDownPauseSec 60 :doneNoWriteTurns 2 :doc \"d\")"
     "  :remoteJobs (:claimSweepS 300)"

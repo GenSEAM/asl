@@ -1,6 +1,6 @@
 (module aslGateway/tests/configPathTest
   :x [runTests]
-  :i [(asl/agentLoop/providers :a pv)])
+  :i [(aslAgent/providers :a pv)])
 
 ; (:m :ref GW-CONFIG-PATH-SUFFIX :do "the in-process gateway keeps its HOME/.asl/gateway.asn rule because the secrets file, ledger and sessions store are all derived from that HOME; a config path outside it is refused with ERR_CONFIG_PATH naming the rule and the path, not the generic ERR_GATEWAY_CONFIG")
 fn ! runTests -> Bool

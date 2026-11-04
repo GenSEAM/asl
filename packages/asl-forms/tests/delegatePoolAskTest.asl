@@ -1,6 +1,6 @@
 (module asl-forms/tests/delegatePoolAskTest
   :x [runTests]
-  :i [(asl-forms/delegate :a d) (aslHarness/tests/agentLoopRecorderKit :a rk) (asl/agentLoop/core :a c) (asl/agentLoop/tests/gitInitKit :a gk)])
+  :i [(asl-forms/delegate :a d) (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk)])
 
 ; (:m :ref LEON-POOL-ASK-WIRE :do "end to end through (:agent :pool ...): runDelegate starts the pool binary, which forks two Leon tasks against script fixtures (no model); the tasks name no mode and no gates; task 0's only reply is (:ask :to 1 :body (...)), so the run goes on to execute it instead of ending on it as ad-hoc findings (LEON-POOL-ASK-SCOUT); task 1 runs a slow step, gets the ask as a (:poolAsks ...) observation and replies (:answer :to 0 :body (...)); task 0's journal holds the ask receipt carrying that answer")
 

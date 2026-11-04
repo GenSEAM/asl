@@ -11,7 +11,7 @@
 (:c "core/bytes" "Bytes builtins, no import" (bytesLength bytesAlloc))
 (:c "core/arrays" "Arrays builtins, no import" (f64ArrayLen f64ArrayGet))
 (:c "core/parquet" "Parquet builtins, no import" (parquetOpen parquetNumRowGroups))
-(:c "asl-agent" "Omni-channel intent classification, ..." (classifyOmniIntent formatOmniIntentAsn))
+(:c "asl-agent" "Leon, the agent loop (core, loop, tu..." (withRemote knownParams))
 (:c "asl-agent-bus" "High-frequency in-memory agent-to-ag..." (makeBusEnvelope makeSequencedBusEnvelope))
 (:c "asl-agent-core" "Autonomous AgentSlang execution core..." (makeMessage makeAgentContext))
 (:c "asl-audio" "Ear-budgeted auditory digests, voice..." (formatAloudDigest formatAuditDigestAloud))

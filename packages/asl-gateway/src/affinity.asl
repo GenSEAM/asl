@@ -7,24 +7,27 @@
   (:f on Bool)
   (:f stickSec Int64)
   (:f forgetSec Int64)
-  (:f dropOnSwitch Bool))
+  (:f dropOnSwitch Bool)
+  ; (:m :ref GW-AFFINITY-SPREAD :do "seconds a sticking session's member waits for its own rpm token before the chain moves on, instead of the short bucketWaitSec of a plain member; (:gateway :affinityWaitSec S), adopted default 0: affinity never blocks progress, a paced member yields at once like any other; a positive value is an opt-in wait")
+  (:f waitSec Int64))
 
 (schema AffinityRecord
   (:f alias String)
   (:f atMs Int64))
 
 fn affinityDefault -> AffinityConfig
-  (AffinityConfig :on true :stickSec 1800 :forgetSec 86400 :dropOnSwitch true)
+  (AffinityConfig :on true :stickSec 1800 :forgetSec 86400 :dropOnSwitch true :waitSec 0)
 
 fn affinityConfigFromText text: String -> AffinityConfig
   (let [(d (affinityDefault))
         (on (match (c/gatewayTopScalarOverride text "affinity") ((some (c/scalarBool b)) b) (_ d.on)))
         (stick (optionOr (c/gatewayTopIntOverride text "affinityStickSec") d.stickSec))
         (forget (optionOr (c/gatewayTopIntOverride text "affinityForgetSec") d.forgetSec))
-        (drop (match (c/gatewayTopScalarOverride text "affinitySwitch") ((some (c/scalarStr s)) (!= s "keep")) (_ d.dropOnSwitch)))]
-    (AffinityConfig :on on :stickSec (max 1 stick) :forgetSec (max stick forget) :dropOnSwitch drop))
+        (drop (match (c/gatewayTopScalarOverride text "affinitySwitch") ((some (c/scalarStr s)) (!= s "keep")) (_ d.dropOnSwitch)))
+        (wait (optionOr (c/gatewayTopIntOverride text "affinityWaitSec") d.waitSec))]
+    (AffinityConfig :on on :stickSec (max 1 stick) :forgetSec (max stick forget) :dropOnSwitch drop :waitSec (max 0 wait)))
 
-; (:m :ref GW-SESSION-AFFINITY :do "the answer to one session's affinity ask: empty when affinity is off, the key is empty or the record is older than :affinityForgetSec, else (alias stick drop) where stick is 1 while the last answer is under :affinityStickSec old and drop is 1 when a switch drops prior reasoning")
+; (:m :ref GW-SESSION-AFFINITY :do "the answer to one session's affinity ask: empty when affinity is off, the key is empty or the record is older than :affinityForgetSec, else (alias stick drop wait) where stick is 1 while the last answer is under :affinityStickSec old, drop is 1 when a switch drops prior reasoning and wait is :affinityWaitSec")
 fn affinityAnswer cfg: AffinityConfig st: (Map String AffinityRecord) session: String nowMs: Int64 -> (List String)
   (if (or (not cfg.on) (stringEmpty? session))
     (list)
@@ -34,7 +37,7 @@ fn affinityAnswer cfg: AffinityConfig st: (Map String AffinityRecord) session: S
         (let [(age (- nowMs r.atMs))]
           (if (> age (* cfg.forgetSec 1000))
             (list)
-            (list r.alias (if (<= age (* cfg.stickSec 1000)) "1" "0") (if cfg.dropOnSwitch "1" "0")))))))
+            (list r.alias (if (<= age (* cfg.stickSec 1000)) "1" "0") (if cfg.dropOnSwitch "1" "0") (stringFromInt64 cfg.waitSec)))))))
 
 ; (:m :ref GW-SESSION-AFFINITY :do "records the member that answered a session and forgets every record older than :affinityForgetSec, so the table holds only live sessions")
 fn affinityNote cfg: AffinityConfig st: (Map String AffinityRecord) session: String alias: String nowMs: Int64 -> (Map String AffinityRecord)

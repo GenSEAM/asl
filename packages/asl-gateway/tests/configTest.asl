@@ -282,7 +282,7 @@ fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
         (linePlan (cfg/gatewayIntentLine tbl "plan"))
         (lineUnknown (cfg/gatewayIntentLine tbl "unknownIntent"))
         (pWork (optionOr (mapGet tbl.profiles "work")
-                         (cfg/GatewayProfile :id "" :routes (list) :fallback (none) :mode "route" :judge (cfg/judgeDefault))))
+                         (cfg/GatewayProfile :id "" :routes (list) :fallback (none) :mode "route" :judge (cfg/judgeDefault) :budgetFirstAbove 0)))
         (routeDesign (cfg/gatewayV2Route pWork lineDesign))
         (routeImplement (cfg/gatewayV2Route pWork lineImplement))
         (routeUnknown (cfg/gatewayV2Route pWork lineUnknown))
@@ -463,6 +463,19 @@ fn ! testRouteEntriesCarriesSpread -> Bool
                               (assert (= rePlain.cooldownSec 60) (str "SPREADLIVE: a route without :cooldownSec carries the 60 default, got " rePlain.cooldownSec))
                               true))))))))))))))
 
+; (:m :ref CTX-ROUTE :do "top-level :contextCap: read back, 200000 when absent, and config check refuses one outside 1 to 10000000")
+fn ! testContextCap -> Bool
+  (let [(body " :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id m1 :provider fp :name \"n1\")) :profiles ((:profile :id default :routes ((:intent any :chain (m1))))) :uses ((:use :for default :profile default)))\n")
+        (good (str "(:gateway :v 2 :contextCap 500000" body))
+        (bad (cfg/gatewayConfigCheckText! (str "(:gateway :v 2 :contextCap 0" body) "src" ".asl/mem/calibration/index.asn"))
+        (ok1 (cfg/gatewayConfigCheckText! good "src" ".asl/mem/calibration/index.asn"))]
+    (do
+      (assert (= (cfg/gatewayContextCap good) 500000) "a :contextCap row is read back")
+      (assert (= (cfg/gatewayContextCap "(:gateway :v 2)") 200000) "no :contextCap row is the adopted 200000")
+      (assert (and (= (pairSecond bad) 1) (stringContains? (pairFirst bad) "contextCap")) (str "config check refuses :contextCap 0: " (pairFirst bad)))
+      (assert (= (pairSecond ok1) 0) (str "config check accepts :contextCap 500000: " (pairFirst ok1)))
+      true))
+
 fn ! runTests -> Bool
   (let [(contentRes (fileReadString "asl/packages/asl-gateway/tests/configFixture.asn"))]
     (match contentRes
@@ -498,6 +511,7 @@ fn ! runTests -> Bool
                               (assert (testSharedUsagePathOverride) "SHAREDPATH: top-level :sharedUsagePath override tested")
                               (assert (testDailyTokenBudget) "DAILYBUDGET: top-level :dailyTokenBudgets override tested")
                               (assert (testBreakerCooldownSecOverride) "COOLDOWNCFG: top-level :breakerCooldownSec override tested")
+                              (assert (testContextCap) "CTX-ROUTE: top-level :contextCap tested")
                               (assert (testAnthropicKindParsesAndResolvesEntry) "ANTHROPICKIND: :kind anthropic provider parsing and entry resolution tested")
                               (assert (testGeminiKindParsesAndResolvesEntry) "GEMINIKIND: :kind gemini provider parsing and entry resolution tested")
                               (assert (testRoleCascadeIsConfigOnly) "GW-HARDCODED-CASCADES-20261017: a config-only role cascade edit changes the chosen model")

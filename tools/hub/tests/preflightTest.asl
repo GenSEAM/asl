@@ -5,9 +5,9 @@
 ; (:m :ref ORCH-NODE2-CUTOVER-BUG :do "the conductor's hub preflight on scratch dirs: no hub.asn passes as noHub, a hub with a client-carrying worktree passes, a hub with an old worktree is ERR_HUB_CLIENT_MISSING")
 fn ! runTests -> Bool
   (let [(temp (stringTrim (resultOr (fr/shellOut "/usr/bin/mktemp -d /tmp/preflightTest.XXXXXX" 5000) "")))
-        (made (fr/shellOut (str "/bin/mkdir -p " temp "/home/.asl " temp "/old/asl/agentLoop " temp "/new/asl/agentLoop") 5000))
-        (wOld (fileWrite (str temp "/old/asl/agentLoop/providers.asl") "(module x)\n"))
-        (wNew (fileWrite (str temp "/new/asl/agentLoop/providers.asl") "fn hubAsnPath cfg -> String\n"))
+        (made (fr/shellOut (str "/bin/mkdir -p " temp "/home/.asl " temp "/old/asl/packages/asl-agent/src " temp "/new/asl/packages/asl-agent/src") 5000))
+        (wOld (fileWrite (str temp "/old/asl/packages/asl-agent/src/providers.asl") "(module x)\n"))
+        (wNew (fileWrite (str temp "/new/asl/packages/asl-agent/src/providers.asl") "fn hubAsnPath cfg -> String\n"))
         (none_ (pf/hubPreflight (str temp "/home") (str temp "/old")))
         (hubW (fileWrite (str temp "/home/.asl/hub.asn") "(:hub :sock \"/x/hub.sock\")\n"))
         (good (pf/hubPreflight (str temp "/home") (str temp "/new")))

@@ -1,5 +1,5 @@
 (module asl-cli/sweep
-  :x [main Done workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine nativeCheckSweep!]
+  :x [main Done negative? negativeFixtures workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine nativeCheckSweep!]
   :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (asl-tools/testImpact :a impact) (asl-checker/checkCached :a cc)])
 
 (schema Job
@@ -33,8 +33,16 @@ fn esc text: String -> String
 fn say! text: String -> Bool
   (do (println text) true)
 
+; (:m :ref SWEEP-NEGATIVE-FIXTURES :do "the explicit list of files that hold deliberate errors for a Test.asl beside them to check, and so never pass a sweep: the three conformance/check fixtures; the hidden tests of the harness bench cases are covered by negative? as a path rule (they only resolve once copied into their case)")
+fn negativeFixtures -> (List String)
+  (list "tests/conformance/check/compileErrorKeepsTypeBoundary.asl"
+        "tests/conformance/check/hiddenListCtorPattern.asl"
+        "tests/conformance/check/localCtorShadowsHidden.asl")
+
 fn negative? path: String -> Bool
-  (or (stringStartsWith? path "asl/grammar/corpus/")
+  (or (listContains? (negativeFixtures) path)
+      (and (stringStartsWith? path "tests/harnessBench/cases/") (stringContains? path "/hidden/"))
+      (stringStartsWith? path "asl/grammar/corpus/")
       (listAny? (fn [(seg String)] -> Bool (or (= seg "invalid") (or (= seg "fixtures") (= seg "node_modules")))) (stringSplit path "/")))
 
 fn ! capture! argv: (List String) cwd: (Option String) -> (Result (Pair Int64 String) String)

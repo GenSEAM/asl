@@ -133,7 +133,7 @@ fn ! testFiles! root: String -> (List String)
   (filter testPath?
           (fold (fn [(acc (List String)) (d String)] -> (List String) (listAppend acc (walk! (str root "/" d))))
                 (list)
-                (list "asl/packages" "asl/prelude" "asl/agentLoop" "harness" "tools" "tests")))
+                (list "asl/packages" "asl/prelude" "harness" "tools" "tests")))
 
 fn ! readTokens! files: (List String) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (f String)] -> (Map String Bool)

@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a ty)])
 
-; (:m :ref HL-GAPS-B :do "regression for two native-lowering gaps: a let bound with a parenthesized binding list ((a v) (b w)) is still outside the lowered subset, fixed upstream by migrating source to [(a v) (b w)] in asl-gateway browser/media/server.asl and harness multiLensPipeline/stepsPipeline.asl; and an enum case whose sole field is positional (bare type, no name, e.g. (early s/RunResult)) was undercounted to arity 0 by caseArity filtering out empty-named fields, rejecting every correct-arity construct/match of such a case (asl/agentLoop/runLoop.LoopSetup.early)")
+; (:m :ref HL-GAPS-B :do "regression for two native-lowering gaps: a let bound with a parenthesized binding list ((a v) (b w)) is still outside the lowered subset, fixed upstream by migrating source to [(a v) (b w)] in asl-gateway browser/media/server.asl and harness multiLensPipeline/stepsPipeline.asl; and an enum case whose sole field is positional (bare type, no name, e.g. (early s/RunResult)) was undercounted to arity 0 by caseArity filtering out empty-named fields, rejecting every correct-arity construct/match of such a case (aslAgent/runLoop.LoopSetup.early)")
 
 fn configText -> String
   "(:aslConfig)\n"

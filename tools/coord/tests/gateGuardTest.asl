@@ -5,7 +5,7 @@
 ; (:m :ref CONDHARDEN :do "pure coverage of the gate-stage guards: importer finder over given file texts, deletion-ratio refusal, and the Leon launch argv/cwd/env; each assert goes red when its check is removed or weakened")
 fn files -> (List (Pair String String))
   (list (pair "a/vps.asl" "(module tools/remote/vps\n  :x [main]\n  :i [])")
-        (pair "a/remoteOps.asl" "(module asl/agentLoop/remoteOps\n  :x [ops]\n  :i [(tools/remote/vps :a vps) (asl-x/y :a y)])")
+        (pair "a/remoteOps.asl" "(module aslAgent/remoteOps\n  :x [ops]\n  :i [(tools/remote/vps :a vps) (asl-x/y :a y)])")
         (pair "a/near.asl" "(module asl/near\n  :i [(tools/remote/vpsExtra :a v)])")
         (pair "a/bare.asl" "(module asl/bare\n  :i [tools/remote/vps])")
         (pair "a/none.asl" "(module asl/none\n  :i [(asl-x/y :a y)])"))
