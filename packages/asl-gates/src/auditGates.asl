@@ -782,10 +782,12 @@ fn allowAbsentCheck! root: String -> Check
               (match (git! root (list "ls-tree" "--name-only" rev "--" rel))
                 ((ok listed) (not (stringEmpty? listed)))
                 ((err _) false))))
-        (base (match (git! root (list "merge-base" "HEAD" "main")) ((ok b) b) ((err _) "HEAD")))]
-    (if (or (at "HEAD") (at base))
-      (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" (str rel " is gone from the tree but exists at HEAD or the merge base with main") (none) (none))
-      (skippedCheck "vcsDirect" (str rel " absent"))))
+        (base (git! root (list "merge-base" "HEAD" "main")))]
+    (cond
+      ((err? base) (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" "the allowlist is absent and the merge base with main does not resolve, so a deletion cannot be ruled out" (none) (none)))
+      ((or (at "HEAD") (at (resultOr base "HEAD")))
+       (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" (str rel " is gone from the tree but exists at HEAD or the merge base with main") (none) (none)))
+      (else (skippedCheck "vcsDirect" (str rel " absent")))))
 
 ; (:m :ref VCS-AUDIT-WIRE :do "vcsDirectAudit as one consistency check: a git commit, add, push, update-ref or checkout site outside the allowlist (.asl/mem/vcsDirectAllow.asn, compared with the merge base with main) fails it and the evidence names the sites; a tree without the allowlist skips it, an audit error fails it")
 fn vcsDirectCheck! root: String -> Check
