@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid impossibleWhy! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -649,7 +649,7 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
             cap
             (let [(why (impossibleWhy! ctx u))]
               (if (not (stringEmpty? why))
-                (let [(_ (refuseImpossible! ctx c why))] cap)
+                (let [(_ (refuseImpossible! ctx u c why))] cap)
                 (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
                   ((err e) (let [(_ (waitMore! ctx c e))] cap))
                   ((ok text)
@@ -972,6 +972,7 @@ fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 -> Bool
 fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 max: Int64 backoffMs: Int64 -> Bool
   (if (not (and (= c.st "blocked") (stringEmpty? c.await))) false
     (let [(why (transientWhy! ctx u c leases now))]
+      (if (impossibleSig? c.sig) (impossibleRecheck! ctx u c)
       (if (stringEmpty? why) (ladderHop! ctx c (/ now 1000000))
         (let [(r (retryLast! ctx.dir c.id))
               (wait (* backoffMs (fold (fn [(a Int64) (_ Int64)] -> Int64 (* a 2)) 1 (range 0 (pairFirst r)))))]
@@ -979,7 +980,7 @@ fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 m
             (let [(_ (retryNote! ctx.dir c.id why (+ (pairFirst r) 1)))
                   (_ (pwReset! ctx.dir c.id))
                   (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "retry" "" 0 0 (str "retry " why) 0))]
-              true))))))
+              true)))))))
 
 fn ! retryBlocked! ctx: Ctx units: (List st/Task) -> Int64
   (match (st/readLeases! ctx.dir)
@@ -1015,7 +1016,7 @@ fn dirOf p: String -> String
   (let [(parts (stringSplit p "/"))]
     (stringJoin (listTake parts (max 0 (- (listLength parts) 1))) "/"))
 
-; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can: an owned path whose directory is absent on the base while neither the task text nor an owned directory entry names that directory (node2: 17 units owned asl/agentLoop/, removed for asl/packages/asl-agent), a gate file absent on the base that no owned path creates, a handoff branch the task cites (main..sh/NAME) that does not exist or is already merged into the base (8 and 1 units); 24 of 170 node2 units were impossible and cost 56 writer runs")
+; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can; a refusal needs positive evidence, an unreadable or ambiguous case is admitted: an owned path whose directory is absent on the base but was on its history (removed, as asl/agentLoop was for asl/packages/asl-agent, 17 node2 units) while the task text does not name it, a gate file absent on the base that was on its history and that the unit neither owns, nor sits under an owned directory of, nor names in its task, a handoff branch the task cites (main..sh/NAME) that is merged into the base, or is missing while no commit on the base carries NAME in its message and no commit sha the task cites exists; a directory that never existed (a new tests/ under a live package) is the unit's to create")
 fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
   (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
     (if (stringEmpty? repo) ""
@@ -1023,12 +1024,19 @@ fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
             (base (baseRef u))
             (task (taskText ctx.dir u))
             (onBase (fn [(path String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str base ":" path))).exit 0)))
+            (hadOnBase (fn [(path String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" base "--" path)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
             (plain (filter (fn [(p String)] -> Bool (and (not (stringContains? p "*")) (not (stringEndsWith? p "/")))) u.owns))
             (declared (fn [(d String)] -> Bool (or (stringContains? task d) (listAny? (fn [(o String)] -> Bool (and (stringEndsWith? o "/") (stringStartsWith? (str d "/") o))) u.owns))))
-            (badDir (listFind (fn [(p String)] -> Bool (let [(d (dirOf p))] (and (not (stringEmpty? d)) (and (not (onBase d)) (not (declared d)))))) plain))
-            (badGate (listFind (fn [(f String)] -> Bool (and (not (onBase f)) (not (listContains? u.owns f)))) (gateFiles u.gate)))
+            (ownedDirs (listAppend (map dirOf plain) (map (fn [(o String)] -> String (optionOr (stringSlice o 0 (- (stringLength o) 1)) o)) (filter (fn [(o String)] -> Bool (stringEndsWith? o "/")) u.owns))))
+            (createsGate (fn [(f String)] -> Bool (or (listContains? u.owns f) (or (stringContains? task f) (listAny? (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (stringStartsWith? f (str d "/")))) ownedDirs)))))
+            (badDir (listFind (fn [(p String)] -> Bool (let [(d (dirOf p))] (and (not (stringEmpty? d)) (and (not (onBase d)) (and (not (declared d)) (hadOnBase d)))))) plain))
+            (badGate (listFind (fn [(f String)] -> Bool (and (not (onBase f)) (and (not (createsGate f)) (hadOnBase f)))) (gateFiles u.gate)))
             (branches (filter (fn [(b String)] -> Bool (not (stringEmpty? b))) (handoffBranches task)))
-            (missing (listFind (fn [(b String)] -> Bool (!= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/sh/" b))).exit 0)) branches))
+            (shas (filter (fn [(w String)] -> Bool (and (>= (stringLength w) 7) (and (<= (stringLength w) 40) (listAll? (fn [(ch String)] -> Bool (or (and (>= (charCode ch) 48) (<= (charCode ch) 57)) (and (>= (charCode ch) 97) (<= (charCode ch) 102)))) (stringChars w)))))
+                          (map (fn [(w String)] -> String (stringReplace (stringReplace (stringReplace (stringReplace w "(" "") ")" "") "," "") "." "")) (stringSplit (stringReplace task "\n" " ") " "))))
+            (shaLive (listAny? (fn [(w String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str w "^{commit}"))).exit 0)) shas))
+            (onMain (fn [(b String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--fixed-strings" (str "--grep=" b) base)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
+            (missing (listFind (fn [(b String)] -> Bool (and (!= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/sh/" b))).exit 0) (and (not shaLive) (not (onMain b))))) branches))
             (merged (listFind (fn [(b String)] -> Bool (= (gitOut repo (list "merge-base" "--is-ancestor" (str "refs/heads/sh/" b) base)).exit 0)) branches))]
         (cond
           ((some? badDir) (str "ownsDirMissing " (dirOf (optionOr badDir "")) " on " base))
@@ -1037,10 +1045,27 @@ fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
           ((some? merged) (str "handoffBranchMerged sh/" (optionOr merged "")))
           (else "")))))
 
-fn ! refuseImpossible! ctx: Ctx c: CUnit why: String -> Unit
-  (let [(c1 (escalate! ctx (with c :sig (str "impossible: " why)) (str "impossible: " why) "admission refused the unit before any claim or writer run"))
-        (_ (move! ctx c1 "blocked" "admit" "" 0 0 (str "impossible: " why) 0))]
+; (:m :ref COND-RECOVER-C4 :do "an impossible block carries the base head it was judged on (impossible: WHY @SHA); impossibleRecheck! re-judges when the base moved, so a restored directory, a fixed gate path or a landed branch releases the unit and a still impossible unit only has its head refreshed")
+fn ! baseHead! ctx: Ctx u0: st/Task -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) "" (stringTrim (gitOut repo (list "rev-parse" "--short=9" (baseRef (resolved! repo u0)))).out)))
+
+fn ! impossibleSigOf! ctx: Ctx u: st/Task why: String -> String
+  (str "impossible: " why " @" (baseHead! ctx u))
+
+fn ! refuseImpossible! ctx: Ctx u: st/Task c: CUnit why: String -> Unit
+  (let [(sig (impossibleSigOf! ctx u why))
+        (c1 (escalate! ctx (with c :sig sig) sig "admission refused the unit before any claim or writer run"))
+        (_ (move! ctx c1 "blocked" "admit" "" 0 0 sig 0))]
     ())
+
+fn ! impossibleRecheck! ctx: Ctx u: st/Task c: CUnit -> Bool
+  (let [(head (baseHead! ctx u))]
+    (if (or (stringEmpty? head) (stringEndsWith? c.sig (str " @" head))) false
+      (let [(why (impossibleWhy! ctx u))]
+        (if (stringEmpty? why)
+          (let [(_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "recheck" "" 0 0 "impossibleCleared" 0))] true)
+          (let [(_ (writeCUnit! ctx.dir (with c :sig (impossibleSigOf! ctx u why))))] false)))))
 
 fn impossibleSig? sig: String -> Bool
   (stringStartsWith? sig "impossible: ")
