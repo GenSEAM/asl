@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? absent? starved? scrubLines reviewBrief reviewWith review]
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -381,11 +381,20 @@ fn transientMark? toks: (List String) low: String -> Bool
   (or (listAny? (fn [(t String)] -> Bool (or (= t "429") (and (= (stringLength t) 3) (and (stringStartsWith? t "5") (some? (stringToInt64 t)))))) toks)
       (listAny? (fn [(m String)] -> Bool (stringContains? low m)) (list "timeout" "timed out" "rate limit" "overloaded" "retry")))
 
+fn statusIdx? toks: (List String) i: Int64 -> Bool
+  (and (listContains? (list "401" "403" "404") (optionOr (listGet toks i) ""))
+       (or (= i 0) (listContains? (list "http" "status" "code" "error") (optionOr (listGet toks (- i 1)) ""))))
+
 fn statusAt toks: (List String) -> Bool
-  (listAny? (fn [(i Int64)] -> Bool
-              (and (listContains? (list "401" "403" "404") (optionOr (listGet toks i) ""))
-                   (or (= i 0) (listContains? (list "http" "status" "code" "error") (optionOr (listGet toks (- i 1)) "")))))
-            (range 0 (listLength toks)))
+  (listAny? (fn [(i Int64)] -> Bool (statusIdx? toks i)) (range 0 (listLength toks)))
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the cause word of a permanent lane error from the same reading permanentError? uses: credits for an insufficient-credit message, else the first token that counts as a status (401 403 404), else permanent; a number inside a message is not a cause")
+fn causeOf why: String -> String
+  (let [(toks (codeTokens why))
+        (hits (filter (fn [(i Int64)] -> Bool (statusIdx? toks i)) (range 0 (listLength toks))))]
+    (cond ((stringContains? (stringLower why) "credit") "credits")
+          ((not (listEmpty? hits)) (optionOr (listGet toks (optionOr (listHead hits) 0)) "permanent"))
+          (else "permanent")))
 
 fn permanentError? e: String -> Bool
   (let [(low (stringLower e))
@@ -400,10 +409,6 @@ fn unresolvable? r: Ruling live: (List Lane) -> Bool
 
 fn tierOfRung rung: String -> String
   (cond ((= rung "R1") "free") ((= rung "R2") "paid") (else "strong"))
-
-fn causeOf why: String -> String
-  (let [(w (stringLower why))]
-    (cond ((stringContains? w "credit") "credits") ((stringContains? w "401") "401") ((stringContains? w "403") "403") ((stringContains? w "404") "404") (else "permanent")))
 
 fn blockedNoLane u: ReviewUnit rung: String prior: (List Verdict) dead: (List Verdict) earlier: (List String) -> Ruling
   (let [(why (str "review: no live lane on tier " (tierOfRung rung) " (permanent: " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (causeOf (optionOr (listHead v.defects) "")))) dead) ", ") ")"))]

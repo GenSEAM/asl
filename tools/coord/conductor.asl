@@ -6,7 +6,7 @@
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
-      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
+      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
 
@@ -2212,40 +2212,58 @@ fn ! writerOf! dir: String c: CUnit -> String
 fn laneDeadPath dir: String -> String
   (str dir "/laneDead.asn")
 
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "ledger rows are read as forms, never by splitting text: a why with escaped quotes (a JSON error body) or the word :until in it stays one field; a line that is no laneDead form is dropped")
+fn deadFields l: String -> (List asn/AsnField)
+  (resultOr (st/rowFields l "laneDead") (list))
+
 fn laneDeadRows dir: String -> (List String)
-  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:laneDead ")) (stringLines (readOr (laneDeadPath dir))))
+  (filter (fn [(l String)] -> Bool (not (listEmpty? (deadFields l)))) (stringLines (readOr (laneDeadPath dir))))
 
 fn laneDeadLive dir: String nowMs: Int64 -> (List String)
-  (filter (fn [(l String)] -> Bool (> (optionOr (stringToInt64 (sp/tokAfter l ":until")) 0) nowMs)) (laneDeadRows dir))
+  (filter (fn [(l String)] -> Bool (> (st/intField (deadFields l) "until") nowMs)) (laneDeadRows dir))
 
 fn laneCause why: String -> String
-  (let [(w (stringLower why))]
-    (cond ((stringContains? w "credit") "credits") ((stringContains? w "401") "401") ((stringContains? w "403") "403") ((stringContains? w "404") "404") (else "permanent")))
+  (l/causeOf why)
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the remembered error keeps the lane cause in a form permanentError? reads: credits as insufficient credit, a status as HTTP N; the word remembered keeps rememberDeadLanes! from storing it again")
+fn rememberedErr cause: String why: String -> String
+  (str "remembered lane unavailable " (if (= cause "credits") "insufficient credit" (if (= cause "permanent") "HTTP 403" (str "HTTP " cause))) ": " why)
 
 fn ! skipDead dir: String nowMs: Int64 inner: (fn ! [String String] -> (Result String String)) -> (fn ! [String String] -> (Result String String))
   (let [(dead (laneDeadLive dir nowMs))]
     (fn [(alias String) (prompt String)] -> (Result String String)
-      (match (listFind (fn [(l String)] -> Bool (= (sp/tokAfter l ":lane") alias)) dead)
-        ((some l) (err (str "remembered lane unavailable HTTP 403: " (quotedAfter l ":why \""))))
+      (match (listFind (fn [(l String)] -> Bool (= (st/textField (deadFields l) "lane") alias)) dead)
+        ((some l) (err (rememberedErr (st/textField (deadFields l) "cause") (st/textField (deadFields l) "why"))))
         ((none) (inner alias prompt)))))
 
-fn ! rememberDeadLanes! dir: String ttlSec: Int64 nowMs: Int64 rows: (List String) -> Int64
+fn unavailFields l: String -> (List asn/AsnField)
+  (resultOr (st/rowFields l "laneUnavailable") (list))
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the read-modify-write of laneDead.asn runs under a flock beside it so parallel stage children do not drop each other's rows, and a failed write is an error, not a stored row: no lead warn is sent for it")
+fn ! rememberDeadLanes! dir: String ttlSec: Int64 nowMs: Int64 rows: (List String) -> (Result Int64 String)
   (let [(fresh (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:laneUnavailable ") (not (stringContains? l "remembered")))) rows))]
-    (if (listEmpty? fresh) 0
-      (let [(lanes (map (fn [(l String)] -> String (sp/tokAfter l ":lane")) fresh))
-            (kept (filter (fn [(l String)] -> Bool (not (listContains? lanes (sp/tokAfter l ":lane")))) (laneDeadLive dir nowMs)))
-            (added (map (fn [(l String)] -> String
-                          (let [(why (quotedAfter l ":why \""))]
-                            (str "(:laneDead :lane " (sp/tokAfter l ":lane") " :cause " (laneCause why) " :why " (st/q why) " :at " (n nowMs) " :until " (n (+ nowMs (* ttlSec 1000))) ")")))
-                        fresh))
-            (tmp (str (laneDeadPath dir) "." (n (procSelf)) ".tmp"))
-            (_ (fileWrite tmp (str (stringJoin (listAppend kept added) "\n") "\n")))
-            (_ (pathRename tmp (laneDeadPath dir)))
-            (_ (map (fn [(l String)] -> Bool
-                      (let [(why (quotedAfter l ":why \""))]
-                        (ls/emitAt! (dirOf dir) nowMs "conductor" "warn" "laneUnavailable" (str (sp/tokAfter l ":lane") ":" (laneCause why)) (sp/tokAfter l ":unit") why)))
-                    fresh))]
-        (listLength fresh))))
+    (if (listEmpty? fresh) (ok 0)
+      (match (fileLockWait (str (laneDeadPath dir) ".lock") true 10000)
+        ((err e) (err (str "laneDead lock: " e)))
+        ((ok fd)
+          (let [(lanes (map (fn [(l String)] -> String (st/textField (unavailFields l) "lane")) fresh))
+                (kept (filter (fn [(l String)] -> Bool (not (listContains? lanes (st/textField (deadFields l) "lane")))) (laneDeadLive dir nowMs)))
+                (added (map (fn [(l String)] -> String
+                              (let [(why (st/textField (unavailFields l) "why"))]
+                                (str "(:laneDead :lane " (st/textField (unavailFields l) "lane") " :cause " (laneCause why) " :why " (st/q why) " :at " (n nowMs) " :until " (n (+ nowMs (* ttlSec 1000))) ")")))
+                            fresh))
+                (tmp (str (laneDeadPath dir) "." (n (procSelf)) ".tmp"))
+                (w (fileWrite tmp (str (stringJoin (listAppend kept added) "\n") "\n")))
+                (r (match w ((err e) (err e)) ((ok _) (pathRename tmp (laneDeadPath dir)))))
+                (_ (fdClose fd))]
+            (match r
+              ((err e) (err (str "laneDead write: " e)))
+              ((ok _)
+                (let [(_ (map (fn [(l String)] -> Bool
+                                (let [(why (st/textField (unavailFields l) "why"))]
+                                  (ls/emitAt! (dirOf dir) nowMs "conductor" "warn" "laneUnavailable" (str (st/textField (unavailFields l) "lane") ":" (laneCause why)) (st/textField (unavailFields l) "unit") why)))
+                              fresh))]
+                  (ok (listLength fresh))))))))))
 
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
@@ -2267,7 +2285,7 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
       ((err e) (failRes (str "ladder: " e)))
       ((ok r)
         (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))
-              (_ (rememberDeadLanes! dir rc.laneTtlSec (nowMs) r.rows))]
+              (_ (match (rememberDeadLanes! dir rc.laneTtlSec (nowMs) r.rows) ((err e) (ok? (fileAppend (journalPath dir) (str "(:laneDeadFailed :unit " (st/q u.id) " :why " (st/q e) ")\n")))) ((ok _) true)))]
           (Res :tiers (tiersOfRows r.rows) :ok 0 :wt "" :branch "" :model r.models :tokens r.tokens :costMicro r.costMicro :claimedGreen 0 :sig r.sig :ms 0 :exit 0 :asserts 0
                :verdict (rulingVerdict r.action)))))))
 
