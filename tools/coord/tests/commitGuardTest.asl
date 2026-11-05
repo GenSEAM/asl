@@ -320,7 +320,12 @@ fn ! stubRoot! base: String name: String body: String -> String
 
 fn ! partialGates root: String base: String -> Bool
   (let [(slow (stubRoot! base "slowRoot" "#!/bin/sh\nsleep 20\n"))
-        (fast (stubRoot! base "fastRoot" "#!/bin/sh\nexit 0\n"))
+        (fast (stubRoot! base "fastRoot" "#!/bin/sh\nshift\nfor f in \"$@\"; do echo \"ok $f: (:checked 1)\"; done\nexit 0\n"))
+        (silent (stubRoot! base "silentRoot" "#!/bin/sh\nexit 0\n"))
+        (c6 (fixture base "pSilent" (list)))
+        (_s (put (str c6 "/good.asl") (goodAsl)))
+        (h6 (head c6))
+        (r6 (cg/commit! c6 silent (list "good.asl") (goodMsg) false))
         (c1 (fixture base "pSlow" (list)))
         (_a (put (str c1 "/good.asl") (goodAsl)))
         (h1 (head c1))
@@ -349,6 +354,9 @@ fn ! partialGates root: String base: String -> Bool
       (assert (!= (head c2) h2) "HEAD moved under warn")
       (assert (stringContains? r2.text ":status :partial") "the warn receipt stays partial")
       (assert (stringContains? log2 ":rule :unchecked") (str "warn records the unchecked row: " log2))
+      (assert (= r6.code 1) (str "a checker that exits 0 with no output leaves the file unchecked and blocks: " r6.text))
+      (assert (stringContains? r6.text "no ok verdict") "naming the missing verdict")
+      (assert (= (head c6) h6) "HEAD unchanged for a silent checker")
       (assert (= r3.code 0) (str "a stub that checks in time commits: " r3.text))
       (assert (!= (head c3) h3) "HEAD moved on a checked file")
       (assert (= cfgS.perFileS 1) "perFileS comes from the config, not an env var")

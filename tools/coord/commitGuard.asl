@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [guardIndex! cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [recordText! guardIndex! cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -246,13 +246,13 @@ fn ! checkChunk! cfg: Cfg src: String files: (List String) secs: Int64 -> (List 
   (let [(d (fr/runOneLimited (fr/job (listAppend (list (str cfg.aslRoot "/bin/asl") "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
     (chunkRows src files secs d.exit d.verdict d.out))
 
-; (:m :do "the rows of one asl check chunk from its exit code, verdict and output: pure, so the stale-native and attribution cases are testable")
+; (:m :ref COMMIT-GUARD-VERDICT :do "the rows of one asl check chunk from its exit code, verdict and output: pure; exit 0 counts a file clean only when the output carries its ok line, so a silent or foreign checker leaves it unchecked")
 fn chunkRows src: String files: (List String) secs: Int64 exit: Int64 verdict: String out: String -> (List Hit)
   (let [(lines (stringLines out))
         (all (fn [(why String)] -> (List Hit) (map (fn [(p String)] -> Hit (unchecked p why)) files)))
         (strip (fn [(s String)] -> String (esc1 (stringReplace s (str src "/") ""))))]
     (cond
-      ((= exit 0) (list))
+      ((= exit 0) (map (fn [(p String)] -> Hit (unchecked p "asl check gave no ok verdict for this file")) (filter (fn [(p String)] -> Bool (not (listAny? (fn [(l String)] -> Bool (stringStartsWith? l (str "ok " src "/" p ":"))) lines))) files)))
       ((= verdict "timeout") (all (str "asl check exceeded " (stringFromInt64 secs) " s")))
       ((= verdict "spawnFailed") (all "asl check did not start"))
       ((listAny? (fn [(l String)] -> Bool (stringContains? l "ERR_NATIVE_STALE")) lines)
@@ -514,3 +514,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 fn hitBlocks? h: Hit -> Bool
   h.block
+
+; (:m :ref VCS-LAYER-CORE :do "the warn-mode record for in-process callers: append text to repo/.asl/log/commitGuard.asn, answering the :recorded marker of record!")
+fn ! recordText! repo: String text: String -> String
+  (record! (defaultCfg repo) text)
