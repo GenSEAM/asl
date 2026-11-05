@@ -602,6 +602,30 @@ fn ! aheadWt rc: cd/RealCfg u: st/Task f: String -> String
         (_ (if (stringEmpty? p) () (commitFile p f "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")")))]
     p)
 
+; (:m :ref LEON-BASE-WIRE :do "the extra form keys the write stage hands the Leon run carry :base BRANCH, baseRef of the unit (main for an empty or HEAD base), next to the attractor arm key, so Leon's gate integrity reverts to merge-base(HEAD, base) and not to HEAD")
+fn ! testWriteCarriesBase -> Bool
+  (let [(root (scratch "writebase"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (seen (str root "/seenExtra"))
+        (run (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+               (let [(_ (fileAppend seen (str id "=" extra "\n")))] (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "exit"))))
+        (uHead (with (aheadUnit "B1" "sh gImpl.sh") :base "HEAD"))
+        (uEmpty (with (aheadUnit "B2" "sh gImpl.sh") :base ""))
+        (uBranch (with (aheadUnit "B3" "sh gImpl.sh") :base "main"))
+        (_ (cd/writeResWith run rc dir uHead (aheadCUnit "B1")))
+        (_ (cd/writeResWith run rc dir uEmpty (aheadCUnit "B2")))
+        (_ (cd/writeResWith run rc dir uBranch (aheadCUnit "B3")))
+        (extras (resultOr (fileReadString seen) ""))
+        (_ (cleanup root))]
+    (do (assert (stringContains? extras "B1=:base \"main\"") (str "a HEAD base reaches Leon as main: " extras))
+        (assert (stringContains? extras "B2=:base \"main\"") (str "an empty base reaches Leon as main: " extras))
+        (assert (stringContains? extras "B3=:base \"main\"") (str "a named base reaches Leon: " extras))
+        true))
+
 ; (:m :ref COND-RECOVER-C1 :do "a vacuous receipt on a blank branch whose run left a gate-passed commit past the base is no vacuous verdict: the write goes to gating; the same receipt with no commit is still vacuous")
 fn ! testVacuousWithCommit -> Bool
   (let [(root (scratch "vaccommit"))
@@ -1205,6 +1229,7 @@ fn ! runTests -> Bool
       (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
       (assert (testLeonGuard) "the write stage refuses a worktree without the deployed Leon")
       (assert (testAheadGating) "an ahead branch with a green gate goes to gating without a writer")
+      (assert (testWriteCarriesBase) "the write form carries :base")
       (assert (testVacuousWithCommit) "a vacuous receipt over a gate-passed commit goes to gating")
       (assert (testIntegrityOnBase) "the writer integrity revert is measured against the merge-base")
       (assert (testOnBaseRefs) "saved pre-onBase state is per unit, never overwritten, healed before rebase, kept when stale")

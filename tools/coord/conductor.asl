@@ -1947,7 +1947,7 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))))))
+              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (fp/withBase (armExtra arm) (baseRef u))))))))
               (d (pairFirst pv))
               (model (servedModel d.out))
               ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
