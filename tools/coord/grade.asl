@@ -1,5 +1,5 @@
 (module asl-tools/coord/grade
-  :x [Candidate Writer Source Plan planGo planRefused familyOf pickGrader receiptProblems constantProblems preChecks plan runRow gradeRow statsProblems]
+  :x [Candidate Writer Source Plan planGo planRefused familyOf pickGrader receiptProblems constantProblems preChecks plan planWith planGated! gateProblems! runRow gradeRow statsProblems]
   :i [(tools/fleet/model :a fm) (tools/fleet/receipt :a rc) (asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-checker/constAssert :a ca) (asl-checker/types :a ty)])
 
 (schema Candidate
@@ -118,12 +118,27 @@ fn gradeRow unit: String graderChannel: String graderModel: String writerChannel
        (if (stringEmpty? note) "" (str " :note " (fm/asnQuote note))) ")")
 
 fn plan w: Writer fleet: (List rd/SExpr) receipt: String sources: (List Source) cs: (List Candidate) -> Plan
-  (let [(problems (preChecks fleet receipt sources))]
-    (if (not (listEmpty? problems))
-      (planRefused (gradeRow w.unit "none" "none" w.channel "reject" (str "refused before any model call: " (stringJoin problems "; "))) problems)
-      (match (pickGrader w cs)
-        ((err e) (planRefused (gradeRow w.unit "none" "none" w.channel "pending" e) (list e)))
-        ((ok c) (planGo c)))))
+  (planWith w (preChecks fleet receipt sources) cs)
+
+fn planWith w: Writer problems: (List String) cs: (List Candidate) -> Plan
+  (if (not (listEmpty? problems))
+    (planRefused (gradeRow w.unit "none" "none" w.channel "reject" (str "refused before any model call: " (stringJoin problems "; "))) problems)
+    (match (pickGrader w cs)
+      ((err e) (planRefused (gradeRow w.unit "none" "none" w.channel "pending" e) (list e)))
+      ((ok c) (planGo c))))
+
+; (:m :ref RECEIPT-GATE-ROW :do "the receipt is graded only after the unit's declared ledger gate was rerun through receipt gateAudit!: no declared gate, no complete gate row for it, a red or timed-out rerun, or a claimed count that differs from the rerun refuses the plan before any model call; plan stays the pure structural check")
+fn ! gateProblems! receipt: String gate: String run: (fn [(String)] -> (Pair Int64 Int64)) -> (List String)
+  (if (stringEmpty? gate) (list "gateMissing: the unit declares no ledger gate to rerun")
+    (match (fm/parseForms receipt)
+      ((err e) (list (str "gateUnparsed: " e)))
+      ((ok forms)
+        (match (listHead (filter (fn [(f rd/SExpr)] -> Bool (rc/auditedHead? (fm/atomText (optionOr (listHead (fm/itemsOf f)) (fm/makeEmpty))))) forms))
+          ((none) (list "gateNoForm: no :receipt, :report or :done form to audit"))
+          ((some f) (pairFirst (rc/gateAudit! (fm/itemsOf f) gate run)))))))
+
+fn ! planGated! w: Writer fleet: (List rd/SExpr) receipt: String sources: (List Source) cs: (List Candidate) gate: String run: (fn [(String)] -> (Pair Int64 Int64)) -> Plan
+  (planWith w (listAppend (preChecks fleet receipt sources) (gateProblems! receipt gate run)) cs)
 
 fn oneOf? v: String allowed: (List String) -> Bool
   (listContains? allowed v)

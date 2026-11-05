@@ -111,9 +111,38 @@ fn testRows -> Bool
         (assert (stringContains? (g/runRow "a b" "agy" "m" "done" "pending" -1 -1 -1 "") ":unit \"a b\"") "an unsafe atom is quoted")
         true))
 
+; (:m :ref RECEIPT-GATE-ROW :do "planGated! reruns the unit's declared gate through receipt gateAudit! before any model call: an honest receipt goes to a grader, a forged count (claimed 12, rerun 3), a red rerun with an honest claim, a timeout and a missing declared gate are refused")
+fn ! testGated -> Bool
+  (match (fm/loadText (resultOr (fileReadString (fm/fleetPath)) ""))
+    ((err e) (do (assert false (str "fleet.asn loads: " e)) false))
+    ((ok fleet)
+      (let [(w (flashWriter))
+            (all (list (agyFlash) (leonFlash) (codexLuna)))
+            (runOf (fn [(exit Int64) (asserts Int64)] -> (fn [(String)] -> (Pair Int64 Int64)) (fn [(c String)] -> (Pair Int64 Int64) (pair exit asserts))))
+            (honest (g/planGated! w fleet (goodReceipt) (cleanSources) all "gradeTest" (runOf 0 12)))
+            (forged (g/planGated! w fleet (goodReceipt) (cleanSources) all "gradeTest" (runOf 0 3)))
+            (red (g/planGated! w fleet (redClaimReceipt) (cleanSources) all "gradeTest" (runOf 1 12)))
+            (timeout (g/planGated! w fleet (goodReceipt) (cleanSources) all "gradeTest" (runOf -1 -1)))
+            (noGate (g/planGated! w fleet (goodReceipt) (cleanSources) all "" (runOf 0 12)))
+            (otherGate (g/planGated! w fleet (goodReceipt) (cleanSources) all "someOtherGate" (runOf 0 12)))]
+        (do (assert (= (goChannel honest) "codex") "an honest receipt with a matching rerun goes to the grader")
+            (assert (stringContains? (refusedProblems forged) "gateMismatch") (str "a forged count is refused: " (refusedProblems forged)))
+            (assert (stringContains? (refusedProblems red) "gateRed") (str "a red rerun with an honest claim is refused: " (refusedProblems red)))
+            (assert (stringContains? (refusedProblems timeout) "gateTimeout") "a rerun that timed out is refused")
+            (assert (stringContains? (refusedProblems noGate) "gateMissing") "a unit with no declared gate is refused")
+            (assert (stringContains? (refusedProblems otherGate) "gateMissing") "a receipt without a row for the declared gate is refused")
+            (assert (stringContains? (refusedRow forged) "refused before any model call") "the refusal makes no model call")
+            true))))
+
+fn redClaimReceipt -> String
+  (str "(:receipt U1 :head \"abc\" :owns (\"asl/tools/coord/grade.asl\")"
+       " :gates ((:gate gradeTest :kind correctness :exit 1 :executed 12 :new true))"
+       " :redBefore ((:gate gradeTest :exit 1 :executed 0)))")
+
 fn ! runTests -> Bool
   (do (assert (testFamilies) "families")
       (assert (testPick) "grader pick")
       (assert (testPlan) "pre-checks and plan")
       (assert (testRows) "rows")
+      (assert (testGated) "the gated plan reruns the declared gate")
       true)
