@@ -770,20 +770,20 @@ fn stubHostPath -> String
 fn ! privateDir? dir: String -> Bool
   (match (fileLstat dir)
     ((err _) false)
-    ((ok st) (and st.isDir (and (not st.isSymlink) (and (= (mod st.mode 512) 448) (= (runOne (job (list "test" "-O" dir) dir (childEnv (list)))).exit 0))))))
+    ((ok st) (and st.isDir (and (= (mod st.mode 512) 448) (= (runOne (job (list "test" "-O" dir) dir (childEnv (list)))).exit 0)))))
 
 fn ! stubVerifiedIn! dir: String -> Bool
   (and (privateDir? dir)
     (match (fileLstat (str dir "/bin/asl"))
       ((err _) false)
-      ((ok st) (and st.isFile (and (not st.isSymlink) (= (resultOr (fileReadString (str dir "/bin/asl")) "") (stubHostText)))))))
+      ((ok st) (and st.isFile (= (resultOr (fileReadString (str dir "/bin/asl")) "") (stubHostText))))))
 
 fn ! stubVerified! -> Bool
   (stubVerifiedIn! (stubDirPath))
 
 fn ! stubHostIn! dir: String -> String
   (let [(existed (ok? (fileLstat dir)))
-        (made (if existed true (and (ok? (dirCreate dir)) (= (runOne (job (list "sh" "-c" (str "test ! -L '" dir "' && test -O '" dir "' && chmod 700 '" dir "'")) "." (childEnv (list)))).exit 0))))
+        (made (if existed true (and (ok? (dirCreate dir)) (= (runOne (job (list "sh" "-c" (str "chmod 700 '" dir "'")) "." (childEnv (list)))).exit 0))))
         (tmp (str dir "/bin/asl." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
     (if (and made (privateDir? dir))
       (let [(_ (dirCreate (str dir "/bin")))
