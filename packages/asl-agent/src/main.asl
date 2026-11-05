@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf stalledTurnCapIn dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1562,6 +1562,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
           out (resolvedOut out (pairSecond resolvedOp))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
+          _opRow (liveOpRow! journal run.state.turn opName target out pooled)
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
@@ -1696,6 +1697,42 @@ fn stalledTurnCapIn cfgText: String -> Int64
   (match (ac/agentLoopValue cfgText ":stalledTurnCap")
     ((some v) (optionOr (ac/positiveInt v) (defaultStalledTurnCap)))
     ((none) (defaultStalledTurnCap)))
+
+; (:m :ref TRIAL-LEON-OPROWS :do "one (:op :turn N :name OP :file F :status ok|err [:error CODE]) journal row per applied step, so a trial can read each op's outcome without parsing the next turn's history; only the op name, the path and the status/error code of the receipt, never a value of the environment or a file body; pool ops carry no receipt here and write no row")
+fn recText out: ex/ExecOut key: String -> String
+  (match (ex/recGet out.rec key) ((some v) (match v ((ex/vStr t) t) (_ "")) ) ((none) ""))
+
+fn opRowText turn: Int64 name: String file: String status: String error: String -> String
+  (str "(:op :turn " (stringFromInt64 turn) " :name \"" (c/escapeAsn name) "\" :file \"" (c/escapeAsn file) "\" :status " (if (= status "ok") "ok" "err")
+    (if (and (!= status "ok") (not (stringEmpty? error))) (str " :error " error) (if (!= status "ok") (str " :error " (if (stringEmpty? status) "UNKNOWN" status)) "")) ")")
+
+fn ! liveOpRow! journal: String turn: Int64 name: String file: String out: ex/ExecOut pooled: Bool -> Bool
+  (if (or pooled (stringEmpty? name)) true
+    (ok? (fileAppend journal (str (opRowText turn name file (recText out "status") (recText out "error")) "\n"))))
+
+; (:m :ref LEON-READLOOP :do "node2 UNBALANCED-DIAG ran 37 successful read-only turns and nothing stopped it, since readStreak counts only missing-file or refused turns and only against a red gate; the rule: consecutive turns whose steps are all read-only and (a read-only turn runs no gate, unchangedTurn?), counted from the last turn that wrote, ran a gate or sent any other step, stop the run at readOnlyTurnCap (adopted 16, :agentLoop :readOnlyTurnCap) as readStreak with cause readOnly; no exemption before the first write, whatever the owned files are: a new file needs no reading, and the 37-turn run had written nothing")
+fn defaultReadOnlyTurnCap -> Int64
+  16
+
+fn readOnlyTurnCapIn cfgText: String -> Int64
+  (match (ac/agentLoopValue cfgText ":readOnlyTurnCap")
+    ((some v) (optionOr (ac/positiveInt v) (defaultReadOnlyTurnCap)))
+    ((none) (defaultReadOnlyTurnCap)))
+
+fn historyText entry: j/Json key: String -> String
+  (match (j/jsonGet entry key) ((some v) (pv/pyStr v)) ((none) ""))
+
+fn readOnlyEntry? entry: j/Json -> Bool
+  (let [names (filter (fn [n] (not (stringEmpty? n))) (stringSplit (historyText entry "ops") " "))]
+    (and (not (listEmpty? names))
+      (listAll? (fn [n] (listContains? (readOnlyOps) n)) names)))
+
+fn readOnlyCount entries: (List j/Json) -> Int64
+  (if (listEmpty? entries) 0
+    (if (readOnlyEntry? (c/firstOf entries)) (+ 1 (readOnlyCount (c/restOf entries))) 0))
+
+fn readOnlyTail history: (List j/Json) -> Int64
+  (readOnlyCount (listReverse history))
 
 fn nextReadStreakOf wrote: Bool stalledTurn: Bool stalledStreak: Int64 readStreak: Int64 -> Int64
   (cond (wrote 0) ((and stalledTurn (> stalledStreak (notFoundStreakCap))) readStreak) (else (+ readStreak 1)))
@@ -2133,6 +2170,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   stalledCause (if (writeAttempt? operations) "refusedWrites" "notFound")
                   stalledReason (str (stringFromInt64 notFoundStreak) " turns in a row persisted nothing (" stalledCause ")")
                   _ (if stalledStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readStreak :cause :" stalledCause " :reason \"" stalledReason "\")\n"))) true)
+                  readOnlyN (readOnlyTail history)
+                  readOnlyStop (and (not terminal) (and (not stalledStop) (>= readOnlyN (readOnlyTurnCapIn (ac/configText! rootDir)))))
+                  readOnlyReason (str (stringFromInt64 readOnlyN) " turns in a row read and nothing else, no write and no gate run")
+                  _ (if readOnlyStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readStreak :cause :readOnly :reason \"" readOnlyReason "\")\n"))) true)
                   wallHalt (and wallStop (not terminal))
                   wallReason (str (stringFromInt64 (optionOr gateLeft 0)) " s of the wall budget left, under the " (stringFromInt64 gateMin) " s a gate run needs")
                   _ (if wallHalt (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :wallBudget :reason \"" wallReason "\")\n"))) true)
@@ -2143,6 +2184,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (stalledStop
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "readStreak") (some (str "(:escalate :reason \"" stalledReason "\")")) state.runStarted) counts)))
+                    (readOnlyStop
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "readStreak") (some (str "(:escalate :reason \"" readOnlyReason "\")")) state.runStarted) counts)))
                     (wallHalt
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
@@ -2157,7 +2201,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
                     (else (rl/withState nextRun0 (with (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak) :notFoundStreak notFoundStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal (or repeatStop (or wallHalt (or doneStop (or malformedStop (or modelStop stalledStop)))))) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt (or doneStop (or malformedStop (or modelStop (or stalledStop readOnlyStop))))))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
