@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [guardIndex! cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -14,7 +14,8 @@
   (:f warn Bool)
   (:f perFileS Int64)
   (:f totalS Int64)
-  (:f gitS Int64))
+  (:f gitS Int64)
+  (:f indexFile String :default ""))
 
 (schema Hit
   (:f rule String)
@@ -227,7 +228,7 @@ fn nowMs! -> Int64
   (/ (nowNs) 1000000)
 
 fn ! git! cfg: Cfg args: (List String) -> fr/Done
-  (fr/runOneLimited (fr/job (listAppend (list "git" "-C" cfg.repo "-c" "core.quotepath=off" "-c" "core.fsmonitor=") args) "." (fr/childEnv (list))) (fr/limits cfg.gitS 16))
+  (fr/runOneLimited (fr/job (listAppend (list "git" "-C" cfg.repo "-c" "core.quotepath=off" "-c" "core.fsmonitor=") args) "." (fr/childEnv (if (stringEmpty? cfg.indexFile) (list) (list (str "GIT_INDEX_FILE=" cfg.indexFile))))) (fr/limits cfg.gitS 16))
 
 fn unchecked path: String why: String -> Hit
   (soft "unchecked" path why)
@@ -412,8 +413,12 @@ fn receipt cfg: Cfg files: Int64 ms: Int64 hits: (List Hit) -> String
 
 ; (:m :do "the pure-call API for in-process callers (conductor, Leon, flush, train): judge the staged change of repo restricted to paths, with msg checked as the commit message; code is 1 only when a block row exists and warn is off; the receipt text is the one-line ASN form; git and asl check run as bounded fleet children")
 fn ! guard! repo: String aslRoot: String paths: (List String) msg: String warn: Bool -> Receipt
+  (guardIndex! repo aslRoot paths msg warn "")
+
+; (:m :ref VCS-LAYER-CORE :do "guard! judging the entries of the given index file instead of the shared index (the git children get GIT_INDEX_FILE), so the vcs layer judges exactly the blobs it then commits")
+fn ! guardIndex! repo: String aslRoot: String paths: (List String) msg: String warn: Bool indexFile: String -> Receipt
   (let [(base (cfgFor! repo aslRoot))
-        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS))]
+        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS :indexFile indexFile))]
     (judge! cfg))
 
 fn ! judge! cfg: Cfg -> Receipt

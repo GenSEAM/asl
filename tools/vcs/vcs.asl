@@ -2,7 +2,7 @@
   :x [VcsReceipt head! status! diff! stage! commit! branch! mergeFf! log! isAncestor! receiptOf]
   :i [(asl-tools/vcs/git :a g) (asl-tools/coord/commitGuard :a cg)])
 
-; (:m :ref VCS-LAYER-CORE :do "the backend-neutral version-control API: every op takes a repo root and answers an ASN receipt line; the git backend is vcs/git.asl, the only file that spawns git, so a different backend replaces that one file; commit stages only named paths and refuses when commitGuard blocks or leaves a file unchecked")
+; (:m :ref VCS-LAYER-CORE :do "the backend-neutral version-control API: every op takes a repo root and answers an ASN receipt line; the git backend is vcs/git.asl, the only file that spawns git, so a different backend replaces that one file; commit lands exactly the blobs the guard judged and refuses when commitGuard blocks or leaves a file unchecked")
 (schema VcsReceipt
   (:f code Int64)
   (:f text String))
@@ -14,47 +14,54 @@ fn receiptOf op: String code: Int64 body: String -> VcsReceipt
   (VcsReceipt :code code :text (str "(:vcs :op :" op " :status :" (if (= code 0) "ok" "failed") body ")"))
 
 fn outReceipt op: String o: g/Out -> VcsReceipt
-  (receiptOf op o.exit (str " :exit " (stringFromInt64 o.exit) " :out \"" (esc (g/clean o.out)) "\""))
+  (receiptOf op (if (= o.exit 0) 0 1) (str " :exit " (stringFromInt64 o.exit) " :out \"" (esc (g/clean o.out)) "\""))
 
 fn ! head! repo: String -> VcsReceipt
   (outReceipt "head" (g/head! repo))
 
 fn ! status! repo: String paths: (List String) -> VcsReceipt
-  (outReceipt "status" (g/changes! repo paths))
+  (let [(bad (badPaths! repo paths))]
+    (if (listEmpty? bad)
+      (outReceipt "status" (g/changes! repo paths))
+      (refused "status" (str "path not accepted: " (stringJoin bad ",")))))
 
 fn ! diff! repo: String base: String headRef: String paths: (List String) -> VcsReceipt
-  (outReceipt "diff" (g/diff! repo base headRef paths))
+  (let [(bad (badPaths! repo paths))]
+    (if (listEmpty? bad)
+      (outReceipt "diff" (g/diff! repo base headRef paths))
+      (refused "diff" (str "path not accepted: " (stringJoin bad ",")))))
 
-fn badPaths paths: (List String) -> (List String)
-  (filter (fn [(p String)] -> Bool (not (g/pathOk? p))) paths)
+; (:m :do "paths the layer will not pass on: pathspec-shaped, escaping, .git, or a directory")
+fn ! badPaths! repo: String paths: (List String) -> (List String)
+  (filter (fn [(p String)] -> Bool (or (not (g/pathOk? p)) (g/isDirPath? repo p))) paths)
 
-fn refused why: String -> VcsReceipt
-  (VcsReceipt :code 1 :text (str "(:vcs :op :stage :status :refused :why \"" (esc why) "\")"))
+fn refused op: String why: String -> VcsReceipt
+  (VcsReceipt :code 1 :text (str "(:vcs :op :" op " :status :refused :why \"" (esc why) "\")"))
 
-; (:m :do "stage exactly the named paths; an empty list or a path that could widen the scope is refused and nothing is staged")
+; (:m :do "stage exactly the named paths in the shared index; an empty list, a pathspec-shaped path or a directory is refused and nothing is staged")
 fn ! stage! repo: String paths: (List String) -> VcsReceipt
   (cond
-    ((listEmpty? paths) (refused "no paths named"))
-    ((not (listEmpty? (badPaths paths))) (refused (str "path not accepted: " (stringJoin (badPaths paths) ","))))
+    ((listEmpty? paths) (refused "stage" "no paths named"))
+    ((not (listEmpty? (badPaths! repo paths))) (refused "stage" (str "path not accepted: " (stringJoin (badPaths! repo paths) ","))))
     (else (outReceipt "stage" (g/stageNamed! repo paths))))
 
-; (:m :do "commit exactly paths: refuse an empty or widening path list, stage only those paths, run commitGuard judge in process on the staged blobs and the message, refuse on a block or a partial check (mode commit) or record and go on (mode warn), then git commit -- paths; the receipt carries :sha on success and the guard receipt on a refusal")
+; (:m :do "commit exactly paths: refuse an empty list or an unaccepted path, build a private index from HEAD plus the named paths (the shared index and the guard's view never differ from what lands), run commitGuard on that index in process, refuse on a block or a partial check (mode commit) or record and go on (mode warn), then commit-tree and update-ref against the recorded HEAD; the receipt carries :sha and the guard receipt, a refusal leaves the shared index as it was")
 fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode: String -> VcsReceipt
   (cond
-    ((listEmpty? paths) (VcsReceipt :code 1 :text "(:vcs :op :commit :status :refused :why \"no paths named\")"))
-    ((not (listEmpty? (badPaths paths))) (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :why \"path not accepted: " (esc (stringJoin (badPaths paths) ",")) "\")")))
+    ((listEmpty? paths) (refused "commit" "no paths named"))
+    ((not (listEmpty? (badPaths! repo paths))) (refused "commit" (str "path not accepted: " (stringJoin (badPaths! repo paths) ","))))
     (else
-      (let [(st (g/stageNamed! repo paths))]
-        (if (!= st.exit 0)
-          (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :why \"stage failed: " (esc (g/clean st.out)) "\")"))
-          (let [(j (cg/guard! repo aslRoot paths msg (= mode "warn")))]
+      (let [(tx (g/prepare! repo paths))]
+        (if (not tx.ok)
+          (let [(_ (g/discard! tx))] (refused "commit" tx.why))
+          (let [(j (cg/guardIndex! repo aslRoot paths msg (= mode "warn") tx.index))]
             (if (= j.code 1)
-              (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :guard " j.text ")"))
-              (let [(c (g/commitNamed! repo paths msg))]
+              (let [(_ (g/discard! tx))] (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :guard " j.text ")")))
+              (let [(c (g/finish! repo tx msg paths))
+                    (_ (g/discard! tx))]
                 (if (!= c.exit 0)
                   (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :failed :why \"" (esc (g/clean c.out)) "\")"))
-                  (let [(h (g/head! repo))]
-                    (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :done :sha " (g/clean h.out) " :guard " j.text ")")))))))))))
+                  (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :done :sha " (g/clean c.out) " :guard " j.text ")"))))))))))
 
 fn ! branch! repo: String name: String base: String -> VcsReceipt
   (outReceipt "branch" (g/branchCreate! repo name base))
@@ -63,7 +70,10 @@ fn ! mergeFf! repo: String source: String -> VcsReceipt
   (outReceipt "mergeFf" (g/mergeFf! repo source))
 
 fn ! log! repo: String range: String paths: (List String) fmt: String -> VcsReceipt
-  (outReceipt "log" (g/log! repo range paths fmt))
+  (let [(bad (badPaths! repo paths))]
+    (if (listEmpty? bad)
+      (outReceipt "log" (g/log! repo range paths fmt))
+      (refused "log" (str "path not accepted: " (stringJoin bad ",")))))
 
-fn ! isAncestor! repo: String a: String b: String -> Bool
+fn ! isAncestor! repo: String a: String b: String -> (Result Bool String)
   (g/isAncestor! repo a b)
