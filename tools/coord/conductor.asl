@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -31,7 +31,7 @@
   (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace) (:f hold Bool :default false))
 
 (schema RealCfg
-  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default "") (:f writerModel String :default ""))
+  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default "") (:f writerModel String :default "") (:f laneTtlSec Int64 :default 3600))
 
 fn cuDir dir: String -> String
   (str dir "/cond")
@@ -2208,6 +2208,45 @@ fn ! writerOf! dir: String c: CUnit -> String
     (match (listLast rows) ((some l) (pick l)) ((none) c.model)))
 
 ; (:m :ref REVIEW-NO-DIFF :do "a review never passes a change no reviewer was shown: a gone worktree, a failed git diff (missing base ref) or an empty diff ends the review before any model call: an empty diff as block, an unreadable one (gone worktree, failed git diff) as verdict requeue, which finish! turns into a transient move to ready (no fail count, capped through retries.asn)")
+; (:m :ref LANE-UNAVAILABLE-MEMORY :do "laneUnavailable rows from the ladder are remembered in laneDead.asn with an until time of at plus the lane-ttl-sec stage flag (adopted 3600); while a row is live the review call for that alias returns a permanent error without calling the provider, so later reviews skip the lane and the ladder picks another; a row marked remembered is not stored again so its own echo does not extend the window; after the window the lane is tried once more; the first sighting of a lane sends one lead-stream warn keyed lane and cause")
+fn laneDeadPath dir: String -> String
+  (str dir "/laneDead.asn")
+
+fn laneDeadRows dir: String -> (List String)
+  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:laneDead ")) (stringLines (readOr (laneDeadPath dir))))
+
+fn laneDeadLive dir: String nowMs: Int64 -> (List String)
+  (filter (fn [(l String)] -> Bool (> (optionOr (stringToInt64 (sp/tokAfter l ":until")) 0) nowMs)) (laneDeadRows dir))
+
+fn laneCause why: String -> String
+  (let [(w (stringLower why))]
+    (cond ((stringContains? w "credit") "credits") ((stringContains? w "401") "401") ((stringContains? w "403") "403") ((stringContains? w "404") "404") (else "permanent")))
+
+fn ! skipDead dir: String nowMs: Int64 inner: (fn ! [String String] -> (Result String String)) -> (fn ! [String String] -> (Result String String))
+  (let [(dead (laneDeadLive dir nowMs))]
+    (fn [(alias String) (prompt String)] -> (Result String String)
+      (match (listFind (fn [(l String)] -> Bool (= (sp/tokAfter l ":lane") alias)) dead)
+        ((some l) (err (str "remembered lane unavailable HTTP 403: " (quotedAfter l ":why \""))))
+        ((none) (inner alias prompt)))))
+
+fn ! rememberDeadLanes! dir: String ttlSec: Int64 nowMs: Int64 rows: (List String) -> Int64
+  (let [(fresh (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:laneUnavailable ") (not (stringContains? l "remembered")))) rows))]
+    (if (listEmpty? fresh) 0
+      (let [(lanes (map (fn [(l String)] -> String (sp/tokAfter l ":lane")) fresh))
+            (kept (filter (fn [(l String)] -> Bool (not (listContains? lanes (sp/tokAfter l ":lane")))) (laneDeadLive dir nowMs)))
+            (added (map (fn [(l String)] -> String
+                          (let [(why (quotedAfter l ":why \""))]
+                            (str "(:laneDead :lane " (sp/tokAfter l ":lane") " :cause " (laneCause why) " :why " (st/q why) " :at " (n nowMs) " :until " (n (+ nowMs (* ttlSec 1000))) ")")))
+                        fresh))
+            (tmp (str (laneDeadPath dir) "." (n (procSelf)) ".tmp"))
+            (_ (fileWrite tmp (str (stringJoin (listAppend kept added) "\n") "\n")))
+            (_ (pathRename tmp (laneDeadPath dir)))
+            (_ (map (fn [(l String)] -> Bool
+                      (let [(why (quotedAfter l ":why \""))]
+                        (ls/emitAt! (dirOf dir) nowMs "conductor" "warn" "laneUnavailable" (str (sp/tokAfter l ":lane") ":" (laneCause why)) (sp/tokAfter l ":unit") why)))
+                    fresh))]
+        (listLength fresh))))
+
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
         (lanesText (readOr rc.lanes))
@@ -2219,7 +2258,7 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
         (writer (rs/writerAliasFor gatewayText lanesText (l/reviewWriter (writerOf! dir c) rc.writerAlias)))
         (ru (l/ReviewUnit :id u.id :task (taskText dir u) :risk risk :closureChanged false :writerAlias writer :writerChannel u.channel
                           :startRung (offeredRung! dir u.id) :fixesUsed c.fails :prior (list)))
-        (call (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText)))]
+        (call (skipDead dir (nowMs) (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText))))]
     (if (or (!= diff.exit 0) (stringEmpty? (stringTrim diff.out)))
       (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0
            :sig (if (!= diff.exit 0) (str "reviewDiffUnreadable: git diff " (baseRef u) "...HEAD exit " (n diff.exit) " " (repoClip diff.out)) (str "reviewDiffEmpty: no change past " (baseRef u)))
@@ -2227,7 +2266,8 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (match (rs/reviewUnit! gatewayText lanesText (pacesNow rc) rc.repo usage ru diff.out (readOr (runPath dir u.id "receipt" "asn")) call)
       ((err e) (failRes (str "ladder: " e)))
       ((ok r)
-        (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))]
+        (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))
+              (_ (rememberDeadLanes! dir rc.laneTtlSec (nowMs) r.rows))]
           (Res :tiers (tiersOfRows r.rows) :ok 0 :wt "" :branch "" :model r.models :tokens r.tokens :costMicro r.costMicro :claimedGreen 0 :sig r.sig :ms 0 :exit 0 :asserts 0
                :verdict (rulingVerdict r.action)))))))
 
@@ -2398,7 +2438,7 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
              :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec (st/intOpt args "lease-sec" 3600) :gateSec 3600
              :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
-             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "")))
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600)))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -2415,7 +2455,7 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
   (let [(repo (st/opt args "repo" "."))
         (pass (fold (fn [(acc (List String)) (k String)] -> (List String)
                       (if (stringEmpty? (st/opt args k "")) acc (listAppend acc (list (str "--" k) (st/opt args k "")))))
-                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool" "writer-model" "lease-sec")))]
+                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool" "writer-model" "lease-sec" "lane-ttl-sec")))]
     (fn [(stage String) (u st/Task) (c CUnit)] -> (List String)
       (listAppend (list (str repo "/bin/asl") "run" (str repo "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" dir) pass)))
 
