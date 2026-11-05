@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [suiteGateChecks! vcsDirectCheck! Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! vcsDirectCheck! allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -761,9 +761,13 @@ fn checkOneFile! root: String a: String -> (List Check)
             (cCoreFixed (Check :id cCore.id :status cCore.status :err cCore.err :ev (str a " " cCore.ev) :n cCore.n :trust cCore.trust))]
         (list cBal cCoreFixed))))
 
+; (:m :ref VCS-AUDIT-WIRE :do "the explicit sweep argv of the core check: a bare check is an error once ASL-TEST-EMPTY-ARG lands, and asl-core accepts --all today")
+fn coreSweepArgv -> (List String)
+  (list "check" "--all")
+
 fn cmdCheck! root: String argv: (List String) -> AuditRun
   (if (listEmpty? argv)
-    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (list "check" "--all")))))]
+    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (coreSweepArgv)))))]
       (emit "check" checks "" "" false))
     (let [(checks (fold (fn [(acc (List Check)) (a String)] -> (List Check)
                           (listAppend acc (checkOneFile! root a)))
@@ -771,11 +775,23 @@ fn cmdCheck! root: String argv: (List String) -> AuditRun
                         argv))]
       (emit "check" checks "" "" false)))
 
+; (:m :ref VCS-AUDIT-WIRE :do "an allowlist missing from the tree is a skip only when it is also absent at HEAD and at the merge base with main; present at either means it was deleted, so the check fails closed with ERR_VCS_ALLOW_DELETED")
+fn allowAbsentCheck! root: String -> Check
+  (let [(rel ".asl/mem/vcsDirectAllow.asn")
+        (at (fn [(rev String)] -> Bool
+              (match (git! root (list "ls-tree" "--name-only" rev "--" rel))
+                ((ok listed) (not (stringEmpty? listed)))
+                ((err _) false))))
+        (base (match (git! root (list "merge-base" "HEAD" "main")) ((ok b) b) ((err _) "HEAD")))]
+    (if (or (at "HEAD") (at base))
+      (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" (str rel " is gone from the tree but exists at HEAD or the merge base with main") (none) (none))
+      (skippedCheck "vcsDirect" (str rel " absent"))))
+
 ; (:m :ref VCS-AUDIT-WIRE :do "vcsDirectAudit as one consistency check: a git commit, add, push, update-ref or checkout site outside the allowlist (.asl/mem/vcsDirectAllow.asn, compared with the merge base with main) fails it and the evidence names the sites; a tree without the allowlist skips it, an audit error fails it")
 fn vcsDirectCheck! root: String -> Check
   (let [(allow (str root "/.asl/mem/vcsDirectAllow.asn"))]
     (if (not (isFile! allow))
-      (skippedCheck "vcsDirect" ".asl/mem/vcsDirectAllow.asn absent")
+      (allowAbsentCheck! root)
       (match (vda/auditAt! root allow "")
         ((err e) (failCheck "vcsDirect" "ERR_VCS_DIRECT_AUDIT" e (none) (none)))
         ((ok receipt)

@@ -42,6 +42,12 @@ fn ! runTests -> Bool
         (ra (ag/vcsDirectCheck! a))
         (rb (ag/vcsDirectCheck! b))
         (rc (ag/vcsDirectCheck! c))
+        (d (str base "/deleted"))
+        (okD (and (tree d true) (seed d) (g d (list (v "r" "m") "-q" ".asl/mem/vcsDirectAllow.asn"))))
+        (rd (ag/vcsDirectCheck! d))
+        (e (str base "/noMain"))
+        (okE (and (tree e true) (g e (list (v "bran" "ch") "-m" "dev"))))
+        (re (ag/vcsDirectCheck! e))
         (wa (ag/cmdConsistency! a (list)))
         (wb (ag/cmdConsistency! b (list)))]
     (do
@@ -51,6 +57,10 @@ fn ! runTests -> Bool
       (assert (and (= ra.id "vcsDirect") (= ra.status ":passed")) (str "the tree without a direct site passes: " ra.status " " ra.ev))
       (assert (and (= rb.status ":failed") (= rb.err "ERR_VCS_DIRECT")) (str "a seeded direct commit site fails: " rb.status " " rb.ev))
       (assert (stringContains? rb.ev "seeded.asl") (str "the failure names the site: " rb.ev))
+      (assert okD "deleted-allowlist fixture tree built")
+      (assert (and (= rd.status ":failed") (= rd.err "ERR_VCS_ALLOW_DELETED")) (str "a seeded site plus a deleted allowlist stays red: " rd.status " " rd.err))
+      (assert okE "no-main fixture tree built")
+      (assert (and (= re.status ":failed") (= re.err "ERR_VCS_DIRECT_AUDIT")) (str "an audit error (base does not resolve) is red: " re.status " " re.err))
       (assert (= rc.status ":skipped") (str "a tree without the allowlist is skipped: " rc.status))
       (assert (stringContains? wb.receipt "ERR_VCS_DIRECT") (str "audit consistency on the seeded tree carries the vcsDirect failure: " wb.receipt))
       (assert (not (stringContains? wa.receipt "ERR_VCS_DIRECT")) "and the clean tree does not")

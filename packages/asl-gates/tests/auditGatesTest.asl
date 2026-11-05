@@ -586,6 +586,7 @@ fn ! runTests -> Bool
         (recordMismatches (fold (fn [(acc (List String)) (c AVal)] -> (List String) (listAppend acc (recordFails! tmp c))) (list) records))
         (cleaned (pathRemove tmp))]
     (do
+      (assert (= (ag/coreSweepArgv) (list "check" "--all")) "the core sweep passes the explicit --all")
       (assert (= (headOf header) "auditParity") "fixture header is (:auditParity ...)")
       (assert (ok? made) "temp root created")
       (assert (= t.cases (numField header "cases")) (str "replayed cases " (stringFromInt64 t.cases) " = header :cases"))
