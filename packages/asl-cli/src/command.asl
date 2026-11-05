@@ -194,6 +194,14 @@ fn ! train! ctx: sys/Context args: (List String) -> Int64
       (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list))
       (do (sys/sayErr! "Error: the train tool entry tools/fleet/train.asl was not found") 1)))
 
+
+; (:m :ref VCS-CLI-ENTRY :do "asl vcs OP ARGS runs asl/tools/vcs/vcsMain.asl: the backend-neutral commit, status, diff, log and head ops; commit stages only named paths and refuses on a commitGuard block or partial check")
+fn ! vcs! ctx: sys/Context args: (List String) -> Int64
+  (let [(entry (str ctx.root "/asl/tools/vcs/vcsMain.asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list (str "ASL_ROOT=" ctx.root)))
+      (do (sys/sayErr! "Error: the vcs tool entry asl/tools/vcs/vcsMain.asl was not found") 1)))
+
 fn ! shim! ctx: sys/Context mode: String args: (List String) -> Int64
   (let [(entry (str ctx.root "/asl/packages/asl-utils/src/timeout.asl"))]
     (if (sys/isFile? entry)
@@ -494,6 +502,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
     ((= cmd "train") (train! ctx args))
+    ((= cmd "vcs") (vcs! ctx args))
     ((= cmd "timeout") (shim! ctx "timeout" args))
     ((or (= cmd "relay") (or (= cmd "rla") (= cmd "gateway"))) (tool! ctx "asl-gateway" args))
     ((or (= cmd "web") (= cmd "search")) (webDelegate! ctx "search" "query" args))

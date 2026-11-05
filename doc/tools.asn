@@ -1889,3 +1889,4 @@
 (:doc :symbol "asl/tools/coord/mergeCheck.asl#classify" :text "head reds against base reds by check id and :ev with digit runs collapsed: absent from base is a regression, present is pre-existing")
 (:doc :symbol "asl/tools/coord/mergeCheck.asl#judgeSuite" :text "one suite at head against its base run: regression, preExisting, unverified (timeout) or pass; fewer executed asserts than a green base is a regression")
 (:doc :symbol "asl/tools/coord/mergeCheck.asl#missingRows" :text "plan rows for pre-existing reds whose MC-id-digest the ledger text does not carry yet, so --ledger appends idempotently")
+(:doc :symbol "asl/packages/asl-cli/src/command.asl#vcs!" :text "asl vcs OP: commit --msg M -- PATH (stage only the named paths, commitGuard in process, refuse on block or partial), status, diff BASE HEAD, log RANGE, head; prints an ASN receipt, exit 0 ok, 1 refused, 2 usage")
