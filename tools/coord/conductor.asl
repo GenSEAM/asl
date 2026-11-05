@@ -1683,11 +1683,20 @@ fn ! ownedChanges! p: String owns: (List String) -> (List String)
                  (match (stringIndexOf path " -> ") ((some at) (optionOr (stringSlice path (+ at 4) (stringLength path)) path)) ((none) path))))
              (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) (stringLines r.out))))))
 
+; (:m :ref FLEET-COMMIT-VIA-VCS :do "a unit with no :owns used to be committed by add -A; the vcs layer commits only named paths, so the dirty paths of the worktree are named here (untracked ones included)")
+fn ! dirtyPaths! p: String -> (List String)
+  (let [(r (gitOut p (list "status" "--porcelain" "--untracked-files=all")))]
+    (if (!= r.exit 0) (list)
+      (map (fn [(l String)] -> String
+             (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))]
+               (match (stringIndexOf path " -> ") ((some at) (optionOr (stringSlice path (+ at 4) (stringLength path)) path)) ((none) path))))
+           (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) (stringLines r.out)))))
+
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "the driver commit stages only the owned paths that changed; true when a commit landed")
 fn ! commitWrite! p: String owns: (List String) id: String model: String -> Bool
   (let [(changed (ownedChanges! p owns))]
     (if (listEmpty? changed) false
-      (fp/driverCommitRow! p (if (listEmpty? owns) (list) changed) id model)))
+      (fp/driverCommitRow! p (if (listEmpty? owns) (dirtyPaths! p) changed) id model)))
 
 ; (:m :ref COORD-WIP-RESCUE :do "progress counts commits past the base except wip rescue commits, found by their ASN message head (:c :a wip :do; a rescued tree is kept work, not a finished write")
 fn pastArgs base: String -> (List String)
