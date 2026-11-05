@@ -8,7 +8,7 @@ fn ! gitIn dir: String args: String -> String
 
 fn ! trainFake! dev: String -> Bool
   (let [(_ (dirCreate (str dev "/bin")))
-        (_ (fileWrite (str dev "/bin/asl") "#!/bin/sh\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\necho \"$@\" >> \"$D/.git/trainArgs\"\ncase \"$(cat \"$D/.git/trainMode\" 2>/dev/null)\" in\n  red) echo \"FAIL train gates red on impl.txt\"; exit 1 ;;\n  commitError) echo \"(:commitError :why x)\"; exit 0 ;;\n  noop) exit 0 ;;\n  *) git -C \"$D\" merge --no-ff -q -m \"train $2\" \"$2\" || exit 1; exit 0 ;;\nesac\n"))
+        (_ (fileWrite (str dev "/bin/asl") "#!/bin/sh\nif [ \"$1\" = audit ]; then echo \"(:audit :sub $2 :status :passed)\"; exit 0; fi\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\necho \"$@\" >> \"$D/.git/trainArgs\"\ncase \"$(cat \"$D/.git/trainMode\" 2>/dev/null)\" in\n  red) echo \"FAIL train gates red on impl.txt\"; exit 1 ;;\n  commitError) echo \"(:commitError :why x)\"; exit 0 ;;\n  noop) exit 0 ;;\n  *) git -C \"$D\" merge --no-ff -q -m \"train $2\" \"$2\" || exit 1; exit 0 ;;\nesac\n"))
         (made (pf/sh (str "mkdir -p " dev "/bin && chmod 755 " dev "/bin/asl && echo bin/asl >> " dev "/.git/info/exclude && echo madeOk")))]
     (stringContains? made "madeOk"))
 

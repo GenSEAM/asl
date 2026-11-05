@@ -1,12 +1,12 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
-      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
+      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
 
@@ -670,11 +670,18 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
           ((= res.verdict "requeue") (let [(_ (requeueUnreadable! ctx c res))] ()))
           (else (let [(_ (fail! ctx c "review" res.model res.sig res.ms))] ()))))
       ((= c.st "merging")
+        (cond
+          ; (:m :ref CONDUCTOR-MERGE-CHECK :do "mergeCheck verdicts park the unit without a failure count or a retry: block is blocked with the check rows, hold is blocked await mergeHold for the lead")
+          ((or (= res.verdict "block") (= res.verdict "hold"))
+            (let [(_ (dropLease! ctx c))
+                  (_ (move! ctx (with (noEpoch c) :sig res.sig :await (if (= res.verdict "hold") "mergeHold" "")) "blocked" "merge" "" 0 0 (str "mergeCheck " res.verdict) res.ms))]
+              ()))
+          (else
         (if (= res.ok 1)
           (match (st/commit! ctx.dir c.id c.epoch c.branch)
             ((ok _) (let [(_ (move! ctx (noEpoch c) "merged" "merge" "" 0 0 "merged" res.ms))] ()))
             ((err e) (let [(_ (mergeFail! ctx u c e res.ms))] ())))
-          (let [(_ (mergeFail! ctx u c res.sig res.ms))] ())))
+          (let [(_ (mergeFail! ctx u c res.sig res.ms))] ())))))
       (else ())))
 
 ; (:m :do "returns the in-flight capacity left for the rest of this tick")
@@ -2072,7 +2079,37 @@ fn ! promoteDev! rc: RealCfg -> String
             (if (= m.exit 0) "merged"
               (let [(_ (gitOut rc.devRepo (list "merge" "--abort")))] "conflict")))))))
 
-fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the merge-time audit asl/tools/coord/mergeCheck.asl in process on the unit branch against its merge base with dev, cli = the dev clone bin/asl, cache under the home; returns its exit (0 pass, 1 block, 3 unverified, 2 could not run) and receipt")
+fn ! realMergeCheck! rc: RealCfg c: CUnit base: String -> (Pair Int64 String)
+  (mc/run! (mc/Opts :repo rc.devRepo :base base :head c.branch :cli (str rc.devRepo "/bin/asl") :totalS 900 :stepS 300 :cache (str rc.home "/.asl/run/mergeCheck")))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the receipt row of one merge check lands in the journal whatever the verdict, so a merged unit shows what was checked")
+fn ! mergeReceipt! store: String id: String ex: Int64 receipt: String -> Bool
+  (ok? (fileAppend (journalPath store) (str "(:mergeReceipt :unit " (st/q id) " :exit " (n ex) " :at " (n (nowMs)) " " receipt ")\n")))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the text of one parenthesised list of a receipt, :structure or :regressions or :unverified, cut to 300 chars, for the signature of a block or a hold")
+fn mergeCheckWhy receipt: String key: String -> String
+  (let [(parts (stringSplit receipt (str " " key " (")))
+        (rows (if (< (listLength parts) 2) "" (stringTrim (optionOr (listHead (stringSplit (optionOr (listGet parts 1) "") ") :")) ""))))]
+    (optionOr (stringSlice rows 0 300) rows))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "a check that blocks leaves dev untouched and the unit blocked with verdict block and the sig mergeCheck: rows; one that could not verify (exit 3, or 2 when it could not run) holds the unit with verdict hold plus one lead-stream event; neither counts as a failed merge; exit 0 returns none and the train goes on")
+fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option Res)
+  (let [(ex (pairFirst r))
+        (receipt (pairSecond r))
+        (_ (mergeReceipt! store u.id ex receipt))]
+    (cond
+      ((= ex 0) (none))
+      ((= ex 1) (some (with (failRes (str "mergeCheck: " (mergeCheckWhy receipt ":structure") " " (mergeCheckWhy receipt ":regressions"))) :verdict "block")))
+      (else
+        (let [(why (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (optionOr (stringSlice receipt 0 160) receipt)))
+              (_ (ls/emitAt! (dirOf store) (nowMs) "conductor" "warn" "mergeCheckHold" u.id u.id why))]
+          (some (with (failRes why) :verdict "hold"))))))
+
+fn ! mergeRes rc: RealCfg store: String u: st/Task c: CUnit -> Res
+  (mergeResWith rc store u c realMergeCheck!)
+
+fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [RealCfg CUnit String] -> (Pair Int64 String)) -> Res
   (let [(cur (currentBranch rc.devRepo))
         (promoted (if (or (= rc.devBranch "main") (or (= rc.devBranch "master") (!= cur rc.devBranch))) "" (promoteDev! rc)))]
     (cond
@@ -2081,15 +2118,21 @@ fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
       ((or (= promoted "conflict") (= promoted "fetchFailed"))
         (failRes (str "refused: main does not come into dev (" promoted ")")))
       (else
-      (let [(_ (if (= rc.devRepo rc.repo) 0 (dropRemotes! rc.devRepo)))
-            (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
-                       (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
-            (d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
-                                 (fr/limits 3600 200)))]
-        (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
-          (let [(_ (w/removeWt! rc.wt u.id true))]
-            (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
-          (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms)))))))
+        (let [(_ (if (= rc.devRepo rc.repo) 0 (dropRemotes! rc.devRepo)))
+              (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
+                         (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
+              (mb (if (= fetched.exit 0) (gitOut rc.devRepo (list "merge-base" "HEAD" c.branch)) fetched))
+              ; (:m :ref CONDUCTOR-MERGE-CHECK :do "no merge base or a failed fetch skips the check, the train below fails on the same cause with its own signature")
+              (verdict (if (and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check rc c (stringTrim mb.out))) (none)))]
+          (match verdict
+            ((some stopped) stopped)
+            ((none)
+              (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
+                                         (fr/limits 3600 200)))]
+                (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
+                  (let [(_ (w/removeWt! rc.wt u.id true))]
+                    (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
+                  (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms))))))))))
 
 ; (:m :ref CONDUCTOR :do "thin adapter for the COND2 ladder: its Ruling action (merge|fix|await|blocked) maps to the review verdict pass|fail|defer|block; an unknown action blocks")
 fn rulingVerdict action: String -> String
@@ -2437,7 +2480,7 @@ fn ! realRes rc: RealCfg dir: String stage: String u0: st/Task c: CUnit -> Res
     ((= stage "write") (writeRes rc dir u c))
     ((= stage "gates") (gatesStage rc dir u c))
     ((= stage "review") (realReview rc dir u c))
-    ((= stage "merge") (mergeRes rc u c))
+    ((= stage "merge") (mergeRes rc dir u c))
     (else (failRes (str "unknown stage " stage)))))
 
 fn ! loadUnit! dir: String id: String -> (Option (Pair st/Task CUnit))
