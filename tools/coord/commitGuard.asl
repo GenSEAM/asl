@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -255,18 +255,22 @@ fn defaultWarmS -> Int64
 fn ! warmRows! cfg: Cfg src: String files: (List String) -> (List Hit)
   (if (listEmpty? files)
     (list)
-    (let [(name ".guardWarm.asl")
+    (let [(name "guardWarmProbe.asl")
+          (cfgPath (str src "/.asl.config.asn"))
+          (hadCfg (fileExists? cfgPath))
+          (c (if hadCfg (ok ()) (fileWrite cfgPath "(:aslConfig\n  :workspace \"guardWarm\"\n  :root true\n)\n")))
           (w (fileWrite (str src "/" name) "(module guardWarm\n  :x []\n  :i [])\n"))
-          (rows (checkChunk! cfg src (list name) cfg.warmS))
-          (gone (pathRemove (str src "/" name)))]
+          (rows (checkChunk! cfg cfg.aslRoot src (list name) cfg.warmS))
+          (gone (pathRemove (str src "/" name)))
+          (gone2 (if hadCfg (ok ()) (pathRemove cfgPath)))]
       (if (listEmpty? rows)
         (list)
         (let [(why (str "toolchain warm-up failed (" (stringFromInt64 cfg.warmS) " s limit): " (optionOr (listHead (map (fn [(h Hit)] -> String h.why) rows)) "no verdict")))]
           (map (fn [(p String)] -> Hit (unchecked p why)) files)))))
 
 ; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one BLOCKING toolchain row (fail closed: a stale native CLI is not a verdict on the file) plus unchecked files, any other failure blocks per file with its first error line")
-fn ! checkChunk! cfg: Cfg src: String files: (List String) secs: Int64 -> (List Hit)
-  (let [(d (fr/runOneLimited (fr/job (listAppend (list (checkBinOf cfg) "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
+fn ! checkChunk! cfg: Cfg ws: String src: String files: (List String) secs: Int64 -> (List Hit)
+  (let [(d (fr/runOneLimited (fr/job (listAppend (list (checkBinOf cfg) "check") (map (fn [(p String)] -> String (str src "/" p)) files)) ws (fr/childEnv (list (str "ASL_ROOT=" ws)))) (fr/limits secs 200)))]
     (chunkRows src files secs d.exit d.verdict d.out))
 
 ; (:m :ref COMMIT-GUARD-VERDICT :do "the rows of one asl check chunk from its exit code, verdict and output: pure; exit 0 counts a file clean only when the output carries its ok line, so a silent or foreign checker leaves it unchecked")
@@ -300,6 +304,18 @@ fn configNum text: String key: String -> (Option Int64)
     ((none) none)
     ((some i) (stringToInt64 (digitsPrefix (stringTrim (optionOr (stringSlice text (+ i (stringLength key)) (stringLength text)) ""))))))
 
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "a string config value: the text between the quotes after KEY, empty when absent")
+fn configStr text: String key: String -> String
+  (match (stringIndexOf text (str key " \""))
+    ((none) "")
+    ((some i) (let [(rest (optionOr (stringSlice text (+ i (stringLength key) 2) (stringLength text)) ""))]
+                (match (stringIndexOf rest "\"") ((some j) (optionOr (stringSlice rest 0 j) "")) ((none) "")))))
+
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "the directory the staged export goes under: :commitGuardExportDir \"DIR\" of aslRoot/.asl.config.asn when set, else TMPDIR; only a configured directory is ever swept, never the shared temp dir")
+fn ! exportBase! cfg: Cfg -> String
+  (let [(c (configStr (resultOr (fileReadString (str cfg.aslRoot "/.asl.config.asn")) "") ":commitGuardExportDir"))]
+    (if (stringEmpty? c) (optionOr (envGet "TMPDIR") "/tmp") c))
+
 ; (:m :ref COMMIT-GUARD-CHECK-DEADLINE :do "adopted 400 ms of asl check time per KB of source, added to perFileS; a workspace tunes it with :commitGuardPerKbMs N in aslRoot/.asl.config.asn, never an env var")
 fn defaultPerKbMs -> Int64
   400
@@ -327,7 +343,7 @@ fn ! scaledSecs! cfg: Cfg src: String files: (List String) -> Int64
 fn chunksOf xs: (List String) n: Int64 -> (List (List String))
   (if (listEmpty? xs) (list) (cons (listTake xs n) (chunksOf (listDrop xs n) n)))
 
-fn ! checkLoop! cfg: Cfg src: String chunks: (List (List String)) deadline: Int64 acc: (List Hit) -> (List Hit)
+fn ! checkLoop! cfg: Cfg ws: String src: String chunks: (List (List String)) deadline: Int64 acc: (List Hit) -> (List Hit)
   (match (listHead chunks)
     ((none) acc)
     ((some files)
@@ -335,7 +351,7 @@ fn ! checkLoop! cfg: Cfg src: String chunks: (List (List String)) deadline: Int6
             (rest (optionOr (listTail chunks) (list)))]
         (if (<= left 1000)
           (listAppend acc (map (fn [(p String)] -> Hit (unchecked p "total check budget spent")) (listFlatMap (fn [(c (List String))] -> (List String) c) chunks)))
-          (checkLoop! cfg src rest deadline (listAppend acc (checkChunk! cfg src files (min (scaledSecs! cfg src files) (/ left 1000)))))))))
+          (checkLoop! cfg ws src rest deadline (listAppend acc (checkChunk! cfg ws src files (min (scaledSecs! cfg src files) (/ left 1000)))))))))
 
 fn aslPath? p: String -> Bool
   (stringEndsWith? p ".asl")
@@ -357,20 +373,30 @@ fn diffBase cfg: Cfg -> (List String)
 
 ; (:m :do "export the index content of the changed paths into a private temp dir (git checkout-index --prefix), so every check judges the blob that will land and a partly staged file is judged by its staged half; the dir is empty when the export failed")
 fn ! exportStaged! cfg: Cfg paths: (List String) -> (Pair String String)
-  (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/commitGuard-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+  (exportStagedWith! cfg paths (listAny? aslPath? paths))
+
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "exportStaged! with the workspace context exported only when withCtx is true; stale commitGuard export dirs older than an hour (a killed guard) are swept first")
+fn ! exportStagedWith! cfg: Cfg paths: (List String) withCtx: Bool -> (Pair String String)
+  (let [(base (exportBase! cfg))
+        (swept (sweepStale! cfg base))
+        (dir (str base "/commitGuard-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (mk (fr/runOneLimited (fr/job (list "mkdir" "-p" dir) "." (fr/childEnv (list))) (fr/limits 20 16)))]
     (cond
       ((!= mk.exit 0) (pair dir (str "cannot create the export dir: " mk.out)))
       ((listEmpty? paths) (pair dir ""))
       (else (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths)))]
               (if (!= x.exit 0) (pair dir (str "git checkout-index failed: " x.out))
-                (if (listAny? aslPath? paths) (pair dir (exportContext! cfg dir paths)) (pair dir "")))))))
+                (if withCtx (pair dir (exportContext! cfg dir paths)) (pair dir "")))))))
+
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "a nested .asl.config.asn (any but the root one) is not exported: with one on the way up from an exported file the checker resolves root-level imports such as tools/remote/form against that nested workspace only and reports them undeclared, measured on asl/packages/asl-agent/src/main.asl; without it the export resolves like the repo does")
+fn nestedConfig? p: String -> Bool
+  (stringEndsWith? p "/.asl.config.asn")
 
 ; (:m :ref COMMIT-GUARD-PKG-RESOLVE :do "the index entries of every other .asl and .asn file (manifests, the root .asl.config.asn, sibling and dependency modules), so asl check of an exported file resolves imports in its own package and workspace exactly as a plain check at that path would; a quoted path (special characters under quotepath off) is skipped, since checkout-index takes the raw name")
 fn ! contextPaths! cfg: Cfg paths: (List String) -> (Result (List String) String)
   (let [(ls (git! cfg (list "ls-files" "--cached" "--" "*.asl" "*.asn")))]
     (if (!= ls.exit 0) (err (str "git ls-files failed: " (stringTrim ls.out)))
-      (ok (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (and (not (stringStartsWith? p "\"")) (not (listContains? paths p)))))
+      (ok (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (and (not (stringStartsWith? p "\"")) (and (not (listContains? paths p)) (not (nestedConfig? p))))))
                   (stringLines ls.out)))))
 
 ; (:m :ref COMMIT-GUARD-PKG-RESOLVE :do "export the context paths in chunks of 400 into dir beside the changed files; the first failure is the message, empty on success")
@@ -383,9 +409,32 @@ fn ! exportContext! cfg: Cfg dir: String paths: (List String) -> String
                           (if (= x.exit 0) "" (str "git checkout-index of the package context failed: " x.out)))))
                     "" (chunksOf ctx 400))))
 
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "a staged .asl whose working-tree file equals its index entry is checked where it lies: the exact workspace context, the warm cache of the repo, no export; git diff --quiet of that path against the index (the cfg index file when given) answers, and anything else (partly staged, deleted, unreadable) is exported and judged by its staged blob")
+fn ! sameRoot? a: String b: String -> Bool
+  (= (resultOr (realPath a) a) (resultOr (realPath b) b))
+
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "the root of the asl binary that checks: the tool tree when one is given, else aslRoot; a file is checked in place only when that root is the repo itself, because a binary of another tree resolves root-level imports of a file outside its own root against the nearest nested workspace and reports them undeclared (measured: tools/remote/form from asl-agent/src/main.asl in a fresh worktree)")
+fn binRoot cfg: Cfg -> String
+  (if (stringEmpty? cfg.checkBin) cfg.aslRoot (parentOf (parentOf cfg.checkBin)))
+
+fn parentOf p: String -> String
+  (let [(parts (stringSplit p "/"))]
+    (if (<= (listLength parts) 1) "." (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
+
+fn ! inPlaceOk! cfg: Cfg p: String -> Bool
+  (and (stringEmpty? cfg.range)
+       (and (sameRoot? (binRoot cfg) cfg.repo)
+       (and (fileExists? (str cfg.repo "/" p))
+            (= (git! cfg (list "diff" "--quiet" "--no-ext-diff" "--" p)).exit 0))))
+
 ; (:m :do "the block row for a failed export, none when the export succeeded")
 fn exportHits msg: String -> (List Hit)
   (if (stringEmpty? msg) (list) (list (hit "git" "" (esc1 msg))))
+
+fn ! sweepStale! cfg: Cfg base: String -> Bool
+  (if (stringEmpty? (configStr (resultOr (fileReadString (str cfg.aslRoot "/.asl.config.asn")) "") ":commitGuardExportDir"))
+    false
+    (= (fr/runOneLimited (fr/job (list "find" base "-maxdepth" "1" "-name" "commitGuard-*" "-mmin" "+60" "-exec" "rm" "-rf" "{}" "+") "." (fr/childEnv (list))) (fr/limits 60 16)).exit 0))
 
 fn ! dropExport! dir: String -> Bool
   (if (stringContains? dir "/commitGuard-")
@@ -401,15 +450,20 @@ fn ! gather! cfg: Cfg -> (Pair Int64 (List Hit))
         (ns (git! cfg (listAppend (list "diff" "--name-status" "--no-renames") (listAppend (diffBase cfg) (scopeArgs cfg)))))
         (changes (if (= ns.exit 0) (parseNameStatus ns.out) (list)))
         (paths (map (fn [(c Change)] -> String c.path) changes))
-        (ex (if (stringEmpty? cfg.range) (exportStaged! cfg paths) (pair cfg.repo "")))
+        (inPl (filter (fn [(p String)] -> Bool (and (aslPath? p) (inPlaceOk! cfg p))) paths))
+        (needCtx (listAny? (fn [(p String)] -> Bool (and (aslPath? p) (not (listContains? inPl p)))) paths))
+        (ex (if (stringEmpty? cfg.range) (exportStagedWith! cfg paths needCtx) (pair cfg.repo "")))
         (src (pairFirst ex))
         (exRow (exportHits (pairSecond ex)))
         (srcPaths (filter (fn [(p String)] -> Bool (or (aslPath? p) (asnPath? p))) paths))
         (bal (somes! srcPaths (fn [(p String)] -> (Option Hit) (balanceHit! src p))))
         (balBad (map (fn [(h Hit)] -> String h.path) bal))
         (aslGood (filter (fn [(p String)] -> Bool (and (aslPath? p) (not (listContains? balBad p)))) paths))
+        (goodIn (filter (fn [(p String)] -> Bool (listContains? inPl p)) aslGood))
+        (goodEx (filter (fn [(p String)] -> Bool (not (listContains? inPl p))) aslGood))
         (warm (if (not (listEmpty? exRow)) (list) (warmRows! cfg src aslGood)))
-        (chk (if (or (not (listEmpty? exRow)) (not (listEmpty? warm))) warm (checkLoop! cfg src (chunksOf aslGood 10) (+ t0 (* (+ cfg.totalS (- (scaledSecs! cfg src aslGood) cfg.perFileS)) 1000)) (list))))
+        (chk (if (or (not (listEmpty? exRow)) (not (listEmpty? warm))) warm (let [(dl (+ t0 (* (+ cfg.totalS (+ (- (scaledSecs! cfg src goodEx) cfg.perFileS) (- (scaledSecs! cfg cfg.repo goodIn) cfg.perFileS))) 1000)))]
+                                                                                       (listAppend (checkLoop! cfg cfg.repo cfg.repo (chunksOf goodIn 10) dl (list)) (checkLoop! cfg cfg.aslRoot src (chunksOf goodEx 10) dl (list))))))
         (bt (readText! (str cfg.repo "/scripts/audit/foreignBaseline.asn")))
         (fgn (if (or (stringEmpty? bt) (not (listEmpty? exRow))) (list)
                (fold (fn [(acc (List Hit)) (c Change)] -> (List Hit)
