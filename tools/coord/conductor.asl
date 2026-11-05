@@ -31,7 +31,7 @@
   (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace) (:f hold Bool :default false))
 
 (schema RealCfg
-  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default "") (:f writerModel String :default "") (:f laneTtlSec Int64 :default 3600))
+  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default "") (:f writerModel String :default "") (:f laneTtlSec Int64 :default 3600) (:f mergeCheckSec Int64 :default 1200))
 
 fn cuDir dir: String -> String
   (str dir "/cond")
@@ -1246,6 +1246,7 @@ fn ! status! ctx: Ctx -> String
     (stringJoin (listAppend (listAppend rows spend)
                   (list (str "(:running (" (idList cus active?) "))")
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
+                        (str "(:held (" (idList cus (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (= c.await "mergeHold")))) "))")
                         (str "(:parked (" (stringJoin (map (fn [(p (Pair String String))] -> String (st/q (str (pairFirst p) ":" (optionOr (listHead (stringSplit (pairSecond p) "\n")) ""))) ) (parkedRows! ctx.dir)) " ") "))")
                         (str "(:escalations " (n (listLength esc)) ")")))
                 "\n"))
@@ -2079,9 +2080,10 @@ fn ! promoteDev! rc: RealCfg -> String
             (if (= m.exit 0) "merged"
               (let [(_ (gitOut rc.devRepo (list "merge" "--abort")))] "conflict")))))))
 
+; (:m :ref CONDUCTOR-MERGE-CHECK-FIX :do "budgets: merge-check-sec adopted 1200 (flag, RealCfg.mergeCheckSec) plus the train limit 3600 stay under the stage deadline, whose default is now 5400 (was 4200, which the sum of the old 900 and 3600 already exceeded)")
 ; (:m :ref CONDUCTOR-MERGE-CHECK :do "the merge-time audit asl/tools/coord/mergeCheck.asl in process on the unit branch against its merge base with dev, cli = the dev clone bin/asl, cache under the home; returns its exit (0 pass, 1 block, 3 unverified, 2 could not run) and receipt")
 fn ! realMergeCheck! rc: RealCfg c: CUnit base: String -> (Pair Int64 String)
-  (mc/run! (mc/Opts :repo rc.devRepo :base base :head c.branch :cli (str rc.devRepo "/bin/asl") :totalS 900 :stepS 300 :cache (str rc.home "/.asl/run/mergeCheck")))
+  (mc/run! (mc/Opts :repo rc.devRepo :base base :head c.branch :cli (str rc.devRepo "/bin/asl") :totalS rc.mergeCheckSec :stepS 300 :cache (str rc.home "/.asl/run/mergeCheck")))
 
 ; (:m :ref CONDUCTOR-MERGE-CHECK :do "the receipt row of one merge check lands in the journal whatever the verdict, so a merged unit shows what was checked")
 fn ! mergeReceipt! store: String id: String ex: Int64 receipt: String -> Bool
@@ -2499,7 +2501,7 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
              :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec (st/intOpt args "lease-sec" 3600) :gateSec 3600
              :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
-             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600)))
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600) :mergeCheckSec (st/intOpt args "merge-check-sec" 1200)))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -2516,7 +2518,7 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
   (let [(repo (st/opt args "repo" "."))
         (pass (fold (fn [(acc (List String)) (k String)] -> (List String)
                       (if (stringEmpty? (st/opt args k "")) acc (listAppend acc (list (str "--" k) (st/opt args k "")))))
-                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool" "writer-model" "lease-sec" "lane-ttl-sec")))]
+                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool" "writer-model" "lease-sec" "lane-ttl-sec" "merge-check-sec")))]
     (fn [(stage String) (u st/Task) (c CUnit)] -> (List String)
       (listAppend (list (str repo "/bin/asl") "run" (str repo "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" dir) pass)))
 
@@ -2525,7 +2527,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (dir (st/opt args "store" (str (resultOr (getHomeDir) ".") "/.asl/run/conductor")))
         (rc (realCfg args dir))
         (ctx (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
-                  :stageSec (st/intOpt args "stage-sec" 4200) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
+                  :stageSec (st/intOpt args "stage-sec" 5400) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
     (cond
       ((= cmd "stage") (ok (stageMain! args dir)))
       ((= cmd "tick") (match (tick! ctx) ((ok c) (do (println (str "(:tick :changed " (n c) ")")) (ok 0))) ((err e) (do (eprintln e) (ok 1)))))

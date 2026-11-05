@@ -21,6 +21,14 @@ fn ! seedGrowth! root: String u: st/Task -> String
 fn stubUnverified rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
   (pair 3 "(:mergeCheck :verdict unverified :unverified (\"gates:deadline\") :structure () :regressions ())")
 
+; (:m :ref CONDUCTOR-MERGE-CHECK-FIX :do "exit 2 is a check that could not run (checkout failed), never a pass: it holds like exit 3; the recording stub writes the base it was given so the test can compare it with the fork point")
+fn stubCannotRun rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
+  (pair 2 "(:mergeCheck :verdict block :error \"cannot check out base and head\")")
+
+fn ! stubRecord rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
+  (let [(_ (fileWrite (str rc.home "/baseSeen") base))]
+    (pair 0 "(:mergeCheck :verdict pass)"))
+
 fn rowsOf root: String needle: String -> Int64
   (listLength (filter (fn [(l String)] -> Bool (stringContains? l needle)) (stringLines (resultOr (fileReadString (str root "/lead/stream.asn")) ""))))
 
@@ -51,7 +59,12 @@ fn ! runTests -> Bool
         (wtGrow (seedGrowth! root (pf/unitIn "K1" "sh check.sh impl.txt")))
         (wtHold (pf/seedUnit! root (pf/unitIn "H1" "sh check.sh impl.txt") "merging" "impl.txt"))
         (wtStub (pf/seedUnit! root (pf/unitIn "H2" "sh check.sh impl.txt") "merging" "impl.txt"))
+        (wtTwo (pf/seedUnit! root (pf/unitIn "H3" "sh check.sh impl.txt") "merging" "impl.txt"))
+        (wtBase (pf/seedUnit! root (pf/unitIn "B1" "sh check.sh impl.txt") "merging" "impl.txt"))
         (dev (devClone! root))
+        (forkPoint (gitIn repo "rev-parse main"))
+        (_ (pf/sh (str "cd " dev " && printf later > later.txt && git add -A && git -c user.email=t@example.invalid -c user.name=t commit -qm '(:c :a t :do later)' && echo ok")))
+        (devTip (gitIn dev "rev-parse HEAD"))
         (rc (cd/realCfg (list "--repo" (str root "/repo") "--dev-repo" dev "--dev" "dev" "--worktrees" (str root "/wts") "--home" (str root "/home")) (str root "/store")))
         (store (str root "/store"))
         (head0 (gitIn dev "rev-parse HEAD"))
@@ -64,6 +77,12 @@ fn ! runTests -> Bool
         (_ (fileWrite (str dev "/.git/auditMode") "ok"))
         (rStub (cd/mergeResWith rc store (pf/unitIn "H2" "sh check.sh impl.txt") (pf/cuIn "H2" "merging" wtStub "sh/H2") stubUnverified))
         (headStub (gitIn dev "rev-parse HEAD"))
+        (head2a (gitIn dev "rev-parse HEAD"))
+        (rTwo (cd/mergeResWith rc store (pf/unitIn "H3" "sh check.sh impl.txt") (pf/cuIn "H3" "merging" wtTwo "sh/H3") stubCannotRun))
+        (headTwo (gitIn dev "rev-parse HEAD"))
+        (argsTwo (resultOr (fileReadString (str dev "/.git/trainArgs")) ""))
+        (rBase (cd/mergeResWith rc store (pf/unitIn "B1" "sh check.sh impl.txt") (pf/cuIn "B1" "merging" wtBase "sh/B1") stubRecord))
+        (baseSeen (resultOr (fileReadString (str root "/home/baseSeen")) ""))
         (rOk (cd/mergeRes rc store (pf/unitIn "C1" "sh check.sh impl.txt") (pf/cuIn "C1" "merging" wtClean "sh/C1")))
         (headOk (gitIn dev "rev-parse HEAD"))
         (argsOk (resultOr (fileReadString (str dev "/.git/trainArgs")) ""))
@@ -73,6 +92,8 @@ fn ! runTests -> Bool
         (nHold (rowsOf root "mergeCheckHold"))
         (nH1 (rowsOf root "H1"))
         (nH2 (rowsOf root "H2"))
+        (nH3 (rowsOf root "H3"))
+        (statusText (cd/status! (ctxFor root)))
         (wtKept (fileExists? (str wtGrow "/.git")))
         (_ (pf/cleanup root))]
     (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? dev)) (and (not (stringEmpty? wtClean)) (and (not (stringEmpty? wtGrow)) (and (not (stringEmpty? wtHold)) (not (stringEmpty? wtStub))))))) "fixture: source repo, dev clone and four unit branches are up")
@@ -82,7 +103,10 @@ fn ! runTests -> Bool
         (assert (and (= rHold.ok 0) (= rHold.verdict "hold") (stringContains? rHold.sig "mergeCheck unverified exit 3")) (str "an audit with no receipt is unverified and holds the unit: " rHold.verdict " " rHold.sig))
         (assert (= headHold head0) "a held unit leaves dev where it was")
         (assert (and (= rStub.verdict "hold") (stringContains? rStub.sig "gates:deadline") (= headStub head0)) (str "a stubbed unverified check holds with its unverified step in the signature: " rStub.sig))
-        (assert (and (= nHold 2) (and (= nH1 1) (= nH2 1))) (str "one lead-stream row per held unit: " (stringFromInt64 nHold)))
+        (assert (and (= nHold 3) (and (= nH1 1) (and (= nH2 1) (= nH3 1)))) (str "one lead-stream row per held unit: " (stringFromInt64 nHold)))
+        (assert (and (= rTwo.verdict "hold") (= rTwo.ok 0) (stringContains? rTwo.sig "exit 2") (= headTwo head2a) (not (stringContains? argsTwo "H3"))) (str "a check that could not run (exit 2) holds the unit, no train, dev unchanged: " rTwo.verdict " " rTwo.sig))
+        (assert (and (not (stringEmpty? baseSeen)) (= baseSeen forkPoint) (!= baseSeen devTip)) (str "the check gets the fork point of the branch, not the dev head: seen " baseSeen " fork " forkPoint " dev " devTip))
+        (assert (stringContains? statusText "(:held (\"P2\"))") (str "status! lists a held unit: " statusText))
         (assert (and (= rOk.ok 1) (stringEmpty? rOk.sig) (!= headOk head0)) (str "a clean branch passes the check and merges: " rOk.sig))
         (assert (stringContains? argsOk "train sh/C1 --onto HEAD") (str "the train ran for the clean branch only: " argsOk))
         (assert (and (stringContains? journal "(:mergeReceipt :unit \"C1\" :exit 0 ") (stringContains? journal "(:mergeReceipt :unit \"K1\" :exit 1 ") (stringContains? journal "(:mergeReceipt :unit \"H1\" :exit 3 ")) "the journal holds the mergeCheck receipt of a pass, a block and a hold")
