@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -814,8 +814,23 @@ fn ! tickBeat! dir: String -> Bool
       ((err _) false)
       ((ok _) (match (pathRename tmp (tickBeatPath dir)) ((ok _) true) ((err _) false)))))
 
+; (:m :ref COND-TICK-READS :do "a store that cannot be read is an error, not an empty store: the unit rows count as unreadable when their directory exists and listing or parsing it fails (a directory that does not exist yet is an empty store)")
+fn ! storeReadError! dir: String -> (Option String)
+  (if (not (fileExists? (st/unitsDir dir))) (none)
+    (match (st/readUnits! dir) ((err e) (some e)) ((ok _) (none))))
+
+; (:m :ref COND-TICK-READS :do "every tick raises one lead-stream warn per unreadable conductor state row (kind cuUnreadable, key the unit) and one for an unreadable store (kind storeUnreadable); the stream dedupes repeats, so a corrupt row is one row with a count, not a silent drop")
+fn ! surfaceReads! ctx: Ctx -> Int64
+  (let [(now (nowMs))
+        (ids (unreadableIds! ctx.dir))
+        (_ (map (fn [(id String)] -> Bool (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "cuUnreadable" id id "conductor state row unreadable, the unit is skipped until it parses")) ids))
+        (bad (storeReadError! ctx.dir))
+        (_ (match bad ((some e) (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "storeUnreadable" "store" "" (str "store rows unreadable: " e))) ((none) true)))]
+    (+ (listLength ids) (match bad ((some _) 1) ((none) 0))))
+
 fn ! tick! ctx: Ctx -> (Result Int64 String)
-  (let [(_ (tickBeat! ctx.dir))]
+  (let [(_ (tickBeat! ctx.dir))
+        (_ (surfaceReads! ctx))]
     (if (repoGate! ctx) (tickRepo! ctx) (ok 0)))
 
 fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
@@ -841,8 +856,9 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
 fn ! settled? ctx: Ctx -> Bool
   (let [(cus (readCUnits! ctx.dir))
         (stored (resultOr (st/readUnits! ctx.dir) (list)))]
-    (and (= (listLength cus) (listLength stored))
-         (listAll? (fn [(c CUnit)] -> Bool (or (listContains? (list "merged" "blocked" "failed") c.st) (and (= c.st "awaitReview") (= c.parked 1)))) cus)))
+    (and (none? (storeReadError! ctx.dir))
+         (and (= (listLength cus) (listLength stored))
+         (listAll? (fn [(c CUnit)] -> Bool (or (listContains? (list "merged" "blocked" "failed") c.st) (and (= c.st "awaitReview") (= c.parked 1)))) cus))))
 
 ; (:m :do "ticks, sleeping 50 ms after an idle one, until settled or max ticks; returns the ticks run")
 fn ! drain! ctx: Ctx max: Int64 -> Int64
@@ -1248,7 +1264,8 @@ fn ! status! ctx: Ctx -> String
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
                         (str "(:held (" (idList cus (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (= c.await "mergeHold")))) "))")
                         (str "(:parked (" (stringJoin (map (fn [(p (Pair String String))] -> String (st/q (str (pairFirst p) ":" (optionOr (listHead (stringSplit (pairSecond p) "\n")) ""))) ) (parkedRows! ctx.dir)) " ") "))")
-                        (str "(:escalations " (n (listLength esc)) ")")))
+                        (str "(:escalations " (n (listLength esc)) ")")
+                        (match (storeReadError! ctx.dir) ((some e) (str "(:store :unreadable " (st/q e) ")")) ((none) "(:store :ok)"))))
                 "\n"))
 
 fn allowanceUnlimited lane: String -> Int64
