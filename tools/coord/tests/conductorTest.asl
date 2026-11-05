@@ -1560,6 +1560,7 @@ fn ! testReviewRequeue bin: String -> Bool
                  (let [(_ (cd/writeCUnit! dir (with (cuSt "RQ" "reviewing") :launched 1 :fails 1 :lane "paid")))
                        (_ (cd/finish! ctx u (with (cuSt "RQ" "reviewing") :launched 1 :fails 1 :lane "paid") res))]
                    (cuOf dir "RQ"))))
+        (_ (fileAppend (str dir "/retries.asn") "(:retry :unit \"RQ\" :why \"git busy\" :n 2 :at 1)\n"))
         (c1 (round 1))
         (j1 (stringJoin (journalLines dir) "\n"))
         (c2 (round 2))

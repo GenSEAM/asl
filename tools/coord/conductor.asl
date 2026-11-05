@@ -567,7 +567,7 @@ fn ! ledgerGuard dir: String u: st/Task c: CUnit res0: Res -> Res
 
 ; (:m :ref COND-RECOVER-C3 :do "a review that could not be shown the change (gone worktree, failed git diff) is a transient, not a review failure: the unit goes to ready with stage requeue and verdict reviewDiffUnreadable, its fail count and ladder lane untouched, so no rung is spent and reviewFailedSinceWriter? stays false; settleWt! then re-attaches sh/UNIT and the ahead check sends it to gating; each requeue is one retries.asn row and past :blockedRetryMax the unit blocks with the unreadable signature")
 fn ! requeueUnreadable! ctx: Ctx c: CUnit res: Res -> Unit
-  (let [(r (retryLast! ctx.dir c.id))
+  (let [(r (retryLastBy! ctx.dir c.id true))
         (_ (dropLease! ctx c))]
     (if (>= (pairFirst r) (blockedRetryMax ctx.dir))
       (let [(c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig (str "review diff unreadable " (n (+ (pairFirst r) 1)) "x")))
@@ -1031,10 +1031,14 @@ fn ! reapLeases! ctx: Ctx -> (List String)
 fn retriesPath dir: String -> String
   (str dir "/retries.asn")
 
-fn ! retryLast! dir: String id: String -> (Pair Int64 Int64)
-  (match (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:retry :unit " (st/q id) " "))) (stringLines (readOr (retriesPath dir)))))
+; (:m :ref UNREADABLE-RETRY-SHARED-CAP :do "retries.asn rows count per cause: a reviewDiff row (unreadable review requeue) and a blocked-retry row of the same unit never share a count, each cause has its own cap per unit lifetime")
+fn ! retryLastBy! dir: String id: String review: Bool -> (Pair Int64 Int64)
+  (match (listLast (filter (fn [(l String)] -> Bool (and (stringStartsWith? l (str "(:retry :unit " (st/q id) " ")) (= review (stringContains? l " :why \"reviewDiff\" ")))) (stringLines (readOr (retriesPath dir)))))
     ((none) (pair 0 0))
     ((some l) (pair (optionOr (stringToInt64 (sp/tokAfter l ":n")) 0) (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0))))
+
+fn ! retryLast! dir: String id: String -> (Pair Int64 Int64)
+  (retryLastBy! dir id false)
 
 fn ! retryNote! dir: String id: String why: String count: Int64 -> Bool
   (ok? (fileAppend (retriesPath dir) (str "(:retry :unit " (st/q id) " :why " (st/q why) " :n " (n count) " :at " (n (nowMs)) ")\n")))
