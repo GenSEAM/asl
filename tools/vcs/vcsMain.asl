@@ -2,7 +2,7 @@
   :x [main]
   :i [(asl-tools/vcs/vcs :a v) (asl-tools/coord/commitGuard :a cg)])
 
-; (:m :ref VCS-CLI-ENTRY :do "asl vcs OP: commit --msg M [--warn] [--repo DIR] [--asl-root DIR] -- PATH... | status [-- PATH...] | diff BASE HEAD [-- PATH...] | log RANGE [-- PATH...] | head; prints the ASN receipt; exit 0 ok, 1 refused or failed, 2 usage")
+; (:m :ref VCS-CLI-ENTRY :do "asl vcs OP: commit --msg M [--warn] [--repo DIR] [--asl-root DIR] [--tool-root DIR] -- PATH... | status [-- PATH...] | diff BASE HEAD [-- PATH...] | log RANGE [-- PATH...] | head; prints the ASN receipt; exit 0 ok, 1 refused or failed, 2 usage")
 fn usage why: String -> (Result Int64 String)
   (do (println (str "(:vcs :status :usage :why \"" why "\" :ops \"commit --msg M -- PATH... | status | diff BASE HEAD | log RANGE | head\")"))
       (ok 2))
@@ -27,7 +27,7 @@ fn positionals xs: (List String) -> (List String)
     ((some a)
       (let [(rest (optionOr (listTail xs) (list)))]
         (cond
-          ((listContains? (list "--asl-root" "--repo" "--msg") a) (positionals (optionOr (listTail rest) (list))))
+          ((listContains? (list "--asl-root" "--repo" "--msg" "--tool-root") a) (positionals (optionOr (listTail rest) (list))))
           ((= a "--warn") (positionals rest))
           (else (cons a (positionals rest)))))))
 
@@ -45,7 +45,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (cond
           ((not (cg/hasFlag pre "--msg")) (usage "commit needs --msg M"))
           ((listEmpty? paths) (usage "commit needs paths after --"))
-          (else (show (v/commit! repo root paths (cg/flagVal pre "--msg") (if (cg/hasFlag pre "--warn") "warn" "commit"))))))
+          (else (show (v/commitWith! repo root (cg/flagVal pre "--tool-root") paths (cg/flagVal pre "--msg") (if (cg/hasFlag pre "--warn") "warn" "commit"))))))
       ((= op "status") (show (v/status! repo paths)))
       ((= op "head") (show (v/head! repo)))
       ((= op "diff")

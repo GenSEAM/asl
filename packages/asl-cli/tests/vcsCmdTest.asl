@@ -93,10 +93,28 @@ fn ! scenarios root: String base: String -> Bool
       (assert (= o8.exit 0) (str "without --asl-root the CLI passes its own root, no env needed: " o8.out))
       true))
 
+; (:m :ref WORKTREE-COLD-CACHE :do "asl vcs commit --tool-root DIR runs the guard checks with DIR/bin/asl (a stub that logs its cwd and arguments) in the repo named by --repo; the flag is removed from the positionals")
+fn ! toolRootCase! root: String base: String -> Bool
+  (let [(tool (str base "/toolRootStub"))
+        (_a (sh "." (list "mkdir" "-p" (str tool "/bin"))))
+        (_b (put (str tool "/bin/asl") "#!/bin/sh\nD=\"$(dirname \"$0\")\"\necho \"cwd=$PWD args=$*\" >> \"$D/calls.log\"\nshift\nfor a in \"$@\"; do echo \"ok $a:\"; done\n"))
+        (_c (sh "." (list "chmod" "+x" (str tool "/bin/asl"))))
+        (r (repoAt base "toolRootRepo"))
+        (_d (put (str r "/tr.asl") "(module fx/tr\n  :x [f]\n  :i [])\n\nfn f -> Int64\n  1\n"))
+        (h0 (head r))
+        (o (vcs root (list "commit" "--repo" r "--asl-root" r "--tool-root" tool "--msg" (goodMsg) "--" "tr.asl")))
+        (log (resultOr (fileReadString (str tool "/bin/calls.log")) ""))]
+    (do (assert (= o.exit 0) (str "commit with --tool-root lands: " o.out))
+        (assert (!= (head r) h0) "HEAD moved")
+        (assert (= (committed r) "tr.asl") "exactly the named path")
+        (assert (stringContains? log "args=check ") (str "the tool root's binary ran the check: " log))
+        true))
+
 fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
     (do (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (scenarios root base) "scenarios")
+        (assert (toolRootCase! root base) "tool root flag")
         (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
         true))
