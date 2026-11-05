@@ -211,7 +211,30 @@ fn testAbsenceKinds -> Bool
         (assert (stringStartsWith? garbage.why "tiebreak: reviewers split at the last rung") (str "the old tiebreak reason stays: " garbage.why))
         (assert (= sloppy.action "blocked") (str "pass plus a fail without a defect keeps the old outcome: " sloppy.action))
         (assert (and (= rate.action "await") (= rate.awaitLane "ccKimi31Pro")) (str "a 429 is absence: " rate.action " " rate.awaitLane))
-        (assert (and (= credit.action "await") (= credit.awaitLane "ccKimi31Pro")) (str "no credit is absence: " credit.action " " credit.awaitLane))
+        (assert (and (= credit.action "await") (= credit.awaitLane "strong") (stringContains? (stringJoin credit.rows " ") ":laneUnavailable")) (str "no credit is permanent, not absence: the lane leaves the pool and the rung waits on its tier: " credit.action " " credit.awaitLane))
+        true))
+
+; (:m :ref LANE-PERMANENT-ERROR :do "a lane that fails permanently (400 insufficient credits, 401, 403, 404) leaves the pool for the review: one laneUnavailable warn row, the rung is picked again and the review reaches the next lane; 429 and 5xx stay absence and still defer; a status code inside a longer number is no status")
+fn testPermanentLane -> Bool
+  (let [(lanes (list (lane "orNemotronUltraFree" "free" 5) (lane "ocLongcat" "free" 5) (lane "orKimiFree" "free" 5) (lane "ccKimi31Pro" "strong" 5)))
+        (via (fn [(deadAlias String) (msg String)] -> l/Ruling
+               (match (l/review (unit "low" false) "+ a\n- b" (goodGates) lanes
+                        (fn [(a String) (p String)] -> (Result String String) (if (= a deadAlias) (err msg) (ok (passReply)))))
+                 ((ok r) r)
+                 ((err e) (l/Ruling :action "error" :rung "" :defects (list) :awaitLane "" :rows (list) :verdicts (list) :why e)))))
+        (warns (fn [(r l/Ruling)] -> (List String) (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:laneUnavailable ")) r.rows)))
+        (credit (via "ocLongcat" "http 400 insufficient credits"))
+        (kimiDead (via "ocLongcat" "http 401 unauthorized"))
+        (gone (via "orNemotronUltraFree" "HTTP 404 model not found"))
+        (rate (via "ocLongcat" "http 429 rate limited"))
+        (longNum (via "ocLongcat" "failed after 4040 ms"))]
+    (do (assert (and (= credit.action "merge") (not (listContains? (models credit) "ocLongcat"))) (str "400 insufficient credits: the dead lane is skipped and the review merges on the others: " credit.action " " (stringJoin (models credit) ",")))
+        (assert (and (= (listLength (warns credit)) 1) (stringContains? (optionOr (listHead (warns credit)) "") ":lane ocLongcat ") (stringContains? (optionOr (listHead (warns credit)) "") ":sev warn")) (str "one warn row names the lane: " (stringJoin credit.rows " | ")))
+        (assert (not (stringStartsWith? (optionOr (listHead credit.rows) "") "(:reviewCall")) "the head row is still the grade row")
+        (assert (and (= kimiDead.action "merge") (= (listLength (warns kimiDead)) 1)) (str "401 is permanent too: " kimiDead.action " " (stringJoin kimiDead.rows " | ")))
+        (assert (and (= gone.action "merge") (= (listLength (warns gone)) 1) (not (listContains? (models gone) "orNemotronUltraFree"))) (str "404 is permanent: " gone.action " " (stringJoin (models gone) ",")))
+        (assert (and (listEmpty? (warns rate)) (not (stringContains? (stringJoin rate.rows " ") ":laneUnavailable"))) "429 is not permanent")
+        (assert (listEmpty? (warns longNum)) "4040 ms is no 404")
         true))
 
 fn testBlocked -> Bool
@@ -354,6 +377,7 @@ fn ! runTests -> Bool
       (assert (testAwait) "await")
       (assert (testFallThrough) "paid falls through to strong")
       (assert (testAbsenceKinds) "only absence defers")
+      (assert (testPermanentLane) "permanent lane errors skip the lane")
       (assert (testBlocked) "blocked")
       (assert (testBrief) "brief")
       true)

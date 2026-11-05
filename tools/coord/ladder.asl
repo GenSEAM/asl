@@ -371,6 +371,22 @@ fn ruling action: String rung: String defects: (List String) awaitLane: String r
   (Ruling :action action :rung rung :defects defects :awaitLane awaitLane :rows rows :verdicts vs :why why)
 
 ; (:m :ref TRIAL-REVIEW-ROWS :do "one (:reviewCall :unit :rung :alias :verdict :defects N :tokens :ms :empty BOOL) row per reviewer call, so per-reviewer verdicts no longer sit inside the one (:grade :note); :empty is true when the reply was blank or the call said empty; :tokens is 0 here, the call has no usage channel in the ladder, and the review stage fills it from its usage rows")
+; (:m :ref LANE-PERMANENT-ERROR :do "a call failure is permanent when the provider says it will not answer this lane at all: HTTP 400 insufficient credits, 401, 403, 404 (bad key, no access, unknown model); every other failure (429, 5xx, timeout, blank) is transient and stays absence; the status code must be a whole number token of the error text")
+fn codeTokens e: String -> (List String)
+  (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
+          (stringSplit (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) (stringLower e) (list ":" "/" "," ";" "(" ")" "\"" "=" "-" "_")) " "))
+
+fn permanentError? e: String -> Bool
+  (or (stringContains? (stringLower e) "insufficient credit")
+      (listAny? (fn [(t String)] -> Bool (listContains? (list "401" "403" "404") t)) (codeTokens e)))
+
+fn unavailable? v: Verdict -> Bool
+  (and (= v.outcome "abstain") (stringStartsWith? (optionOr (listHead v.defects) "") "lane unavailable"))
+
+; (:m :ref LANE-PERMANENT-ERROR :do "one (:laneUnavailable ... :sev warn) row per lane that failed permanently in this review; the lane leaves the pool for the rest of the review and the rung is picked again from the lanes that remain")
+fn unavailableRow u: ReviewUnit rung: String v: Verdict -> String
+  (str "(:laneUnavailable :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf v.model) " :sev warn :why " (fm/asnQuote (optionOr (listHead v.defects) "")) ")")
+
 fn reviewCallRow u: ReviewUnit v: Verdict ms: Int64 empty: Bool -> String
   (str "(:reviewCall :unit " (atomOf u.id) " :rung " v.rung " :alias " (atomOf v.model) " :verdict " v.outcome " :defects " (stringFromInt64 (if (= v.outcome "abstain") 0 (listLength v.defects))) " :tokens 0 :ms " (stringFromInt64 ms) " :empty " (if empty "true" "false") ")")
 
@@ -380,9 +396,16 @@ fn ! askLaneRow u: ReviewUnit callModel: (fn ! [String String] -> (Result String
         (ms (- (/ (nowNs) 1000000) t0))
         (empty (match reply ((err e) (stringContains? (stringLower e) "empty")) ((ok text) (stringEmpty? (stringTrim text)))))
         (v (match reply
-             ((err e) (abstain lane.alias rung (str "call failed: " (clip e 160))))
+             ((err e) (abstain lane.alias rung (str (if (permanentError? e) "lane unavailable: " "call failed: ") (clip e 160))))
              ((ok text) (if (stringEmpty? (stringTrim text)) (abstain lane.alias rung "no answer: empty reply") (parseVerdict text lane.alias rung)))))]
     (pair v (reviewCallRow u v ms empty)))
+
+; (:m :ref LANE-PERMANENT-ERROR :do "rows of an earlier attempt join a ruling after its head rows (grade, await, escalate) and before the review calls of the later attempt, so the head row stays first and calls keep their order")
+fn withEarlier r: Ruling earlier: (List String) -> Ruling
+  (ruling r.action r.rung r.defects r.awaitLane
+          (listAppend (filter (fn [(x String)] -> Bool (not (stringStartsWith? x "(:reviewCall "))) r.rows)
+                      (listAppend earlier (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:reviewCall ")) r.rows)))
+          r.verdicts r.why)
 
 ; (:m :ref REVIEW-DEFER :do "an await is one (:await :unit :rung :lane ...) row with its reason, which the conductor journals, so a parked review says what it waits for")
 fn awaitRow u: ReviewUnit rung: String lane: String why: String -> String
@@ -406,19 +429,27 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
                          (ok r3)))))))
       ((pickOk ls)
         (let [(asked (map (fn [(l Lane)] -> (Pair Verdict String) (askLaneRow u callModel prompt rung l)) ls))
-              (cur (map pairFirst asked))
-              (calls (map pairSecond asked))
-              (all (listAppend prior cur))
-              (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (gatesProven receipt)))
-              (grade (fn [(verdict String) (note String)] -> String (g/gradeRow u.id "none" (modelsOf all) u.writerChannel verdict note)))]
-          (match step
-            ((stepMerge) (ok (ruling "merge" rung (list) "" (listAppend (list (grade "accept" (str "ladder " rung))) calls) all "")))
-            ((stepFix ds) (ok (ruling "fix" rung ds "" (listAppend (list (grade "reject" (clip (stringJoin ds "; ") 300))) calls) all "")))
-            ((stepDefer ls why) (ok (ruling "await" rung (list) ls (listAppend (list (awaitRow u rung ls why)) calls) all why)))
-            ((stepBlocked why) (ok (ruling "blocked" rung (defectsOf all) "" (listAppend (list (grade "pending" why) (escalateRow u rung all why)) calls) all why)))
-            ((stepEscalate) (match (runRung u rows lanes prompt receipt callModel (nextRung rung) all 0)
-                              ((err e) (err e))
-                              ((ok next) (ok (ruling next.action next.rung next.defects next.awaitLane (listAppend (filter (fn [(x String)] -> Bool (not (stringStartsWith? x "(:reviewCall "))) next.rows) (listAppend calls (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:reviewCall ")) next.rows))) next.verdicts next.why))))))))))
+              (dead (filter unavailable? (map pairFirst asked)))]
+         (if (not (listEmpty? dead))
+          (let [(deadAliases (map (fn [(v Verdict)] -> String v.model) dead))
+                (live (filter (fn [(l Lane)] -> Bool (not (listContains? deadAliases l.alias))) lanes))
+                (earlier (listAppend (map pairSecond asked) (map (fn [(v Verdict)] -> String (unavailableRow u rung v)) dead)))]
+            (match (runRung u rows live prompt receipt callModel rung prior fixesUsed)
+              ((err e) (err e))
+              ((ok next) (ok (withEarlier next earlier)))))
+           (let [(cur (map pairFirst asked))
+                 (calls (map pairSecond asked))
+                 (all (listAppend prior cur))
+                 (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (gatesProven receipt)))
+                 (grade (fn [(verdict String) (note String)] -> String (g/gradeRow u.id "none" (modelsOf all) u.writerChannel verdict note)))]
+             (match step
+               ((stepMerge) (ok (ruling "merge" rung (list) "" (listAppend (list (grade "accept" (str "ladder " rung))) calls) all "")))
+               ((stepFix ds) (ok (ruling "fix" rung ds "" (listAppend (list (grade "reject" (clip (stringJoin ds "; ") 300))) calls) all "")))
+               ((stepDefer ls why) (ok (ruling "await" rung (list) ls (listAppend (list (awaitRow u rung ls why)) calls) all why)))
+               ((stepBlocked why) (ok (ruling "blocked" rung (defectsOf all) "" (listAppend (list (grade "pending" why) (escalateRow u rung all why)) calls) all why)))
+               ((stepEscalate) (match (runRung u rows lanes prompt receipt callModel (nextRung rung) all 0)
+                                 ((err e) (err e))
+                                 ((ok next) (ok (withEarlier next calls))))))))))))
 
 ; (:m :ref COND2 :do "the conductor's review stage: (review unit diff gates lanes callModel) -> Ruling.")
 ; (:m :ref COND2 :do "callModel takes a lane alias and a prompt and returns the reply text; ruling.action is merge | fix | await | blocked.")
