@@ -211,7 +211,7 @@ fn testAbsenceKinds -> Bool
         (assert (stringStartsWith? garbage.why "tiebreak: reviewers split at the last rung") (str "the old tiebreak reason stays: " garbage.why))
         (assert (= sloppy.action "blocked") (str "pass plus a fail without a defect keeps the old outcome: " sloppy.action))
         (assert (and (= rate.action "await") (= rate.awaitLane "ccKimi31Pro")) (str "a 429 is absence: " rate.action " " rate.awaitLane))
-        (assert (and (= credit.action "await") (= credit.awaitLane "strong") (stringContains? (stringJoin credit.rows " ") ":laneUnavailable")) (str "no credit is permanent, not absence: the lane leaves the pool and the rung waits on its tier: " credit.action " " credit.awaitLane))
+        (assert (and (= credit.action "blocked") (stringContains? credit.why "review: no live lane on tier strong (permanent: ccKimi31Pro credits)") (stringContains? (stringJoin credit.rows " ") ":laneUnavailable") (stringContains? (stringJoin credit.rows " ") "(:escalate :unit U1")) (str "no credit is permanent, not absence: the sole strong lane leaves the pool and the ruling blocks at once, visibly: " credit.action " " credit.why))
         true))
 
 ; (:m :ref LANE-PERMANENT-ERROR :do "a lane that fails permanently (400 insufficient credits, 401, 403, 404) leaves the pool for the review: one laneUnavailable warn row, the rung is picked again and the review reaches the next lane; 429 and 5xx stay absence and still defer; a status code inside a longer number is no status")
@@ -235,6 +235,28 @@ fn testPermanentLane -> Bool
         (assert (and (= gone.action "merge") (= (listLength (warns gone)) 1) (not (listContains? (models gone) "orNemotronUltraFree"))) (str "404 is permanent: " gone.action " " (stringJoin (models gone) ",")))
         (assert (and (listEmpty? (warns rate)) (not (stringContains? (stringJoin rate.rows " ") ":laneUnavailable"))) "429 is not permanent")
         (assert (listEmpty? (warns longNum)) "4040 ms is no 404")
+        true))
+
+; (:m :ref LANE-PERMANENT-ERROR-FIX :do "a sole strong lane that fails with 401 blocks in one ruling with the sig, the escalate row and one laneUnavailable row, never an await on a tier name; permanent needs a real status: the numbers inside retry or timing text stay transient, a 429 or 5xx mark wins, HTTP 401 and insufficient credits stay permanent")
+fn testSoleLaneBlocks -> Bool
+  (let [(r (match (l/review (unit "low" false) "+ a\n- b" (goodGates) (pool)
+                    (fn [(a String) (p String)] -> (Result String String)
+                      (if (= a "ccKimi31Pro") (err "HTTP 401 unauthorized") (if (= a "orNemotronUltraFree") (ok (passReply)) (ok "")))))
+             ((ok x) x)
+             ((err e) (l/Ruling :action "error" :rung "" :defects (list) :awaitLane "" :rows (list) :verdicts (list) :why e))))
+        (warns (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:laneUnavailable ")) r.rows))]
+    (do (assert (= r.action "blocked") (str "blocked within one ruling: " r.action " " r.awaitLane " " r.why))
+        (assert (stringContains? r.why "review: no live lane on tier strong (permanent: ccKimi31Pro 401)") (str "the sig names tier, alias and cause: " r.why))
+        (assert (= (listLength warns) 1) (str "one warn row: " (stringJoin r.rows " | ")))
+        (assert (stringStartsWith? (optionOr (listHead r.rows) "") "(:grade ") "the head row is the grade row")
+        (assert (stringContains? (stringJoin r.rows " ") "(:escalate :unit U1") "an escalate row is emitted")
+        (assert (and (l/permanentError? "HTTP 401") (l/permanentError? "http 400 insufficient credits") (l/permanentError? "401 unauthorized") (l/permanentError? "status 403") (l/permanentError? "HTTP 404 model not found")) "real statuses are permanent")
+        (assert (not (l/permanentError? "429 retry after 403 s")) "retry text is transient")
+        (assert (not (l/permanentError? "req-404-ab failed")) "an id is no status")
+        (assert (not (l/permanentError? "timeout after 401 ms")) "timing text is transient")
+        (assert (not (l/permanentError? "HTTP 503 upstream said 401")) "a 5xx mark wins")
+        (assert (not (l/permanentError? "http 429 rate limited")) "429 is transient")
+        (assert (not (l/permanentError? "HTTP 403 forbidden, 429 rate limited, retry later")) "a message that also carries a transient mark is transient")
         true))
 
 fn testBlocked -> Bool
@@ -378,6 +400,7 @@ fn ! runTests -> Bool
       (assert (testFallThrough) "paid falls through to strong")
       (assert (testAbsenceKinds) "only absence defers")
       (assert (testPermanentLane) "permanent lane errors skip the lane")
+      (assert (testSoleLaneBlocks) "a sole lane that dies blocks visibly, statuses are real statuses")
       (assert (testBlocked) "blocked")
       (assert (testBrief) "brief")
       true)

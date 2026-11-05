@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide absent? starved? scrubLines reviewBrief reviewWith review]
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? absent? starved? scrubLines reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -376,9 +376,40 @@ fn codeTokens e: String -> (List String)
   (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
           (stringSplit (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) (stringLower e) (list ":" "/" "," ";" "(" ")" "\"" "=" "-" "_")) " "))
 
+; (:m :ref LANE-PERMANENT-ERROR-FIX :do "a status counts only as a status: 401, 403 or 404 right after http, status, code or error, or as the first token of the message; a number elsewhere (retry after 403 s, req-404-ab, timeout after 401 ms) is no status, and a message that also carries a transient mark (429, a 5xx, timeout, rate limit, overloaded, retry) is transient whatever else it says")
+fn transientMark? toks: (List String) low: String -> Bool
+  (or (listAny? (fn [(t String)] -> Bool (or (= t "429") (and (= (stringLength t) 3) (and (stringStartsWith? t "5") (some? (stringToInt64 t)))))) toks)
+      (listAny? (fn [(m String)] -> Bool (stringContains? low m)) (list "timeout" "timed out" "rate limit" "overloaded" "retry")))
+
+fn statusAt toks: (List String) -> Bool
+  (listAny? (fn [(i Int64)] -> Bool
+              (and (listContains? (list "401" "403" "404") (optionOr (listGet toks i) ""))
+                   (or (= i 0) (listContains? (list "http" "status" "code" "error") (optionOr (listGet toks (- i 1)) "")))))
+            (range 0 (listLength toks)))
+
 fn permanentError? e: String -> Bool
-  (or (stringContains? (stringLower e) "insufficient credit")
-      (listAny? (fn [(t String)] -> Bool (listContains? (list "401" "403" "404") t)) (codeTokens e)))
+  (let [(low (stringLower e))
+        (toks (codeTokens e))]
+    (and (not (transientMark? toks low))
+         (or (stringContains? low "insufficient credit") (statusAt toks))))
+
+; (:m :ref LANE-PERMANENT-ERROR-FIX :do "an await whose target names no live lane (a tier name, because the permanent errors left the tier empty) is one wake! cannot resolve and the starved cap never counts: the ruling blocks at once with the sig review: no live lane on tier T (permanent: alias cause), the escalate row and the laneUnavailable rows, so it is bounded and the lead sees it")
+fn unresolvable? r: Ruling live: (List Lane) -> Bool
+  (and (= r.action "await")
+       (not (listAny? (fn [(a String)] -> Bool (listAny? (fn [(l Lane)] -> Bool (= l.alias a)) live)) (stringSplit r.awaitLane " "))))
+
+fn tierOfRung rung: String -> String
+  (cond ((= rung "R1") "free") ((= rung "R2") "paid") (else "strong"))
+
+fn causeOf why: String -> String
+  (let [(w (stringLower why))]
+    (cond ((stringContains? w "credit") "credits") ((stringContains? w "401") "401") ((stringContains? w "403") "403") ((stringContains? w "404") "404") (else "permanent")))
+
+fn blockedNoLane u: ReviewUnit rung: String prior: (List Verdict) dead: (List Verdict) earlier: (List String) -> Ruling
+  (let [(why (str "review: no live lane on tier " (tierOfRung rung) " (permanent: " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (causeOf (optionOr (listHead v.defects) "")))) dead) ", ") ")"))]
+    (ruling "blocked" rung (defectsOf prior) ""
+            (listAppend (list (g/gradeRow u.id "none" (modelsOf prior) u.writerChannel "pending" why) (escalateRow u rung prior why)) earlier)
+            prior why))
 
 fn unavailable? v: Verdict -> Bool
   (and (= v.outcome "abstain") (stringStartsWith? (optionOr (listHead v.defects) "") "lane unavailable"))
@@ -436,7 +467,7 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
                 (earlier (listAppend (map pairSecond asked) (map (fn [(v Verdict)] -> String (unavailableRow u rung v)) dead)))]
             (match (runRung u rows live prompt receipt callModel rung prior fixesUsed)
               ((err e) (err e))
-              ((ok next) (ok (withEarlier next earlier)))))
+              ((ok next) (ok (if (unresolvable? next live) (blockedNoLane u rung prior dead earlier) (withEarlier next earlier))))))
            (let [(cur (map pairFirst asked))
                  (calls (map pairSecond asked))
                  (all (listAppend prior cur))
