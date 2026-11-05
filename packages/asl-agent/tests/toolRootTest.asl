@@ -5,12 +5,16 @@
 
 ; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; the stale tree is a symlink clone of this checkout with bin/asl replaced; the good tree is a clone whose bin/asl logs and execs this checkout; the run carries :wallBudget 120 so a run rooted in it by mistake ends by its budget and fails the asserts")
 
-fn ! sh command: String -> Int64
-  (processRun command).exitCode
+fn ! linkEntries! from: String to: String skip: (List String) -> Bool
+  (listAll? (fn [n] (or (listAny? (fn [k] (= k n)) skip) (ok? (pathSymlink (str from "/" n) (str to "/" n)))))
+    (resultOr (dirList from) (list "?")))
 
 fn ! cloneTree! dir: String repo: String script: String -> Bool
-  (and (= (sh (str "mkdir -p " dir "/bin && for e in " repo "/* " repo "/.[!.]*; do b=$(basename $e); [ $b = bin ] || [ $b = .asl ] || [ $b = .git ] || ln -s $e " dir "/$b; done; for e in " repo "/bin/*; do b=$(basename $e); [ $b = asl ] || ln -s $e " dir "/bin/$b; done")) 0)
-    (ok? (fileWrite (str dir "/bin/asl") script)))
+  (and (ok? (dirCreate (str dir "/bin")))
+    (and (linkEntries! repo dir (list "bin" ".asl" ".git"))
+      (and (linkEntries! (str repo "/bin") (str dir "/bin") (list "asl"))
+        (and (ok? (fileWrite (str dir "/bin/asl") script))
+          (ok? (fileChmod (str dir "/bin/asl") 493))))))
 
 fn ! runWith! tag: String stale: String tool: String -> String
   (let [root (rk/freshRecorderRoot! tag)
@@ -36,7 +40,6 @@ fn ! runTests -> Bool
         goodLog (str base "/good.log")
         a (cloneTree! stale repo (str "#!/bin/sh\necho \"$PWD|$1\" >> " staleLog "\necho '(:asl :status :failed :error ERR_NATIVE_STALE :message \"stale\")'\nexit 2\n"))
         b (cloneTree! good repo (str "#!/bin/sh\necho \"$PWD|$1\" >> " goodLog "\nexec " repo "/bin/asl \"$@\"\n"))
-        chmod (sh (str "chmod +x " stale "/bin/asl " good "/bin/asl"))
         withTool (runWith! "with" stale good)
         withoutTool (runWith! "without" stale "")
         runRoot (optionOr (listHead (stringLines withTool)) "?")
@@ -46,9 +49,13 @@ fn ! runTests -> Bool
         toolHas (or (fileExists? (str good "/new.txt")) (or (fileExists? (str good "/subject.txt")) (or (fileExists? (str good "/other.txt")) (fileExists? (str good "/.asl")))))
         goodText (resultOr (fileReadString goodLog) "")
         staleText (resultOr (fileReadString staleLog) "")
-        cleaned (sh (str "rm -rf " base))]
+        withoutRoot (optionOr (listHead (stringLines withoutTool)) "?")
+        badRoot (m/mainWithRoots (list (str "(:agent :task \"x\" :backend \"script/none\" :root \"" (c/escapeAsn repo) "\" :toolRoot \"" (c/escapeAsn base) "/missing\")")) repo repo)
+        cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (ok? (pathRemove withoutRoot))))]
     (do
       (assert (and a b) "the two tree clones were built")
+      (assert (and (stringContains? badRoot.stdout "ERR_TOOLROOT") (not (= badRoot.exitCode 0))) "a :toolRoot without bin/asl is refused ERR_TOOLROOT")
+      (assert cleaned "the clones and both run roots were removed")
       (assert (and (= rootNew "made") (stringContains? rootSubject "green")) "with :toolRoot a written and an edited owned file land in the run root")
       (assert (not toolHas) "the :toolRoot tree gets none of the run's files, no journal and no write")
       (assert (and (not rootOther) (stringContains? withTool "ERR_OWNS")) "a write outside :owns is refused in the run root")
