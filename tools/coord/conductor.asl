@@ -524,18 +524,16 @@ fn ! seedGradeCommits! dir: String -> Int64
             ((err _) -1))))))
 
 ; (:m :ref CONDUCTOR-REPO-HEALTH :do "the ledger verdict of a unit branch: empty when clean, forged when a commit touching the ledger is not in the store's record, ERR_REPO_GIT: TEXT when git could not read the log at all (the repo, not the writer, is broken: a vanished common dir made 45 units LEDGER_FORGED on node2)")
-; (:m :ref COND-RECOVER-C1 :do "a grade commit the store recorded under another sha is still the conductor's own: a rebase of the unit branch (onBaseRebuild!, freshBase!) rewrites every sha, so the recorded one no longer matches (TEXT-WRAP node2 2026-11-04: LEDGER_FORGED four times on a branch whose only ledger commit was the conductor's rebased grade); such a commit passes when its committer is conductor@localhost, its subject is a grade subject and every line it adds to the ledger is a row the store recorded, so a writer cannot launder its own row through it")
+; (:m :ref COND-RECOVER-C1 :do "a grade commit the store recorded under another sha is still the conductors own: a rebase rewrites every sha and sets the committer to the rebasing identity (t@example.invalid on node2), so neither sha nor committer identifies it; the guard is the content: the commit adds only ledger rows the store recorded and drops none, so a writer cannot add a row the conductor never wrote")
 fn ! rebasedGradeCommit? dir: String path: String sha: String -> Bool
-  (let [(meta (gitOut path (list "show" "-s" "--format=%ce%x09%s" sha)))
-        (diff (gitOut path (list "show" "--format=" "-U0" sha "--" (al/ledgerPath))))
+  (let [(diff (gitOut path (list "show" "--format=" "-U0" sha "--" (al/ledgerPath))))
         (recorded (readOr (gradeCommitsPath dir)))
         (lines (stringLines diff.out))
         (added (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "+") (not (stringStartsWith? l "+++")))) lines))
         (dropped (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "-") (not (stringStartsWith? l "---")))) lines))]
-    (and (and (= meta.exit 0) (= diff.exit 0))
-      (and (stringStartsWith? (stringTrim meta.out) "conductor@localhost\t(:c :a grade :do ")
-        (and (and (not (listEmpty? added)) (listEmpty? dropped))
-          (listAll? (fn [(l String)] -> Bool (stringContains? recorded (str ":row " (st/q (optionOr (stringSlice l 1 (stringLength l)) "")) ")"))) added)))))
+    (and (= diff.exit 0)
+      (and (and (not (listEmpty? added)) (listEmpty? dropped))
+        (listAll? (fn [(l String)] -> Bool (stringContains? recorded (str ":row " (st/q (optionOr (stringSlice l 1 (stringLength l)) "")) ")"))) added))))
 
 fn ! ledgerState! dir: String path: String base: String -> String
   (if (stringEmpty? path) ""
