@@ -88,10 +88,20 @@ fn wordsOf text: String -> (List String)
   (filter (fn [(w String)] -> Bool (not (stringEmpty? w)))
           (map stripWord (stringSplit (stringReplace (stringReplace (stringReplace text "\t" " ") "\n" " ") "\r" " ") " ")))
 
-; (:m :do "the command segments of a shell text, split at && || ; & newlines and a pipe with a blank on either side (a#f|git key is one word), each as its words")
+fn shellLead? w: String -> Bool
+  (or (listContains? (list "then" "else" "do" "if" "elif" "while" "until" "time" "!" "{" "}") w)
+      (and (stringContains? w "=") (not (or (stringStartsWith? w "-") (stringStartsWith? w "=")))))
+
+; (:m :do "a segment's command word: leading shell keywords (then else do if elif while until time ! { }) and VAR=x assignments are not the command")
+fn dropLead ws: (List String) -> (List String)
+  (match (listHead ws)
+    ((none) ws)
+    ((some w) (if (shellLead? w) (dropLead (listDrop ws 1)) ws)))
+
+; (:m :do "the command segments of a shell text, split at && || ; & newlines, $( and backquotes and a pipe with a blank on either side (a#f|git key is one word), each as its words")
 fn segmentsOf text: String -> (List (List String))
-  (let [(flat (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace text "||" ";") "&&" ";") " |" ";") "| " ";") "&" ";") "\n" ";") "\r" ";"))]
-    (filter (fn [(ws (List String))] -> Bool (not (listEmpty? ws))) (map wordsOf (stringSplit flat ";"))))
+  (let [(flat (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace text "$(" ";") "`" ";") "||" ";") "&&" ";") " |" ";") "| " ";") "&" ";") "\n" ";") "\r" ";"))]
+    (filter (fn [(ws (List String))] -> Bool (not (listEmpty? ws))) (map (fn [(seg String)] -> (List String) (dropLead (wordsOf seg))) (stringSplit flat ";"))))
 
 fn option? s: String -> Bool
   (or (stringStartsWith? s "-") (stringContains? s "="))
@@ -415,14 +425,23 @@ fn baseRowsText baseKeys: (Option (List String)) -> String
 fn grownFor allow: (List String) baseKeys: (Option (List String)) -> (Pair (List String) (List String))
   (match baseKeys ((some b) (grownOf allow b)) ((none) (pair (list) (list))))
 
-fn verdictReceipt files: (List (Pair String String)) text: String sha: String baseKeys: (Option (List String)) -> String
+fn verdictReceipt files: (List (Pair String String)) text: String sha: String head: String baseKeys: (Option (List String)) -> String
   (let [(allow (parseAllow text))
         (v (verdictOf (scanFiles files) allow))
         (grown (grownFor allow baseKeys))
-        (extra (str " :base " (q sha) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown))))]
+        (extra (str " :base " (if (= sha head) ":self" (q sha)) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown))))]
     (receiptWith v (listLength allow) (pairFirst grown) extra))
 
+; (:m :do "the receipt with the base (:self when the base is HEAD itself, as on main, so the ratchet compares against the committed allowlist) and the run time :ms")
 fn ! auditAt! root: String allowPath: String base: String -> (Result String String)
+  (let [(t0 (/ (nowNs) 1000000))
+        (r (auditCore! root allowPath base))
+        (ms (- (/ (nowNs) 1000000) t0))]
+    (match r
+      ((err e) (err e))
+      ((ok s) (ok (str (optionOr (stringSlice s 0 (- (stringLength s) 1)) s) " :ms " (stringFromInt64 ms) ")")))))
+
+fn ! auditCore! root: String allowPath: String base: String -> (Result String String)
   (match (readTracked! root)
     ((err e) (err e))
     ((ok files)
@@ -434,7 +453,10 @@ fn ! auditAt! root: String allowPath: String base: String -> (Result String Stri
             ((ok sha)
               (match (baseAllow! root sha)
                 ((err e) (err (str "cannot read the allowlist at the base " sha ": " e)))
-                ((ok baseKeys) (ok (verdictReceipt files text sha baseKeys))))))))))
+                ((ok baseKeys)
+                  (match (sr/gitOut! root (list "rev-parse" "HEAD"))
+                    ((err e) (err (str "cannot resolve HEAD: " e)))
+                    ((ok head) (ok (verdictReceipt files text sha (stringTrim head) baseKeys))))))))))))
 
 fn ! audit! root: String allowPath: String -> (Result String String)
   (auditAt! root allowPath "")
