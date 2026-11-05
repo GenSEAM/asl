@@ -6,6 +6,9 @@
 fn ! gate cmd: String -> fr/Done
   (fr/runShell! cmd (resultOr (realPath ".") ".") (fr/childEnv (list)) (fr/limits 300 100))
 
+fn ! sh! cmd: String -> Bool
+  (= (fr/runOneLimited (fr/job (list "sh" "-c" cmd) "." (fr/childEnv (list))) (fr/limits 60 8)).exit 0)
+
 fn count d: fr/Done -> Int64
   (optionOr (fr/executedOf d.out) 0)
 
@@ -26,8 +29,18 @@ fn ! runTests -> Bool
         (pureDupFail (fr/gateOut (str "./bin/asl test " three) (str "FAIL " three ": ERR_ASSERT: a (after 1 asserts)\nFAIL " three ": ERR_ASSERT: b (after 2 asserts)\n")))
         (pureRunVerb (fr/gateOut (str "./bin/asl run " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
         (pureEvilHost (fr/gateOut (str "/tmp/evil/bin/asl test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
-        (pureStubHost (fr/gateOut (str (fr/stubHostPath) " test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
+        (pureStubProd (fr/gateOut (str (fr/stubHostPath) " test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
+        (pureStubHost (fr/gateOutHost (fr/stubHostPath) (str (fr/stubHostPath) " test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
         (stubPath (fr/stubHost!))
+        (probeRoot (str (resultOr (realPath ".") ".") "/.asl/cache/executedOfTest-" (stringFromInt64 (procSelf))))
+        (_ (sh! (str "rm -rf '" probeRoot "' && mkdir -p '" probeRoot "' && mkdir '" probeRoot "/ro' && chmod 500 '" probeRoot "/ro' && mkdir '" probeRoot "/open' && chmod 777 '" probeRoot "/open' && mkdir '" probeRoot "/real' && ln -s '" probeRoot "/real' '" probeRoot "/link'")))
+        (fresh (fr/stubHostIn! (str probeRoot "/fresh")))
+        (again (fr/stubHostIn! (str probeRoot "/fresh")))
+        (planted (fr/stubHostIn! (str probeRoot "/ro")))
+        (opened (fr/stubHostIn! (str probeRoot "/open")))
+        (linked (fr/stubHostIn! (str probeRoot "/link")))
+        (freshMode (match (fileLstat (str probeRoot "/fresh")) ((ok st) (mod st.mode 512)) ((err _) -1)))
+        (_ (sh! (str "chmod 700 '" probeRoot "/ro'; chmod 700 '" probeRoot "/open'; rm -rf '" probeRoot "'")))
         (pureRed (fr/gateOut (str "./bin/asl test " three) (str "t.asl:5:9: ERR_ASSERT: assertion failed: x\nFAIL " three ": ERR_ASSERT: assertion failed: x (after 2 asserts)\n")))]
     (do (assert (and (= echoed.exit 0) (= (count echoed) 0) (stringContains? echoed.out "gateFormUndeclared")) (str "an echoed count line is no count: " (stringFromInt64 (count echoed)) " in " echoed.out))
         (assert (= (count echoedForm) 0) (str "an echo that spells the declared form is no count: " (stringFromInt64 (count echoedForm))))
@@ -45,5 +58,10 @@ fn ! runTests -> Bool
         (assert (none? (fr/executedOf pureRunVerb)) "a verb other than test is no declared form")
         (assert (none? (fr/executedOf pureEvilHost)) "an absolute host other than the stand-in is no declared form")
         (assert (= (fr/executedOf pureStubHost) (some 3)) "the content-addressed stand-in host is a declared form")
+        (assert (none? (fr/executedOf pureStubProd)) "production gateOut does not accept the stand-in host, only ./bin/asl bin/asl asl")
+        (assert (and (= fresh (str probeRoot "/fresh/bin/asl")) (= again fresh) (= freshMode 448)) (str "a fresh private install: path returned, rewritten and verified on the second call, dir mode 700: " fresh " " (stringFromInt64 freshMode)))
+        (assert (stringEmpty? planted) "a planted read-only dir is an error, never used")
+        (assert (stringEmpty? opened) "a dir with mode 777 is an error, never used")
+        (assert (stringEmpty? linked) "a symlinked dir is an error, never used")
         (assert (and (= stubPath (fr/stubHostPath)) (= (resultOr (fileReadString stubPath) "") (fr/stubHostText))) "the stand-in host sits at its content-hash path and holds exactly its text")
         true))

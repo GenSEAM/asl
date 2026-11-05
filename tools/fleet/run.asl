@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateFiles stubHost! stubHostPath stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubDirPath stubVerified! stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -753,33 +753,55 @@ fn ! runOne j: Job -> Done
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "the one place a (list \"sh\" \"-c\" cmd) argv literal is built for a caller that only has a command string, not an argv list already; freePool.asl's runGate! used to build this literal itself (a second textual sh -c site outside this file), this gives it (and any future command-string caller) the same single site runOneLimited's callers with an argv already in hand use")
 fn ! runShell! cmd: String cwd: String env: (List String) lim: Limits -> Done
   (let [(d (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim))]
-    (with d :out (gateOut cmd d.out)))
+    (with d :out (gateOutHost (if (stubVerified!) (stubHostPath) "") cmd d.out)))
 
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the executed-assert count of a gate was read from any line of the gate's own stdout, so a command that echoed '5 assertion(s) executed' passed the conductor's asserts>0 check without running a suite. Now a gate counts only in the declared form ./bin/asl test FILE... (or asl test): the host prints one verdict line per FILE after the suite's own output, the lines must be exactly the declared files' verdicts and the last lines of the output; any other count or FAIL line is rewritten to 'claimed' or '(unrecorded) FAIL' and a marker row says why. A gate whose own files are modified by the unit under test (bin/asl itself) is not covered.")
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "test stand-in for the host's test command in hermetic fixtures: greenN.asl prints N passed, redN.asl fails after N asserts, any other file is run as sh and its 'assert ' lines are the count; stubHost! writes it once to a fixed path and returns the path, a gate is then (str (stubHost!) \" test greenN.asl\"), which has the declared form")
 fn stubHostText -> String
   "#!/bin/sh\n[ \"$1\" = test ] || exit 2\nshift\nrc=0\nfor f in \"$@\"; do\n  b=${f##*/}\n  case \"$b\" in\n    green*.asl) n=${b#green}; n=${n%.asl}; echo \"$f: $n assertion(s) executed ($n passed)\" ;;\n    red*.asl) n=${b#red}; n=${n%.asl}; echo \"suite: ERR_TYPE boom in $b\"; echo \"FAIL $f: ERR_ASSERT: assertion failed: red (after $n asserts)\"; rc=1 ;;\n    *) out=$(sh \"$f\" 2>&1); r=$?; [ -z \"$out\" ] || printf '%s\\n' \"$out\"; n=$(printf '%s\\n' \"$out\" | /usr/bin/grep -c '^assert '); e=$(printf '%s\\n' \"$out\" | /usr/bin/grep -o 'ERR_[A-Z_]*' | head -1); if [ $r -eq 0 ]; then echo \"$f: $n assertion(s) executed ($n passed)\"; else echo \"FAIL $f: ${e:-exit $r} (after $n asserts)\"; rc=1; fi ;;\n  esac\ndone\nexit $rc\n"
 
-fn stubHostPath -> String
-  (str "/tmp/aslStubHost-" (bytesSha256 (stringToBytes (stubHostText))) "/bin/asl")
+fn stubDirPath -> String
+  (str "/tmp/aslStubHost-" (bytesSha256 (stringToBytes (stubHostText))))
 
-fn ! stubHost! -> String
-  (let [(path (stubHostPath))
-        (dir (stringReplace path "/bin/asl" ""))
+fn stubHostPath -> String
+  (str (stubDirPath) "/bin/asl")
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the stand-in host is trusted only from a private install: dir is a real directory (lstat, no symlink), mode 700, owned by the caller, and bin/asl holds exactly the stand-in text; stubHostIn! never reuses what it finds, it rewrites bin/asl through a temp name and verifies again, and any failed check returns the empty string so the caller fails closed; stubVerified! is the same check without writing, and is what lets runShell! accept the stand-in head: where no test installed it, the head is undeclared")
+fn ! privateDir? dir: String -> Bool
+  (match (fileLstat dir)
+    ((err _) false)
+    ((ok st) (and st.isDir (and (not st.isSymlink) (and (= (mod st.mode 512) 448) (= (runOne (job (list "test" "-O" dir) dir (childEnv (list)))).exit 0))))))
+
+fn ! stubVerifiedIn! dir: String -> Bool
+  (and (privateDir? dir)
+    (match (fileLstat (str dir "/bin/asl"))
+      ((err _) false)
+      ((ok st) (and st.isFile (and (not st.isSymlink) (= (resultOr (fileReadString (str dir "/bin/asl")) "") (stubHostText)))))))
+
+fn ! stubVerified! -> Bool
+  (stubVerifiedIn! (stubDirPath))
+
+fn ! stubHostIn! dir: String -> String
+  (let [(existed (ok? (fileLstat dir)))
+        (made (if existed true (and (ok? (dirCreate dir)) (= (runOne (job (list "sh" "-c" (str "test ! -L '" dir "' && test -O '" dir "' && chmod 700 '" dir "'")) "." (childEnv (list)))).exit 0))))
         (tmp (str dir "/bin/asl." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
-    (if (= (resultOr (fileReadString path) "") (stubHostText)) path
+    (if (and made (privateDir? dir))
       (let [(_ (dirCreate (str dir "/bin")))
             (_ (fileWrite tmp (stubHostText)))
-            (r (runOne (job (list "sh" "-c" (str "chmod 700 '" dir "' && chmod 755 '" tmp "' && mv '" tmp "' '" path "'")) dir (childEnv (list)))))]
-        path)))
+            (r (runOne (job (list "sh" "-c" (str "chmod 755 '" tmp "' && mv '" tmp "' '" dir "/bin/asl'")) dir (childEnv (list)))))]
+        (if (stubVerifiedIn! dir) (str dir "/bin/asl") ""))
+      ""))
 
-fn gateFiles cmd: String -> (List String)
+fn ! stubHost! -> String
+  (stubHostIn! (stubDirPath))
+
+fn gateFiles cmd: String host: String -> (List String)
   (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim cmd) " ")))
         (bad (list ";" "&" "|" "<" ">" "$" "`" "\"" "'" "(" ")" "*" "?" "{" "}" "\\" "~" "!" "#"))
         (files (listDrop toks 2))]
     (if (and (>= (listLength toks) 3)
              (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
-                 (= (optionOr (listHead toks) "") (stubHostPath)))
+                 (and (not (stringEmpty? host)) (= (optionOr (listHead toks) "") host)))
              (= (optionOr (listGet toks 1) "") "test")
              (not (listAny? (fn [(f String)] -> Bool (or (not (stringEndsWith? f ".asl")) (listAny? (fn [(c String)] -> Bool (stringContains? f c)) bad))) files)))
       files
@@ -795,7 +817,10 @@ fn claimed line: String -> String
         (else line))
 
 fn gateOut cmd: String out: String -> String
-  (let [(files (gateFiles cmd))
+  (gateOutHost "" cmd out)
+
+fn gateOutHost host: String cmd: String out: String -> String
+  (let [(files (gateFiles cmd host))
         (lines (stringLines out))
         (body (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines))
         (k (listLength files))
