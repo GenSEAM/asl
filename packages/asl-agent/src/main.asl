@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr nextReadStreakOf stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -133,6 +133,7 @@
   (:f wallBudget (Option Int64))
   (:f intent (Option String))
   (:f base String)
+  (:f toolRoot String)
   (:f remote String)
   (:f contextTokens (Option Int64))
   (:f plan Bool)
@@ -147,7 +148,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit")
+        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -359,7 +360,7 @@ fn strParam v: j/Json -> j/Json
 
 fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List (Pair String j/Json)) (Option String))
   (cond
-    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "poolChan" "remote") key)
+    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "toolRoot" "poolChan" "remote") key)
       (pair (paramSet ps key (strParam v)) none))
     ((= key "mode") (pair (paramSet ps "modeHint" (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
@@ -2273,8 +2274,13 @@ enum LivePrep
   (prepared LiveSession)
   (prepRejected MainResult)
 
-fn ! liveSetup! ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> LivePrep
-  (let [ra (with ra0 :route (codeRouteSetup! ra0.intent (ac/configText! rootDir) repoRoot env))]
+; (:m :ref LEON-TOOLROOT :do "F5: tool ops ran <worktree>/bin/asl, whose suspect() refuses ERR_NATIVE_STALE once a unit edits CLI sources, so such a unit could neither check nor test; a run given :toolRoot (a built tree, the base build) takes it as its repo root, so check, test and forms run <toolRoot>/bin/asl with the worktree as cwd and target; absent or empty :toolRoot keeps the old behaviour")
+fn toolRootOr ra: RunArgs repoRoot: String -> String
+  (if (stringEmpty? ra.toolRoot) repoRoot ra.toolRoot)
+
+fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderEnv -> LivePrep
+  (let [repoRoot (toolRootOr ra0 repoRoot0)
+        ra (with ra0 :route (codeRouteSetup! ra0.intent (ac/configText! rootDir) repoRoot env))]
   (match (liveJournal ra rootDir)
     ((err e) (prepRejected (rejectWith (str ":error ERR_JOURNAL :message \"" (c/escapeAsn e) "\"") 1)))
     ((ok sp)
@@ -2352,7 +2358,7 @@ fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResul
     (if dry (executeDryRun ra repoRoot rootDir env) (executeLive ra repoRoot rootDir env)))
 
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
-  (RunArgs :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
+  (RunArgs :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
@@ -2374,7 +2380,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
-                    :base (textValue (paramOr ps "base" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
+                    :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
                     :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false))
                     :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
