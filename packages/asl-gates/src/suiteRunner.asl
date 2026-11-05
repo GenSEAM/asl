@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! countConstant! skipAllowedPaths skipDecision! toResult! countedAsserts countedRefutes countedDeclared]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! countConstant! skipAllowedPaths skipDecision! suiteJobFor! toResult! countedAsserts countedRefutes countedDeclared]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -1061,9 +1061,10 @@ fn ! nativeTestCacheRoot! -> String
 fn ! nativeSuiteArgv! snap: String real: String suite: String -> (List String)
   (list (rb/runnerBin! real) "test" suite)
 
-fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
+; (:m :ref SKIP-DECIDED-ONCE :do "the runner decides a skip once, before the run, and carries that decision to the result: a suite that fails and then rewrites its own precondition file is still a run")
+fn ! suiteJobFor! snap: String suite: String baseS: Int64 skip: (Option String) -> Job
   (let [(path (str snap "/" suite))]
-    (if (some? (skipDecision! snap suite))
+    (if (some? skip)
       (Job :input "" :argv (list "/bin/sh" "-c" "exit 0") :cwd (some snap) :env (none) :timeoutMs 10000)
     (if (stringEndsWith? suite ".sh")
       (Job :input "" :argv (if (isExecutable! path) (list path) (list "/bin/sh" path)) :cwd (some snap)
@@ -1073,9 +1074,11 @@ fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
              :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
              :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000))))))
 
-fn ! toResult! snap: String real: String suite: String d: Done -> SuiteResult
-  (let [(out (stripSnap d.merged snap real))
-        (skip (skipDecision! snap suite))]
+fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
+  (suiteJobFor! snap suite baseS (skipDecision! snap suite))
+
+fn ! toResult! snap: String real: String suite: String d: Done skip: (Option String) -> SuiteResult
+  (let [(out (stripSnap d.merged snap real))]
     (cond
       ((some? skip) (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts 0 :refutes 0 :declared 0 :failed 0))
       ((stringEndsWith? suite ".sh") (shellResult suite d.code out))
@@ -1297,8 +1300,9 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
            (match (getDirt! snap)
              ((err e) (err e))
              ((ok before)
-              (let [(t0 (monotonicNs))]
-                (match (runJobsBy! (map (fn [(s String)] -> Job (suiteJob! snap s baseS)) suites) (st/startOrder suites known) workers (some guard) (some registry))
+              (let [(skipped (map (fn [(s String)] -> (Pair String (Option String)) (pair s (skipDecision! snap s))) suites))
+                    (t0 (monotonicNs))]
+                (match (runJobsBy! (map (fn [(p (Pair String (Option String)))] -> Job (suiteJobFor! snap (pairFirst p) baseS (pairSecond p))) skipped) (st/startOrder suites known) workers (some guard) (some registry))
                   ((err e) (err e))
                   ((ok dones)
                    (let [(wallMs (/ (- (monotonicNs) t0) 1000000))
@@ -1309,7 +1313,7 @@ fn ! suitePhase! snap: String real: String baseS: Int64 suites: (List String) wo
                         (match (getDirt! snap)
                           ((err e) (err e))
                           ((ok after)
-                           (ok (SnapRun :results (map (fn [(p (Pair String Done))] -> SuiteResult (toResult! snap real (pairFirst p) (pairSecond p))) (zip suites dones))
+                           (ok (SnapRun :results (map (fn [(p (Pair (Pair String (Option String)) Done))] -> SuiteResult (toResult! snap real (pairFirst (pairFirst p)) (pairSecond p) (pairSecond (pairFirst p)))) (zip skipped dones))
                                         :gained (checkGained before after) :wallMs wallMs :times times))))))))))))))))))))
 
 fn ! snapRun root: String suites: (List String) workers: Int64 lockWaitS: Int64 -> (Result SnapRun Fault)
