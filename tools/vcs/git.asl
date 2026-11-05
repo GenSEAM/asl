@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeFf! log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeFf! log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -133,7 +133,7 @@ fn ! finish! repo: String tx: Tx msg: String paths: (List String) -> Out
               (if (!= ur.exit 0)
                 (Out :exit 1 :out (str "HEAD moved during the commit, nothing landed: " (clean ur.out)))
                 (let [(rs (gitRun! repo (listAppend (list "reset" "-q" "--") paths) 60))]
-                  (Out :exit 0 :out sha)))))))))
+                  (Out :exit (if (= rs.exit 0) 0 2) :out sha)))))))))
 
 ; (:m :do "a branch name git accepts (check-ref-format --branch) and a base that resolves to a commit")
 fn ! branchCreate! repo: String name: String base: String -> Out
@@ -168,3 +168,24 @@ fn ! isAncestor! repo: String a: String b: String -> (Result Bool String)
               (cond ((= o.exit 0) (ok true))
                     ((= o.exit 1) (ok false))
                     (else (err (clean o.out))))))))
+
+; (:m :ref VCS-LAYER-CORE :do "named paths whose entry in the shared index is a blob that differs from both HEAD's blob and the working file: a peer staged something this commit would silently drop from the index")
+fn ! peerRow! repo: String path: String idxSha: String -> Bool
+  (let [(h (gitRun! repo (list "rev-parse" "--verify" "--quiet" (str "HEAD:" path)) 20))
+        (w (if (fileExists? (str repo "/" path)) (gitRun! repo (list "hash-object" "--" path) 20) (Out :exit 1 :out "")))]
+    (and (!= idxSha (clean h.out)) (!= idxSha (clean w.out))))
+
+fn ! peerFold! repo: String lines: (List String) acc: (List String) -> (List String)
+  (match (listHead lines)
+    ((none) acc)
+    ((some l)
+      (let [(tab (stringSplit l "\t"))
+            (meta (stringSplit (optionOr (listHead tab) "") " "))
+            (path (optionOr (listGet tab 1) ""))
+            (sha (optionOr (listGet meta 1) ""))
+            (rest (optionOr (listTail lines) (list)))]
+        (peerFold! repo rest (if (peerRow! repo path sha) (listAppend acc (list path)) acc)))))
+
+fn ! peerStaged! repo: String paths: (List String) -> (List String)
+  (let [(ls (gitRun! repo (listAppend (list "ls-files" "-s" "--") paths) 30))]
+    (peerFold! repo (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines ls.out)) (list)))

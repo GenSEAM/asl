@@ -50,6 +50,7 @@ fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode:
   (cond
     ((listEmpty? paths) (refused "commit" "no paths named"))
     ((not (listEmpty? (badPaths! repo paths))) (refused "commit" (str "path not accepted: " (stringJoin (badPaths! repo paths) ","))))
+    ((not (listEmpty? (g/peerStaged! repo paths))) (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :peerStaged (" (stringJoin (map (fn [(p String)] -> String (str "\"" (esc p) "\"")) (g/peerStaged! repo paths)) " ") ") :why \"the shared index holds a staged blob for a named path that differs from HEAD and the working file\")")))
     (else
       (let [(tx (g/prepare! repo paths))]
         (if (not tx.ok)
@@ -59,9 +60,10 @@ fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode:
               (let [(_ (g/discard! tx))] (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :guard " j.text ")")))
               (let [(c (g/finish! repo tx msg paths))
                     (_ (g/discard! tx))]
-                (if (!= c.exit 0)
-                  (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :failed :why \"" (esc (g/clean c.out)) "\")"))
-                  (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :done :sha " (g/clean c.out) " :guard " j.text ")"))))))))))
+                (cond
+                  ((= c.exit 2) (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :partial :indexStale true :sha " (g/clean c.out) " :guard " j.text ")")))
+                  ((!= c.exit 0) (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :failed :why \"" (esc (g/clean c.out)) "\")")))
+                  (else (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :done :sha " (g/clean c.out) " :guard " j.text ")")))))))))))
 
 fn ! branch! repo: String name: String base: String -> VcsReceipt
   (outReceipt "branch" (g/branchCreate! repo name base))

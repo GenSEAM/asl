@@ -227,8 +227,13 @@ fn ignoredHits paths: (List String) ignored: String tracked: String -> (List Hit
 fn nowMs! -> Int64
   (/ (nowNs) 1000000)
 
+; (:m :ref VCS-LAYER-CORE :do "every git child of the guard runs through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_NAMESPACE, so a caller's git environment never points it at another repo; the explicit indexFile is then set for that child only")
+fn gitEnvArgv cfg: Cfg -> (List String)
+  (listAppend (list "env" "-u" "GIT_DIR" "-u" "GIT_WORK_TREE" "-u" "GIT_INDEX_FILE" "-u" "GIT_COMMON_DIR" "-u" "GIT_OBJECT_DIRECTORY" "-u" "GIT_NAMESPACE")
+              (if (stringEmpty? cfg.indexFile) (list) (list (str "GIT_INDEX_FILE=" cfg.indexFile))))
+
 fn ! git! cfg: Cfg args: (List String) -> fr/Done
-  (fr/runOneLimited (fr/job (listAppend (list "git" "-C" cfg.repo "-c" "core.quotepath=off" "-c" "core.fsmonitor=") args) "." (fr/childEnv (if (stringEmpty? cfg.indexFile) (list) (list (str "GIT_INDEX_FILE=" cfg.indexFile))))) (fr/limits cfg.gitS 16))
+  (fr/runOneLimited (fr/job (listAppend (gitEnvArgv cfg) (listAppend (list "git" "-C" cfg.repo "-c" "core.quotepath=off" "-c" "core.fsmonitor=") args)) "." (fr/childEnv (list))) (fr/limits cfg.gitS 16))
 
 fn unchecked path: String why: String -> Hit
   (soft "unchecked" path why)
