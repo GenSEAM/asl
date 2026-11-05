@@ -1,0 +1,20 @@
+diff --git a/asl/packages/asl-utils/src/kit.asl b/asl/packages/asl-utils/src/kit.asl
+index e45df87d6..320b861b7 100644
+--- a/asl/packages/asl-utils/src/kit.asl
++++ b/asl/packages/asl-utils/src/kit.asl
+@@ -1,5 +1,5 @@
+ (module asl-utils/kit
+-  :x [Kit Flag Out Op Diff specOf parse help run! flag flagInt flagOn? arg argNum env glob! globGit! globRegex readText! readLines! writeText! inside? edit! editAll! editRx! replaceAll sub found? diff sh! shFor! quote]
++  :x [Kit Flag Out Op Diff specOf parse help run! flag flagInt flagOn? arg argNum env glob! globGit! globRegex readText! readLines! writeText! inside? edit! editAll! editRx! replaceAll sub found? diff sh! shFor! quote joinPath]
+   :i [(asl-tools/fleet/run :a fr) (asl-regex/regex :a re)])
+ 
+ ; (:m :ref SCRIPT-KIT :do "script kit: flags typed by their defaults with generated help, positional args, read-only env, sorted glob, atomic writes, confined edits that print a unified diff under --dry, regex text helpers and argv-only children through fleet/run; every action prints one ASN receipt line")
+@@ -189,7 +189,7 @@ fn wild? seg: String -> Bool
+   (or (stringContains? seg "*") (stringContains? seg "?"))
+ 
+ fn joinPath rel: String name: String -> String
+-  (if (stringEmpty? rel) name (if (stringEndsWith? rel "/") (str rel name) (str rel "/" name)))
++  (if (stringEmpty? rel) name (str rel "/" name))
+ 
+ fn ! walk! r: re/Regex rel: String depth: Int64 acc: (List String) -> (List String)
+   (match (dirList (if (stringEmpty? rel) "." rel))
