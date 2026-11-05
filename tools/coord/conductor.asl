@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -1193,10 +1193,31 @@ fn ! baseHead! ctx: Ctx u0: st/Task -> String
 fn ! impossibleSigOf! ctx: Ctx u: st/Task why: String -> String
   (str "impossible: " why " @" (baseHead! ctx u))
 
+; (:m :ref IMPOSSIBLE-REMAP-MOVED :do "git name-status lines of a commit as (old new) pairs of its renames, rename lines being R<score> TAB old TAB new")
+fn renamePairs text: String -> (List (Pair String String))
+  (map (fn [(parts (List String))] -> (Pair String String) (pair (optionOr (listGet parts 1) "") (optionOr (listGet parts 2) "")))
+       (filter (fn [(parts (List String))] -> Bool (and (= (listLength parts) 3) (stringStartsWith? (optionOr (listHead parts) "") "R")))
+               (map (fn [(l String)] -> (List String) (stringSplit l "\t")) (stringLines text))))
+
+; (:m :ref IMPOSSIBLE-REMAP-MOVED :do "when an owned directory is gone because a commit renamed its files, the proposal lists each owned path with the path it was renamed to (old=>new), read from the commit that removed the directory; empty when no owned path was renamed")
+fn ! ownsRemap! ctx: Ctx u: st/Task why: String -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
+        (words (stringSplit why " "))]
+    (if (or (stringEmpty? repo) (!= (optionOr (listHead words) "") "ownsDirMissing")) ""
+      (let [(dir (optionOr (listGet words 1) ""))
+            (base (baseRef (resolved! repo u)))
+            (gone (stringTrim (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" dir)).out))]
+        (if (stringEmpty? gone) ""
+          (let [(pairs (renamePairs (gitOut repo (list "show" "-M" "--name-status" "--format=" gone)).out))
+                (hits (filter (fn [(p String)] -> Bool (listAny? (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs)) u.owns))]
+            (stringJoin (map (fn [(p String)] -> String (str p "=>" (pairSecond (optionOr (listFind (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs) (pair p p))))) hits) " "))))))
+
 fn ! refuseImpossible! ctx: Ctx u: st/Task c: CUnit why: String -> Unit
   (let [(sig (impossibleSigOf! ctx u why))
         (c1 (escalate! ctx (with c :sig sig) sig "admission refused the unit before any claim or writer run"))
-        (_ (move! ctx c1 "blocked" "admit" "" 0 0 sig 0))]
+        (_ (move! ctx c1 "blocked" "admit" "" 0 0 sig 0))
+        (remap (ownsRemap! ctx u why))
+        (_ (if (stringEmpty? remap) true (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "act" "ownsRemap" u.id u.id (str "owned paths were renamed, not deleted; proposed :owns " remap))))]
     ())
 
 fn ! impossibleRecheck! ctx: Ctx u: st/Task c: CUnit -> Bool
