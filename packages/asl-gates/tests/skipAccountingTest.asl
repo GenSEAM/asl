@@ -1,6 +1,11 @@
 (module asl-gates/tests/skipAccountingTest
   :x [runTests]
-  :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl) (asl-gates/auditGates :a ag) (asl-gates/runnerMain :a rm)])
+  :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl) (asl-gates/auditGates :a ag) (asl-gates/runnerMain :a rm) (asl-tools/fleet/run :a fr)])
+
+; (:m :ref SPAWN-SAFETY :do "the fixture suite child runs through asl/tools/fleet/run.asl with a timeout and a descendant limit, like the other suites, and is mapped back to the runner's Done")
+fn ! viaFleet! job: sr/Job -> sr/Done
+  (let [(d (fr/runOneLimited (fr/job job.argv (optionOr job.cwd ".") (fr/childEnv (optionOr job.env (list)))) (fr/limits 60 16)))]
+    (sr/Done :code d.exit :out d.out :errText "" :merged d.out :startNs 0 :endNs 0))
 
 ; (:m :ref SKIP-AND-CONSTANT :do "only a suite listed in .asl/mem/skipAllowed.asn is SKIPPED (zero asserts, not a pass, no red check); an unlisted skip row is ERR_SKIP_NOT_ALLOWED; a skip row never hides a failing cause; a run of only skips fails ERR_ALL_SKIPPED in the runner receipt and in audit gates; knownRed capture never records a skip; a fullGreen record carries :skipped N; a suite whose every executed assert is the literal true is ERR_CONSTANT_ASSERT")
 fn ! fixture! dir: String name: String body: String -> Bool
@@ -35,8 +40,8 @@ fn ! testRunner! dir: String -> Bool
         (plainDec (sr/skipDecision! dir "plainTest.asl"))
         (skipJob (sr/suiteJob! dir "markSkip.sh" 30))
         (runJob (sr/suiteJob! dir "markRun.sh" 30))
-        (skipDone (sr/runOne! skipJob))
-        (runDone (sr/runOne! runJob))
+        (skipDone (ok (viaFleet! skipJob)))
+        (runDone (ok (viaFleet! runJob)))
         (skipRes (sr/toResult! dir dir "markSkip.sh" (match skipDone ((ok d) d) ((err _) (sr/Done :code 1 :out "" :errText "" :merged "" :startNs 0 :endNs 0))) skipDec))
         (echoOut (str "(:skip :suite child :why \"echo\")\n"))
         (echoZero (sr/aslResult! dir "echoTest.asl" 1 (str echoOut "FAIL echoTest.asl: ERR_TEST_FAILED: zero assertions executed (after 0 asserts)\n")))
