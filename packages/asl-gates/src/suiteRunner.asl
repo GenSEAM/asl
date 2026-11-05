@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! skipRow countConstant! skipAllowedPaths skipAllowed?]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! skipRow countConstant! skipAllowedPaths skipAllowed? countedAsserts countedRefutes countedDeclared]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -14,6 +14,16 @@
 
 fn makeSuiteResult suite: String cause: String digest: String failLine: String asserts: Int64 refutes: Int64 declared: Int64 failed: Int64 -> SuiteResult
   (SuiteResult :suite suite :cause cause :digest digest :failLine failLine :asserts asserts :refutes refutes :declared declared :failed failed)
+
+; (:m :ref SKIP-AND-CONSTANT :do "a skipped suite reports the asserts it ran on its own row but adds 0 to every executed total, so a skip never satisfies the executed-above-zero invariant")
+fn countedAsserts r: SuiteResult -> Int64
+  (if (= r.cause "SKIPPED") 0 r.asserts)
+
+fn countedRefutes r: SuiteResult -> Int64
+  (if (= r.cause "SKIPPED") 0 r.refutes)
+
+fn countedDeclared r: SuiteResult -> Int64
+  (if (= r.cause "SKIPPED") 0 r.declared)
 
 (schema HostVerdict
   (:f cause String)
@@ -797,7 +807,7 @@ fn computeDigest cause: String failLine: String -> String
 
 fn gateCounts cause: String declared: Int64 asserts: Int64 refutes: Int64 failedCount: Int64 -> (Pair Int64 Int64)
   (cond
-    ((= cause "SKIPPED") (pair (+ asserts refutes) 0))
+    ((= cause "SKIPPED") (pair 0 0))
     ((= cause "OK") (pair (+ asserts refutes) 0))
     ((= cause "ERR_DECLARED_GAP") (pair declared (- declared (+ asserts refutes))))
     (else
@@ -1376,7 +1386,7 @@ fn ! gate root: String arg: String -> Int64
        (let [(counts (gateCounts r.cause r.declared r.asserts r.refutes r.failed))]
          (do
            (println (str "(:gateCause :suite \"" (esc suite 400) "\" :cause " r.cause " :digest \"" r.digest "\" :ev \"" (esc r.failLine 400) "\""
-                         (if (stringEndsWith? suite ".asl") (str " " (trustForm)) "") ")"))
+                         (if (= r.cause "SKIPPED") (str " :skipped true :asserts " (stringFromInt64 (+ r.asserts r.refutes))) "") (if (stringEndsWith? suite ".asl") (str " " (trustForm)) "") ")"))
            (println (str "(:gate :name \"" (esc suite 400) "\" :asserts " (stringFromInt64 (pairFirst counts)) " :failed " (stringFromInt64 (pairSecond counts)) ")"))
            (if (or (= r.cause "OK") (= r.cause "SKIPPED")) 0 1))))))
 

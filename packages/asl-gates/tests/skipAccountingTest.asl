@@ -39,7 +39,8 @@ fn ! testRunner! dir: String -> Bool
         (assert (= rogue.failed 1) "an unlisted skip is failed")
         (assert (= rogueZero.cause "ERR_SKIP_NOT_ALLOWED") (str "an unlisted zero-assert skip is red too: " rogueZero.cause))
         (assert (= skipFail.cause "ASSERTION_FAILURE") (str "a skip row never turns a failing suite into SKIPPED: " skipFail.cause))
-        (assert (= (sr/gateCounts "SKIPPED" 0 2 0 0) (pair 2 0)) "gate counts of a skip are the asserts that ran, 0 failed")
+        (assert (= (sr/gateCounts "SKIPPED" 0 2 0 0) (pair 0 0)) "gate counts of a skip are 0 asserts, 0 failed: a skip never counts toward the executed-above-zero invariant")
+        (assert (= (sr/countedAsserts skipOne) 0) "counted asserts of a skipped suite are 0 while the row keeps the ones that ran")
         (assert (= echoMid.cause "OK") (str "a skip row echoed mid-output does not skip the suite: " echoMid.cause))
         (assert (= echoMid.asserts 1) "an echoing suite keeps its asserts")
         (assert (= echoFail.cause "ASSERTION_FAILURE") (str "an echoed skip row does not hide a failure: " echoFail.cause))
@@ -52,7 +53,7 @@ fn ! testRunner! dir: String -> Bool
         true))
 
 fn ! testLedger! -> Bool
-  (let [(skip (sr/makeSuiteResult "a/skipTest.asl" "SKIPPED" "" "(:skip :suite x)" 0 0 0 0))
+  (let [(skip (sr/makeSuiteResult "a/skipTest.asl" "SKIPPED" "" "(:skip :suite x)" 2 0 2 0))
         (pass (sr/makeSuiteResult "a/okTest.asl" "OK" "" "" 3 0 3 0))
         (mixed (rl/reconcile! (list skip pass) (list) ""))
         (onlySkip (rl/reconcile! (list skip) (list) ""))
@@ -62,7 +63,8 @@ fn ! testLedger! -> Bool
         (auditMixed (ag/suiteGateChecks! "gate5Suites" (list skip pass) (list) ""))]
     (do (assert (listEmpty? mixed.checks) "a skipped suite raises no red check")
         (assert (stringContains? mixedText ":skippedSuites 1") (str "skips are counted apart from passes: " mixedText))
-        (assert (stringContains? mixedText ":executedAsserts 3") "a skip adds no executed asserts")
+        (assert (stringContains? mixedText ":executedAsserts 3") "a skip adds no executed asserts even when it ran some")
+        (assert (stringContains? mixedText ":skippedAsserts 2") (str "the asserts that ran in a skip are reported apart: " mixedText))
         (assert (stringContains? mixedText "(:runner :status :passed") "skips plus a pass is green")
         (assert (stringContains? skipText "(:runner :status :failed") "only skips is not green")
         (assert (stringContains? skipText "ERR_ALL_SKIPPED") (str "only skips names ERR_ALL_SKIPPED: " skipText))
@@ -99,6 +101,13 @@ fn ! testRecord! dir: String -> Bool
         (assert (stringContains? text ":suites 2 :skipped 1 ") (str "a fullGreen record with a skipped suite says :skipped 1: " text))
         true))
 
+; (:m :ref SKIP-ALLOWLIST-PIN :do "the tracked allowlist is exactly the two e2e suites, growth means editing this test in plain view")
+fn ! testPin! -> Bool
+  (let [(text (resultOr (fileReadString ".asl/mem/skipAllowed.asn") "MISSING"))
+        (paths (listSort (sr/skipAllowedPaths text)))]
+    (do (assert (= paths (list "asl/tools/coord/tests/e2eSmokeTest.asl" "tools/remote/tests/vpsE2eTest.asl")) (str "skipAllowed.asn lists exactly e2eSmokeTest and vpsE2eTest: " (stringJoin paths " ")))
+        true))
+
 fn ! runTests -> Bool
   (match (sr/makeTempDir! "skipFx")
     ((err e) (do (assert false (str "temp dir: " e)) false))
@@ -107,9 +116,11 @@ fn ! runTests -> Bool
             (b (testLedger!))
             (c (testCapture!))
             (d (testRecord! dir))
+            (e (testPin!))
             (_ (pathRemove dir))]
         (do (assert a "runner results")
             (assert b "ledger accounting")
             (assert c "knownRed capture")
             (assert d "fullGreen record")
+            (assert e "allowlist pinned")
             true))))

@@ -175,9 +175,9 @@ fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvalu
                               (if (= r.cause "OK") (+ acc 1) acc))
                             0
                             results))
-        (executedAsserts (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc r.asserts)) 0 results))
-        (executedRefutes (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc r.refutes)) 0 results))
-        (declaredAsserts (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc r.declared)) 0 results))
+        (executedAsserts (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc (sr/countedAsserts r))) 0 results))
+        (executedRefutes (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc (sr/countedRefutes r))) 0 results))
+        (declaredAsserts (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (+ acc (sr/countedDeclared r))) 0 results))
         (head (str "(:runner :status " status " :scope " scope " :suites " (stringFromInt64 (listLength results))
                    " :passedSuites " (stringFromInt64 passedSuites)
                    " :knownRedHeld " (stringFromInt64 held)
@@ -186,7 +186,7 @@ fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvalu
                    " :executedRefutes " (stringFromInt64 executedRefutes)
                    " :declaredAsserts " (stringFromInt64 declaredAsserts)
                    " :frozen " (stringFromInt64 frozen)
-                   (if (> skipped 0) (str " :skippedSuites " (stringFromInt64 skipped)) "")))
+                   (if (> skipped 0) (str " :skippedSuites " (stringFromInt64 skipped) " :skippedAsserts " (stringFromInt64 (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64 (if (= r.cause "SKIPPED") (+ acc (+ r.asserts r.refutes)) acc)) 0 results))) "")))
         (parts1 (list head))
         (parts2 (cond
                   ((listEmpty? results) (cons "(:check :id discovery :status :failed :err ERR_NO_SUITES :ev \"no suite discovered in scope\")" parts1))

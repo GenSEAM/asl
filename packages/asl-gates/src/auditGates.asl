@@ -693,13 +693,13 @@ fn snapshotFault id: String f: sr/Fault -> Check
     (failCheck id "ERR_RUNNER" (str f.kind ": " f.msg) (none) (none)))
 
 fn countAsserts results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.asserts)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedAsserts r))) 0 results)
 
 fn countRefutes results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.refutes)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedRefutes r))) 0 results)
 
 fn countDeclared results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.declared)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedDeclared r))) 0 results)
 
 fn countPassed results: (List sr/SuiteResult) -> Int64
   (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (if (= r.cause "OK") (+ n 1) n)) 0 results)
