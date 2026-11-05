@@ -13,6 +13,51 @@ fn leadText root: String -> String
 fn countIn text: String needle: String -> Int64
   (- (listLength (stringSplit text needle)) 1)
 
+(schema ReleaseCase (:f released Bool) (:f top String) (:f rel String) (:f unique Bool) (:f top2 String) (:f rowKept Bool))
+(schema ListCase (:f rowsSame Bool) (:f quarantined Bool) (:f note String))
+
+fn ! chmodTo mode: String path: String -> Bool
+  (let [(_ (fr/runOneLimited (fr/job (list "/bin/chmod" mode path) "." (fr/childEnv (list))) (fr/limits 60 4)))] true)
+
+fn ! releaseCase root: String -> ReleaseCase
+  (let [(dir (str root "/rel"))
+        (_ (st/put! dir (pf/unitIn "R1" "true")))
+        (bad "(:cu :id \"R1\" :st merged :lane\n")
+        (_ (cd/writeCUnit! dir (pf/cuIn "R1" "queued" "" "")))
+        (_ (fileWrite (cd/cuPath dir "R1") bad))
+        (ctx (ctxOf dir))
+        (_ (cd/surfaceReads! ctx))
+        (_ (cd/writeCUnit! dir (pf/cuIn "R1" "queued" "" "")))
+        (good (resultOr (fileReadString (cd/cuPath dir "R1")) ""))
+        (_ (cd/surfaceReads! ctx))
+        (top (stringJoin (filter (fn [(x String)] -> Bool (!= x "released")) (resultOr (dirList (cd/quarantineDir dir)) (list))) " "))
+        (rel (stringJoin (resultOr (dirList (str (cd/quarantineDir dir) "/released")) (list)) " "))
+        (idsAfter (cd/quarantinedIds dir))
+        (_ (fileWrite (cd/cuPath dir "R1") bad))
+        (_ (cd/surfaceReads! ctx))
+        (_ (cd/writeCUnit! dir (pf/cuIn "R1" "queued" "" "")))
+        (_ (cd/surfaceReads! ctx))
+        (rel2 (resultOr (dirList (str (cd/quarantineDir dir) "/released")) (list)))
+        (top2 (stringJoin rel2 " "))
+        (_ (cd/step! ctx (pf/unitIn "R1" "true") 4))
+        (kept (and (!= good "") (listAny? (fn [(c cd/CUnit)] -> Bool (and (= c.id "R1") (= c.st "ready"))) (cd/readCUnits! dir))))]
+    (ReleaseCase :released (and (stringEmpty? top) (stringStartsWith? rel "R1.") (= (listLength idsAfter) 0)) :top top :rel rel
+                 :unique (= (listLength rel2) 2) :top2 top2 :rowKept kept))
+
+fn ! listErrorCase root: String -> ListCase
+  (let [(dir (str root "/lst"))
+        (_ (st/put! dir (pf/unitIn "L1" "true")))
+        (_ (cd/writeCUnit! dir (pf/cuIn "L1" "queued" "" "")))
+        (before (resultOr (fileReadString (cd/cuPath dir "L1")) ""))
+        (ctx (ctxOf dir))
+        (_ (chmodTo "000" (cd/cuPath dir "L1")))
+        (_ (cd/surfaceReads! ctx))
+        (_ (cd/step! ctx (pf/unitIn "L1" "true") 4))
+        (_ (chmodTo "644" (cd/cuPath dir "L1")))
+        (after (resultOr (fileReadString (cd/cuPath dir "L1")) ""))
+        (q (fileExists? (cd/quarantineDir dir)))]
+    (ListCase :rowsSame (and (not (stringEmpty? before)) (= before after)) :quarantined q :note (str "q=" (if q "yes" "no") " same=" (if (= before after) "yes" "no"))))
+
 fn ! runTests -> Bool
   (let [(root (pf/scratch "tickReads" "t"))
         (_ (pf/cleanup root))
@@ -49,6 +94,8 @@ fn ! runTests -> Bool
         (fresh (ctxOf (str root "/never")))
         (freshSettled (cd/settled? fresh))
         (freshRaised (cd/surfaceReads! fresh))
+        (rel (releaseCase root))
+        (lst (listErrorCase root))
         (_ (pf/cleanup root))]
     (do (assert (and (= clean 0) (stringEmpty? leadClean)) (str "control: healthy rows raise nothing: " (stringFromInt64 clean) " " leadClean))
         (assert (and (= (countIn leadOne "cuUnreadable") 1) (stringContains? leadOne "\"U2\"")) (str "one tick over a corrupt state row raises one cuUnreadable lead row for its unit: " leadOne))
@@ -61,5 +108,9 @@ fn ! runTests -> Bool
         (assert (not storeSettled) "an unreadable store is not settled even with no conductor rows")
         (assert (stringContains? storeStatus "(:store :unreadable") (str "status! names the unreadable store: " storeStatus))
         (assert (and (>= storeRaised 1) (stringContains? leadStore "storeUnreadable")) (str "the tick raises storeUnreadable: " leadStore))
+        (assert rel.released (str "a good row back at cond/ID.asn releases the quarantine: " rel.top " / " rel.rel))
+        (assert rel.unique (str "a second quarantine of the same id does not collide: " rel.top2))
+        (assert rel.rowKept "the released unit proceeds (queued to ready) instead of staying frozen")
+        (assert (and lst.rowsSame (not lst.quarantined)) (str "a row whose read fails (transient) is neither quarantined nor overwritten: " lst.note))
         (assert (and freshSettled (= freshRaised 0)) "a store directory that does not exist yet is an empty settled store, not an error")
         true))

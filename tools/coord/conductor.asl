@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -689,10 +689,9 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
   (let [(ctx (with ctx0 :hold (or ctx0.hold (= (sc/levelRead! ctx0.dir) "stop"))))
         (cus (readCUnits! ctx.dir))
         (c (optionOr (cuOf cus u.id) (newCUnit u)))
-        (bad (and (none? (cuOf cus u.id)) (fileExists? (cuPath ctx.dir u.id))))
-        (_ (if bad (quarantineRow! ctx.dir u.id) false))]
+        (held (and (none? (cuOf cus u.id)) (or (fileExists? (cuPath ctx.dir u.id)) (listContains? (quarantinedIds ctx.dir) u.id))))]
     (cond
-      ((or bad (listContains? (quarantinedIds ctx.dir) u.id)) cap)
+      (held cap)
       ((= c.st "queued")
         (if (depsMerged? u cus)
           (let [(_ (move! ctx c "ready" "deps" "" 0 0 "depsMerged" 0))] cap)
@@ -826,26 +825,43 @@ fn ! storeReadError! dir: String -> (Option String)
 fn quarantineDir dir: String -> String
   (str (cuDir dir) "/quarantine")
 
+fn quarantineIdOf name: String -> String
+  (let [(parts (stringSplit name "."))]
+    (stringJoin (listTake parts (max 1 (- (listLength parts) 1))) "."))
+
 fn ! quarantinedIds dir: String -> (List String)
   (match (dirList (quarantineDir dir))
     ((err _) (list))
     ((ok names)
       (fold (fn [(acc (List String)) (name String)] -> (List String)
-              (let [(parts (stringSplit name "."))
-                    (id (stringJoin (listTake parts (max 1 (- (listLength parts) 1))) "."))]
-                (if (listContains? acc id) acc (listAppend acc (list id)))))
+              (if (= name "released") acc
+                (let [(id (quarantineIdOf name))]
+                  (if (listContains? acc id) acc (listAppend acc (list id))))))
             (list) (listSort names))))
 
+; (:m :ref COND-TICK-READS :do "only a row read successfully as bytes that fails to parse is quarantined; a list or read error is surfaced and retried, never a move; the name is ID.nowMs-pid so two quarantines of one id never collide")
 fn ! quarantineRow! dir: String id: String -> Bool
   (let [(_ (dirCreate (quarantineDir dir)))]
-    (ok? (pathRename (cuPath dir id) (str (quarantineDir dir) "/" id "." (n (nowMs))))))
+    (ok? (pathRename (cuPath dir id) (str (quarantineDir dir) "/" id "." (n (nowMs)) "-" (n (procSelf))))))
+
+; (:m :ref COND-TICK-READS :do "a quarantined unit is released once a parsing row is back at cond/ID.asn: its quarantine files move to quarantine/released/ and the unit schedules again")
+fn ! releaseQuarantined! dir: String -> Int64
+  (match (dirList (quarantineDir dir))
+    ((err _) 0)
+    ((ok names)
+      (let [(good (filter (fn [(id String)] -> Bool (match (fileReadString (cuPath dir id)) ((err _) false) ((ok raw) (match (parseCUnit raw) ((ok _) true) ((err _) false))))) (quarantinedIds dir)))
+            (mine (filter (fn [(name String)] -> Bool (and (!= name "released") (listContains? good (quarantineIdOf name)))) names))
+            (_ (if (listEmpty? mine) false (ok? (dirCreate (str (quarantineDir dir) "/released")))))
+            (_ (map (fn [(name String)] -> Bool (ok? (pathRename (str (quarantineDir dir) "/" name) (str (quarantineDir dir) "/released/" name)))) mine))]
+        (listLength mine))))
 
 ; (:m :ref COND-TICK-READS :do "every tick raises one lead-stream warn per unreadable conductor state row (kind cuUnreadable, key the unit) and one for an unreadable store (kind storeUnreadable); the stream dedupes repeats, so a corrupt row is one row with a count, not a silent drop")
 fn ! surfaceReads! ctx: Ctx -> Int64
   (let [(now (nowMs))
-        (_ (map (fn [(id String)] -> Bool (quarantineRow! ctx.dir id)) (unreadableIds! ctx.dir)))
+        (_ (map (fn [(id String)] -> Bool (quarantineRow! ctx.dir id)) (unparseableIds! ctx.dir)))
+        (_ (releaseQuarantined! ctx.dir))
         (ids (quarantinedIds ctx.dir))
-        (_ (map (fn [(id String)] -> Bool (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "cuUnreadable" id id "conductor state row unreadable: quarantined with its bytes, the unit is out of scheduling until restored")) ids))
+        (_ (map (fn [(id String)] -> Bool (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "cuUnreadable" id id (str "conductor state row unparseable: bytes kept in " (quarantineDir ctx.dir) "/" id ".*, the unit is out of scheduling; release: cp or mv a good row back to " (cuPath ctx.dir id) ", the next tick moves the quarantine file to " (quarantineDir ctx.dir) "/released"))) ids))
         (bad (storeReadError! ctx.dir))
         (_ (match bad ((some e) (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "storeUnreadable" "store" "" (str "store rows unreadable: " e))) ((none) true)))]
     (+ (listLength ids) (match bad ((some _) 1) ((none) 0))))
@@ -1257,6 +1273,19 @@ fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
 
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
+
+; (:m :ref COND-TICK-READS :do "the ids whose row was read as bytes and does not parse: the only rows quarantine may move")
+fn ! unparseableIds! dir: String -> (List String)
+  (match (dirList (cuDir dir))
+    ((err _) (list))
+    ((ok names)
+      (map (fn [(name String)] -> String (optionOr (stringSlice name 0 (- (stringLength name) 4)) name))
+           (filter (fn [(name String)] -> Bool
+                     (and (stringEndsWith? name ".asn")
+                          (match (fileReadString (str (cuDir dir) "/" name))
+                            ((err _) false)
+                            ((ok raw) (match (parseCUnit raw) ((ok _) false) ((err _) true))))))
+                   (listSort names)))))
 
 ; (:m :ref STATUS-UNREADABLE :do "the unit ids whose conductor row file does not parse; readCUnits! skips them, so status! lists each as st unreadable instead of dropping the unit")
 fn ! unreadableIds! dir: String -> (List String)
