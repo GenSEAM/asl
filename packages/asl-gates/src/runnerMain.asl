@@ -1,5 +1,5 @@
 (module asl-gates/runnerMain
-  :x [FullGreenRecord chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
+  :x [redForCapture? FullGreenRecord chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
   :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl)])
 
 (schema PackageInfo
@@ -297,7 +297,7 @@ fn chooseBase! -> (Pair (Option FullGreenRecord) (List String))
   (chooseBaseAt! "")
 
 fn forceFullPrefixes -> (List String)
-  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/audit/" ".asl/mem/knownRed.asn")
+  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/audit/" ".asl/mem/knownRed.asn" ".asl/mem/skipAllowed.asn")
 
 fn isForceFull p: String -> Bool
   (listAny? (fn [(f String)] -> Bool (stringStartsWith? p f)) (forceFullPrefixes))
@@ -696,6 +696,10 @@ fn ! captureRounds! clone: String suites: (List String) runs: Int64 acc: (List R
 fn sigOf rd: Round s: String -> String
   (match (mapGet rd.bySuite s) ((some r) (str r.cause "\n" r.digest)) ((none) ""))
 
+; (:m :ref SKIP-AND-CONSTANT :do "knownRed capture records failures only: a SKIPPED suite is neither red nor a ledger entry")
+fn redForCapture? r: sr/SuiteResult -> Bool
+  (and (!= r.cause "OK") (!= r.cause "SKIPPED"))
+
 fn ! captureIn root: String clone: String c: CaptureArgs out: String -> (Result Int64 sr/Fault)
   (match (sr/gitOut! root (list "clone" "-q" root clone))
     ((err e) (err (runnerFault e)))
@@ -713,7 +717,7 @@ fn ! captureIn root: String clone: String c: CaptureArgs out: String -> (Result 
                  ((ok rounds)
                   (let [(first (optionOr (listHead rounds) (Round :bySuite (mapEmpty))))
                         (flaky (filter (fn [(s String)] -> Bool (listAny? (fn [(rd Round)] -> Bool (!= (sigOf rd s) (sigOf first s))) rounds)) suites))
-                        (entries (filter (fn [(s String)] -> Bool (and (not (listContains? flaky s)) (match (mapGet first.bySuite s) ((some r) (!= r.cause "OK")) ((none) false)))) suites))]
+                        (entries (filter (fn [(s String)] -> Bool (and (not (listContains? flaky s)) (match (mapGet first.bySuite s) ((some r) (redForCapture? r)) ((none) false)))) suites))]
                     (match (today!)
                       ((err e) (err (runnerFault e)))
                       ((ok date)

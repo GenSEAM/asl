@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -636,7 +636,7 @@ fn writeRecord! root: String results: (List sr/SuiteResult) -> (Result String St
           ((ok lines)
            (let [(body (str lines ")\n"))
                  (rel (str (fullGreenDir) head ".asn"))
-                 (first (str "(:fullGreen :v 1 :sha \"" head "\" :tree \"" tree "\" :origin :runner :suites " (itos (listLength results))
+                 (first (str "(:fullGreen :v 1 :sha \"" head "\" :tree \"" tree "\" :origin :runner :suites " (itos (listLength results)) (let [(k (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))] (if (> k 0) (str " :skipped " (itos k)) ""))
                              " :receiptDigest \"" (bytesSha256 (stringToBytes body)) "\"\n"))]
              (match (dirCreate (str root "/" (fullGreenDir)))
                ((err e) (err (str "cannot create " (fullGreenDir) ": " e)))
@@ -682,9 +682,10 @@ fn suiteGateChecks! id: String results: (List sr/SuiteResult) ledger: (List rl/L
   (let [(rec (rl/reconcile! results ledger root))
         (bad (map (fn [(c rl/ReconcileCheck)] -> Check
                     (failCheck id c.err (str c.suite ": " c.ev) (none) (none))) rec.checks))]
-    (if (listEmpty? results)
-      (list (failCheck id "ERR_NO_SUITES" "no suite discovered in scope" (none) (none)))
-      (if (listEmpty? bad) (list (passCheck id (some (listLength results)) (none))) bad)))
+    (cond
+      ((listEmpty? results) (list (failCheck id "ERR_NO_SUITES" "no suite discovered in scope" (none) (none))))
+      ((listAll? (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results) (list (failCheck id "ERR_ALL_SKIPPED" "every suite in scope skipped, nothing executed" (none) (none))))
+      (else (if (listEmpty? bad) (list (passCheck id (some (listLength results)) (none))) bad))))
 
 fn snapshotFault id: String f: sr/Fault -> Check
   (if (= f.kind "terminated")

@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! skipRow countConstant!]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? aslResult! skipRow countConstant! skipAllowedPaths skipAllowed?]
   :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
@@ -306,6 +306,21 @@ fn countConstant! path: String -> Int64
 ; (:m :ref SKIP-AND-CONSTANT :do "a suite that prints a (:skip :suite ...) row (a case-level (:skip :case ...) leaves the suite as it is) ran nothing: its result is SKIPPED, counted apart from passed and failed, with zero executed asserts")
 fn skipRow out: String -> (Option String)
   (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? (pyStrip l) "(:skip :suite ")) (pyLines out)))
+
+; (:m :ref SKIP-ALLOWLIST :do "a suite reports SKIPPED only when skipAllowed.asn under .asl/mem lists its path, any other skip row is ERR_SKIP_NOT_ALLOWED and red")
+fn skipAllowedPaths text: String -> (List String)
+  (fold (fn [(acc (List String)) (l String)] -> (List String)
+          (let [(t (pyStrip l))]
+            (if (stringStartsWith? t "(:skipAllowed :suite \"")
+              (match (listGet (stringSplit t "\"") 1) ((some p) (cons p acc)) ((none) acc))
+              acc)))
+        (list)
+        (stringLines text))
+
+fn skipAllowed? snap: String suite: String -> Bool
+  (match (fileReadString (str snap "/.asl/mem/skipAllowed.asn"))
+    ((ok text) (listContains? (skipAllowedPaths text) suite))
+    ((err _) false))
 
 (schema SpawnedProc
   (:f pid Int64)
@@ -924,6 +939,10 @@ fn aslResult! snap: String suite: String code: Int64 out: String -> SuiteResult
         (constant (countConstant! (str snap "/" suite)))
         (gap (- declared (+ asserts refutes)))]
     (cond
+      ((and (some? skip) (or (= cause "OK") (= cause "ERR_VACUOUS_SUITE")) (not (skipAllowed? snap suite)))
+       (let [(failLine (str "skip row from a suite not in skipAllowed.asn: " (optionOr skip "")))]
+         (SuiteResult :suite suite :cause "ERR_SKIP_NOT_ALLOWED" :digest (computeDigest "ERR_SKIP_NOT_ALLOWED" failLine) :failLine failLine
+                      :asserts asserts :refutes refutes :declared declared :failed 1)))
       ((and (some? skip) (or (= cause "OK") (= cause "ERR_VACUOUS_SUITE")))
        (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts 0 :refutes 0 :declared 0 :failed 0))
       ((and (= cause "OK") (> asserts 0) (>= constant asserts))
