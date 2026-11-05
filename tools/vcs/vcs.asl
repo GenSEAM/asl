@@ -60,13 +60,14 @@ fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode:
               (let [(_ (g/discard! tx))] (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :guard " j.text ")")))
               (let [(c (g/finish! repo tx msg paths))
                     (_ (g/discard! tx))]
-                (cond
-                  ((= c.exit 2) (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :partial :indexStale true :sha " (g/clean c.out) " :guard " j.text ")")))
-                  ((!= c.exit 0) (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :failed :why \"" (esc (g/clean c.out)) "\")")))
-                  ((and (= mode "warn") (not (listEmpty? j.rows)))
-                    (let [(rec (cg/recordText! repo (str "(:vcs :op :commit :sha " (g/clean c.out) " :aslRoot \"" (esc aslRoot) "\" :guard " j.text ")")))]
-                      (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :warned :aslRoot \"" (esc aslRoot) "\" :sha " (g/clean c.out) rec " :guard " j.text ")"))))
-                  (else (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :done :aslRoot \"" (esc aslRoot) "\" :sha " (g/clean c.out) " :guard " j.text ")")))))))))))
+                (if (and (!= c.exit 0) (!= c.exit 2))
+                  (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :failed :why \"" (esc (g/clean c.out)) "\")"))
+                  (let [(sha (g/clean c.out))
+                        (warned (and (= mode "warn") (not (listEmpty? j.rows))))
+                        (stale (= c.exit 2))
+                        (rec (if warned (cg/recordText! repo (str "(:vcs :op :commit :sha " sha " :aslRoot \"" (esc aslRoot) "\" :guard " j.text ")")) ""))
+                        (status (cond (warned "warned") (stale "partial") (else "done")))]
+                    (VcsReceipt :code 0 :text (str "(:vcs :op :commit :status :" status " :aslRoot \"" (esc aslRoot) "\"" (if stale " :indexStale true" "") " :sha " sha rec " :guard " j.text ")")))))))))))
 
 fn ! branch! repo: String name: String base: String -> VcsReceipt
   (outReceipt "branch" (g/branchCreate! repo name base))

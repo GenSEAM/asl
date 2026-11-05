@@ -329,11 +329,21 @@ fn ! warnGate root: String base: String -> Bool
         (_a (put (str w "/bad.asl") "(module fx/bad\n  :x [f]\n"))
         (hW (head w))
         (ow (v/commit! w root (list "bad.asl") (goodMsg) "warn"))
-        (log (resultOr (fileReadString (str w "/.asl/log/commitGuard.asn")) ""))]
+        (log (resultOr (fileReadString (str w "/.asl/log/commitGuard.asn")) ""))
+        (w2 (repoAt base "warnStale"))
+        (_b (put (str w2 "/bad.asl") "(module fx/bad\n  :x [f]\n"))
+        (_c (put (str w2 "/.git/index.lock") ""))
+        (ow2 (v/commit! w2 root (list "bad.asl") (goodMsg) "warn"))
+        (_d (sh "." (list "rm" "-f" (str w2 "/.git/index.lock"))))
+        (log2 (resultOr (fileReadString (str w2 "/.asl/log/commitGuard.asn")) ""))]
     (do
       (assert (= ow.code 0) (str "warn commits over a block: " ow.text))
       (assert (!= (head w) hW) "HEAD moved under warn")
       (assert (stringContains? ow.text ":status :warned") "the status is warned, not done")
       (assert (stringContains? ow.text ":aslRoot \"") "the receipt carries the aslRoot")
       (assert (stringContains? log ":rule :balance") (str "the blocking rows are recorded: " log))
+      (assert (and (= ow2.code 0) (stringContains? ow2.text ":status :warned")) (str "warn over a block with a failed index reset is still warned: " ow2.text))
+      (assert (stringContains? ow2.text ":indexStale true") "and marks the stale index")
+      (assert (stringContains? ow2.text ":aslRoot \"") "and carries the aslRoot")
+      (assert (stringContains? log2 ":rule :balance") (str "and records the rows: " log2))
       true))

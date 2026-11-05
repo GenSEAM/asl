@@ -255,6 +255,12 @@ fn ! fixPure -> Bool
     (assert (= (listLength (filter (fn [(h cg/Hit)] -> Bool (= h.rule "unchecked")) (cg/chunkRows "/src" (list "a.asl") 30 124 "timeout" ""))) 1) "a timeout reports the file unchecked, not clean")
     (assert (= (cg/statusOf (cg/chunkRows "/src" (list "a.asl") 30 124 "timeout" "") false) "partial") "unchecked files give status partial")
     (assert (= (cg/statusOf (list) false) "ok") "no rows is ok")
+    (let [(decoys "ok /src/other.asl: (:checked 1)\nok /src/a.asl.bak: (:checked 1)\n  ok /src/a.asl: (:checked 1)\nsome ok /src/a.asl: text\n")
+          (exact "noise\nok /src/a.asl: (:checked 1)\n")]
+      (do (assert (= (listLength (cg/chunkRows "/src" (list "a.asl") 30 0 "" decoys)) 1) "an ok line of another file, a .bak name, an indented line or one with text before it does not clear the file")
+          (assert (= (optionOr (listHead (map (fn [(h cg/Hit)] -> String h.rule) (cg/chunkRows "/src" (list "a.asl") 30 0 "" decoys))) "") "unchecked") "and it is reported unchecked")
+          (assert (listEmpty? (cg/chunkRows "/src" (list "a.asl") 30 0 "" exact)) "the exact ok line at the line start clears it")
+          (assert (= (listLength (cg/chunkRows "/src" (list "a.asl" "b.asl") 30 0 "" exact)) 1) "a second file without its own ok line stays unchecked")))
     true)
 
 fn ! fixFixtures root: String base: String -> Bool
