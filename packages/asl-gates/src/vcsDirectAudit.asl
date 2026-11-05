@@ -74,6 +74,10 @@ fn gitHelper? name: String -> Bool
     (and (stringStartsWith? b "git")
          (or (stringEndsWith? b "!") (listContains? (list "gitIn" "gitOut" "gitRun" "gitCmd") b))))
 
+; (:m :do "a command word is git when its last path segment is git, so /usr/bin/git and any .../git count")
+fn gitWord? w: String -> Bool
+  (= (baseName w) "git")
+
 fn helper? h: Helpers file: String name: String -> Bool
   (or (gitHelper? name)
       (if (stringContains? name "/")
@@ -89,10 +93,10 @@ fn wordsOf text: String -> (List String)
           (map stripWord (stringSplit (stringReplace (stringReplace (stringReplace text "\t" " ") "\n" " ") "\r" " ") " ")))
 
 fn shellLead? w: String -> Bool
-  (or (listContains? (list "then" "else" "do" "if" "elif" "while" "until" "time" "!" "{" "}") w)
+  (or (listContains? (list "then" "else" "do" "if" "elif" "while" "until" "time" "!" "{" "}" "env" "exec" "command" "nohup" "xargs" "sudo" "eval") w)
       (and (stringContains? w "=") (not (or (stringStartsWith? w "-") (stringStartsWith? w "=")))))
 
-; (:m :do "a segment's command word: leading shell keywords (then else do if elif while until time ! { }) and VAR=x assignments are not the command")
+; (:m :do "a segment's command word: leading shell keywords (then else do if elif while until time ! { }), the prefixes env exec command nohup xargs sudo eval and VAR=x assignments are not the command")
 fn dropLead ws: (List String) -> (List String)
   (match (listHead ws)
     ((none) ws)
@@ -125,11 +129,11 @@ fn verbLoop xs: (List String) skipPh: Bool skipNext: Bool seenPh: Bool -> String
 
 ; (:m :do "what the words after git name: v:VERB for a covered verb, word for any other verb, param when the verb comes from a value (the fn is a helper), none when nothing follows; the value of -C, -c and the other valued global options is never the verb; skipPh is true for a helper call, whose leading values and path literals are its own arguments")
 fn verbState items: (List String) skipPh: Bool -> String
-  (verbLoop (if (= (optionOr (listHead items) "") "git") (listDrop items 1) items) skipPh false false)
+  (verbLoop (if (gitWord? (optionOr (listHead items) "")) (listDrop items 1) items) skipPh false false)
 
 fn segmentStates text: String -> (List String)
   (map (fn [(ws (List String))] -> String (verbState ws false))
-       (filter (fn [(ws (List String))] -> Bool (= (optionOr (listHead ws) "") "git")) (segmentsOf text)))
+       (filter (fn [(ws (List String))] -> Bool (gitWord? (optionOr (listHead ws) ""))) (segmentsOf text)))
 
 fn verbsIn states: (List String) -> (List String)
   (map (fn [(s String)] -> String (optionOr (stringSlice s 2 (stringLength s)) ""))
@@ -215,7 +219,7 @@ fn onHead file: String h: Helpers scan: Scan head: String -> Scan
 fn onString file: String scan: Scan text: String -> Scan
   (let [(live (listAny? (fn [(c Coll)] -> Bool (= c.opaque 0)) scan.colls))
         (fed (map (fn [(c Coll)] -> Coll (if (= c.opaque 0) (itemsOfText c text) c)) scan.colls))
-        (argvOpen (and (= text "git") (and (= (prevAt scan 1) "(") (listContains? (list "list" "cons") (prevAt scan 0)))))
+        (argvOpen (and (gitWord? text) (and (= (prevAt scan 1) "(") (listContains? (list "list" "cons") (prevAt scan 0)))))
         (appendOpen (and argvOpen (and (= (prevAt scan 3) "(") (listContains? (list "listAppend" "listConcat") (prevAt scan 2)))))
         (colls (if argvOpen
                  (cons (Coll :kind "argv" :at (if appendOpen (- scan.depth 1) scan.depth) :items (list "git") :opaque 0) fed)
