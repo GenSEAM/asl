@@ -1,8 +1,10 @@
-(module asl-utils/tests/kitJoinPathProbe
+(module asl-utils/tests/joinPathTest
   :x [runTests]
   :i [(asl-utils/kit :a kit)])
 
 fn ! runTests -> Bool
   (do (assert (= (kit/joinPath "a" "b") "a/b") "joinPath joins two parts with one slash")
       (assert (= (kit/joinPath "a/" "b") "a/b") "joinPath does not add a second slash when the left part already ends in one")
+      (assert (= (kit/joinPath "a/b/" "c") "a/b/c") "joinPath keeps one slash for a longer left part that ends in one")
+      (assert (= (kit/joinPath "" "x") "x") "joinPath returns the name alone for an empty left part")
       true)

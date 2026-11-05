@@ -1,0 +1,13 @@
+diff --git a/asl/packages/asl-utils/src/kit.asl b/asl/packages/asl-utils/src/kit.asl
+index 320b861b7..0075a54d3 100644
+--- a/asl/packages/asl-utils/src/kit.asl
++++ b/asl/packages/asl-utils/src/kit.asl
+@@ -189,7 +189,7 @@ fn wild? seg: String -> Bool
+   (or (stringContains? seg "*") (stringContains? seg "?"))
+ 
+ fn joinPath rel: String name: String -> String
+-  (if (stringEmpty? rel) name (str rel "/" name))
++  (if (stringEmpty? rel) name (if (stringEndsWith? rel "/") (str rel name) (str rel "/" name)))
+ 
+ fn ! walk! r: re/Regex rel: String depth: Int64 acc: (List String) -> (List String)
+   (match (dirList (if (stringEmpty? rel) "." rel))

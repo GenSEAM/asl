@@ -2,19 +2,16 @@
   :x [runTests]
   :i [(asl-gates/dyck :a dk) (asl-tools/fleet/run :a fr)])
 
-; (:m :ref TRIAL-CORPUS :do "every trial corpus row parses and has its fields, new-module owns are absent on base, the T5 and T6 branch patches apply on base, and the T4 seed applies with kitTest green and the joinPath probe red; the seed checks run in a git archive of base, so the working tree is never touched")
-
-fn cutOf s: String a: Int64 b: Int64 -> String
-  (optionOr (stringSlice s a b) "")
+; (:m :ref TRIAL-CORPUS :do "every trial corpus row parses and has its fields; each row's gate file is absent on base unless the row is seeded; new-module owns are absent on base; in one clone at base, the T4 regression is red on the seed and green after the reference fix with kitTest green, each seeded branch's gate runs green with executed asserts, and each seed's probe shows the seed is wrong; a broken unionFind passes the T6 seed gate and fails its probe")
 
 fn ! sh dir: String argv: (List String) -> fr/Done
-  (fr/runOneLimited (fr/job argv dir (fr/childEnv (list))) (fr/limits 900 128))
-
-fn ! shAsl dir: String argv: (List String) -> fr/Done
   (fr/runOneLimited (fr/job argv dir (fr/childEnv (list "ASL_ROOT=" "ASL_PRELUDE="))) (fr/limits 900 128))
 
 fn ! scratch -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/trialCorpusTest-" (stringFromInt64 (procSelf)))
+
+fn cutOf s: String a: Int64 b: Int64 -> String
+  (optionOr (stringSlice s a b) "")
 
 fn after row: String key: String -> String
   (match (stringIndexOf row key)
@@ -30,6 +27,16 @@ fn ownsOf row: String -> (List String)
     ((some i) (let [(rest (cutOf row (+ i 7) (stringLength row)))
                     (inner (match (stringIndexOf rest ")") ((some j) (cutOf rest 0 j)) ((none) rest)))]
                 (filter (fn [(s String)] -> Bool (stringContains? s "/")) (stringSplit inner "\"")))))
+
+fn gateOf row: String -> String
+  (match (stringIndexOf row ":gate \"")
+    ((none) "")
+    ((some i) (let [(rest (cutOf row (+ i 7) (stringLength row)))
+                    (inner (match (stringIndexOf rest "\"") ((some j) (cutOf rest 0 j)) ((none) rest)))]
+                (optionOr (listLast (stringSplit inner " ")) ""))))
+
+fn seeded? row: String -> Bool
+  (stringContains? row ":skipWrite true")
 
 fn rowOk row: String -> Bool
   (and (not (stringEmpty? (idOf row)))
@@ -47,38 +54,85 @@ fn newOwnsAbsent? root: String base: String chunks: (List String) -> Bool
                   (listAll? (fn [(p String)] -> Bool (absentOnBase? root base p)) (ownsOf row))))
             chunks)
 
-fn archive root: String base: String dir: String -> Bool
-  (= (sh root (list "sh" "-c" (str "rm -rf " dir " && git clone -q --no-checkout " root " " dir " && git -C " dir " checkout -q " base))).exit 0)
+fn gatesAbsent? root: String base: String chunks: (List String) -> Bool
+  (listAll? (fn [(row String)] -> Bool
+              (or (seeded? row) (absentOnBase? root base (gateOf row))))
+            chunks)
 
-fn patchApplies? dir: String seed: String -> Bool
-  (= (sh dir (list "git" "apply" "--check" seed)).exit 0)
+fn ranOk? d: fr/Done -> Bool
+  (and (= d.exit 0)
+       (and (stringContains? d.out "assertion(s) executed (") (not (stringContains? d.out " 0 assertion(s) executed"))))
+
+fn redOk? d: fr/Done -> Bool
+  (and (not (= d.exit 0)) (stringContains? d.out "ERR_ASSERT"))
+
+fn ! cloneAt root: String base: String dir: String -> fr/Done
+  (sh root (list "sh" "-c" (str "rm -rf " dir " && git clone -q --shared --no-checkout " root " " dir " && git -C " dir " checkout -q " base)))
+
+fn ! applySeed dir: String seed: String -> Bool
+  (= (sh dir (list "git" "apply" seed)).exit 0)
+
+fn ! putIn dir: String src: String dst: String -> Bool
+  (= (sh dir (list "cp" src (str dir "/" dst))).exit 0)
+
+fn ! testIn dir: String rel: String -> fr/Done
+  (sh dir (list (str dir "/bin/asl") "test" rel))
+
+fn ! resetIn dir: String -> Bool
+  (= (sh dir (list "sh" "-c" "git checkout -q -- . && git clean -fdq")).exit 0)
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (text (resultOr (fileReadString (str root "/asl/tools/coord/trial/corpus.asn")) ""))
         (base (stringReplace (after text ":base") "\"" ""))
         (chunks (listDrop (stringSplit text "(:task ") 1))
-        (seedDir (str root "/asl/tools/coord/trial/seeds"))
+        (seeds (str root "/asl/tools/coord/trial/seeds"))
         (dir (scratch))
         (absent (newOwnsAbsent? root base chunks))
-        (ext (archive root base dir))
-        (t5 (patchApplies? dir (str seedDir "/humanBytesWrongBase.patch")))
-        (t6 (patchApplies? dir (str seedDir "/unionFindConstAssert.patch")))
-        (t4 (patchApplies? dir (str seedDir "/kitJoinPathFix.patch")))
-        (t4Applied (= (sh dir (list "git" "apply" (str seedDir "/kitJoinPathFix.patch"))).exit 0))
-        (kitRc (if t4Applied (shAsl dir (list (str dir "/bin/asl") "test" "asl/packages/asl-utils/tests/kitTest.asl")) (sh dir (list "false"))))
-        (probeCopy (sh dir (list "cp" (str seedDir "/kitJoinPathProbe.asl.seed") (str dir "/asl/packages/asl-utils/tests/kitJoinPathProbe.asl"))))
-        (probeRc (if t4Applied (shAsl dir (list (str dir "/bin/asl") "test" "asl/packages/asl-utils/tests/kitJoinPathProbe.asl")) (sh dir (list "false"))))
+        (gates (gatesAbsent? root base chunks))
+        (cloned (cloneAt root base dir))
+        (t5Patch (applySeed dir (str seeds "/humanBytesWrongBase.patch")))
+        (t5Gate (testIn dir "asl/packages/asl-utils/tests/humanBytesTest.asl"))
+        (t5ProbeCopy (putIn dir (str seeds "/humanBytesProbe.asl.seed") "asl/packages/asl-utils/tests/humanBytesProbe.asl"))
+        (t5Probe (testIn dir "asl/packages/asl-utils/tests/humanBytesProbe.asl"))
+        (r1 (resetIn dir))
+        (t4Patch (applySeed dir (str seeds "/kitJoinPathFix.patch")))
+        (t4Copy (putIn dir (str seeds "/joinPathTest.asl.seed") "asl/packages/asl-utils/tests/joinPathTest.asl"))
+        (t4Red (testIn dir "asl/packages/asl-utils/tests/joinPathTest.asl"))
+        (t4Ref (applySeed dir (str seeds "/kitJoinPathReference.patch")))
+        (t4Green (testIn dir "asl/packages/asl-utils/tests/joinPathTest.asl"))
+        (t4Kit (testIn dir "asl/packages/asl-utils/tests/kitTest.asl"))
+        (r2 (resetIn dir))
+        (t6Patch (applySeed dir (str seeds "/unionFindConstAssert.patch")))
+        (t6Gate (testIn dir "asl/packages/asl-utils/tests/unionFindTest.asl"))
+        (t6ProbeCopy (putIn dir (str seeds "/unionFindProbe.asl.seed") "asl/packages/asl-utils/tests/unionFindProbe.asl"))
+        (t6Probe (testIn dir "asl/packages/asl-utils/tests/unionFindProbe.asl"))
+        (t6Mut (sh dir (list "perl" "-pi" "-e" "s/\\(mapSet parent ra rb\\)/parent/" "asl/packages/asl-utils/src/unionFind.asl")))
+        (t6MutGate (testIn dir "asl/packages/asl-utils/tests/unionFindTest.asl"))
+        (t6MutProbe (testIn dir "asl/packages/asl-utils/tests/unionFindProbe.asl"))
+        (r3 (resetIn dir))
         (cleaned (sh root (list "rm" "-rf" dir)))]
     (do (assert (none? (dk/checkString text false)) "every row is balanced ASN")
         (assert (= (listLength chunks) 6) (str "six task rows: " (stringFromInt64 (listLength chunks))))
         (assert (listAll? rowOk chunks) "every row has an id, kind, known outcome, owns and a gate")
         (assert absent "new-module owns are absent on base")
-        (assert ext "the base archive extracts")
-        (assert t5 "the T5 branch patch applies on base")
-        (assert t6 "the T6 branch patch applies on base")
-        (assert t4 "the T4 seed applies on base")
-        (assert (= kitRc.exit 0) "kitTest stays green on the T4 seed")
-        (assert (not (= probeRc.exit 0)) "the joinPath probe is red on the T4 seed")
-        (assert (= cleaned.exit 0) "the archive scratch directory was removed")
+        (assert gates "every unseeded row's gate file is absent on base, so its gate is red before")
+        (assert (= cloned.exit 0) "the clone at base was made")
+        (assert t5Patch "the T5 branch patch applies on base")
+        (assert (ranOk? t5Gate) "the T5 seed gate is green with executed asserts")
+        (assert (and t5ProbeCopy (redOk? t5Probe)) "the T5 probe fails on the seed: the seed is wrong")
+        (assert r1 "the clone was reset after T5")
+        (assert t4Patch "the T4 seed applies on base")
+        (assert (and t4Copy (redOk? t4Red)) "the T4 regression is red on the seed")
+        (assert t4Ref "the T4 reference fix applies on the seed")
+        (assert (ranOk? t4Green) "the T4 regression is green after the reference fix")
+        (assert (= t4Kit.exit 0) "kitTest stays green after the reference fix")
+        (assert r2 "the clone was reset after T4")
+        (assert t6Patch "the T6 branch patch applies on base")
+        (assert (ranOk? t6Gate) "the T6 seed gate is green with executed asserts")
+        (assert (and t6ProbeCopy (= t6Probe.exit 0)) "the unionFind probe passes on the real module")
+        (assert (= t6Mut.exit 0) "the no-op union mutant was applied")
+        (assert (ranOk? t6MutGate) "the T6 seed gate stays green with a no-op union: the test is vacuous")
+        (assert (redOk? t6MutProbe) "the unionFind probe fails with a no-op union")
+        (assert (= cleaned.exit 0) "the scratch clone was removed")
         true))

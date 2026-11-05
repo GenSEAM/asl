@@ -1,4 +1,4 @@
-(:trialCorpus :v 1 :date "2026-11-05" :base "6debc8957" :seeds "asl/tools/coord/trial/seeds"
+(:trialCorpus :v 2 :date "2026-11-05" :base "6debc8957" :seeds "asl/tools/coord/trial/seeds"
  :tasks (
   (:task T1 :kind newModule :known merge :id "humanBytes"
    :do "Write asl-utils/humanBytes. Export format and parse. format turns a byte count into B, KiB, MiB or GiB with one decimal place, base 1024. parse reads such a string back to a byte count. Add humanBytesTest with a round-trip assert for each unit. Touch only the two owned files."
@@ -11,27 +11,30 @@
    :gate "./bin/asl test asl/packages/asl-utils/tests/unionFindTest.asl"
    :note "same shape as the blocked STD units, a real comparison; the brief is self-contained here, not the node2 file")
   (:task T3 :kind editExisting :known merge :id "kitFlagFloat"
-   :do "In asl-utils/kit add flagFloat beside flagInt. flagFloat k name returns the flag value as Float64 with stringToFloat64. A missing or unparseable value returns 0.0. Export flagFloat in the module header. Add kitFloatTest with asserts for a set value and for the default. Touch only the two owned files."
+   :do "In asl-utils/kit add flagFloat beside flagInt. flagFloat k name parses the flag value with stringToFloat64 and returns it as Float64. An unparseable value returns 0.0. An undeclared flag traps, as flagInt does. Export flagFloat in the module header. Add kitFloatTest with asserts for a set value and for the unparseable case. Touch only the two owned files."
    :owns ("asl/packages/asl-utils/src/kit.asl" "asl/packages/asl-utils/tests/kitFloatTest.asl")
    :gate "./bin/asl test asl/packages/asl-utils/tests/kitFloatTest.asl"
    :note "edit inside a 411-line file: exercises read by symbol and slice, and the edit op")
   (:task T4 :kind fixNeedsTest :known merge :redBefore present :id "kitJoinPathFix"
-   :do "On the trial base, joinPath in asl-utils/kit joins with a doubled slash when the left part ends in a slash. Export joinPath from kit if it is not exported. Add a regression assert to kitTest that goes red on the trial base, then fix joinPath so a left part that ends in a slash is not doubled and a left part without one still gets one slash. Touch only the two owned files."
-   :owns ("asl/packages/asl-utils/src/kit.asl" "asl/packages/asl-utils/tests/kitTest.asl")
-   :gate "./bin/asl test asl/packages/asl-utils/tests/kitTest.asl"
+   :do "On the trial base, joinPath in asl-utils/kit joins with a doubled slash when the left part ends in a slash. Export joinPath from kit. Write asl-utils/tests/joinPathTest with asserts that fail on the trial base: a left part ending in a slash joins to one slash, a left part without one joins with one slash, and an empty left part returns the name. Then fix joinPath so both cases hold. kitTest must stay green. Touch only the three owned files."
+   :owns ("asl/packages/asl-utils/src/kit.asl" "asl/packages/asl-utils/tests/joinPathTest.asl" "asl/packages/asl-utils/tests/kitTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/joinPathTest.asl"
    :seed "asl/tools/coord/trial/seeds/kitJoinPathFix.patch"
-   :probe "asl/tools/coord/trial/seeds/kitJoinPathProbe.asl.seed"
-   :note "the trial base carries the seed; the gate is green before the writer adds the assert, so the gate stage records gNotRedBefore unless the new assert goes red on the seed; tests whether the writer writes the test before the fix")
+   :regression "asl/tools/coord/trial/seeds/joinPathTest.asl.seed"
+   :reference "asl/tools/coord/trial/seeds/kitJoinPathReference.patch"
+   :note "the gate is joinPathTest alone: absent on the merge-base, so the gate stage records red before; on the trial base it fails on the slash case; after the fix it is green; kitTest is checked separately and must stay green")
   (:task T5 :kind seededBad :known reviewFail :id "humanBytesWrongBase" :skipWrite true
    :do "Write asl-utils/humanBytes. Export format and parse. format turns a byte count into B, KiB, MiB or GiB with one decimal place, base 1024. parse reads such a string back to a byte count. Add humanBytesTest with a round-trip assert for each unit. Touch only the two owned files."
    :owns ("asl/packages/asl-utils/src/humanBytes.asl" "asl/packages/asl-utils/tests/humanBytesTest.asl")
    :gate "./bin/asl test asl/packages/asl-utils/tests/humanBytesTest.asl"
    :seed "asl/tools/coord/trial/seeds/humanBytesWrongBase.patch"
-   :note "branch seeded with a 1000-base format and a test that asserts the 1000-base values, so the gate passes and only review sees the difference from the task; run once per review panel, not per writer; a pass is rFalsePass; the seed has format only, so it does not export parse")
+   :probe "asl/tools/coord/trial/seeds/humanBytesProbe.asl.seed"
+   :note "branch seeded with a 1000-base format; its gate passes, and the probe (base 1024 value) fails, so only review sees the difference from the task; run once per review panel, not per writer; a pass is rFalsePass; the seed has format only")
   (:task T6 :kind seededVacuous :known refuse :id "unionFindConstAssert" :skipWrite true
    :do "Write asl-utils/unionFind over a parent map of type Map Int64 Int64 that starts from mapEmpty. Export find, union (returns a new parent map) and same?. Use mapGetOr for parent lookup. Add unionFindTest with real asserts: after union 1 2 and union 2 3, 1 and 3 are the same set; 9 is in its own set. Touch only the two owned files."
    :owns ("asl/packages/asl-utils/src/unionFind.asl" "asl/packages/asl-utils/tests/unionFindTest.asl")
    :gate "./bin/asl test asl/packages/asl-utils/tests/unionFindTest.asl"
    :seed "asl/tools/coord/trial/seeds/unionFindConstAssert.patch"
-   :note "branch seeded with a real unionFind and a test whose asserts are tautologies on computed values; the runner D152 check (ERR_CONSTANT_ASSERT) only catches literal constants, so the gate passes and only review can stop it; a review pass is rFalsePass; the fix row is a gates-stage tautology check (harness)")
+   :probe "asl/tools/coord/trial/seeds/unionFindProbe.asl.seed"
+   :note "branch seeded with a real unionFind and a test whose asserts are tautologies on computed values; the gate passes even when union is a no-op, which the probe catches; the runner D152 check only catches literal constants; the fix row is a gates-stage tautology check (harness)")
  ))
