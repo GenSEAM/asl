@@ -1152,10 +1152,24 @@ fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
 
+; (:m :ref STATUS-UNREADABLE :do "the unit ids whose conductor row file does not parse; readCUnits! skips them, so status! lists each as st unreadable instead of dropping the unit")
+fn ! unreadableIds! dir: String -> (List String)
+  (match (dirList (cuDir dir))
+    ((err _) (list))
+    ((ok names)
+      (map (fn [(name String)] -> String (optionOr (stringSlice name 0 (- (stringLength name) 4)) name))
+           (filter (fn [(name String)] -> Bool
+                     (and (stringEndsWith? name ".asn")
+                          (match (fileReadString (str (cuDir dir) "/" name))
+                            ((err _) true)
+                            ((ok raw) (match (parseCUnit raw) ((ok _) false) ((err _) true))))))
+                   (listSort names)))))
+
 fn ! status! ctx: Ctx -> String
   (let [(cus (readCUnits! ctx.dir))
         (lanes (fold (fn [(acc (List String)) (c CUnit)] -> (List String) (if (listContains? acc c.lane) acc (listAppend acc (list c.lane)))) (list) cus))
-        (rows (map (fn [(c CUnit)] -> String (str "(:unit :id " (st/q c.id) " :st " c.st " :lane " (st/q c.lane) " :fails " (n c.fails) " :parked " (n c.parked) " :waited " (n c.waited) ")")) cus))
+        (rows (listAppend (map (fn [(c CUnit)] -> String (str "(:unit :id " (st/q c.id) " :st " c.st " :lane " (st/q c.lane) " :fails " (n c.fails) " :parked " (n c.parked) " :waited " (n c.waited) ")")) cus)
+                          (map (fn [(id String)] -> String (str "(:unit :id " (st/q id) " :st unreadable)")) (unreadableIds! ctx.dir))))
         (spend (map (fn [(l String)] -> String
                       (let [(mine (filter (fn [(c CUnit)] -> Bool (= c.lane l)) cus))]
                         (str "(:spend :lane " (st/q l) " :tokens " (n (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.tokens)) 0 mine))
@@ -2097,24 +2111,29 @@ fn ! writerOf! dir: String c: CUnit -> String
         (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l " :from writing ") (and (stringContains? l " :stage write ") (and (not (stringEmpty? (pick l))) (or (stringContains? l " :to gating ") (!= (pick l) "unknown"))))))) (journalLinesOf dir)))]
     (match (listLast rows) ((some l) (pick l)) ((none) c.model)))
 
+; (:m :ref REVIEW-NO-DIFF :do "a review never passes a change no reviewer was shown: a gone worktree, a failed git diff (missing base ref) or an empty diff ends the review as block with the reason in the signature, before any model call")
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
         (lanesText (readOr rc.lanes))
         (usage (runPath dir u.id "usage" "asn"))
         (_ (pathRemove usage))
-        (diff (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))))
+        (diff (if (worktreeValid? c.wt) (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))) (fr/Done :idx 0 :exit 128 :out "worktree gone" :ms 0 :verdict "exit")))
         (riskRaw (stringTrim (readOr (str dir "/tasks/" u.id ".risk"))))
         (risk (if (stringEmpty? riskRaw) "low" riskRaw))
         (writer (rs/writerAliasFor gatewayText lanesText (l/reviewWriter (writerOf! dir c) rc.writerAlias)))
         (ru (l/ReviewUnit :id u.id :task (taskText dir u) :risk risk :closureChanged false :writerAlias writer :writerChannel u.channel
                           :startRung (offeredRung! dir u.id) :fixesUsed c.fails :prior (list)))
         (call (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText)))]
+    (if (or (!= diff.exit 0) (stringEmpty? (stringTrim diff.out)))
+      (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+           :sig (if (!= diff.exit 0) (str "reviewDiffUnreadable: git diff " (baseRef u) "...HEAD exit " (n diff.exit) " " (repoClip diff.out)) (str "reviewDiffEmpty: no change past " (baseRef u)))
+           :ms 0 :exit 0 :asserts 0 :verdict "block")
     (match (rs/reviewUnit! gatewayText lanesText (pacesNow rc) rc.repo usage ru diff.out (readOr (runPath dir u.id "receipt" "asn")) call)
       ((err e) (failRes (str "ladder: " e)))
       ((ok r)
         (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))]
           (Res :tiers (tiersOfRows r.rows) :ok 0 :wt "" :branch "" :model r.models :tokens r.tokens :costMicro r.costMicro :claimedGreen 0 :sig r.sig :ms 0 :exit 0 :asserts 0
-               :verdict (rulingVerdict r.action))))))
+               :verdict (rulingVerdict r.action)))))))
 
 ; (:m :ref COND3 :do "alias and tier allowances now: every lane alias, and each tier as the largest allowance of its lanes, so a unit parked on a tier name wakes too")
 fn ! laneSnapshot rc: RealCfg -> (List (Pair String Int64))
