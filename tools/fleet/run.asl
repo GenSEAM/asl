@@ -761,16 +761,16 @@ fn stubHostText -> String
   "#!/bin/sh\n[ \"$1\" = test ] || exit 2\nshift\nrc=0\nfor f in \"$@\"; do\n  b=${f##*/}\n  case \"$b\" in\n    green*.asl) n=${b#green}; n=${n%.asl}; echo \"$f: $n assertion(s) executed ($n passed)\" ;;\n    red*.asl) n=${b#red}; n=${n%.asl}; echo \"suite: ERR_TYPE boom in $b\"; echo \"FAIL $f: ERR_ASSERT: assertion failed: red (after $n asserts)\"; rc=1 ;;\n    *) out=$(sh \"$f\" 2>&1); r=$?; [ -z \"$out\" ] || printf '%s\\n' \"$out\"; n=$(printf '%s\\n' \"$out\" | /usr/bin/grep -c '^assert '); e=$(printf '%s\\n' \"$out\" | /usr/bin/grep -o 'ERR_[A-Z_]*' | head -1); if [ $r -eq 0 ]; then echo \"$f: $n assertion(s) executed ($n passed)\"; else echo \"FAIL $f: ${e:-exit $r} (after $n asserts)\"; rc=1; fi ;;\n  esac\ndone\nexit $rc\n"
 
 fn stubHostPath -> String
-  "/tmp/aslStubHost/bin/asl"
+  (str "/tmp/aslStubHost-" (bytesSha256 (stringToBytes (stubHostText))) "/bin/asl")
 
 fn ! stubHost! -> String
-  (let [(dir "/tmp/aslStubHost")
-        (path (stubHostPath))
+  (let [(path (stubHostPath))
+        (dir (stringReplace path "/bin/asl" ""))
         (tmp (str dir "/bin/asl." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
-    (if (ok? (fileReadString path)) path
+    (if (= (resultOr (fileReadString path) "") (stubHostText)) path
       (let [(_ (dirCreate (str dir "/bin")))
             (_ (fileWrite tmp (stubHostText)))
-            (r (runOne (job (list "sh" "-c" (str "chmod 755 '" tmp "' && mv '" tmp "' '" path "'")) dir (childEnv (list)))))]
+            (r (runOne (job (list "sh" "-c" (str "chmod 700 '" dir "' && chmod 755 '" tmp "' && mv '" tmp "' '" path "'")) dir (childEnv (list)))))]
         path)))
 
 fn gateFiles cmd: String -> (List String)
@@ -779,7 +779,7 @@ fn gateFiles cmd: String -> (List String)
         (files (listDrop toks 2))]
     (if (and (>= (listLength toks) 3)
              (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
-                 (and (stringStartsWith? (optionOr (listHead toks) "") "/") (stringEndsWith? (optionOr (listHead toks) "") "/bin/asl") (not (listAny? (fn [(c String)] -> Bool (stringContains? (optionOr (listHead toks) "") c)) bad))))
+                 (= (optionOr (listHead toks) "") (stubHostPath)))
              (= (optionOr (listGet toks 1) "") "test")
              (not (listAny? (fn [(f String)] -> Bool (or (not (stringEndsWith? f ".asl")) (listAny? (fn [(c String)] -> Bool (stringContains? f c)) bad))) files)))
       files
