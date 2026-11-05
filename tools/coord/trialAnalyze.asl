@@ -196,7 +196,7 @@ fn signalled f: Facts name: String -> Bool
   (or (= (lastSignal f) name) (= f.stop name))
 
 fn stopSignals -> (List String)
-  (list "readStreak" "malformedReply" "parseDefect" "repeatFailure" "doneNoWrite" "modelEscalated" "wallBudget" "gateIntegrity" "needsReview" "noWrite" "turnBudget")
+  (list "readStreak" "malformedReply" "parseDefect" "repeatFailure" "doneNoWrite" "modelEscalated" "wallBudget" "gateIntegrity" "stalled" "needsReview" "noWrite" "turnBudget")
 
 fn noStopSignal f: Facts -> Bool
   (and (listEmpty? f.signals) (not (listContains? (stopSignals) f.stop)))
@@ -273,6 +273,16 @@ fn pEscalated f: Facts -> Bool
 fn pWall f: Facts -> Bool
   (and (writeFailed f) (or (signalled f "wallBudget") (or f.killed (stringContains? f.writeSig "lease ended before"))))
 
+; (:m :ref TRIAL-ANALYZE :do "three classes added to v1 on 2026-11-05 from the node2 slice: wStallKill, the conductor stall sweep killed the writer (verdict stalled, 146 rows); wRevertGreen, Leon's own revert check found the gate green with the change reverted (stop gateIntegrity or passesOnRevert, 71 rows); wNeedsReview, Leon stopped asking for review (stop needsReview, 20 rows)")
+fn pStallKill f: Facts -> Bool
+  (and (writeFailed f) (or (= (stringTrim f.writeSig) "stalled") (or (stringStartsWith? f.writeSig "stalled:") (= f.stop "stalled"))))
+
+fn pRevertGreen f: Facts -> Bool
+  (and (writeFailed f) (or (signalled f "gateIntegrity") (stringContains? f.writeSig "passesOnRevert")))
+
+fn pNeedsReview f: Facts -> Bool
+  (and (writeFailed f) (signalled f "needsReview"))
+
 fn pCompile f: Facts -> Bool
   (and (writeFailed f) (and (> f.gateExit 0) (anyIn f.gateError (compileCodes))))
 
@@ -325,12 +335,13 @@ fn pMerged f: Facts -> Bool
 fn rule c: String stage: String ins: String alt: String t: (fn [Facts] -> Bool) -> Rule
   (Rule :class c :stage stage :insert ins :alt alt :test t)
 
-; (:m :ref TRIAL-ANALYZE :do "the precedence of trialStall-v1, the design's row order: write rows first, then gates, review and merge; wPinBroken sits second and applies at any stage, because a cell served by another alias says nothing about its pinned model; rFalsePass precedes merged so a seeded-bad cell that merged is never counted as merged")
+; (:m :ref TRIAL-ANALYZE :do "the precedence of trialStall-v1, the design's row order plus wStallKill after wInfra (a sweep kill is a harness verdict on the run, read before Leon's own signals) and wRevertGreen and wNeedsReview after wWall (Leon's own stop explains the end before the gate output does): write rows first, then gates, review and merge; wPinBroken sits second and applies at any stage, because a cell served by another alias says nothing about its pinned model; rFalsePass precedes merged so a seeded-bad cell that merged is never counted as merged")
 fn rules -> (List Rule)
   (list (rule "wProvider" "write" "limit" "" pProvider)
         (rule "wPinBroken" "write" "harness" "" pPinBroken)
         (rule "wToolRoot" "write" "tool" "" pToolRoot)
         (rule "wInfra" "write" "harness" "" pInfra)
+        (rule "wStallKill" "write" "harness" "" pStallKill)
         (rule "wMalformed" "write" "tool" "" pMalformed)
         (rule "wReadLoop" "write" "hint" "limit" pReadLoop)
         (rule "wRefused" "write" "tool" "task" pRefused)
@@ -338,6 +349,8 @@ fn rules -> (List Rule)
         (rule "wDoneNoWrite" "write" "hint" "" pDoneNoWrite)
         (rule "wEscalated" "write" "harness" "" pEscalated)
         (rule "wWall" "write" "limit" "" pWall)
+        (rule "wRevertGreen" "write" "harness" "task" pRevertGreen)
+        (rule "wNeedsReview" "write" "harness" "" pNeedsReview)
         (rule "wCompile" "write" "hint" "tool" pCompile)
         (rule "wGateRed" "write" "model" "hint" pGateRed)
         (rule "wNoEdit" "write" "harness" "" pNoEdit)

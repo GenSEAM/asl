@@ -14,6 +14,10 @@
 (:fixture :expect wInfra :insert harness :note "Leon never ran: claim waited out"
  :record (:trialRun :id "T2-Nim-infra" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "" :known merge
   :stages ((:write :ok false :exit 1 :sig "waitedOut: (:refused :unit T2-Nim-infra :why held)" :ms 0))))
+(:fixture :expect wStallKill :insert harness :note "the stall sweep killed a writer that was read-looping with no signal; matches wReadLoop too, so it pins wStallKill before wReadLoop"
+ :record (:trialRun :id "T2-Nim-stallkill" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "stalled" :ms 1200000))
+  :leon (:stop "" :turns 25 :signals () :ops ((:read 25)))))
 (:fixture :expect wMalformed :insert tool
  :record (:trialRun :id "T2-Nim-malformed" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
   :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop malformedReply)" :ms 50000))
@@ -42,6 +46,14 @@
  :record (:trialRun :id "T3-Ifm-wall" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
   :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop wallBudget)" :ms 1680000))
   :leon (:stop wallBudget :turns 36 :signals (wallBudget) :ops ((:read 20) (:edit 6)))))
+(:fixture :expect wRevertGreen :insert harness :note "Leon's revert check found the gate green with the change reverted, and the conductor also called the gate vacuous; pins wRevertGreen before wVacuous"
+ :record (:trialRun :id "T4-Ifm-revertgreen" :task T4 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "vacuousGate: ./bin/asl test asl/packages/asl-utils/tests/kitTest.asl; (:gateVacuous :passesOnRevert true)" :ms 120000))
+  :leon (:stop gateIntegrity :turns 3 :signals (gateIntegrity) :ops ((:read 1) (:write 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect wNeedsReview :insert harness :note "Leon stopped asking for review with its gate red on an assertion; pins wNeedsReview before wGateRed"
+ :record (:trialRun :id "T3-Ifm-needsreview" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :needsReview :stop needsReview)" :ms 900000))
+  :leon (:stop needsReview :turns 20 :signals (needsReview) :ops ((:read 8) (:write 6)) :lastGate (:exit 1 :error "" :failed 1))))
 (:fixture :expect wCompile :insert hint :note "test staged before its src module"
  :record (:trialRun :id "T2-Ifm-compile" :task T2 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
   :stages ((:write :ok false :exit 1 :sig "gate red" :ms 400000))
@@ -143,13 +155,13 @@
  :record (:t :unit "TRAIN-PREEXISTING-MASK" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: stale branch recreate failed: fatal: no branch named 'sh/TRAIN-PREEXISTING-MASK'" :ms 0 :at 1793760000000))
 (:extra :expect unclassified :note "node2 gap: readStreak on 47212a0d7 has no :cause and the row has no ops"
  :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :lastStep (:turn 12 :op \"run\") :servedAlias \"orNvidiaNemotron35SuperVlFree\"" :ms 73445 :at 1793772685811))
-(:extra :expect unclassified :note "node2 gap: Leon's gateIntegrity stop (passesOnRevert) has no trialStall-v1 class"
+(:extra :expect wRevertGreen :insert harness :note "node2 production row: Leon stop gateIntegrity (passesOnRevert)"
  :record (:t :unit "CSV-WRITE" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :failed :stop gateIntegrity :lastStep (:turn 1 :op \"write\") :servedAlias \"nimNvidiaNemotron35SuperVl120b" :ms 11374 :at 1793751805524))
-(:extra :expect unclassified :note "node2 gap: needsReview stop"
+(:extra :expect wNeedsReview :insert harness :note "node2 production row: needsReview stop"
  :record (:t :unit "LL-BIT-RT" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :needsReview :stop needsReview :lastStep (:turn 20 :op \"write\") :servedAlias \"ccDeepseekDeepseekV41Flash" :ms 2740595 :at 1793755475425))
 (:extra :expect unclassified :note "node2 gap: LEDGER_FORGED, behind a tierHop prefix"
  :record (:t :unit "TEXT-WRAP" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "tierHop paid->strong: LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn" :ms 0 :at 1793821281083))
-(:extra :expect unclassified :note "node2 gap: the stall sweep killed the writer"
+(:extra :expect wStallKill :insert harness :note "node2 production row: the stall sweep killed the writer"
  :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "stalled" :ms 0 :at 1793772498343))
 (:extra :expect unclassified :note "a passed production write row: later stages are not in the row"
  :record (:t :unit "STD-TRIE" :from writing :to gating :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "written" :ms 28 :at 1793820705800))
