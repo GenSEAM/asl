@@ -1,5 +1,5 @@
 (module asl-gates/auditForeign
-  :x [Check ForeignRun InlineReport esc countLines normalizeNewlines embeddedPyLines inlineForeignCounts inlineAll! langFromHead foreignLangOf! measureForeign! parseAllowlist parseBaseline foreignAudit! lowerBaseline! runForeign! main]
+  :x [Audit Check ForeignRun InlineReport esc countLines normalizeNewlines embeddedPyLines inlineForeignCounts inlineAll! langFromHead foreignLangOf! measureForeign! parseAllowlist parseBaseline foreignAudit! lowerBaseline! runForeign! main]
   :i [(asl-proc/coreProcess :a p)])
 
 (schema Check
@@ -1199,7 +1199,10 @@ fn auditRatchet showAll: Bool allow: Allow t: Tracked b: Baseline ms: (Map Strin
         (raisedBad (match baseText
                      ((none) (list))
                      ((some _) (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (raisedFinding b baseB.rows base p))) (list) (sortedKeys b.order)))))
-        (c5 (listAppend c4 (perItem "foreignRaise" raisedBad "ERR_BASELINE_RAISED" rowCount)))
+        (headForms (map (fn [(r Raise)] -> String r.form) b.raises))
+        (missingRaises (filter (fn [(r Raise)] -> Bool (not (listContains? headForms r.form))) baseB.raises))
+        (missingBad (map (fn [(r Raise)] -> String (str "base :raise changed or deleted at head: " r.path " was " r.form)) missingRaises))
+        (c5 (listAppend c4 (perItem "foreignRaise" (listAppend raisedBad missingBad) "ERR_BASELINE_RAISED" rowCount)))
         (baseEntries (match baseAllow ((some ba) (parseAllowlist ba).entries) ((none) (mapEmpty))))
         (fresh (filter (fn [(p String)] -> Bool (not (mapHas? baseEntries p))) (sortedKeys allow.order)))
         (untilBad (map (fn [(p String)] -> String (str "new entry " p " has :until :none and no :reason"))
