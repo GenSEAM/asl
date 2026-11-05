@@ -304,8 +304,20 @@ fn countConstant! path: String -> Int64
     ((err _) 0))
 
 ; (:m :ref SKIP-AND-CONSTANT :do "a suite that prints a (:skip :suite ...) row (a case-level (:skip :case ...) leaves the suite as it is) ran nothing: its result is SKIPPED, counted apart from passed and failed, with zero executed asserts")
+fn hostTailLine? l: String -> Bool
+  (let [(t (pyStrip l))]
+    (or (stringEmpty? t) (stringStartsWith? t "FAIL ") (stringContains? t " assertion(s) executed")))
+
+fn dropHostTail lines: (List String) -> (List String)
+  (match (listLast lines)
+    ((none) lines)
+    ((some l) (if (hostTailLine? l) (dropHostTail (listTake lines (- (listLength lines) 1))) lines)))
+
+; (:m :ref SKIP-LAST-LINE :do "the skip row counts only as the last line the suite itself printed, before the host verdict lines, so a suite that echoes a child's output with a skip row in the middle is not skipped")
 fn skipRow out: String -> (Option String)
-  (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? (pyStrip l) "(:skip :suite ")) (pyLines out)))
+  (match (listLast (dropHostTail (pyLines out)))
+    ((some l) (if (stringStartsWith? (pyStrip l) "(:skip :suite ") (some (pyStrip l)) (none)))
+    ((none) (none)))
 
 ; (:m :ref SKIP-ALLOWLIST :do "a suite reports SKIPPED only when skipAllowed.asn under .asl/mem lists its path, any other skip row is ERR_SKIP_NOT_ALLOWED and red")
 fn skipAllowedPaths text: String -> (List String)
@@ -785,7 +797,7 @@ fn computeDigest cause: String failLine: String -> String
 
 fn gateCounts cause: String declared: Int64 asserts: Int64 refutes: Int64 failedCount: Int64 -> (Pair Int64 Int64)
   (cond
-    ((= cause "SKIPPED") (pair 0 0))
+    ((= cause "SKIPPED") (pair (+ asserts refutes) 0))
     ((= cause "OK") (pair (+ asserts refutes) 0))
     ((= cause "ERR_DECLARED_GAP") (pair declared (- declared (+ asserts refutes))))
     (else
@@ -944,7 +956,7 @@ fn aslResult! snap: String suite: String code: Int64 out: String -> SuiteResult
          (SuiteResult :suite suite :cause "ERR_SKIP_NOT_ALLOWED" :digest (computeDigest "ERR_SKIP_NOT_ALLOWED" failLine) :failLine failLine
                       :asserts asserts :refutes refutes :declared declared :failed 1)))
       ((and (some? skip) (or (= cause "OK") (= cause "ERR_VACUOUS_SUITE")))
-       (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts 0 :refutes 0 :declared 0 :failed 0))
+       (SuiteResult :suite suite :cause "SKIPPED" :digest "" :failLine (optionOr skip "") :asserts asserts :refutes refutes :declared declared :failed 0))
       ((and (= cause "OK") (> asserts 0) (>= constant asserts))
        (let [(failLine (str "constant=" (stringFromInt64 constant) " of " (stringFromInt64 asserts)))]
          (SuiteResult :suite suite :cause "ERR_CONSTANT_ASSERT" :digest (computeDigest "ERR_CONSTANT_ASSERT" failLine) :failLine failLine
