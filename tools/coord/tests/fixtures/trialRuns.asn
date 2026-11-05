@@ -242,3 +242,7 @@
   :leon (:stop done :turns 8 :signals () :ops ((:write 3)) :lastGate (:exit 1 :error "assertion failed: expected ERR_PARSE got ok" :failed 1))))
 (:extra :expect wNoEdit :insert harness :note "regrade L8: a tierHop wrapper is stripped before the anchored fail: noEdit"
  :record (:t :unit "L8-tierHopNoEdit" :from writing :to ready :stage write :model "unknown" :verdict "tierHop paid->strong: fail: noEdit" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "regrade S1 (M1r): an escaped quote in :lastStep :text keeps the fake :stop provider inside the text"
+ :record (:t :unit "S1-stepTextQuote" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :lastStep (:turn 3 :op \"write\" :text \"he said \\\" :stop provider :x \\\"\") :stop repeatFailure :servedAlias \"nimA\")" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "regrade S2 (M1r): an escaped quote and a paren in :lastStep :text neither close :lastStep nor lift the fake :stop provider to the top"
+ :record (:t :unit "S2-stepTextQuoteParen" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :lastStep (:turn 3 :op \"write\" :text \"x \\\") :stop provider (:y \\\"\") :stop repeatFailure :servedAlias \"nimA\")" :ms 1 :at 1))
