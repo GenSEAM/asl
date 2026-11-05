@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStage! impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -937,7 +937,14 @@ fn ! retryBackoffS dir: String -> Int64
   (let [(row (cdRowOf dir))]
     (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":retryBackoffS")) 300) 300))
 
-; (:m :ref COND-RECOVER-C3 :do "why a blocked unit may be retried by itself, empty when it may not: claim (the lease or owns clash that refused it is gone), provider (the failure signature matches the providerFail patterns), lease (the signature names a lost lease), stall (a stalled writer), vacuous (the vacuous verdict with commits on the unit branch past its base, which gating can now test); every other block, a review block, a stale rebase, deps, a repeated writer failure, waits for a person or the ladder")
+; (:m :ref COND-RECOVER-C3 :do "the conductors own signatures of a lost lease (leaseLost, stage run row lost, lease ended before) and of a stalled writer (stalled), matched as sig prefixes, never as substrings: a gate failure naming leaseTest or a stalled word is a writer failure")
+fn conductorLeaseSig? sig: String -> Bool
+  (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p)) (list "leaseLost" "stage run row lost" "lease ended before"))
+
+fn conductorStallSig? sig: String -> Bool
+  (or (= sig "stalled") (stringStartsWith? sig "stalled: "))
+
+; (:m :ref COND-RECOVER-C3 :do "why a blocked unit may be retried by itself, empty when it may not, a cap per unit lifetime (retries.asn is never reset): claim (the lease or owns clash that refused it is gone), provider (the failure signature matches the providerFail patterns), lease and stall (the conductors own signatures), vacuous (the vacuous verdict with commits on the unit branch past its base, which gating can now test); every other block, a review block, a stale rebase, deps, a repeated writer failure, waits for a person or the ladder")
 fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 -> String
   (let [(low (stringLower c.sig))]
     (cond
@@ -945,8 +952,8 @@ fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int
       ((claimFreed? c leases now) "claim")
       ((stringEmpty? c.sig) "")
       ((providerFailSig? c.sig (pfPatterns (pfRowOf ctx.dir))) "provider")
-      ((stringContains? low "lease") "lease")
-      ((stringContains? low "stalled") "stall")
+      ((conductorLeaseSig? c.sig) "lease")
+      ((conductorStallSig? c.sig) "stall")
       ((vacuousSig? c.sig)
         (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
               (p (str (wtBase ctx.dir repo) "/asex-" c.id))]
@@ -954,11 +961,18 @@ fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int
       (else "")))
 
 ; (:m :ref COND-RECOVER-C3 :do "an escalated writer failure whose next ladder rung has room again (the per-day cap of a rung rolled over, a rung row was raised) hops there as the failed write would have, one tierHop move to ready with a clean count; the lead rung is left to offerBacklog!; the review block that offerStrong! serves, a stale rebase, deps and the vacuous verdict are not writer failures")
+; (:m :ref COND-RECOVER-C3 :do "only a writer failure hops a rung: the unit blocked at stage write through fail! and its signature is not one of the conductors own non-writer failures (LEDGER_FORGED, ERR_REPO_GIT, worktree attach, stage run row lost, stale branch, merge or train failures, impossible, vacuous, waitedOut, review, STALE)")
+fn ! blockedStage! dir: String id: String -> String
+  (let [(l (optionOr (listLast (filter (fn [(x String)] -> Bool (and (stringStartsWith? x (str "(:t :unit " (st/q id) " ")) (stringContains? x " :to blocked "))) (journalLinesOf dir))) ""))]
+    (sp/tokAfter l ":stage"))
+
 fn ladderHopSig? sig: String -> Bool
-  (not (or (stringEmpty? sig) (or (stringStartsWith? sig "waitedOut: ") (or (stringStartsWith? sig "review") (or (impossibleSig? sig) (or (vacuousSig? sig) (stringStartsWith? sig "STALE")))))))
+  (not (or (stringEmpty? sig)
+        (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p))
+                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train"))))
 
 fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 -> Bool
-  (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (ladderHopSig? c.sig))))
+  (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (and (ladderHopSig? c.sig) (= (blockedStage! ctx.dir c.id) "write")))))
     (match (nextRung! ctx.dir c.lane now)
       ((none) false)
       ((some next)
