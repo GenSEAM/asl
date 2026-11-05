@@ -646,6 +646,7 @@ fn ! testWriteCarriesBase -> Bool
     (do (assert (stringContains? extras "B1=:base \"main\"") (str "a HEAD base reaches Leon as main: " extras))
         (assert (stringContains? extras "B2=:base \"main\"") (str "an empty base reaches Leon as main: " extras))
         (assert (stringContains? extras "B3=:base \"main\"") (str "a named base reaches Leon: " extras))
+        (assert (stringStartsWith? (cd/withToolRoot! "" ".") ":toolRoot \"/") "a relative repo root is made absolute before it reaches Leon")
         (assert (stringContains? extras (str "B1=:base \"main\" :toolRoot " (st/q repo))) (str "LEON-TOOLROOT: the conductor's repo root reaches Leon as :toolRoot: " extras))
         true))
 
