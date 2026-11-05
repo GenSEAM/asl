@@ -195,5 +195,81 @@ fn testRealTree -> Bool
                 (assert (stringContains? r ":new () :stale ()") "no new site and no stale row on the real tree")
                 true)))
 
+fn vb a: String b: String -> String
+  (str a b)
+
+; (:m :ref VCS-AUDIT-ENV-OPTS :do "env options before the command word are skipped: -u NAME, -i, --unset NAME, -C DIR, -uNAME and NAME=v; a word after another command is not a command start")
+fn testEnvOptions -> Bool
+  (let [(one (fn [(body String)] -> (List String) (keysOf (list (pairOf "t/q.asl" (srcShell body))))))]
+    (do (assert (= (one (str "env -u GIT_DIR " (g) " " (vb "com" "mit") " -m x")) (list "t/q.asl#f!|git commit")) "env -u NAME git commit is a site")
+        (assert (= (one (str "env -i " (g) " " (vb "ad" "d") " -A")) (list "t/q.asl#f!|git add")) "env -i git add is a site")
+        (assert (= (one (str "env -u A -u B " (g) " push")) (list "t/q.asl#f!|git push")) "two -u options are skipped")
+        (assert (= (one (str "env --unset GIT_DIR " (g) " reset --hard")) (list "t/q.asl#f!|git reset")) "--unset NAME is skipped")
+        (assert (= (one (str "env -uGIT_DIR " (g) " checkout x")) (list "t/q.asl#f!|git checkout")) "-uNAME is skipped")
+        (assert (= (one (str "env -C /d A=1 " (g) " " (vb "com" "mit") " -m x")) (list "t/q.asl#f!|git commit")) "-C DIR and an assignment are skipped")
+        (assert (= (one (str "echo env -u A " (g) " " (vb "ad" "d"))) (list)) "env after another command is not a command start")
+        (assert (= (one "env -u GIT_DIR ls") (list)) "env options before a non-git command are no site")
+        true))
+
+fn cacheFiles -> (List (Pair String String))
+  (list (pairOf "t/a.asl" (srcList "commit")) (pairOf "t/b.asl" (srcShell (str (g) " push"))) (pairOf "t/c.asl" "(module t/c\n  :x [f]\n  :i [])\n\nfn f -> Int64\n  1\n"))
+
+fn siteKeys sites: (List va/Site) -> (List String)
+  (map va/siteKey sites)
+
+; (:m :ref VCS-AUDIT-SPEED :do "the per-file cache: any cache content yields the sites of the plain scan; a row in the cache is used (a planted row shows through); a changed file or a changed helper set misses; a malformed cache line is dropped")
+fn testCache -> Bool
+  (let [(files (cacheFiles))
+        (plain (siteKeys (va/scanFiles files)))
+        (cold (va/scanFilesC (mapEmpty) files))
+        (warmOld (va/parseCache (va/cacheText (pairSecond cold))))
+        (warm (va/scanFilesC warmOld files))
+        (poisoned (fold (fn [(m (Map String String)) (k String)] -> (Map String String) (mapSet m k "\tpush t/fake")) warmOld (mapKeys warmOld)))
+        (shown (siteKeys (pairFirst (va/scanFilesC poisoned files))))
+        (edited (list (pairOf "t/a.asl" (srcList "add")) (pairOf "t/b.asl" (srcShell (str (g) " push"))) (pairOf "t/c.asl" "(module t/c\n  :x [f]\n  :i [])\n")))
+        (editedWarm (siteKeys (pairFirst (va/scanFilesC warmOld edited))))
+        (editedPlain (siteKeys (va/scanFiles edited)))
+        (libA (str (hdr) "fn ! sh dir: String args: (List String) -> Bool\n  (ok? (run (listAppend (list \"" (g) "\" \"-c\" \"x=y\") args)))\n"))
+        (userB (srcBody "(a/sh d (list \"add\" \"-A\"))"))
+        (noLib (list (pairOf "t/a.asl" (srcBody "(ok? (run (list \"echo\")))")) (pairOf "t/u.asl" userB)))
+        (withLib (list (pairOf "t/a.asl" libA) (pairOf "t/u.asl" userB)))
+        (coldNo (va/scanFilesC (mapEmpty) noLib))
+        (helperChanged (siteKeys (pairFirst (va/scanFilesC (va/parseCache (va/cacheText (pairSecond coldNo))) withLib))))]
+    (do (assert (= (siteKeys (pairFirst cold)) plain) "a cold cache scan equals the plain scan")
+        (assert (= (siteKeys (pairFirst warm)) plain) "a warm cache scan equals the plain scan")
+        (assert (> (mapSize (pairSecond warm)) 0) "the used rows are recorded")
+        (assert (= (mapSize (pairSecond warm)) (mapSize warmOld)) "a warm run uses exactly the stored rows")
+        (assert (not (= shown plain)) "a planted cache row is used instead of a rescan")
+        (assert (= editedWarm editedPlain) (str "an edited file misses and the result equals the plain scan: " (stringJoin editedWarm ",")))
+        (assert (= helperChanged (siteKeys (va/scanFiles withLib))) (str "a changed helper set misses for the unchanged caller: " (stringJoin helperChanged ",")))
+        (assert (= (mapSize (va/parseCache "garbage line without tab\n\tno key\nk\trow\n")) 1) "malformed cache lines are dropped")
+        true))
+
+; (:m :ref VCS-AUDIT-SPEED :do "on a temp repo the second audit reuses the cache file and its receipt equals the first one apart from :ms; an unwritable cache dir is named in the receipt, not hidden")
+fn ! testCacheFile -> Bool
+  (let [(root (str "/tmp/vcsDirectAuditCache-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove root))
+        (made (and (ok? (dirCreate root)) (and (ok? (dirCreate (str root "/.asl"))) (and (ok? (dirCreate (str root "/.asl/mem"))) (ok? (dirCreate (str root "/t")))))))
+        (based (and made (and (vcs! root (list "init" "-q" "-b" "main"))
+                   (and (put! root "t/a.asl" (srcList "push")) (and (put! root ".asl/mem/vcsDirectAllow.asn" (str "(:vcsDirectAllow :v 1)\n" (allowRow "t/a.asl#f!" "push")))
+                     (and (stage! root) (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base"))))))))
+        (allow (str root "/.asl/mem/vcsDirectAllow.asn"))
+        (strip (fn [(r String)] -> String (optionOr (listHead (stringSplit r " :ms ")) r)))
+        (r1 (receiptOr (va/audit! root allow)))
+        (cacheText1 (resultOr (fileReadString (str root "/" (va/cacheRel))) ""))
+        (r2 (receiptOr (va/audit! root allow)))
+        (cacheText2 (resultOr (fileReadString (str root "/" (va/cacheRel))) ""))
+        (_ (pathRemove (str root "/.asl/cache")))
+        (_ (fileWrite (str root "/.asl/cache") "file where the dir should be"))
+        (r3 (receiptOr (va/audit! root allow)))
+        (_ (pathRemove root))]
+    (do (assert based "temp repo built")
+        (assert (stringStartsWith? r1 "(:vcsDirectAudit :v 1 :status :ok ") (str "the first audit is ok: " r1))
+        (assert (not (stringEmpty? cacheText1)) "the first audit wrote the cache file")
+        (assert (= (strip r1) (strip r2)) "the second receipt equals the first apart from :ms")
+        (assert (= cacheText1 cacheText2) "the second audit left the cache file unchanged")
+        (assert (stringContains? r3 ":cache \"cache dir: ") (str "a cache that cannot be written is named in the receipt: " r3))
+        true))
+
 fn ! runTests -> Bool
-  (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testCounts) (testRatchet) (testRealTree))
+  (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testCounts) (testRatchet) (testRealTree))

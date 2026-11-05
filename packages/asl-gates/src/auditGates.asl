@@ -784,7 +784,7 @@ fn allowAbsentCheck! root: String -> Check
                 ((err _) false))))
         (base (git! root (list "merge-base" "HEAD" "main")))]
     (cond
-      ((err? base) (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" "the allowlist is absent and the merge base with main does not resolve, so a deletion cannot be ruled out" (none) (none)))
+      ((err? base) (failCheck "vcsDirect" "ERR_VCS_NO_MAIN" "the allowlist is absent and there is no main branch to compare with (or this is not a git work tree), so a deletion cannot be ruled out" (none) (none)))
       ((or (at "HEAD") (at (resultOr base "HEAD")))
        (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" (str rel " is gone from the tree but exists at HEAD or the merge base with main") (none) (none)))
       (else (skippedCheck "vcsDirect" (str rel " absent")))))
@@ -795,7 +795,7 @@ fn vcsDirectCheck! root: String -> Check
     (if (not (isFile! allow))
       (allowAbsentCheck! root)
       (match (vda/auditAt! root allow "")
-        ((err e) (failCheck "vcsDirect" "ERR_VCS_DIRECT_AUDIT" e (none) (none)))
+        ((err e) (failCheck "vcsDirect" (if (stringContains? e "ERR_VCS_NO_MAIN") "ERR_VCS_NO_MAIN" "ERR_VCS_DIRECT_AUDIT") e (none) (none)))
         ((ok receipt)
           (if (stringContains? receipt ":status :ok")
             (passCheck "vcsDirect" (none) (none))

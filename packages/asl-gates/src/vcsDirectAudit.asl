@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText scanFilesC parseCache scanCached! cacheRel Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -96,11 +96,21 @@ fn shellLead? w: String -> Bool
   (or (listContains? (list "then" "else" "do" "if" "elif" "while" "until" "time" "!" "{" "}" "env" "exec" "command" "nohup" "xargs" "sudo" "eval") w)
       (and (stringContains? w "=") (not (or (stringStartsWith? w "-") (stringStartsWith? w "=")))))
 
+; (:m :ref VCS-AUDIT-ENV-OPTS :do "the options env takes before its command: -u NAME, --unset NAME, -C DIR, --chdir DIR and -S STRING skip their value, any other word that starts with a dash (-i, -0, --ignore-environment, -uNAME) is skipped alone; NAME=v words are skipped by shellLead? afterwards")
+fn envOptions ws: (List String) -> (List String)
+  (match (listHead ws)
+    ((none) ws)
+    ((some w)
+      (cond
+        ((listContains? (list "-u" "--unset" "-C" "--chdir" "-S") w) (envOptions (listDrop ws 2)))
+        ((and (stringStartsWith? w "-") (> (stringLength w) 1)) (envOptions (listDrop ws 1)))
+        (else ws))))
+
 ; (:m :do "a segment's command word: leading shell keywords (then else do if elif while until time ! { }), the prefixes env exec command nohup xargs sudo eval and VAR=x assignments are not the command")
 fn dropLead ws: (List String) -> (List String)
   (match (listHead ws)
     ((none) ws)
-    ((some w) (if (shellLead? w) (dropLead (listDrop ws 1)) ws)))
+    ((some w) (cond ((= w "env") (dropLead (envOptions (listDrop ws 1)))) ((shellLead? w) (dropLead (listDrop ws 1))) (else ws))))
 
 ; (:m :do "the command segments of a shell text, split at && || ; & newlines, $( and backquotes and a pipe with a blank on either side (a#f|git key is one word), each as its words")
 fn segmentsOf text: String -> (List (List String))
@@ -409,7 +419,9 @@ fn allowRel -> String
 ; (:m :do "the base commit: --base REF resolved, by default the merge base of HEAD with main; a base that does not resolve is an error")
 fn ! baseCommit! root: String base: String -> (Result String String)
   (if (stringEmpty? base)
-    (resultMap (sr/gitOut! root (list "merge-base" "HEAD" "main")) stringTrim)
+    (match (sr/gitOut! root (list "merge-base" "HEAD" "main"))
+      ((ok sha) (ok (stringTrim sha)))
+      ((err e) (err (str "ERR_VCS_NO_MAIN: no main branch to compare with, or not a git work tree (" e ")"))))
     (resultMap (sr/gitOut! root (list "rev-parse" "--verify" (str base "^{commit}"))) stringTrim))
 
 ; (:m :do "the allowlist keys at the base commit; none when the allowlist did not exist there yet, an error when git fails")
@@ -429,11 +441,104 @@ fn baseRowsText baseKeys: (Option (List String)) -> String
 fn grownFor allow: (List String) baseKeys: (Option (List String)) -> (Pair (List String) (List String))
   (match baseKeys ((some b) (grownOf allow b)) ((none) (pair (list) (list))))
 
-fn verdictReceipt files: (List (Pair String String)) text: String sha: String head: String baseKeys: (Option (List String)) -> String
+; (:m :ref VCS-AUDIT-SPEED :do "per-file scan cache: the result of scanning one file (its helper keys and its sites) depends only on its content and on the helper view it is scanned with, so the row key is sha256(content) | digest(all helper names) | the file's own helper names; an unchanged file in an unchanged helper set is never tokenized again; the cache lives in .asl/cache (ignored by git) and holds only the rows this run used")
+fn cacheRel -> String
+  ".asl/cache/vcsDirectAudit.v1"
+
+fn itemSep -> String
+  "~|~"
+
+fn contentSha text: String -> String
+  (bytesSha256 (stringToBytes text))
+
+fn namesDigest h: Helpers -> String
+  (contentSha (stringJoin (listSort h.names) " "))
+
+fn viewKey sha: String hd: String h: Helpers file: String -> String
+  (str sha "|" hd "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
+
+; (:m :do "one cache row: key TAB helper symbols TAB sites as verb-space-symbol, items joined by the item separator")
+fn encodeRow key: String found: (List String) sites: (List Site) file: String -> String
+  (str key "\t" (stringJoin (map (fn [(k String)] -> String (optionOr (stringSlice k (+ (stringLength file) 1) (stringLength k)) k)) found) (itemSep))
+       "\t" (stringJoin (map (fn [(s Site)] -> String (str s.verb " " s.symbol)) sites) (itemSep)))
+
+fn decodeRes file: String row: String -> (Pair (List String) (List Site))
+  (let [(parts (stringSplit row "\t"))
+        (items (fn [(i Int64)] -> (List String) (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit (optionOr (listGet parts i) "") (itemSep)))))]
+    (pair (map (fn [(n String)] -> String (str file "|" n)) (items 0))
+          (map (fn [(it String)] -> Site (let [(at (optionOr (listIndexOf (stringChars it) " ") 0))]
+                                           (Site :file file :verb (optionOr (stringSlice it 0 at) "") :symbol (optionOr (stringSlice it (+ at 1) (stringLength it)) ""))))
+               (items 1))))
+
+; (:m :do "the rows of a cache text as a map key to the row text after the key; a malformed line is dropped, never a failure")
+fn parseCache text: String -> (Map String String)
+  (fold (fn [(m (Map String String)) (l String)] -> (Map String String)
+          (let [(i (optionOr (listIndexOf (stringChars l) "\t") -1))]
+            (if (< i 1) m (mapSet m (optionOr (stringSlice l 0 i) "") (optionOr (stringSlice l (+ i 1) (stringLength l)) "")))))
+        (mapEmpty) (stringLines text))
+
+; (:m :do "scan one file through the cache: a hit decodes the stored row, a miss tokenizes and scans; the row used is recorded in the used map")
+fn scanOne old: (Map String String) used: (Map String String) sha: String hd: String h: Helpers file: String text: String -> (Pair (Pair (List String) (List Site)) (Map String String))
+  (let [(key (viewKey sha hd h file))]
+    (match (mapGet old key)
+      ((some row) (pair (decodeRes file row) (mapSet used key row)))
+      ((none)
+       (let [(sc (scanToks (helpersFor h file) file (lex/tokenize text)))
+             (found sc.found)
+             (sites (if (excluded? file) (list) (listReverse sc.sites)))
+             (row (stringReplace (encodeRow key found sites file) (str key "\t") ""))]
+         (pair (pair found sites) (mapSet used key row))))))
+
+fn scanAllFiles old: (Map String String) shas: (Map String String) h: Helpers files: (List (Pair String String)) -> (Pair (List (Pair String (Pair (List String) (List Site)))) (Map String String))
+  (let [(hd (namesDigest h))
+        (step (fn [(acc (Pair (List (Pair String (Pair (List String) (List Site)))) (Map String String))) (f (Pair String String))] -> (Pair (List (Pair String (Pair (List String) (List Site)))) (Map String String))
+                (let [(r (scanOne old (pairSecond acc) (optionOr (mapGet shas (pairFirst f)) "") hd h (pairFirst f) (pairSecond f)))]
+                  (pair (cons (pair (pairFirst f) (pairFirst r)) (pairFirst acc)) (pairSecond r)))))
+        (done (fold step (pair (list) (mapEmpty)) files))]
+    (pair (listReverse (pairFirst done)) (pairSecond done)))
+
+fn mergeUsed a: (Map String String) b: (Map String String) -> (Map String String)
+  (fold (fn [(m (Map String String)) (k String)] -> (Map String String) (mapSet m k (optionOr (mapGet b k) ""))) a (mapKeys b))
+
+; (:m :do "the helper fixpoint of helperLoop with the cache: only files whose text holds git are scanned per round")
+fn helperLoopC old: (Map String String) shas: (Map String String) files: (List (Pair String String)) h: Helpers rounds: Int64 used: (Map String String) -> (Pair Helpers (Map String String))
+  (let [(r (scanAllFiles old shas h files))
+        (found (unique (listAppend h.local (listFlatMap (fn [(x (Pair String (Pair (List String) (List Site))))] -> (List String) (pairFirst (pairSecond x))) (pairFirst r)))))
+        (used2 (mergeUsed used (pairSecond r)))]
+    (if (or (<= rounds 0) (= (listLength found) (listLength h.local)))
+      (pair (helpersFrom found) used2)
+      (helperLoopC old shas files (helpersFrom found) (- rounds 1) used2)))
+
+; (:m :do "the sites of a tree with the cache: (sites, used rows); equal to scanFiles for any cache content")
+fn scanFilesC old: (Map String String) files: (List (Pair String String)) -> (Pair (List Site) (Map String String))
+  (let [(shas (fold (fn [(m (Map String String)) (f (Pair String String))] -> (Map String String) (mapSet m (pairFirst f) (contentSha (pairSecond f)))) (mapEmpty) files))
+        (gitFiles (filter (fn [(f (Pair String String))] -> Bool (and (not (excluded? (pairFirst f))) (stringContains? (pairSecond f) "git"))) files))
+        (hl (helperLoopC old shas gitFiles (Helpers :local (list) :names (list)) 8 (mapEmpty)))
+        (all (scanAllFiles old shas (pairFirst hl) files))]
+    (pair (listFlatMap (fn [(x (Pair String (Pair (List String) (List Site))))] -> (List Site) (pairSecond (pairSecond x))) (pairFirst all))
+          (mergeUsed (pairSecond hl) (pairSecond all))))
+
+fn cacheText used: (Map String String) -> String
+  (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) ""))) (listSort (mapKeys used))) "\n")
+
+; (:m :do "load the cache file (absent or unreadable is an empty cache), scan, and write the rows used when they differ from the loaded ones; the second value is empty or the reason the cache could not be written, reported in the receipt")
+fn ! scanCached! root: String files: (List (Pair String String)) -> (Pair (List Site) String)
+  (let [(path (str root "/" (cacheRel)))
+        (old (parseCache (resultOr (fileReadString path) "")))
+        (r (scanFilesC old files))
+        (used (pairSecond r))
+        (changed (or (!= (mapSize used) (mapSize old)) (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used))))]
+    (pair (pairFirst r)
+          (if (not changed) ""
+            (match (dirCreate (str root "/.asl/cache"))
+              ((err e) (str "cache dir: " e))
+              ((ok _) (match (fileWrite path (cacheText used)) ((err e) (str "cache write: " e)) ((ok _) "")))))))
+
+fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (List String)) -> String
   (let [(allow (parseAllow text))
-        (v (verdictOf (scanFiles files) allow))
+        (v (verdictOf sites allow))
         (grown (grownFor allow baseKeys))
-        (extra (str " :base " (if (= sha head) ":self" (q sha)) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown))))]
+        (extra (str " :base " (if (= sha head) ":self" (q sha)) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown)) (if (stringEmpty? note) "" (str " :cache " (q note)))))]
     (receiptWith v (listLength allow) (pairFirst grown) extra))
 
 ; (:m :do "the receipt with the base (:self when the base is HEAD itself, as on main, so the ratchet compares against the committed allowlist) and the run time :ms")
@@ -460,7 +565,7 @@ fn ! auditCore! root: String allowPath: String base: String -> (Result String St
                 ((ok baseKeys)
                   (match (sr/gitOut! root (list "rev-parse" "HEAD"))
                     ((err e) (err (str "cannot resolve HEAD: " e)))
-                    ((ok head) (ok (verdictReceipt files text sha (stringTrim head) baseKeys))))))))))))
+                    ((ok head) (let [(sc (scanCached! root files))] (ok (verdictReceipt (pairFirst sc) (pairSecond sc) text sha (stringTrim head) baseKeys)))))))))))))
 
 fn ! audit! root: String allowPath: String -> (Result String String)
   (auditAt! root allowPath "")
