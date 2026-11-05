@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
+  :x [cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -222,11 +222,15 @@ fn leftS deadlineNs: Int64 stepS: Int64 -> Int64
   (let [(left (/ (- deadlineNs (monotonicNs)) 1000000000))]
     (if (< left stepS) left stepS))
 
+; (:m :ref VCS-AUDIT-LOWS-F1 :do "merge-time audits run with the vcsDirect scan cache off: consistency gets --no-cache")
+fn auditArgv cli: String sub: String -> (List String)
+  (if (= sub "consistency") (list cli "audit" sub "--no-cache") (list cli "audit" sub))
+
 ; (:m :do "audit sub (consistency|gates) at side with the step bound: the failed rows and whether the audit ran (exit 0 or 1 with a receipt); gates run with suites off by default")
 fn ! checkSide! side: String cli: String sub: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Result (List (Pair String String)) String)
   (let [(s (leftS deadlineNs stepS))]
     (if (<= s 0) (err "deadline")
-      (let [(d (fr/runOneLimited (fr/job (list (cliOf side cli) "audit" sub) side env) (fr/limits s 64)))]
+      (let [(d (fr/runOneLimited (fr/job (auditArgv (cliOf side cli) sub) side env) (fr/limits s 64)))]
         (cond
           ((or (= d.verdict "timeout") (= d.verdict "runaway")) (err (str "timeout " sub)))
           ((not (stringContains? d.out "(:audit ")) (err (str "no receipt " sub " exit " (n d.exit))))
@@ -275,6 +279,10 @@ fn ! dropSide! repo: String path: String -> Bool
 fn rows2s rows: (List (Pair String String)) -> String
   (stringJoin (map (fn [(r (Pair String String))] -> String (str "(:check :id " (pairFirst r) " :ev " (q (pairSecond r)) ")")) rows) " ")
 
+; (:m :ref VCS-AUDIT-LOWS-F1 :do "paths under .asl/cache in the diff: a committed cache could hide sites from audits that read it")
+fn cachePaths files: (List String) -> (List String)
+  (filter (fn [(p String)] -> Bool (or (stringStartsWith? p ".asl/cache/") (stringContains? p "/.asl/cache/"))) files)
+
 ; (:m :do "a commit with more than one parent: a merge of main into a unit carries git's own message, so the one-ASN-line rule exempts it")
 fn ! merge? repo: String sha: String -> Bool
   (> (listLength (stringSplit (stringTrim (gitOut! repo (list "rev-list" "--parents" "-n" "1" sha)).out) " ")) 2)
@@ -290,6 +298,7 @@ fn ! structure! repo: String base: String head: String -> (List String)
     (nonEmpty (list (if (= anc.exit 0) "" "baseNotAncestorOfHead")
                     (if (stringEmpty? (stringTrim (stringJoin files ""))) "emptyDiff" "")
                     (if (listEmpty? shas) "noHeadCommits" "")
+                    (if (listEmpty? (cachePaths files)) "" (str "cachePathInDiff " (stringJoin (listTake (cachePaths files) 5) ",")))
                     (if (listEmpty? bad) "" (str "notOneAsnLine " (stringJoin (map (fn [(s String)] -> String (optionOr (stringSlice s 0 9) s)) bad) ",")))
                     (if (conflictMarkers? diff.out) "conflictMarkers" "")
                     (if (listEmpty? (grownLedgers! repo base head)) "" (str "ledgerGrew " (stringJoin (grownLedgers! repo base head) ","))))))

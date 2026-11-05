@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText scanFilesC parseCache scanCached! cacheRel Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -442,9 +442,6 @@ fn grownFor allow: (List String) baseKeys: (Option (List String)) -> (Pair (List
   (match baseKeys ((some b) (grownOf allow b)) ((none) (pair (list) (list))))
 
 ; (:m :ref VCS-AUDIT-SPEED :do "per-file scan cache: the result of scanning one file (its helper keys and its sites) depends only on its content and on the helper view it is scanned with, so the row key is sha256(content) | digest(all helper names) | the file's own helper names; an unchanged file in an unchanged helper set is never tokenized again; the cache lives in .asl/cache (ignored by git) and holds only the rows this run used")
-fn cacheRel -> String
-  ".asl/cache/vcsDirectAudit.v1"
-
 fn itemSep -> String
   "~|~"
 
@@ -455,7 +452,7 @@ fn namesDigest h: Helpers -> String
   (contentSha (stringJoin (listSort h.names) " "))
 
 fn viewKey sha: String hd: String h: Helpers file: String -> String
-  (str sha "|" hd "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
+  (str sha "|" hd "|" (if (excluded? file) "x" "n") "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
 
 ; (:m :do "one cache row: key TAB helper symbols TAB sites as verb-space-symbol, items joined by the item separator")
 fn encodeRow key: String found: (List String) sites: (List Site) file: String -> String
@@ -521,18 +518,37 @@ fn scanFilesC old: (Map String String) files: (List (Pair String String)) -> (Pa
 fn cacheText used: (Map String String) -> String
   (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) ""))) (listSort (mapKeys used))) "\n")
 
-; (:m :do "load the cache file (absent or unreadable is an empty cache), scan, and write the rows used when they differ from the loaded ones; the second value is empty or the reason the cache could not be written, reported in the receipt")
-fn ! scanCached! root: String files: (List (Pair String String)) -> (Pair (List Site) String)
-  (let [(path (str root "/" (cacheRel)))
-        (old (parseCache (resultOr (fileReadString path) "")))
-        (r (scanFilesC old files))
-        (used (pairSecond r))
-        (changed (or (!= (mapSize used) (mapSize old)) (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used))))]
-    (pair (pairFirst r)
-          (if (not changed) ""
-            (match (dirCreate (str root "/.asl/cache"))
-              ((err e) (str "cache dir: " e))
-              ((ok _) (match (fileWrite path (cacheText used)) ((err e) (str "cache write: " e)) ((ok _) "")))))))
+; (:m :ref VCS-AUDIT-LOWS-F1 :do "the cache lives outside every worktree, in the runner-owned store HOME/.asl/run/vcsDirect/ID where ID is the first 16 hex of sha256 of the real git common dir, so a worktree cannot plant, empty or commit rows; mode off reads and writes nothing (merge-time runs), a dir argument replaces the store (tests)")
+fn storeRoot -> String
+  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/vcsDirect")
+
+fn ! cacheDirFor! root: String mode: String -> Result String String
+  (cond
+    ((= mode "off") (ok ""))
+    ((not (stringEmpty? mode)) (ok mode))
+    (else
+      (match (sr/gitOut! root (list "rev-parse" "--git-common-dir"))
+        ((err e) (err (str "git common dir: " e)))
+        ((ok out)
+          (let [(raw (stringTrim out))
+                (abs (if (stringStartsWith? raw "/") raw (str root "/" raw)))
+                (real (resultOr (realPath abs) abs))]
+            (ok (str (storeRoot) "/" (optionOr (stringSlice (contentSha real) 0 16) "x"))))))))
+
+; (:m :do "load the cache file of dir (absent or unreadable is an empty cache), scan, and write the rows used when they differ from the loaded ones; dir empty means no cache; the second value is empty or the reason the cache could not be written, reported in the receipt")
+fn ! scanCached! dir: String files: (List (Pair String String)) -> (Pair (List Site) String)
+  (if (stringEmpty? dir)
+    (pair (scanFiles files) "")
+    (let [(path (str dir "/vcsDirectAudit.v1"))
+          (old (parseCache (resultOr (fileReadString path) "")))
+          (r (scanFilesC old files))
+          (used (pairSecond r))
+          (changed (or (!= (mapSize used) (mapSize old)) (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used))))]
+      (pair (pairFirst r)
+            (if (not changed) ""
+              (match (dirCreate dir)
+                ((err e) (str "cache dir: " e))
+                ((ok _) (match (fileWrite path (cacheText used)) ((err e) (str "cache write: " e)) ((ok _) ""))))))))
 
 fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (List String)) -> String
   (let [(allow (parseAllow text))
@@ -543,14 +559,28 @@ fn verdictReceipt sites: (List Site) note: String text: String sha: String head:
 
 ; (:m :do "the receipt with the base (:self when the base is HEAD itself, as on main, so the ratchet compares against the committed allowlist) and the run time :ms")
 fn ! auditAt! root: String allowPath: String base: String -> (Result String String)
+  (auditWith! root allowPath base "")
+
+; (:m :do "cache is empty for the runner store, off for no cache, or a directory")
+fn ! auditWith! root: String allowPath: String base: String cache: String -> (Result String String)
   (let [(t0 (/ (nowNs) 1000000))
-        (r (auditCore! root allowPath base))
+        (r (auditCore! root allowPath base cache))
         (ms (- (/ (nowNs) 1000000) t0))]
     (match r
       ((err e) (err e))
       ((ok s) (ok (str (optionOr (stringSlice s 0 (- (stringLength s) 1)) s) " :ms " (stringFromInt64 ms) ")")))))
 
-fn ! auditCore! root: String allowPath: String base: String -> (Result String String)
+fn ! trackedCache! root: String -> (Result (List String) String)
+  (match (sr/gitOut! root (list "ls-files" "--" ".asl/cache/vcsDirectAudit*"))
+    ((err e) (err e))
+    ((ok out) (ok (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map stringTrim (stringLines out))))))
+
+fn ! auditCore! root: String allowPath: String base: String cache: String -> (Result String String)
+  (match (trackedCache! root)
+    ((err e) (err (str "cannot list tracked cache paths: " e)))
+    ((ok tracked)
+  (if (not (listEmpty? tracked))
+    (err (str "ERR_VCS_CACHE_TRACKED: tracked paths under .asl/cache would forge a scan cache: " (stringJoin (listTake tracked 5) ",")))
   (match (readTracked! root)
     ((err e) (err e))
     ((ok files)
@@ -565,7 +595,9 @@ fn ! auditCore! root: String allowPath: String base: String -> (Result String St
                 ((ok baseKeys)
                   (match (sr/gitOut! root (list "rev-parse" "HEAD"))
                     ((err e) (err (str "cannot resolve HEAD: " e)))
-                    ((ok head) (let [(sc (scanCached! root files))] (ok (verdictReceipt (pairFirst sc) (pairSecond sc) text sha (stringTrim head) baseKeys)))))))))))))
+                    ((ok head) (match (cacheDirFor! root cache)
+                      ((err e) (err e))
+                      ((ok dir) (let [(sc (scanCached! dir files))] (ok (verdictReceipt (pairFirst sc) (pairSecond sc) text sha (stringTrim head) baseKeys))))))))))))))))))
 
 fn ! audit! root: String allowPath: String -> (Result String String)
   (auditAt! root allowPath "")
@@ -595,6 +627,10 @@ fn flagAfter args: (List String) name: String -> String
 fn ! failWith e: String -> (Result Int64 String)
   (do (println (str "(:vcsDirectAudit :status :error :why " (q e) ")")) (ok 2))
 
+; (:m :do "cache mode of the command line: --no-cache is off, --cache-dir D is a directory, else the runner store")
+fn cap args: (List String) -> String
+  (if (listContains? args "--no-cache") "off" (flagAfter args "--cache-dir"))
+
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(rootFlag (flagAfter args "--root"))
         (root (if (stringEmpty? rootFlag) "." rootFlag))
@@ -610,6 +646,6 @@ fn ! main args: (List String) -> (Result Int64 String)
           ((err e) (failWith e))
           ((ok files) (do (println (str "(:vcsHelpers " (qs (helpersOf files).local) ")")) (ok 0)))))
       (else
-        (match (auditAt! root allowPath (flagAfter args "--base"))
+        (match (auditWith! root allowPath (flagAfter args "--base") (cap args))
           ((err e) (failWith e))
           ((ok receipt) (do (println receipt) (ok (if (stringContains? receipt ":status :ok") 0 1))))))))
