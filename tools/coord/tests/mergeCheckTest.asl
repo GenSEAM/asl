@@ -123,6 +123,9 @@ fn opts repo: String base: String head: String mode: String maxS: Int64 gate: St
 fn ! cacheFile! dir: String sha: String sub: String -> String
   (optionOr (listHead (filter (fn [(f String)] -> Bool (stringStartsWith? f (str sha "-" sub "-"))) (resultOr (dirList dir) (list)))) "")
 
+fn ! evBack path: String hdr: String -> String
+  (match (mc/cacheLoad! path hdr) ((some r) (pairSecond (optionOr (listHead r) (pair "" "none")))) ((none) "miss"))
+
 fn ! loadN path: String hdr: String -> Int64
   (match (mc/cacheLoad! path hdr) ((some r) (listLength r)) ((none) -1))
 
@@ -189,6 +192,9 @@ fn ! testE2e base: String -> Bool
         (cp (str base "/cp/x.asn"))
         (h1 (mc/cacheHeader "v1" "tree" "sha" "gates"))
         (_ (mc/cacheSave! cp h1 (list (red "g" "e") (red "h" "f"))))
+        (qev "say \"hi\") and a\\b \"x\" :lines 3 (+1)")
+        (cq (str base "/cp/q.asn"))
+        (_ (mc/cacheSave! cq h1 (list (red "g" qev) (red "h" "plain"))))
         (stale (cacheFile! cache c1 "gates"))
         (_ (put (str cache "/" stale) "(:mergeCheckBase (:check :id ghost :status :failed :ev \"g\"))\n"))
         (r12 (mc/run! (opts repo c1 c2 "cheap" 12 "" "" 120 cli cache "" "")))
@@ -252,6 +258,8 @@ fn ! testE2e base: String -> Bool
       (assert (and (= (pairFirst r10) 1) (stringContains? (out r10) ":regressions ((:check :id foreignGrowth")) (str "a red that got worse blocks: " (out r10)))
       (assert (and (= (loadN cp h1) 2) (= (loadN cp (mc/cacheHeader "v2" "tree" "sha" "gates")) -1) (= (loadN cp (mc/cacheHeader "v1" "other" "sha" "gates")) -1) (= (loadN cp (mc/cacheHeader "v1" "tree" "sha2" "gates")) -1) (= (loadN cp (mc/cacheHeader "v1" "tree" "sha" "consistency")) -1)) "a cache entry answers only to its own tool version, cli, sha and sub")
       (assert (and (= (pairFirst r12) 0) (stringContains? (out r12) ":baseCached 1")) (str "an entry without provenance is a miss and the audit is redone: " (out r12)))
+      (assert (and (= (evBack cq h1) qev) (= (loadN cq h1) 2)) (str "quotes, parens and backslashes in a check text survive the cache round trip: " (evBack cq h1)))
+      (assert (= (pairSecond (optionOr (listHead (mc/failedRows "(:audit (:check :id g :status :failed :ev \"f(\\\"x\\\") end\") (:check :id h :status :failed :ev \"b\"))")) (pair "" ""))) "f(\"x\") end") "an escaped quote followed by a paren does not close the ev")
       (assert (not (stringContains? (out r12) "ghost")) "a stale entry's red never reaches the receipt")
       (assert (and (= (pairFirst r13) 1) (stringContains? (out r13) "baseDir:refused") (stringContains? (out r13) ":regressions ((:check :id foreignGrowth")) (str "a dirty --base-dir is refused and its edit does not hide the red: " (out r13)))
       (assert (not (stringContains? poison "foreignGrowth")) "nothing taken from the dirty dir reached the cache")

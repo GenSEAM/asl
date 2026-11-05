@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [failedRows normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? touchedSuites checkSide! gitOut! run! main]
+  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -65,13 +65,25 @@ fn evDelta ev: String -> Int64
 fn rowKey id: String ev: String -> String
   (str id "|" (normEv ev))
 
+; (:m :do "the text of a quoted string up to its closing quote, an escaped quote does not close it: the parts are the text split on quotes")
+fn quotedEnd parts: (List String) acc: String -> String
+  (match (listHead parts)
+    ((none) acc)
+    ((some x) (let [(cur (str acc x))]
+                (if (and (stringEndsWith? x "\\") (not (stringEndsWith? x "\\\\")))
+                  (quotedEnd (optionOr (listTail parts) (list)) (str cur "\""))
+                  cur))))
+
+fn unquote s: String -> String
+  (stringReplace (stringReplace s "\\\"" "\"") "\\\\" "\\")
+
 ; (:m :do "the failed (:check :id X ... :ev \"..\") rows of an audit receipt as (id, ev) pairs, in order; a passed check, the header line and a receipt with no checks give nothing")
 fn failedRows text: String -> (List (Pair String String))
   (let [(parts (optionOr (listTail (stringSplit text "(:check :id ")) (list)))]
     (map (fn [(p String)] -> (Pair String String)
            (let [(id (optionOr (listHead (stringSplit p " ")) ""))
                  (evParts (stringSplit p " :ev \""))
-                 (ev (if (< (listLength evParts) 2) "" (optionOr (listHead (stringSplit (optionOr (listGet evParts 1) "") "\")")) "")))]
+                 (ev (if (< (listLength evParts) 2) "" (unquote (quotedEnd (stringSplit (stringJoin (optionOr (listTail evParts) (list)) " :ev \"") "\"") ""))))]
              (pair id ev)))
          (filter (fn [(p String)] -> Bool
                    (let [(head (optionOr (listHead (stringSplit p " :ev \"")) p))
