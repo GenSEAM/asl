@@ -1,5 +1,5 @@
 (module asl-tools/coord/reviewStage
-  :x [LaneRow RevOut tableFor writerAliasFor modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum callModelFor! reviewUnit! allowanceMap risingLanes]
+  :x [LaneRow RevOut tableFor writerAliasFor modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes]
   :i [(asl-tools/coord/ladder :a l) (tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (aslAgent/providers :a prov) (asl-json/json :a j)])
 
 ; (:m :ref COND3 :do "the conductor's real review stage over the COND2 ladder: lanes come from the lane table (alias, tier, quality, default allowance) with the allowance of subscription-backed aliases taken from subPace, the model call is the in-process gateway call Leon's provider uses, and the verdict goes back as a plain RevOut so the conductor owns the state machine")
@@ -170,6 +170,32 @@ fn usageSum text: String -> Int64
           (+ a (optionOr (stringToInt64 (sp/tokAfter line ":tokens")) 0)))
         0 (filter (fn [(x String)] -> Bool (stringContains? x "(:usage ")) (stringLines text)))
 
+; (:m :ref TRIAL-REVIEW-ROWS :do "the ladder cannot see usage, so its (:reviewCall ...) rows carry :tokens 0; the stage fills each from the usage rows of the same alias, in call order (the nth reviewCall of an alias takes the nth usage row of that alias); a call that never reached the provider writes no usage row and shifts later calls of the same alias, which only happens when one alias is called twice in a ruling")
+fn usageFor alias: String us: (List (Pair String Int64)) -> (Option Int64)
+  (optionMap pairSecond (listFind (fn [(x (Pair String Int64))] -> Bool (= (pairFirst x) alias)) us))
+
+fn dropFirstUsage alias: String us: (List (Pair String Int64)) -> (List (Pair String Int64))
+  (pairSecond (fold (fn [(acc (Pair Bool (List (Pair String Int64)))) (x (Pair String Int64))] -> (Pair Bool (List (Pair String Int64)))
+                      (if (and (not (pairFirst acc)) (= (pairFirst x) alias))
+                        (pair true (pairSecond acc))
+                        (pair (pairFirst acc) (listAppend (pairSecond acc) (list x)))))
+                    (pair false (list)) us))
+
+fn usageRowsOf text: String -> (List (Pair String Int64))
+  (map (fn [(x String)] -> (Pair String Int64) (pair (sp/tokAfter x ":alias") (optionOr (stringToInt64 (sp/tokAfter x ":tokens")) 0)))
+       (filter (fn [(x String)] -> Bool (stringContains? x "(:usage ")) (stringLines text)))
+
+fn tokensFilled rows: (List String) usageText: String -> (List String)
+  (pairFirst (fold (fn [(acc (Pair (List String) (List (Pair String Int64)))) (row String)] -> (Pair (List String) (List (Pair String Int64)))
+                     (if (not (stringStartsWith? row "(:reviewCall "))
+                       (pair (listAppend (pairFirst acc) (list row)) (pairSecond acc))
+                       (let [(alias (sp/tokAfter row ":alias"))]
+                         (match (usageFor alias (pairSecond acc))
+                           ((none) (pair (listAppend (pairFirst acc) (list row)) (pairSecond acc)))
+                           ((some t) (pair (listAppend (pairFirst acc) (list (stringReplace row " :tokens 0 " (str " :tokens " (stringFromInt64 t) " "))))
+                                           (dropFirstUsage alias (pairSecond acc))))))))
+                   (pair (list) (usageRowsOf usageText)) rows))
+
 ; (:m :ref COND3 :do "the model call of the ladder is the in-process gateway call of Leon's provider (providers makeProvider! + nextTurn! with the alias as model); each call appends one usage row so the stage can report tokens")
 fn ! callModelFor! root: String usagePath: String prices: (List (Pair String Int64)) -> (fn ! [String String] -> (Result String String))
   (fn [(alias String) (prompt String)] -> (Result String String)
@@ -194,4 +220,4 @@ fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) 
                   :tokens (usageSum (resultOr (fileReadString usagePath) ""))
                   :costMicro (usageCost (resultOr (fileReadString usagePath) ""))
                   :sig (cond ((= r.action "fix") (stringJoin r.defects "; ")) ((= r.action "await") r.awaitLane) ((= r.action "blocked") r.why) (else ""))
-                  :rows r.rows))))
+                  :rows (tokensFilled r.rows (resultOr (fileReadString usagePath) ""))))))
