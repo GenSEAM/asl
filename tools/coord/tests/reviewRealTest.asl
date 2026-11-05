@@ -3,7 +3,7 @@
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
 
 ; (:m :ref PIPE-GATES :do "G4: the real review stage (bin/asl run conductor.asl stage review UNIT) on a temp repo and store, its gateway calls going through the real provider to a stand-in hub (fixtures/hubVerdictStub.asl) named by the child's own HOME/.asl/hub.asn; the stub answers a verdict form read from a file; a pass verdict reaches the review Res row with the diff in the reviewers' request, and anything the stage could not read (lane table) is not a pass")
-fn ! runTests -> Bool
+fn ! testMain -> Bool
   (let [(root (pf/scratch "reviewReal" "g4"))
         (_ (pf/cleanup root))
         (repo (pf/repoIn root))
@@ -37,3 +37,38 @@ fn ! runTests -> Bool
         (assert (and (= (pf/verdictOf resE) "fail") (stringContains? (pf/sigOf resE) "stand-in defect")) (str "a fail verdict from the stand-in hub is a fail Res row carrying its defect: " (pf/verdictOf resE) " " (pf/sigOf resE)))
         (assert (and (not (= (pf/verdictOf resD) "pass")) (or (= (pf/verdictOf resD) "defer") (= (pf/verdictOf resD) "block"))) (str "an unreadable lane table is a defer or block, not a pass: " (pf/verdictOf resD) " " (pf/sigOf resD)))
         true))
+
+; (:m :ref REVIEW-NO-DIFF :do "the review stage on a change no reviewer can be shown: a base ref that does not exist and a worktree that is gone are failures (the unit requeues and the writer recreates the worktree), an empty diff is a block; none passes, though the hub stand-in answers pass to everything")
+fn ! testUnreadable -> Bool
+  (let [(root (pf/scratch "reviewReal" "g4b"))
+        (_ (pf/cleanup root))
+        (repo (pf/repoIn root))
+        (prep (pf/prepare! root))
+        (hub (pf/startHub! root))
+        (env (pf/envFor root))
+        (uB (with (pf/unitIn "RB" "sh check.sh impl.txt") :base "noSuchRef"))
+        (uC (pf/unitIn "RC" "sh check.sh impl.txt"))
+        (uE (pf/unitIn "RE" "sh check.sh impl.txt"))
+        (wtB (pf/seedUnit! root uB "reviewing" "impl.txt"))
+        (wtC (pf/seedUnit! root uC "reviewing" "impl.txt"))
+        (wtE (pf/seedUnit! root uE "reviewing" ""))
+        (rcpts (and (pf/receiptFor! root "RB") (and (pf/receiptFor! root "RC") (pf/receiptFor! root "RE"))))
+        (dB (pf/stageChild! root "review" "RB" (list) env 600))
+        (resB (pf/readResOf! root "RB" "review"))
+        (_ (pf/cleanup wtC))
+        (dC (pf/stageChild! root "review" "RC" (list) env 600))
+        (resC (pf/readResOf! root "RC" "review"))
+        (dE (pf/stageChild! root "review" "RE" (list) env 600))
+        (resE (pf/readResOf! root "RE" "review"))
+        (_ (pf/stopHub! hub))
+        (_ (pf/cleanup root))]
+    (do (assert (and (not (stringEmpty? repo)) (and prep (and (> hub 0) rcpts))) "fixture")
+        (assert (and (= (pf/verdictOf resB) "fail") (stringContains? (pf/sigOf resB) "reviewDiffUnreadable")) (str "a missing base ref is a requeueing failure: " (pf/verdictOf resB) " " (pf/sigOf resB)))
+        (assert (and (= (pf/verdictOf resC) "fail") (stringContains? (pf/sigOf resC) "reviewDiffUnreadable")) (str "a gone worktree is a requeueing failure: " (pf/verdictOf resC) " " (pf/sigOf resC)))
+        (assert (and (= (pf/verdictOf resE) "block") (stringContains? (pf/sigOf resE) "reviewDiffEmpty")) (str "an empty diff is a block: " (pf/verdictOf resE) " " (pf/sigOf resE)))
+        true))
+
+fn ! runTests -> Bool
+  (do (assert (testMain) "the real review stage on a stand-in hub")
+      (assert (testUnreadable) "an unreadable or empty change never passes review")
+      true))
