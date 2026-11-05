@@ -1638,6 +1638,12 @@ fn ! leonReceiptSave! dir: String id: String out: String -> Bool
       (let [(_ (dirCreate (runsDir dir)))]
         (match (fileWrite (runPath dir id "leon" "asn") (str row "\n")) ((ok _) true) ((err _) false)))))
 
+; (:m :ref LEON-TOOLROOT :do "the write stage hands the Leon run :toolRoot REPO, the conductor's own built checkout, so check, test and forms in a unit worktree run that tree's bin/asl and a unit that edits CLI sources is not refused ERR_NATIVE_STALE; extra already naming :toolRoot is kept")
+fn withToolRoot extra: String root: String -> String
+  (if (or (stringEmpty? root) (stringContains? extra ":toolRoot "))
+    extra
+    (str (if (stringEmpty? extra) "" (str extra " ")) ":toolRoot " (st/q root)))
+
 fn armExtra arm: String -> String
   (if (= arm "asn") ":attractor asn" "")
 
@@ -2132,7 +2138,7 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) (if (stringEmpty? rc.writerModel) "" (str " :pin " (st/q rc.writerModel))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u))))))))
+              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (withToolRoot (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u)) rc.repo)))))))
               (d (pairFirst pv))
               (_ (leonReceiptSave! dir u.id d.out))
               (model (servedModel d.out))
