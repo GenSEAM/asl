@@ -44,7 +44,8 @@
   (:c stepMerge [] "merge")
   (:c stepFix [(defects (List String))] "back to the writer for one fix round")
   (:c stepEscalate [] "run the next rung")
-  (:c stepBlocked [(why String)] "waits for Claude"))
+  (:c stepBlocked [(why String)] "waits for Claude")
+  (:c stepDefer [(lanes String) (why String)] "fewer reviewers answered than the quorum needs: wait for those lanes, never block"))
 
 ; (:m :ref COND2 :do "family map: a row matches when its :match, one or more space-separated tokens, is a whole token run of the alias or model name (camelCase, digit and separator boundaries); an alias with zero or several distinct families has no family")
 fn familyTableAsn -> String
@@ -275,7 +276,7 @@ fn defectsOf vs: (List Verdict) -> (List String)
           (if (= v.outcome "fail") (listAppend acc (map (fn [(d String)] -> String (str v.model ": " d)) v.defects)) acc))
         (list) vs)
 
-; (:m :ref COND2 :do "tally over every verdict of this review cycle (all) and the latest rung (cur); abstain counts for nothing")
+; (:m :ref COND2 :do "tally over every verdict of this review cycle (all) and the latest rung (cur); abstain counts for nothing, so a reviewer with no verdict is absent and not a vote: at the last rung a split needs a pass and a fail, and fewer answers than the quorum with no fail (node2: pass 1 fail 0, pass 0 fail 0 from lanes without credits or on 429) defer to those lanes instead of blocking")
 fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool finalRung: String fixesUsed: Int64 gatesOk: Bool -> Step
   (let [(p (countOf "pass" all))
         (f (countOf "fail" all))
@@ -291,6 +292,9 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
           ((< (rungNum rung) (rungNum finalRung)) (stepEscalate))
           (else (stepMerge))))
       ((> f p) (fixOr "fail after the fix round at the last rung"))
+      ((and last (= f 0))
+        (let [(absent (map (fn [(v Verdict)] -> String v.model) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)))]
+          (stepDefer (if (listEmpty? absent) rung (stringJoin absent " ")) (str "reviewers did not answer at the last rung (pass " (stringFromInt64 p) " fail 0, quorum " (stringFromInt64 needed) "): " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (stringJoin v.defects "; "))) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)) ", ")))))
       (last (stepBlocked (str "tiebreak: reviewers split at the last rung (pass " (stringFromInt64 p) " fail " (stringFromInt64 f) ")")))
       (else (stepEscalate))))
 
@@ -389,6 +393,7 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
           (match step
             ((stepMerge) (ok (ruling "merge" rung (list) "" (list (grade "accept" (str "ladder " rung))) all "")))
             ((stepFix ds) (ok (ruling "fix" rung ds "" (list (grade "reject" (clip (stringJoin ds "; ") 300))) all "")))
+            ((stepDefer ls why) (ok (ruling "await" rung (list) ls (list (awaitRow u rung ls why)) all why)))
             ((stepBlocked why) (ok (ruling "blocked" rung (defectsOf all) "" (list (grade "pending" why) (escalateRow u rung all why)) all why)))
             ((stepEscalate) (runRung u rows lanes prompt receipt callModel (nextRung rung) all 0)))))))
 

@@ -132,7 +132,7 @@ fn testSplitAndAbstain -> Bool
         (assert (= split.action "merge") "R2 tie-break pass makes the majority")
         (assert (= split.rung "R2") "merged on R2")
         (assert (!= junk.action "merge") "an abstaining reviewer never counts as a pass")
-        (assert (= junk.action "blocked") "abstains all the way up end blocked")
+        (assert (= junk.action "await") (str "pass 1 fail 0 with the other reviewers absent defers, never blocks: " junk.action))
         (assert (= bothFail.action "fix") "both fail with defects goes back to the writer")
         (assert (not (listEmpty? bothFail.defects)) "the fix round carries the defects")
         true))
@@ -169,6 +169,22 @@ fn testAwait -> Bool
         (assert (and (= b.action "await") (= b.awaitLane "ocLongcat")) "one family left awaits the lane of a second family")
         (assert (and (= c.action "await") (= c.awaitLane "ocDeepseekFlash strong") (= c.rung "R2")) (str "high risk with no paid or strong allowance awaits at R2 on the paid lane and the strong tier: " c.awaitLane))
         (assert (and (= d.action "await") (= d.rung "R2") (= (listLength d.verdicts) 2)) "a split with no R2 allowance awaits R2 and keeps the R1 verdicts")
+        true))
+
+; (:m :ref REVIEW-EMPTY-QUORUM-BLOCKS :do "a reviewer with no verdict is absent, not a vote: at the last rung pass 1 fail 0 and pass 0 fail 0 (the rest absent) defer to the lanes that did not answer, only a real split (a pass and a fail) blocks, and verdicts that exist and meet the quorum still pass")
+fn testAbsentQuorum -> Bool
+  (let [(one (run (unit "low" false) (goodGates) (pool)
+              (list (pair "orNemotronUltraFree" (passReply)) (pair "ocLongcat" "") (pair "ocDeepseekFlash" "") (pair "ccKimi31Pro" ""))))
+        (nobody (run (unit "low" false) (goodGates) (pool)
+              (list (pair "orNemotronUltraFree" "") (pair "ocLongcat" "") (pair "ocDeepseekFlash" "") (pair "ccKimi31Pro" ""))))
+        (split (run (unit "low" false) (goodGates) (pool)
+              (list (pair "orNemotronUltraFree" (passReply)) (pair "ocLongcat" (failReply)) (pair "ocDeepseekFlash" "") (pair "ccKimi31Pro" ""))))
+        (rowOf (fn [(r l/Ruling)] -> String (optionOr (listHead (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:await")) r.rows)) "")))]
+    (do (assert (and (= one.action "await") (not (stringEmpty? one.awaitLane))) (str "pass 1 fail 0 awaits the absent lanes: " one.action " " one.awaitLane))
+        (assert (stringContains? (rowOf one) "did not answer at the last rung (pass 1 fail 0") (str "the await row says why: " (rowOf one)))
+        (assert (and (= nobody.action "await") (not (stringEmpty? nobody.awaitLane))) (str "pass 0 fail 0 awaits, never blocks: " nobody.action " " nobody.awaitLane))
+        (assert (stringContains? (rowOf nobody) "pass 0 fail 0") (str "the await row names the tally: " (rowOf nobody)))
+        (assert (= split.action "blocked") (str "a pass and a fail is still a split and blocks: " split.action))
         true))
 
 fn testBlocked -> Bool
@@ -305,6 +321,7 @@ fn ! runTests -> Bool
       (assert (testVerdicts) "verdict parsing")
       (assert (testMerge) "merge rules")
       (assert (testSplitAndAbstain) "split and abstain")
+      (assert (testAbsentQuorum) "absent reviewers are not votes")
       (assert (testFixCap) "fix cap")
       (assert (testRisk) "risk and closure")
       (assert (testAwait) "await")
