@@ -51,6 +51,10 @@ fn ! pureTests -> Bool
         formOp (list (pair "type" (c/kvStr "escalate")) (pair "form" (c/kvStr form)))
         stepOp (list (pair "op" (c/kvStr "escalate")) (pair "reason" (c/kvStr "via step")))]
     (do
+      (assert (not (= (m/opKey (list (pair "file" (c/kvStr "ax")) (pair "y" (c/kvStr "b"))))
+                  (m/opKey (list (pair "file" (c/kvStr "a")) (pair "xy" (c/kvStr "b")))))) "keys and values with no separator between them do not collide when the boundary moves")
+      (assert (not (= (m/opKey (list (pair "file" (c/kvStr "a1:b1:c"))))
+                  (m/opKey (list (pair "file" (c/kvStr "a")) (pair "b" (c/kvStr "c")))))) "a value that imitates a length-prefixed part does not collide, so the prefix is the real byte length")
       (assert (not (= (m/opKey (list (pair "op" (c/kvStr "read")) (pair "file" (c/kvStr "a\nx=b"))))
                   (m/opKey (list (pair "op" (c/kvStr "read")) (pair "file" (c/kvStr "a")) (pair "x" (c/kvStr "b")))))) "a value holding a newline and key=value does not collide with a step that has that key")
       (assert (and (= (listLength (pairFirst deduped)) 2) (= (pairSecond deduped) 3)) "identical reads in one reply collapse to the distinct ones in order")
