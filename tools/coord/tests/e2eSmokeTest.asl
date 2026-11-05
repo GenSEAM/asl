@@ -46,7 +46,7 @@ fn ! e2e -> Bool
         (_ (dirCreate (str store "/tasks")))
         (_ (fileWrite (str store "/tasks/E2E1.txt")
                       "Create the file docs/e2eSmoke.md containing exactly one line: conductor e2e smoke. Change nothing else."))
-        (put (st/put! store (st/Task :id "E2E1" :owns (list "docs/e2eSmoke.md") :reads (list) :gate "grep -q 'conductor e2e smoke' docs/e2eSmoke.md && echo '1 assertion(s) executed (1 passed)'" :channel "free" :model "" :base baseSha :after (list) :st "queued" :epoch 0 :receipt "")))
+        (put (st/put! store (st/Task :id "E2E1" :owns (list "docs/e2eSmoke.md") :reads (list) :gate "grep -q 'conductor e2e smoke' docs/e2eSmoke.md && env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl test asl/tools/coord/tests/briefTest.asl" :channel "free" :model "" :base baseSha :after (list) :st "queued" :epoch 0 :receipt "")))
         (ctx (cd/Ctx :dir store :holder "e2e" :ttlMs 3600000 :maxWait 100 :maxSame 3 :stageSec 3000 :maxDesc 200 :launch (cd/realLaunch args store) :pace (cd/fixedPace 1 1)))
         (settled (pump! ctx (+ (/ (nowNs) 1000000) 2400000)))
         (journal (readOr (str store "/journal.asn")))
