@@ -1,0 +1,31 @@
+(module asl-tools/coord/tests/stageRealTest
+  :x [runTests]
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
+
+; (:m :ref PIPE-GATES :do "G1: the real stage child (bin/asl run conductor.asl stage gates UNIT --store T) on a temp git repo and a temp store; a green gate leaves a Res row with the gate exit 0 and its executed assertions plus the receipt the review reads, a red gate a Res row with the gate's own exit and signature, an unknown unit exit 2 with no row; no writeRes! means no row, so the stage's whole output is this row")
+fn ! runTests -> Bool
+  (let [(root (pf/scratch "stageReal" "g1"))
+        (_ (pf/cleanup root))
+        (repo (pf/repoIn root))
+        (green (pf/unitIn "G1" "sh check.sh impl.txt"))
+        (red (pf/unitIn "R1" "sh check.sh impl.txt"))
+        (wtG (pf/seedUnit! root green "gating" "impl.txt"))
+        (wtR (pf/seedUnit! root red "gating" ""))
+        (dg (pf/stageChild! root "gates" "G1" (list) (list) 600))
+        (dr (pf/stageChild! root "gates" "R1" (list) (list) 600))
+        (dn (pf/stageChild! root "gates" "NOPE" (list) (list) 600))
+        (rg (pf/readResOf! root "G1" "gates"))
+        (rr (pf/readResOf! root "R1" "gates"))
+        (rn (pf/readResOf! root "NOPE" "gates"))
+        (receipt (resultOr (fileReadString (cd/runPath (str root "/store") "G1" "receipt" "asn")) ""))
+        (receiptRed (resultOr (fileReadString (cd/runPath (str root "/store") "R1" "receipt" "asn")) ""))
+        (_ (pf/cleanup root))]
+    (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? wtG)) (not (stringEmpty? wtR)))) "the temp repo and the two unit worktrees exist")
+        (assert (= dg.exit 0) (str "the stage child exits 0 on a green gate: " (stringFromInt64 dg.exit) " " dg.out))
+        (assert (match rg ((ok r) (and (= r.exit 0) (and (= r.asserts 1) (= r.sig "(:gate :asserts 1 :failed 0)")))) ((err _) false)) (str "green gate: Res row with exit 0, 1 executed assertion: " (match rg ((ok r) (str (stringFromInt64 r.exit) "/" (stringFromInt64 r.asserts) " " r.sig)) ((err e) e))))
+        (assert (and (stringContains? receipt ":gates ((:gate \"sh check.sh impl.txt\" :exit 0 :executed 1))") (stringContains? receipt ":redBefore ((:gate \"sh check.sh impl.txt\" :exit 1")) (str "green gate: the receipt names the gate exit, executed count and the red-before run: " receipt))
+        (assert (= dr.exit 0) (str "the stage child exits 0 on a red gate too, the verdict is the row: " (stringFromInt64 dr.exit) " " dr.out))
+        (assert (match rr ((ok r) (and (= r.exit 1) (and (= r.asserts 1) (stringContains? r.sig ":failed 1")))) ((err _) false)) (str "red gate: Res row with the gate's own exit 1 and its :failed 1 line: " (match rr ((ok r) (str (stringFromInt64 r.exit) "/" (stringFromInt64 r.asserts) " " r.sig)) ((err e) e))))
+        (assert (stringEmpty? receiptRed) "red gate: no receipt, so the review cannot read a green one")
+        (assert (and (= dn.exit 2) (not (ok? rn))) (str "an unknown unit exits 2 and writes no row: " (stringFromInt64 dn.exit)))
+        true))
