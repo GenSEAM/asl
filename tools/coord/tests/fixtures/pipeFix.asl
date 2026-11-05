@@ -1,5 +1,5 @@
 (module asl-tools/coord/tests/fixtures/pipeFix
-  :x [e2eRepo! scriptLeon! devCloneFor! e2eLaunch e2eCtx tosOf journalLines startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
+  :x [scriptNoopLeon! e2eRepo! scriptLeon! devCloneFor! e2eLaunch e2eCtx tosOf journalLines startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref PIPE-GATES :do "shared fixtures of the real-path pipeline tests: scratch dirs under this worktree's .asl/cache, a temp git repo with a gate script, a temp store, and the real stage child bin/asl run conductor.asl stage started only through fleet/run.asl under a timeout")
@@ -161,3 +161,11 @@ fn ! journalLines dir: String -> (List String)
 fn ! tosOf dir: String id: String -> (List String)
   (map (fn [(l String)] -> String (optionOr (listHead (stringSplit (optionOr (listGet (stringSplit l ":to ") 1) "") " ")) ""))
        (filter (fn [(l String)] -> Bool (stringContains? l (str "(:t :unit \"" id "\" "))) (journalLines dir)))
+
+; (:m :ref PIPE-E2E-HERMETIC :do "a Leon that exits 0 at once: it writes content into impl.txt when content is not empty (a wrong or right edit the driver then commits) and nothing otherwise, so the conductor's own noEdit and red-gate branches run, not Leon's")
+fn ! scriptNoopLeon! root: String content: String -> Bool
+  (let [(body (str "#!/bin/sh\ncase \"$1\" in\n\"(:agent\"*)\n" (if (stringEmpty? content) "" (str "  printf '" content "' > impl.txt\n")) "  echo '(:servedBy :model \"kmK31Pro\")'\n  exit 0 ;;\n*) exec " (here) "/bin/asl \"$@\" ;;\nesac\n"))
+        (_ (dirCreate (str root "/repo/bin")))
+        (w (fileWrite (str root "/repo/bin/asl") body))
+        (c (sh (str "chmod 755 " root "/repo/bin/asl && echo chmodOk")))]
+    (and (ok? w) (stringContains? c "chmodOk")))

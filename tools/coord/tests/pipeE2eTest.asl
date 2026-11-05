@@ -24,13 +24,13 @@ fn ! drive! ctx: cd/Ctx id: String needle: String deadlineMs: Int64 ticks: Int64
       ((> (/ (nowNs) 1000000) deadlineMs) ticks)
       (else (let [(_ (sleepMs 1500))] (drive! ctx id needle deadlineMs (+ ticks 1))))))
 
-fn ! scenario! tag: String replies: (List String) hubReply: String needle: String -> Out
+fn ! scenario! tag: String replies: (List String) noop: String hubReply: String needle: String -> Out
   (let [(root (pf/scratch "pipeE2e" tag))
         (_ (pf/cleanup root))
         (repo (pf/e2eRepo! root))
         (prep (pf/prepare! root))
         (_ (fileWrite (str root "/hubReply.txt") hubReply))
-        (leon (pf/scriptLeon! root replies))
+        (leon (if (stringEmpty? noop) (pf/scriptLeon! root replies) (pf/scriptNoopLeon! root (if (= noop "-") "" noop))))
         (dev (pf/devCloneFor! root))
         (hub (pf/startHubFor! root 900))
         (u (pf/unitIn "E1" "sh check3.sh impl.txt"))
@@ -63,17 +63,21 @@ fn writeImpl -> String
 fn ! runTests -> Bool
   (let [(pass "(:verdict :pass :defects () :model m)")
         (fail "(:verdict :fail :defects (\"impl.txt: scripted reviewer defect\") :model m)")
-        (merged (scenario! "merge" (list (writeImpl)) pass ""))
-        (nothing (scenario! "nothing" (list "(:done)") pass ""))
-        (reviewFail (scenario! "reviewFail" (list (writeImpl)) fail ":from reviewing :to ready"))]
-    (do (assert (and merged.ready (and nothing.ready reviewFail.ready)) (str "fixture: temp repo, scripted Leon, dev clone and hub stand-in are up in all three worlds: " merged.why))
+        (merged (scenario! "merge" (list (writeImpl)) "" pass ""))
+        (nothing (scenario! "nothing" (list "(:done)") "" pass ""))
+        (noEdit (scenario! "noEdit" (list) "-" pass ":from writing :to ready"))
+        (gateRed (scenario! "gateRed" (list) "bad" pass ":from gating :to ready"))
+        (reviewFail (scenario! "reviewFail" (list (writeImpl)) "" fail ":from reviewing :to ready"))]
+    (do (assert (and merged.ready (and nothing.ready (and noEdit.ready (and gateRed.ready reviewFail.ready)))) (str "fixture: temp repo, scripted Leon, dev clone and hub stand-in are up in all three worlds: " merged.why))
         (assert (= merged.tos (list "ready" "writing" "gating" "awaitReview" "reviewing" "merging" "merged")) (str "scenario merge: the journal path of the unit: " (stringJoin merged.tos " ") " / " merged.sig))
         (assert (and (!= merged.devAfter merged.devBefore) (and merged.inDev (= merged.devImpl "impl"))) "scenario merge: dev HEAD moved and holds the unit commit and its file")
         (assert (stringStartsWith? merged.trainArgs "train sh/E1 --onto HEAD --repo ") (str "scenario merge: the train ran onto dev with the unit branch: " merged.trainArgs))
         (assert merged.wtGone "scenario merge: the unit worktree is collected")
-        (assert (stringContains? merged.hubSeen "impl.txt") "scenario merge: the reviewers were shown the unit's diff")
+        (assert (and (stringContains? merged.hubSeen "diff --git") (stringContains? merged.hubSeen "+impl")) "scenario merge: the reviewers' request carries the unit's diff itself (a git diff header and the added line), not only the task text")
         (assert (and (listContains? (list "blocked" "failed") nothing.st) (and (not (listContains? nothing.tos "merging")) (and (= nothing.devAfter nothing.devBefore) (stringContains? nothing.sig ":status :failed")))) (str "scenario nothing: a Leon that writes nothing ends blocked or failed, never reaches merge, dev is untouched and the signature is the failed Leon run: " (stringJoin nothing.tos " ") " / " nothing.sig))
         (assert (and (listContains? nothing.tos "writing") (not (listContains? nothing.tos "gating"))) (str "scenario nothing: it stopped at the write: " (stringJoin nothing.tos " ")))
+        (assert (and (= noEdit.sig "noEdit") (and (not (listContains? noEdit.tos "gating")) (and (= noEdit.devAfter noEdit.devBefore) (!= noEdit.st "merged")))) (str "scenario noEdit: a Leon that exits 0 with no commit is noEdit, never gated, dev untouched: " (stringJoin noEdit.tos " ") " / " noEdit.sig))
+        (assert (and (= (listTake gateRed.tos 4) (list "ready" "writing" "gating" "ready")) (and (stringContains? gateRed.sig ":failed 1") (and (not (listContains? gateRed.tos "awaitReview")) (= gateRed.devAfter gateRed.devBefore)))) (str "scenario gateRed: a committed edit whose gate is red goes gating then back to ready, never to review, dev untouched: " (stringJoin gateRed.tos " ") " / " gateRed.sig))
         (assert (and (!= reviewFail.st "merged") (and (not (listContains? reviewFail.tos "merging")) (= reviewFail.devAfter reviewFail.devBefore))) (str "scenario reviewFail: a failing review does not merge and leaves dev alone: " (stringJoin reviewFail.tos " ")))
         (assert (= (listTake reviewFail.tos 6) (list "ready" "writing" "gating" "awaitReview" "reviewing" "ready")) (str "scenario reviewFail: the unit walks to review and back to ready: " (stringJoin reviewFail.tos " ")))
         (assert (stringContains? reviewFail.prior "scripted reviewer defect") (str "scenario reviewFail: the reviewers' defect is the prior note of the next write: " reviewFail.prior))
