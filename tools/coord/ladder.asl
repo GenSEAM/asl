@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide scrubLines reviewBrief reviewWith review]
+  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide absent? starved? scrubLines reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -277,6 +277,16 @@ fn defectsOf vs: (List Verdict) -> (List String)
         (list) vs)
 
 ; (:m :ref COND2 :do "tally over every verdict of this review cycle (all) and the latest rung (cur); abstain counts for nothing, so a reviewer with no verdict is absent and not a vote: at the last rung a split needs a pass and a fail, and fewer answers than the quorum with no fail (node2: pass 1 fail 0, pass 0 fail 0 from lanes without credits or on 429) defer to those lanes instead of blocking")
+; (:m :ref CONDWIRE-A :do "a reviewer is absent when it gave no answer: the call failed (rate limit, no credit, timeout) or the reply was blank; a garbled reply, a fail without a defect and a reply naming both outcomes are answers that carry no vote, not absences; only a cur of abstentions that are all absent defers, anything else at the last rung keeps the tiebreak block")
+fn absent? v: Verdict -> Bool
+  (and (= v.outcome "abstain")
+       (let [(why (optionOr (listHead v.defects) ""))]
+         (or (stringStartsWith? why "call failed") (stringStartsWith? why "no answer"))))
+
+fn starved? cur: (List Verdict) -> Bool
+  (let [(abst (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur))]
+    (and (not (listEmpty? abst)) (listAll? absent? abst)))
+
 fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool finalRung: String fixesUsed: Int64 gatesOk: Bool -> Step
   (let [(p (countOf "pass" all))
         (f (countOf "fail" all))
@@ -292,9 +302,9 @@ fn decide rung: String cur: (List Verdict) all: (List Verdict) priorEmpty: Bool 
           ((< (rungNum rung) (rungNum finalRung)) (stepEscalate))
           (else (stepMerge))))
       ((> f p) (fixOr "fail after the fix round at the last rung"))
-      ((and last (= f 0))
+      ((and last (and (= f 0) (starved? cur)))
         (let [(absent (map (fn [(v Verdict)] -> String v.model) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)))]
-          (stepDefer (if (listEmpty? absent) rung (stringJoin absent " ")) (str "reviewers did not answer at the last rung (pass " (stringFromInt64 p) " fail 0, quorum " (stringFromInt64 needed) "): " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (stringJoin v.defects "; "))) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)) ", ")))))
+          (stepDefer (if (listEmpty? absent) rung (stringJoin absent " ")) (str "quorumStarved: reviewers did not answer at the last rung (pass " (stringFromInt64 p) " fail 0, quorum " (stringFromInt64 needed) "): " (stringJoin (map (fn [(v Verdict)] -> String (str v.model " " (stringJoin v.defects "; "))) (filter (fn [(v Verdict)] -> Bool (= v.outcome "abstain")) cur)) ", ")))))
       (last (stepBlocked (str "tiebreak: reviewers split at the last rung (pass " (stringFromInt64 p) " fail " (stringFromInt64 f) ")")))
       (else (stepEscalate))))
 
@@ -371,7 +381,7 @@ fn ! askLaneRow u: ReviewUnit callModel: (fn ! [String String] -> (Result String
         (empty (match reply ((err e) (stringContains? (stringLower e) "empty")) ((ok text) (stringEmpty? (stringTrim text)))))
         (v (match reply
              ((err e) (abstain lane.alias rung (str "call failed: " (clip e 160))))
-             ((ok text) (parseVerdict text lane.alias rung))))]
+             ((ok text) (if (stringEmpty? (stringTrim text)) (abstain lane.alias rung "no answer: empty reply") (parseVerdict text lane.alias rung)))))]
     (pair v (reviewCallRow u v ms empty)))
 
 ; (:m :ref REVIEW-DEFER :do "an await is one (:await :unit :rung :lane ...) row with its reason, which the conductor journals, so a parked review says what it waits for")

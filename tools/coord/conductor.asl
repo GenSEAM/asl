@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -586,6 +586,28 @@ fn ! parkModelEscalated! ctx: Ctx c: CUnit res: Res -> Unit
         (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
     ())
 
+; (:m :ref CONDWIRE-A :do "the last-rung defer for absent reviewers is bounded: the ladder journals one await row marked quorumStarved per defer; when the newest await row of the unit is such a row and the unit has had more than starvedCap of them, the next one parks the unit blocked instead, with the tiebreak reason and reviewQuorumStarved in the sig, and one warn event on the lead stream; the count is per unit lifetime and adopted at 3")
+fn starvedCap -> Int64
+  3
+
+fn starvedRows dir: String id: String -> (List String)
+  (filter (fn [(l String)] -> Bool (and (stringContains? l ":why \"quorumStarved:") (or (stringStartsWith? l (str "(:await :unit " id " ")) (stringStartsWith? l (str "(:await :unit " (st/q id) " ")))))
+          (journalLinesOf dir))
+
+fn starvedOut? dir: String id: String -> Bool
+  (let [(rows (starvedRows dir id))
+        (newest (optionOr (listLast (filter (fn [(l String)] -> Bool (or (stringStartsWith? l (str "(:await :unit " id " ")) (stringStartsWith? l (str "(:await :unit " (st/q id) " ")))) (journalLinesOf dir))) ""))]
+    (and (stringContains? newest ":why \"quorumStarved:") (> (listLength rows) (starvedCap))))
+
+fn ! starvedPark! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(row (optionOr (listLast (starvedRows ctx.dir c.id)) ""))
+        (sig (str "tiebreak: reviewers split at the last rung (pass " (sp/tokAfter row "(pass") " fail 0); reviewQuorumStarved"))
+        (c2 (escalateTiered! ctx c sig "review blocked" res.tiers))
+        (_ (dropLease! ctx c2))
+        (_ (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "warn" "reviewQuorumStarved" c.id c.id sig))
+        (_ (move! ctx (noEpoch c2) "blocked" "review" res.model res.tokens res.costMicro sig res.ms))]
+    ())
+
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
 fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
   (let [(u (resolved! (stringTrim (readOr (repoPath ctx.dir))) u0))
@@ -636,7 +658,10 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
                   (c1 (move! ctx c "merging" "review" res.model res.tokens res.costMicro "pass" res.ms))
                   (_ (launch! ctx u c1))]
               ()))
-          ((= res.verdict "defer") (let [(_ (move! ctx (awaiting c res.sig) "awaitReview" "review" res.model res.tokens res.costMicro "defer" res.ms))] ()))
+          ((= res.verdict "defer")
+            (if (starvedOut? ctx.dir c.id)
+              (starvedPark! ctx c res)
+              (let [(_ (move! ctx (awaiting c res.sig) "awaitReview" "review" res.model res.tokens res.costMicro "defer" res.ms))] ())))
           ((= res.verdict "block")
             (let [(c2 (escalateTiered! ctx c res.sig "review blocked" res.tiers))
                   (_ (dropLease! ctx c2))
@@ -1050,8 +1075,12 @@ fn handoffBranches text: String -> (List String)
 fn gateFiles gate: String -> (List String)
   (filter (fn [(t String)] -> Bool (and (stringEndsWith? t ".asl") (stringContains? t "/"))) (stringSplit gate " "))
 
-fn dirOf p: String -> String
-  (let [(parts (stringSplit p "/"))]
+fn trimSlashes p: String -> String
+  (if (and (> (stringLength p) 1) (stringEndsWith? p "/")) (trimSlashes (optionOr (stringSlice p 0 (- (stringLength p) 1)) p)) p)
+
+fn dirOf p0: String -> String
+  (let [(p (trimSlashes p0))
+        (parts (stringSplit p "/"))]
     (stringJoin (listTake parts (max 0 (- (listLength parts) 1))) "/"))
 
 ; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can; a refusal needs positive evidence, an unreadable or ambiguous case is admitted: an owned path whose directory is absent on the base but was on its history (removed, as asl/agentLoop was for asl/packages/asl-agent, 17 node2 units) while the task text does not name it, a gate file absent on the base that was on its history and that the unit neither owns, nor sits under an owned directory of, nor names in its task, a handoff branch the task cites (main..sh/NAME) that is merged into the base when the task is only the handoff (GRADE-AND-LAND), or is missing while no commit on the base carries NAME in its message (a cited tip sha that still exists does not admit it); a directory that never existed (a new tests/ under a live package) is the unit's to create")
@@ -1818,11 +1847,12 @@ fn ! pwReset! dir: String id: String -> Bool
 fn ! providerHit? ctx: Ctx u: st/Task c: CUnit res: Res -> Bool
   (let [(row (pfCfg ctx.dir))]
     (and (= res.ok 0)
+         (and (not (modelEscalatedSig? res.sig))
          (and (not (staleSig? res.sig))
               (and (not (vacuousSig? res.sig))
                    (and (providerFailSig? res.sig (pfPatterns row))
                         (and (noCommits? res.wt (baseRef u))
-                             (<= (+ (pairFirst (pwLast ctx.dir c.id)) 1) (pfMaxInRow row))))))))
+                             (<= (+ (pairFirst (pwLast ctx.dir c.id)) 1) (pfMaxInRow row)))))))))
 
 fn ! providerRequeue! ctx: Ctx c: CUnit res: Res -> Unit
   (let [(row (pfCfg ctx.dir))
