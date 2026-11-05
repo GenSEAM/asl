@@ -763,7 +763,7 @@ fn checkOneFile! root: String a: String -> (List Check)
 
 fn cmdCheck! root: String argv: (List String) -> AuditRun
   (if (listEmpty? argv)
-    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (list "check")))))]
+    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (list "check" "--all")))))]
       (emit "check" checks "" "" false))
     (let [(checks (fold (fn [(acc (List Check)) (a String)] -> (List Check)
                           (listAppend acc (checkOneFile! root a)))
