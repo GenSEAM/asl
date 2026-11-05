@@ -1562,7 +1562,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
           out (resolvedOut out (pairSecond resolvedOp))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
-          _opRow (liveOpRow! journal run.state.turn opName target out pooled)
+          _opRow (liveOpRow! journal run.state.turn opName target out (or pooled (liveTerminalOp? op)))
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
@@ -1706,9 +1706,16 @@ fn opRowText turn: Int64 name: String file: String status: String error: String 
   (str "(:op :turn " (stringFromInt64 turn) " :name \"" (c/escapeAsn name) "\" :file \"" (c/escapeAsn file) "\" :status " (if (= status "ok") "ok" "err")
     (if (and (!= status "ok") (not (stringEmpty? error))) (str " :error " error) (if (!= status "ok") (str " :error " (if (stringEmpty? status) "UNKNOWN" status)) "")) ")")
 
-fn ! liveOpRow! journal: String turn: Int64 name: String file: String out: ex/ExecOut pooled: Bool -> Bool
-  (if (or pooled (stringEmpty? name)) true
-    (ok? (fileAppend journal (str (opRowText turn name file (recText out "status") (recText out "error")) "\n"))))
+fn liveTerminalOp? op: (List (Pair String c/KvVal)) -> Bool
+  (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (listContains? (list "done" "escalate") t)) (_ false))) ((none) false))
+
+; (:m :ref LEON-OPROWS-M2 :do "audit: a step whose :op is missing or not a string got a receipt and no row; every step but done, escalate and pool ops now gets one, an unnamed one as :name \"?\" with status err and the receipt's error code (ERR_NO_OP when the receipt has none)")
+fn ! liveOpRow! journal: String turn: Int64 name: String file: String out: ex/ExecOut skip: Bool -> Bool
+  (if skip true
+    (let [unnamed (stringEmpty? name)
+          error (recText out "error")]
+      (ok? (fileAppend journal (str (opRowText turn (if unnamed "?" name) file (if unnamed "rejected" (recText out "status"))
+        (if (and unnamed (stringEmpty? error)) "ERR_NO_OP" error)) "\n")))))
 
 ; (:m :ref LEON-READLOOP :do "node2 UNBALANCED-DIAG ran 37 successful read-only turns and nothing stopped it, since readStreak counts only missing-file or refused turns and only against a red gate; the rule: consecutive turns whose steps are all read-only and (a read-only turn runs no gate, unchangedTurn?), counted from the last turn that wrote, ran a gate or sent any other step, stop the run at readOnlyTurnCap (adopted 16, :agentLoop :readOnlyTurnCap) as readStreak with cause readOnly; no exemption before the first write, whatever the owned files are: a new file needs no reading, and the 37-turn run had written nothing")
 fn defaultReadOnlyTurnCap -> Int64
@@ -1722,10 +1729,12 @@ fn readOnlyTurnCapIn cfgText: String -> Int64
 fn historyText entry: j/Json key: String -> String
   (match (j/jsonGet entry key) ((some v) (pv/pyStr v)) ((none) ""))
 
+; (:m :ref LEON-OPROWS-M4 :do "audit: a turn is non-progress when it persisted no write (history :wrote 0) and every step is a read-only one or a write, edit or delete, so a refused write does not reset the read-only count; a persisted write, or any other step (run, gate, patch, txn), resets it")
 fn readOnlyEntry? entry: j/Json -> Bool
   (let [names (filter (fn [n] (not (stringEmpty? n))) (stringSplit (historyText entry "ops") " "))]
     (and (not (listEmpty? names))
-      (listAll? (fn [n] (listContains? (readOnlyOps) n)) names)))
+      (and (!= (historyText entry "wrote") "1")
+        (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "delete") n))) names))))
 
 fn readOnlyCount entries: (List j/Json) -> Int64
   (if (listEmpty? entries) 0
@@ -2113,7 +2122,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
                   history (listAppend wrapped.history
                     (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
-                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary))))))
+                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0")))))))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
                     (or (liveReviewerAvailable? wrapped.provider) (= (optionOr ra.intent "") "reinforce"))))
                   reviewResult (if reviewInvoked

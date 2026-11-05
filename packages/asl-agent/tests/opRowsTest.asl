@@ -25,6 +25,15 @@ fn ! recordedRun! tag: String replies: (List String) gates: String cfg: String -
 fn opRows journal: String -> (List String)
   (filter (fn [l] (stringStartsWith? l "(:op :turn ")) (stringLines journal))
 
+fn refusedReply -> String
+  "(:step :op \"write\" :file \"other.txt\" :content \"x\")"
+
+fn editReply -> String
+  "(:step :op \"edit\" :file \"subject.txt\" :old \"red\" :new \"green\")"
+
+fn cap4 -> String
+  "(:aslConfig :agentLoop (:specCheck false :readOnlyTurnCap 4))"
+
 fn readReply _i: Int64 -> String
   "(:step :op \"read\" :file \"subject.txt\")"
 
@@ -41,6 +50,10 @@ fn ! runTests -> Bool
         rows (recordedRun! "rows" (list (readReply 0) "(:step :op \"write\" :file \"other.txt\" :content \"x\")" "(:step :op \"edit\" :file \"subject.txt\" :old \"red\" :new \"green\")" "(:done)") "" "(:aslConfig :agentLoop (:specCheck false))")
         loop (recordedRun! "loop" (map readReply (range 0 20)) "" "(:aslConfig :agentLoop (:specCheck false))")
         alt (recordedRun! "alt" (listAppend (map (fn [i] (if (= (- i (* 2 (/ i 2))) 0) (readReply i) (str "(:step :op \"gate\")"))) (range 0 20)) (list "(:done)")) "\"exit 1\"" "(:aslConfig :agentLoop (:specCheck false))")
+        wroteMid (recordedRun! "wmid" (listAppend (map readReply (range 0 3)) (cons (editReply) (map readReply (range 0 3)))) "" (cap4))
+        mixed (recordedRun! "mixed" (listAppend (map readReply (range 0 3)) (cons "(:step :op \"read\" :file \"subject.txt\")\n(:step :op \"run\" :argv \"ls\")" (list (readReply 0)))) "" (cap4))
+        refusedAlt (recordedRun! "refalt" (map (fn [i] (if (= (- i (* 2 (/ i 2))) 0) (readReply i) (refusedReply))) (range 0 12)) "" (cap4))
+        unnamed (recordedRun! "unnamed" (list "(:step :file \"subject.txt\")" "(:step :op 7 :file \"subject.txt\")") "" "(:aslConfig :agentLoop (:specCheck false))")
         shortCap (recordedRun! "cap" (map readReply (range 0 8)) "" "(:aslConfig :agentLoop (:specCheck false :readOnlyTurnCap 4))")]
     (do
       (assert pure "pure helpers")
@@ -51,5 +64,11 @@ fn ! runTests -> Bool
       (assert (stringContains? loop.journal ":signal :readStreak :cause :readOnly") "twenty successful reads stop as readStreak cause readOnly")
       (assert (not (stringContains? loop.journal "(:turn 17 :reply")) "the stop lands on the sixteenth read, not later")
       (assert (stringContains? shortCap.journal ":signal :readStreak :cause :readOnly") "a configured cap of 4 stops eight reads")
+      (assert (not (stringContains? wroteMid.journal ":cause :readOnly")) "a persisted edit between reads resets the read-only count")
+      (assert (not (stringContains? mixed.journal ":cause :readOnly")) "a turn that mixes a read with a run step is not read-only")
+      (assert (stringContains? refusedAlt.journal ":cause :readOnly") "reads alternating with refused writes stop at the cap, a refused write is no progress")
+      (assert (= (listLength (filter (fn [l] (stringContains? l ":name \"?\" ")) (opRows unnamed.journal))) 2) "a step without a usable :op still leaves a row named ?")
+      (assert (and (listAny? (fn [l] (stringContains? l ":name \"?\" :file \"subject.txt\" :status err :error ERR_NO_OP")) (opRows unnamed.journal))
+                (listAny? (fn [l] (stringContains? l ":name \"?\" :file \"subject.txt\" :status err :error ERR_EFFECT_UNDECLARED")) (opRows unnamed.journal))) "the unnamed rows carry the error code")
       (assert (not (stringContains? alt.journal ":cause :readOnly")) "reads alternating with gate runs never stop as readOnly")
       true))
