@@ -1,8 +1,8 @@
 (module asl-gates/vcsDirectAudit
-  :x [Site Verdict scanSource scanFiles verdictOf allowKeys parseAllow siteKey receiptOf audit! trackedAsl! emitRows main vcsVerbs excluded?]
+  :x [Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
-; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list or (cons form that starts with the string git, a call of a git-named helper, or a string starting with git, whose first non-option literal is commit, add, update-ref, commit-tree, push, reset or checkout; each site is keyed path#symbol plus the verb, never a line; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new site is a violation and an allowlist row without a site is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--emit] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
+; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
 (schema Site
   (:f file String)
   (:f symbol String)
@@ -14,27 +14,57 @@
   (:f stale (List String)))
 
 (schema Coll
-  (:f depth Int64)
-  (:f strs (List String))
-  (:f helper Bool))
+  (:f kind String)
+  (:f at Int64)
+  (:f items (List String))
+  (:f opaque Int64))
+
+(schema Helpers
+  (:f local (List String))
+  (:f names (List String)))
 
 (schema Scan
   (:f symbol String)
-  (:f prev1 String)
-  (:f prev2 String)
-  (:f coll (Option Coll))
-  (:f sites (List Site)))
+  (:f prev (List String))
+  (:f depth Int64)
+  (:f colls (List Coll))
+  (:f sites (List Site))
+  (:f found (List String))
+  (:f params (List String))
+  (:f inSig Bool))
 
 fn vcsVerbs -> (List String)
   (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout")
 
+fn valueOptions -> (List String)
+  (list "-C" "-c" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env")
+
+fn transparentHeads -> (List String)
+  (list "list" "cons" "listAppend" "listConcat")
+
+fn placeholder -> String
+  "%%v%%"
+
+fn paramMark -> String
+  "%%p%%"
+
+fn mark? x: String -> Bool
+  (or (= x (placeholder)) (= x (paramMark)))
+
 fn excluded? path: String -> Bool
   (stringStartsWith? path "asl/tools/vcs/")
 
-fn unquote raw: String -> String
-  (if (and (stringStartsWith? raw "\"") (>= (stringLength raw) 2))
-    (stringReplace (optionOr (stringSlice raw 1 (- (stringLength raw) 1)) "") "\\\"" "\"")
-    raw)
+fn decodeStep acc: (Pair Bool (List String)) ch: String -> (Pair Bool (List String))
+  (if (pairFirst acc)
+    (pair false (cons (cond ((= ch "n") "\n") ((= ch "t") "\t") ((= ch "r") "\r") (else ch)) (pairSecond acc)))
+    (if (= ch "\\") (pair true (pairSecond acc)) (pair false (cons ch (pairSecond acc)))))
+
+; (:m :do "the text of a string token: outer quotes dropped and the escapes n t r backslash and quote decoded, so an escaped newline splits a shell string like a real one")
+fn decodeString raw: String -> String
+  (let [(inner (if (and (stringStartsWith? raw "\"") (>= (stringLength raw) 2))
+                 (optionOr (stringSlice raw 1 (- (stringLength raw) 1)) "")
+                 raw))]
+    (stringJoin (listReverse (pairSecond (fold decodeStep (pair false (list)) (stringChars inner)))) ""))
 
 fn baseName name: String -> String
   (optionOr (listLast (stringSplit name "/")) name)
@@ -44,113 +74,286 @@ fn gitHelper? name: String -> Bool
     (and (stringStartsWith? b "git")
          (or (stringEndsWith? b "!") (listContains? (list "gitIn" "gitOut" "gitRun" "gitCmd") b))))
 
+fn helper? h: Helpers file: String name: String -> Bool
+  (or (gitHelper? name)
+      (if (stringContains? name "/")
+        (listContains? h.names (baseName name))
+        (listContains? h.local name)))
+
+fn stripWord w: String -> String
+  (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace w "\"" "") "'" "") "(" "") ")" "") "`" "")
+
+; (:m :do "the shell words of a text: split at blanks, quotes and subshell parens dropped")
+fn wordsOf text: String -> (List String)
+  (filter (fn [(w String)] -> Bool (not (stringEmpty? w)))
+          (map stripWord (stringSplit (stringReplace (stringReplace (stringReplace text "\t" " ") "\n" " ") "\r" " ") " ")))
+
+; (:m :do "the command segments of a shell text, split at && || ; & newlines and a pipe with a blank on either side (a#f|git key is one word), each as its words")
+fn segmentsOf text: String -> (List (List String))
+  (let [(flat (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace (stringReplace text "||" ";") "&&" ";") " |" ";") "| " ";") "&" ";") "\n" ";") "\r" ";"))]
+    (filter (fn [(ws (List String))] -> Bool (not (listEmpty? ws))) (map wordsOf (stringSplit flat ";"))))
+
 fn option? s: String -> Bool
   (or (stringStartsWith? s "-") (stringContains? s "="))
 
-; (:m :do "the verb of a literal list: the first literal after git that is not an option (-C, --x, k=v); none when it is not a destructive verb")
-fn verbOf strs: (List String) -> (Option String)
-  (let [(words (filter (fn [(s String)] -> Bool (and (not (stringEmpty? s)) (and (!= s "git") (not (option? s))))) strs))]
-    (match (listHead words)
-      ((some w) (if (listContains? (vcsVerbs) w) (some w) none))
-      ((none) none)))
+fn pathLike? s: String -> Bool
+  (or (stringContains? s "/") (stringStartsWith? s "."))
 
-; (:m :do "the verbs of a shell string: every segment split at && ; or a newline that starts with git and a space, so cd x && git add is a site")
-fn stringVerbs text: String -> (List String)
-  (let [(flat (stringReplace (stringReplace text "&&" ";") "\n" ";"))
-        (segs (map stringTrim (stringSplit flat ";")))]
-    (listFlatMap (fn [(seg String)] -> (List String)
-                   (if (stringStartsWith? seg "git ")
-                     (match (verbOf (stringSplit seg " ")) ((some v) (list v)) ((none) (list)))
-                     (list)))
-                 segs))
+fn verbLoop xs: (List String) skipPh: Bool skipNext: Bool seenPh: Bool -> String
+  (match (listHead xs)
+    ((none) (if seenPh "param" "none"))
+    ((some x)
+      (let [(rest (listDrop xs 1))]
+        (cond
+          (skipNext (verbLoop rest skipPh false seenPh))
+          ((listContains? (valueOptions) x) (verbLoop rest skipPh true seenPh))
+          ((mark? x) (cond (skipPh (verbLoop rest skipPh false (or seenPh (= x (paramMark))))) ((= x (paramMark)) "param") (else "none")))
+          ((option? x) (verbLoop rest skipPh false seenPh))
+          ((and skipPh (pathLike? x)) (verbLoop rest skipPh false seenPh))
+          ((listContains? (vcsVerbs) x) (str "v:" x))
+          (else "word")))))
+
+; (:m :do "what the words after git name: v:VERB for a covered verb, word for any other verb, param when the verb comes from a value (the fn is a helper), none when nothing follows; the value of -C, -c and the other valued global options is never the verb; skipPh is true for a helper call, whose leading values and path literals are its own arguments")
+fn verbState items: (List String) skipPh: Bool -> String
+  (verbLoop (if (= (optionOr (listHead items) "") "git") (listDrop items 1) items) skipPh false false)
+
+fn segmentStates text: String -> (List String)
+  (map (fn [(ws (List String))] -> String (verbState ws false))
+       (filter (fn [(ws (List String))] -> Bool (= (optionOr (listHead ws) "") "git")) (segmentsOf text)))
+
+fn verbsIn states: (List String) -> (List String)
+  (map (fn [(s String)] -> String (optionOr (stringSlice s 2 (stringLength s)) ""))
+       (filter (fn [(s String)] -> Bool (stringStartsWith? s "v:")) states))
 
 fn addSite scan: Scan file: String verb: String -> Scan
-  (let [(s (Site :file file :symbol scan.symbol :verb verb))]
-    (if (listAny? (fn [(x Site)] -> Bool (and (= x.symbol s.symbol) (= x.verb s.verb))) scan.sites)
-      scan
-      (Scan :symbol scan.symbol :prev1 scan.prev1 :prev2 scan.prev2 :coll scan.coll :sites (cons s scan.sites))))
+  (with scan :sites (cons (Site :file file :symbol scan.symbol :verb verb) scan.sites))
 
-fn step file: String scan: Scan tok: lex/Token -> Scan
-  (let [(kind tok.kind)
-        (text (match kind ((lex/tokSymbol n) n) ((lex/tokString v) (unquote v)) (_ "")))
-        (isStr (match kind ((lex/tokString _) true) (_ false)))
-        (isSym (match kind ((lex/tokSymbol _) true) (_ false)))
-        (isOpen (match kind ((lex/tokLparen) true) ((lex/tokLbracket) true) (_ false)))
-        (isClose (match kind ((lex/tokRparen) true) ((lex/tokRbracket) true) (_ false)))
-        (symbol (cond
-                  ((and isSym (and (<= tok.col 1) (= text "fn"))) "<fn>")
-                  ((and isSym (= scan.symbol "<fn>")) (if (= text "!") "<fn>" text))
-                  (else scan.symbol)))
-        (afterColl (match scan.coll
-                     ((some c)
-                       (cond
-                         (isOpen (some (Coll :depth (+ c.depth 1) :strs c.strs :helper c.helper)))
-                         (isClose (if (<= c.depth 1) none (some (Coll :depth (- c.depth 1) :strs c.strs :helper c.helper))))
-                         (isStr (some (Coll :depth c.depth :strs (cons text c.strs) :helper c.helper)))
-                         (else (some c))))
-                     ((none) none)))
-        (closed (match scan.coll ((some c) (and isClose (<= c.depth 1))) ((none) false)))
+fn addSites scan: Scan file: String verbs: (List String) -> Scan
+  (fold (fn [(acc Scan) (v String)] -> Scan (addSite acc file v)) scan verbs)
+
+fn markHelper scan: Scan file: String -> Scan
+  (if (or (= scan.symbol "<top>") (= scan.symbol "<fn>"))
+    scan
+    (with scan :found (cons (str file "|" scan.symbol) scan.found)))
+
+; (:m :do "a helper call passes its argv through, making its fn a helper too, only when it has no verb word, at least two values and a parameter after the first value, as in (git dir args); a single value is a directory or a handle")
+fn helperState items: (List String) -> String
+  (let [(st (verbState items true))]
+    (if (and (= st "param") (not (listContains? (listDrop (filter mark? items) 1) (paramMark)))) "none" st))
+
+fn collStates c: Coll -> (List String)
+  (let [(items (listReverse c.items))]
+    (cond
+      ((= c.kind "str") (segmentStates (stringJoin items "")))
+      ((= c.kind "helper") (list (helperState items)))
+      (else (list (verbState items false)))))
+
+fn finishColl scan: Scan file: String c: Coll -> Scan
+  (let [(states (collStates c))
+        (withSites (addSites scan file (verbsIn states)))]
+    (if (listContains? states "param") (markHelper withSites file) withSites))
+
+fn pushPrev scan: Scan text: String -> (List String)
+  (listTake (cons text scan.prev) 4)
+
+fn prevAt scan: Scan i: Int64 -> String
+  (optionOr (listGet scan.prev i) "")
+
+fn addItem c: Coll item: String -> Coll
+  (with c :items (cons item c.items))
+
+fn itemsOfText c: Coll text: String -> Coll
+  (if (= c.kind "str")
+    (addItem c text)
+    (fold addItem c (wordsOf text)))
+
+fn markFor c: Coll m: String -> String
+  (if (= c.kind "str") (str " " m " ") m)
+
+fn placeholderFor c: Coll -> String
+  (markFor c (placeholder))
+
+fn closedScan s: Scan colls: (List Coll) d: Int64 prev: (List String) -> Scan
+  (with s :colls colls :depth d :prev prev)
+
+fn setOpaque c: Coll d: Int64 -> Coll
+  (with c :opaque d)
+
+fn onClose file: String scan: Scan -> Scan
+  (let [(d scan.depth)
+        (done (filter (fn [(c Coll)] -> Bool (= c.at d)) scan.colls))
+        (left (map (fn [(c Coll)] -> Coll (if (= c.opaque d) (with c :opaque 0) c))
+                   (filter (fn [(c Coll)] -> Bool (!= c.at d)) scan.colls)))
+        (finished (fold (fn [(acc Scan) (c Coll)] -> Scan (finishColl acc file c)) scan done))]
+    (closedScan finished left (- d 1) (pushPrev scan ")")))
+
+fn nestIn c: Coll d: Int64 head: String -> Coll
+  (cond
+    ((or (!= c.opaque 0) (>= c.at d)) c)
+    ((and (!= c.kind "str") (listContains? (transparentHeads) head)) c)
+    (else (setOpaque (addItem c (placeholderFor c)) d)))
+
+fn onHead file: String h: Helpers scan: Scan head: String -> Scan
+  (let [(d scan.depth)
+        (nested (map (fn [(c Coll)] -> Coll (nestIn c d head)) scan.colls))
         (opened (cond
-                  ((and isStr (and (= text "git") (and (= scan.prev2 "(") (listContains? (list "list" "cons") scan.prev1))))
-                    (some (Coll :depth 1 :strs (list "git") :helper false)))
-                  ((and isSym (and (= scan.prev1 "(") (gitHelper? text)))
-                    (some (Coll :depth 1 :strs (list) :helper true)))
-                  (else none)))
-        (base (Scan :symbol symbol :prev1 (if isOpen "(" text) :prev2 scan.prev1
-                    :coll (match opened ((some o) (some o)) ((none) afterColl)) :sites scan.sites))
-        (withColl (if closed
-                    (match scan.coll
-                      ((some c) (match (verbOf (listReverse c.strs)) ((some v) (addSite base file v)) ((none) base)))
-                      ((none) base))
-                    base))]
-    (if (and isStr (not (excluded? file)))
-      (fold (fn [(acc Scan) (v String)] -> Scan (addSite acc file v)) withColl (stringVerbs text))
-      withColl))
+                  ((= head "str") (cons (Coll :kind "str" :at d :items (list) :opaque 0) nested))
+                  ((helper? h file head) (cons (Coll :kind "helper" :at d :items (list "git") :opaque 0) nested))
+                  (else nested)))]
+    (with scan :colls opened :prev (pushPrev scan head)))
 
-; (:m :do "the sites of one source text, in no particular order, empty for a file under asl/tools/vcs")
+fn onString file: String scan: Scan text: String -> Scan
+  (let [(live (listAny? (fn [(c Coll)] -> Bool (= c.opaque 0)) scan.colls))
+        (fed (map (fn [(c Coll)] -> Coll (if (= c.opaque 0) (itemsOfText c text) c)) scan.colls))
+        (argvOpen (and (= text "git") (and (= (prevAt scan 1) "(") (listContains? (list "list" "cons") (prevAt scan 0)))))
+        (appendOpen (and argvOpen (and (= (prevAt scan 3) "(") (listContains? (list "listAppend" "listConcat") (prevAt scan 2)))))
+        (colls (if argvOpen
+                 (cons (Coll :kind "argv" :at (if appendOpen (- scan.depth 1) scan.depth) :items (list "git") :opaque 0) fed)
+                 fed))
+        (base (with scan :colls colls :prev (pushPrev scan text)))]
+    (if (or live argvOpen) base (addSites base file (verbsIn (segmentStates text)))))
+
+fn atomMark scan: Scan text: String -> String
+  (if (listContains? scan.params (optionOr (listHead (stringSplit text ".")) text)) (paramMark) (placeholder))
+
+fn onAtom scan: Scan text: String -> Scan
+  (with scan :colls (map (fn [(c Coll)] -> Coll (if (= c.opaque 0) (addItem c (markFor c (atomMark scan text))) c)) scan.colls)
+             :prev (pushPrev scan text))
+
+fn paramName sym: String -> String
+  (if (stringEndsWith? sym ":") (optionOr (stringSlice sym 0 (- (stringLength sym) 1)) sym) sym)
+
+; (:m :do "the fn a token belongs to and the names in its signature, read from fn at column 1 up to the arrow")
+fn symbolAfter scan: Scan isSym: Bool sym: String col: Int64 -> Scan
+  (cond
+    ((and isSym (and (<= col 1) (= sym "fn"))) (with scan :symbol "<fn>" :params (list) :inSig false))
+    ((and isSym (= scan.symbol "<fn>")) (if (= sym "!") scan (with scan :symbol sym :inSig true)))
+    ((and isSym scan.inSig) (if (= sym "->") (with scan :inSig false) (with scan :params (cons (paramName sym) scan.params))))
+    (else scan))
+
+fn step file: String h: Helpers scan0: Scan tok: lex/Token -> Scan
+  (let [(sym (match tok.kind ((lex/tokSymbol n) n) (_ "")))
+        (isSym (match tok.kind ((lex/tokSymbol _) true) (_ false)))
+        (scan (symbolAfter scan0 isSym sym tok.col))]
+    (stepKind file h scan tok))
+
+fn stepKind file: String h: Helpers scan: Scan tok: lex/Token -> Scan
+    (match tok.kind
+      ((lex/tokLparen) (with scan :depth (+ scan.depth 1) :prev (pushPrev scan "(")))
+      ((lex/tokLbracket) (with scan :depth (+ scan.depth 1) :prev (pushPrev scan "(")))
+      ((lex/tokRparen) (onClose file scan))
+      ((lex/tokRbracket) (onClose file scan))
+      ((lex/tokString v) (onString file scan (decodeString v)))
+      ((lex/tokSymbol n) (if (= (prevAt scan 0) "(") (onHead file h scan n) (onAtom scan n)))
+      ((lex/tokInt _) (onAtom scan tok.rawText))
+      ((lex/tokFloat _) (onAtom scan tok.rawText))
+      (_ (with scan :prev (pushPrev scan tok.rawText))))
+
+fn scanToks h: Helpers file: String toks: (List lex/Token) -> Scan
+  (fold (fn [(acc Scan) (t lex/Token)] -> Scan (step file h acc t))
+        (Scan :symbol "<top>" :prev (list) :depth 0 :colls (list) :sites (list) :found (list) :params (list) :inSig false)
+        toks)
+
+fn unique xs: (List String) -> (List String)
+  (listReverse (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (cons x acc))) (list) xs))
+
+fn keyName k: String -> String
+  (optionOr (listLast (stringSplit k "|")) k)
+
+fn helpersFrom keys: (List String) -> Helpers
+  (Helpers :local keys :names (unique (map keyName keys)))
+
+; (:m :do "the helper view one file is scanned with: its own helper names unqualified, every helper name for a qualified call")
+fn helpersFor h: Helpers file: String -> Helpers
+  (Helpers :local (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local)) :names h.names)
+
+fn helperLoop files: (List (Pair String (List lex/Token))) h: Helpers rounds: Int64 -> Helpers
+  (let [(found (unique (listAppend h.local (listFlatMap (fn [(f (Pair String (List lex/Token)))] -> (List String) (scanToks (helpersFor h (pairFirst f)) (pairFirst f) (pairSecond f)).found) files))))]
+    (if (or (<= rounds 0) (= (listLength found) (listLength h.local)))
+      (helpersFrom found)
+      (helperLoop files (helpersFrom found) (- rounds 1))))
+
+; (:m :do "the git helpers of a tree by data: the files that hold the text git, outside the vcs layer, are tokenized once and rescanned until no fn joins the set, at most 8 rounds")
+fn helpersOf files: (List (Pair String String)) -> Helpers
+  (helperLoop (map (fn [(f (Pair String String))] -> (Pair String (List lex/Token)) (pair (pairFirst f) (lex/tokenize (pairSecond f))))
+                   (filter (fn [(f (Pair String String))] -> Bool (and (not (excluded? (pairFirst f))) (stringContains? (pairSecond f) "git"))) files))
+              (Helpers :local (list) :names (list)) 8)
+
+fn sitesWith h: Helpers file: String source: String -> (List Site)
+  (if (excluded? file) (list) (listReverse (scanToks (helpersFor h file) file (lex/tokenize source)).sites))
+
+; (:m :do "the sites of one source text in source order, empty for a file under asl/tools/vcs")
 fn scanSource file: String source: String -> (List Site)
-  (if (excluded? file)
-    (list)
-    (listReverse (fold (fn [(acc Scan) (t lex/Token)] -> Scan (step file acc t))
-                       (Scan :symbol "<top>" :prev1 "" :prev2 "" :coll none :sites (list))
-                       (lex/tokenize source)).sites))
+  (sitesWith (helpersOf (list (pair file source))) file source)
 
 fn scanFiles files: (List (Pair String String)) -> (List Site)
-  (listFlatMap (fn [(f (Pair String String))] -> (List Site) (scanSource (pairFirst f) (pairSecond f))) files)
+  (let [(h (helpersOf files))]
+    (listFlatMap (fn [(f (Pair String String))] -> (List Site) (sitesWith h (pairFirst f) (pairSecond f))) files))
 
 fn siteKey s: Site -> String
   (str s.file "#" s.symbol "|git " s.verb)
 
-; (:m :do "the (site, argv) keys of an allowlist text: every :site string paired in order with the :argv string after it")
-fn parseAllow text: String -> (List String)
-  (let [(toks (lex/tokenize text))
-        (strs (fold (fn [(acc (Pair String (List String))) (t lex/Token)] -> (Pair String (List String))
-                      (match t.kind
-                        ((lex/tokKeyword k) (pair k (pairSecond acc)))
-                        ((lex/tokString v) (if (listContains? (list ":site" ":argv") (pairFirst acc))
-                                              (pair "" (cons (str (pairFirst acc) (unquote v)) (pairSecond acc)))
-                                              acc))
-                        (_ acc)))
-                    (pair "" (list)) toks))]
-    (pairKeys (listReverse (pairSecond strs))))
+fn removeOne xs: (List String) x: String -> (List String)
+  (match (listIndexOf xs x)
+    ((none) xs)
+    ((some i) (listAppend (listTake xs i) (listDrop xs (+ i 1)))))
 
-fn pairKeys xs: (List String) -> (List String)
-  (match (listHead xs)
-    ((none) (list))
-    ((some a)
-      (let [(rest (optionOr (listTail xs) (list)))]
-        (match (listHead rest)
-          ((none) (list))
-          ((some b) (cons (str (stringReplace a ":site" "") "|" (stringReplace b ":argv" "")) (pairKeys (optionOr (listTail rest) (list)))))))))
+fn excessStep acc: (Pair (List String) (List String)) x: String -> (Pair (List String) (List String))
+  (if (listContains? (pairSecond acc) x)
+    (pair (pairFirst acc) (removeOne (pairSecond acc) x))
+    (pair (cons x (pairFirst acc)) (pairSecond acc)))
+
+; (:m :do "multiset difference: every x of xs beyond its count in ys, in order")
+fn excess xs: (List String) ys: (List String) -> (List String)
+  (listReverse (pairFirst (fold excessStep (pair (list) ys) xs)))
+
+fn repeatKey key: String n: Int64 -> (List String)
+  (if (<= n 0) (list) (cons key (repeatKey key (- n 1))))
+
+fn rowField r: (List String) i: Int64 -> String
+  (optionOr (listGet r i) "")
+
+fn flushRow r: (List String) acc: (List String) -> (List String)
+  (let [(site (rowField r 1))
+        (argv (rowField r 2))
+        (n (optionOr (stringToInt64 (rowField r 3)) 1))]
+    (if (or (stringEmpty? site) (stringEmpty? argv)) acc (listAppend acc (repeatKey (str site "|" argv) (max n 1)))))
+
+; (:m :do "a row under parse is (field site argv n): the last keyword, the :site and :argv strings and the :n count")
+fn allowStep acc: (Pair (List String) (List String)) t: lex/Token -> (Pair (List String) (List String))
+  (let [(r (pairFirst acc))
+        (field (rowField r 0))]
+    (match t.kind
+      ((lex/tokKeyword k) (if (= k ":site")
+                            (pair (list ":site" "" "" "1") (flushRow r (pairSecond acc)))
+                            (pair (list k (rowField r 1) (rowField r 2) (rowField r 3)) (pairSecond acc))))
+      ((lex/tokString v) (cond
+                           ((= field ":site") (pair (list "" (decodeString v) (rowField r 2) (rowField r 3)) (pairSecond acc)))
+                           ((= field ":argv") (pair (list "" (rowField r 1) (decodeString v) (rowField r 3)) (pairSecond acc)))
+                           (else acc)))
+      ((lex/tokInt i) (if (= field ":n") (pair (list "" (rowField r 1) (rowField r 2) (stringFromInt64 i)) (pairSecond acc)) acc))
+      (_ acc)))
+
+; (:m :do "the site keys of an allowlist text: each (:site S ... :argv A [:n N]) row gives the key S|A, repeated N times (default 1), in order")
+fn parseAllow text: String -> (List String)
+  (let [(state (fold allowStep (pair (list "" "" "" "1") (list)) (lex/tokenize text)))]
+    (flushRow (pairFirst state) (pairSecond state)))
 
 fn allowKeys text: String -> (List String)
   (parseAllow text)
 
 fn verdictOf sites: (List Site) allow: (List String) -> Verdict
   (let [(keys (map siteKey sites))]
-    (Verdict :found sites
-             :newSites (filter (fn [(k String)] -> Bool (not (listContains? allow k))) keys)
-             :stale (filter (fn [(k String)] -> Bool (not (listContains? keys k))) allow)))
+    (Verdict :found sites :newSites (excess keys allow) :stale (excess allow keys)))
+
+fn fixture? key: String -> Bool
+  (let [(path (optionOr (listHead (stringSplit key "#")) ""))]
+    (or (stringStartsWith? path "tests/") (stringContains? path "/tests/")))
+
+; (:m :do "allowlist keys present now beyond their count at the base: product keys (first) are a violation, keys under a tests directory (second) are reported only, since fixtures need real repos")
+fn grownOf allow: (List String) baseAllow: (List String) -> (Pair (List String) (List String))
+  (let [(grown (excess allow baseAllow))]
+    (pair (filter (fn [(k String)] -> Bool (not (fixture? k))) grown) (filter fixture? grown)))
 
 fn q s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
@@ -158,10 +361,13 @@ fn q s: String -> String
 fn qs xs: (List String) -> String
   (str "(" (stringJoin (map q xs) " ") ")")
 
-fn receiptOf v: Verdict allowed: Int64 -> String
-  (str "(:vcsDirectAudit :v 1 :status :" (if (and (listEmpty? v.newSites) (listEmpty? v.stale)) "ok" "violation")
+fn receiptWith v: Verdict allowed: Int64 grown: (List String) extra: String -> String
+  (str "(:vcsDirectAudit :v 1 :status :" (if (and (listEmpty? v.newSites) (and (listEmpty? v.stale) (listEmpty? grown))) "ok" "violation")
        " :sites " (stringFromInt64 (listLength v.found)) " :allowed " (stringFromInt64 allowed)
-       " :new " (qs v.newSites) " :stale " (qs v.stale) ")")
+       " :new " (qs v.newSites) " :stale " (qs v.stale) extra ")")
+
+fn receiptOf v: Verdict allowed: Int64 -> String
+  (receiptWith v allowed (list) "")
 
 ; (:m :do "tracked .asl paths from git ls-files in root, a failed listing is an error, never an empty tree")
 fn ! trackedAsl! root: String -> (Result (List String) String)
@@ -169,40 +375,110 @@ fn ! trackedAsl! root: String -> (Result (List String) String)
     ((err e) (err e))
     ((ok out) (ok (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map stringTrim (stringLines out))))))
 
-fn ! audit! root: String allowPath: String -> (Result String String)
+fn readCause r: (Result String String) -> String
+  (match r ((err e) e) ((ok _) ""))
+
+; (:m :do "path and text of every tracked .asl file; a file that cannot be read is an error naming the path and its cause, never an empty file")
+fn ! readTracked! root: String -> (Result (List (Pair String String)) String)
   (match (trackedAsl! root)
     ((err e) (err (str "cannot list tracked files: " e)))
     ((ok paths)
+      (let [(reads (map (fn [(p String)] -> (Pair String (Result String String)) (pair p (fileReadString (str root "/" p)))) paths))
+            (bad (filter (fn [(r (Pair String (Result String String)))] -> Bool (not (ok? (pairSecond r)))) reads))]
+        (match (listHead bad)
+          ((some b) (err (str "cannot read " (pairFirst b) ": " (readCause (pairSecond b)))))
+          ((none) (ok (map (fn [(r (Pair String (Result String String)))] -> (Pair String String) (pair (pairFirst r) (resultOr (pairSecond r) ""))) reads)))))))
+
+fn allowRel -> String
+  ".asl/mem/vcsDirectAllow.asn"
+
+; (:m :do "the base commit: --base REF resolved, by default the merge base of HEAD with main; a base that does not resolve is an error")
+fn ! baseCommit! root: String base: String -> (Result String String)
+  (if (stringEmpty? base)
+    (resultMap (sr/gitOut! root (list "merge-base" "HEAD" "main")) stringTrim)
+    (resultMap (sr/gitOut! root (list "rev-parse" "--verify" (str base "^{commit}"))) stringTrim))
+
+; (:m :do "the allowlist keys at the base commit; none when the allowlist did not exist there yet, an error when git fails")
+fn ! baseAllow! root: String sha: String -> (Result (Option (List String)) String)
+  (match (sr/gitOut! root (list "ls-tree" "--name-only" sha "--" (allowRel)))
+    ((err e) (err e))
+    ((ok listed)
+      (if (stringEmpty? (stringTrim listed))
+        (ok none)
+        (match (sr/gitOut! root (list "show" (str sha ":" (allowRel))))
+          ((err e) (err e))
+          ((ok text) (ok (some (parseAllow text))))))))
+
+fn baseRowsText baseKeys: (Option (List String)) -> String
+  (match baseKeys ((some b) (stringFromInt64 (listLength b))) ((none) ":absent"))
+
+fn grownFor allow: (List String) baseKeys: (Option (List String)) -> (Pair (List String) (List String))
+  (match baseKeys ((some b) (grownOf allow b)) ((none) (pair (list) (list))))
+
+fn verdictReceipt files: (List (Pair String String)) text: String sha: String baseKeys: (Option (List String)) -> String
+  (let [(allow (parseAllow text))
+        (v (verdictOf (scanFiles files) allow))
+        (grown (grownFor allow baseKeys))
+        (extra (str " :base " (q sha) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown))))]
+    (receiptWith v (listLength allow) (pairFirst grown) extra))
+
+fn ! auditAt! root: String allowPath: String base: String -> (Result String String)
+  (match (readTracked! root)
+    ((err e) (err e))
+    ((ok files)
       (match (fileReadString allowPath)
         ((err e) (err (str "cannot read the allowlist " allowPath ": " e)))
         ((ok text)
-          (let [(files (map (fn [(p String)] -> (Pair String String) (pair p (resultOr (fileReadString (str root "/" p)) ""))) paths))
-                (allow (parseAllow text))
-                (v (verdictOf (scanFiles files) allow))]
-            (ok (receiptOf v (listLength allow))))))))
+          (match (baseCommit! root base)
+            ((err e) (err (str "cannot resolve the base: " e)))
+            ((ok sha)
+              (match (baseAllow! root sha)
+                ((err e) (err (str "cannot read the allowlist at the base " sha ": " e)))
+                ((ok baseKeys) (ok (verdictReceipt files text sha baseKeys))))))))))
 
-; (:m :do "baseline rows for every current site, to seed or review the allowlist")
+fn ! audit! root: String allowPath: String -> (Result String String)
+  (auditAt! root allowPath "")
+
+fn countOf xs: (List String) x: String -> Int64
+  (listCount (fn [(y String)] -> Bool (= y x)) xs)
+
+fn firstSites sites: (List Site) -> (List Site)
+  (listReverse (pairSecond (fold (fn [(acc (Pair (List String) (List Site))) (s Site)] -> (Pair (List String) (List Site))
+                                   (if (listContains? (pairFirst acc) (siteKey s)) acc (pair (cons (siteKey s) (pairFirst acc)) (cons s (pairSecond acc)))))
+                                 (pair (list) (list)) sites)))
+
+; (:m :do "baseline rows for every current site key with its count, to seed or review the allowlist")
 fn emitRows sites: (List Site) why: String -> String
-  (stringJoin (map (fn [(s Site)] -> String
-                     (str "(:site " (q (str s.file "#" s.symbol)) " :file " (q s.file) " :symbol " (q s.symbol) " :argv " (q (str "git " s.verb)) " :why " (q why) ")"))
-                   sites) "\n")
-
-fn ! main args: (List String) -> (Result Int64 String)
-  (let [(rootFlag (flagAfter args "--root"))
-        (root (if (stringEmpty? rootFlag) "." rootFlag))
-        (allowFlag (flagAfter args "--allow"))
-        (allowPath (if (stringEmpty? allowFlag) (str root "/.asl/mem/vcsDirectAllow.asn") allowFlag))]
-    (if (listContains? args "--emit")
-      (match (trackedAsl! root)
-        ((err e) (do (println (str "(:vcsDirectAudit :status :error :why " (q e) ")")) (ok 2)))
-        ((ok paths) (do (println (emitRows (scanFiles (map (fn [(p String)] -> (Pair String String) (pair p (resultOr (fileReadString (str root "/" p)) ""))) paths))
-                                           "baseline: raw git before the vcs layer migration, VCS-DIRECT-GIT-AUDIT"))
-                        (ok 0))))
-      (match (audit! root allowPath)
-        ((err e) (do (println (str "(:vcsDirectAudit :status :error :why " (q e) ")")) (ok 2)))
-        ((ok receipt) (do (println receipt) (ok (if (stringContains? receipt ":status :ok") 0 1)))))))
+  (let [(keys (map siteKey sites))]
+    (stringJoin (map (fn [(s Site)] -> String
+                       (let [(n (countOf keys (siteKey s)))]
+                         (str "(:site " (q (str s.file "#" s.symbol)) " :file " (q s.file) " :symbol " (q s.symbol) " :argv " (q (str "git " s.verb))
+                              (if (> n 1) (str " :n " (stringFromInt64 n)) "") " :why " (q why) ")")))
+                     (firstSites sites)) "\n"))
 
 fn flagAfter args: (List String) name: String -> String
   (match (listIndexOf args name)
     ((none) "")
     ((some i) (optionOr (listGet args (+ i 1)) "")))
+
+fn ! failWith e: String -> (Result Int64 String)
+  (do (println (str "(:vcsDirectAudit :status :error :why " (q e) ")")) (ok 2))
+
+fn ! main args: (List String) -> (Result Int64 String)
+  (let [(rootFlag (flagAfter args "--root"))
+        (root (if (stringEmpty? rootFlag) "." rootFlag))
+        (allowFlag (flagAfter args "--allow"))
+        (allowPath (if (stringEmpty? allowFlag) (str root "/" (allowRel)) allowFlag))]
+    (cond
+      ((listContains? args "--emit")
+        (match (readTracked! root)
+          ((err e) (failWith e))
+          ((ok files) (do (println (emitRows (scanFiles files) "baseline: raw git before the vcs layer migration, VCS-DIRECT-GIT-AUDIT")) (ok 0)))))
+      ((listContains? args "--helpers")
+        (match (readTracked! root)
+          ((err e) (failWith e))
+          ((ok files) (do (println (str "(:vcsHelpers " (qs (helpersOf files).local) ")")) (ok 0)))))
+      (else
+        (match (auditAt! root allowPath (flagAfter args "--base"))
+          ((err e) (failWith e))
+          ((ok receipt) (do (println receipt) (ok (if (stringContains? receipt ":status :ok") 0 1))))))))
