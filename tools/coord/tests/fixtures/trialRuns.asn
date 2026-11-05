@@ -1,0 +1,157 @@
+(:fixture :expect wProvider :insert limit :note "H1 as node2 saw it: 37 read-only turns ended by ERR_VENDOR; matches wReadLoop too, so it pins wProvider before wReadLoop"
+ :record (:trialRun :id "T1-Nim-provider" :task T1 :model "nvidia/nemotron-3.5-super-120b-a12b" :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :failed :stop provider :lastStep (:turn 37 :op read)) ERR_VENDOR hub timeout 286 s" :ms 1800000))
+  :leon (:stop provider :turns 37 :signals () :ops ((:read 37)) :opErrors () :err (:class :transient :code "ERR_VENDOR") :lastGate (:exit 1 :error "" :failed 3))))
+(:fixture :expect wPinBroken :insert harness :note "served by a fallback alias; merged otherwise, and left out of byModel"
+ :record (:trialRun :id "T1-Nim-pin" :task T1 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "ccInclusionaiLing31Flash" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false))) (:merge :ok true :sig "" :branch "trialDev-T1-Nim-pin"))
+  :leon (:stop done :turns 6 :signals () :ops ((:read 3) (:write 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect wToolRoot :insert tool :note "reads refused with ERR_NATIVE_STALE under a readStreak notFound-looking stop; pins wToolRoot before wReadLoop"
+ :record (:trialRun :id "T3-Nim-toolroot" :task T3 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 300000))
+  :leon (:stop readStreak :turns 12 :signals ((:readStreak :cause notFound)) :ops ((:read 12)) :opErrors ((:ERR_NATIVE_STALE 9)))))
+(:fixture :expect wInfra :insert harness :note "Leon never ran: claim waited out"
+ :record (:trialRun :id "T2-Nim-infra" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "" :known merge
+  :stages ((:write :ok false :exit 1 :sig "waitedOut: (:refused :unit T2-Nim-infra :why held)" :ms 0))))
+(:fixture :expect wMalformed :insert tool
+ :record (:trialRun :id "T2-Nim-malformed" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop malformedReply)" :ms 50000))
+  :leon (:stop malformedReply :turns 5 :signals (malformedReply) :ops ((:read 2)) :malformed 3)))
+(:fixture :expect wReadLoop :insert hint :note "readStreak on not-found reads of a file still to be created"
+ :record (:trialRun :id "T1-Nim-readloop" :task T1 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 200000))
+  :leon (:stop readStreak :turns 12 :signals ((:signal :readStreak :cause notFound)) :ops ((:read 10) (:tree 2)) :opErrors ((:ERR_FILE_NOT_FOUND 6)))))
+(:fixture :expect wRefused :insert tool :note "writes outside :owns while repeatFailure also fired; pins wRefused before wRepeat"
+ :record (:trialRun :id "T4-Nim-refused" :task T4 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop repeatFailure)" :ms 200000))
+  :leon (:stop repeatFailure :turns 12 :signals ((:readStreak :cause refusedWrites) repeatFailure) :ops ((:read 4) (:write 8)) :opErrors ((:ERR_OWNS 8)) :ownsRejected 8)))
+(:fixture :expect wRepeat :insert tool
+ :record (:trialRun :id "T2-Nim-repeat" :task T2 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop repeatFailure)" :ms 150000))
+  :leon (:stop repeatFailure :turns 7 :signals (repeatFailure) :ops ((:read 2) (:write 5)) :opErrors ((:ERR_TXN_ABORTED 5)))))
+(:fixture :expect wDoneNoWrite :insert hint
+ :record (:trialRun :id "T3-Nim-donenowrite" :task T3 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop doneNoWrite)" :ms 80000))
+  :leon (:stop doneNoWrite :turns 22 :signals (:doneNoWrite) :ops ((:read 15) (:done 3)))))
+(:fixture :expect wEscalated :insert harness :note "the model escalated, naming the missing path"
+ :record (:trialRun :id "T3-Ifm-escalated" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop modelEscalated)" :ms 120000))
+  :leon (:stop modelEscalated :turns 12 :signals (modelEscalated) :ops ((:run 9) (:read 3)))))
+(:fixture :expect wWall :insert limit
+ :record (:trialRun :id "T3-Ifm-wall" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop wallBudget)" :ms 1680000))
+  :leon (:stop wallBudget :turns 36 :signals (wallBudget) :ops ((:read 20) (:edit 6)))))
+(:fixture :expect wCompile :insert hint :note "test staged before its src module"
+ :record (:trialRun :id "T2-Ifm-compile" :task T2 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "gate red" :ms 400000))
+  :leon (:stop done :turns 9 :signals () :ops ((:read 3) (:write 3)) :lastGate (:exit 1 :error "ERR_UNRESOLVED_IMPORT asl-utils/unionFind not declared" :failed 0))))
+(:fixture :expect wGateRed :insert model
+ :record (:trialRun :id "T1-Ifm-gatered" :task T1 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "gate red" :ms 400000))
+  :leon (:stop done :turns 10 :signals () :ops ((:read 3) (:write 4)) :lastGate (:exit 1 :error "" :failed 2))))
+(:fixture :expect wNoEdit :insert harness
+ :record (:trialRun :id "T3-Ifm-noedit" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 0 :sig "noEdit" :ms 30000))
+  :leon (:stop done :turns 4 :signals () :ops ((:read 4)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect wVacuous :insert task
+ :record (:trialRun :id "T4-Ifm-vacuous" :task T4 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "vacuousGate: ./bin/asl test asl/packages/asl-utils/tests/kitTest.asl" :ms 90000))
+  :leon (:stop done :turns 5 :signals () :ops ((:read 3) (:edit 1)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect gRerunRed :insert harness
+ :record (:trialRun :id "T1-Ifm-rerunred" :task T1 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 1 :executed 9 :redBefore (:exit 1 :executed 4)))
+  :leon (:stop done :turns 6 :signals () :ops ((:read 2) (:write 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect gNoAsserts :insert task
+ :record (:trialRun :id "T2-Ifm-noasserts" :task T2 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 0))
+  :leon (:stop done :turns 6 :signals () :ops ((:write 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect gNotRedBefore :insert task :note "T4 shape: the new assert does not fail on base"
+ :record (:trialRun :id "T4-Ifm-notredbefore" :task T4 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 14))
+  :leon (:stop done :turns 7 :signals () :ops ((:edit 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:fixture :expect rEmpty :insert harness
+ :record (:trialRun :id "T1-Qwen-empty" :task T1 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict block :sig "no verdict" :reviewers ((:alias "ovhGptOss120b" :verdict "" :empty true) (:alias "nimNemotronUltra" :verdict "" :empty true))))))
+(:fixture :expect rNoDiff :insert harness
+ :record (:trialRun :id "T2-Qwen-nodiff" :task T2 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict block :sig "noDiff: git diff failed" :reviewers ()))))
+(:fixture :expect rFalseBlock :insert hint
+ :record (:trialRun :id "T1-Qwen-falseblock" :task T1 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict block :sig "review: block" :leadCheck notHold :reviewers ((:alias "hzQwen3827bGrade" :verdict block :defects 1 :empty false))))))
+(:fixture :expect rTrueBlock :insert model
+ :record (:trialRun :id "T3-Qwen-trueblock" :task T3 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict block :sig "review: block" :leadCheck holds :reviewers ((:alias "hzQwen3827bGrade" :verdict block :defects 2 :empty false))))))
+(:fixture :expect rFalsePass :insert hint :note "T5 seeded-bad cell passed review and merged; pins rFalsePass before merged"
+ :record (:trialRun :id "T5-panel-falsepass" :task T5 :alias "hzQwen3827b" :served "" :known reviewFail
+  :stages ((:gates :exit 0 :executed 8 :redBefore (:exit 1 :executed 2))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false)))
+           (:merge :ok true :sig "" :branch "trialDev-T5"))))
+(:fixture :expect mRefused :insert harness
+ :record (:trialRun :id "T2-Qwen-mrefused" :task T2 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false)))
+           (:merge :ok false :sig "refused: devRepo current branch differs from devBranch" :branch "trialDev-T2"))))
+(:fixture :expect mTrainRed :insert harness
+ :record (:trialRun :id "T3-Qwen-trainred" :task T3 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false)))
+           (:merge :ok false :sig "train exit 1: kitTest red" :branch "trialDev-T3"))))
+(:fixture :expect merged :insert none
+ :record (:trialRun :id "T1-Qwen-merged" :task T1 :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false)))
+           (:merge :ok true :sig "" :branch "trialDev-T1-Qwen"))
+  :leon (:stop done :turns 5 :signals () :ops ((:read 2) (:write 2)) :lastGate (:exit 0 :error "" :failed 0))))
+(:extra :expect wReadLoop :insert hint :note "H1 without the provider end: 37 read-only turns, no signal"
+ :record (:trialRun :id "H1-readonly" :task T3 :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :failed :stop turnLimit)" :ms 1700000))
+  :leon (:stop "" :turns 37 :signals () :ops ((:read 30) (:query 7)))))
+(:extra :expect unclassified :note "an unknown shape"
+ :record (:somethingElse :id "X1" :x 1))
+(:extra :expect unclassified :note "write failed with no evidence"
+ :record (:trialRun :id "X2" :alias "hzQwen3827b" :served "hzQwen3827b" :stages ((:write :ok false :exit 1 :sig "boom" :ms 1)) :leon (:stop error :turns 2 :signals () :ops ((:read 2)))))
+(:extra :expect wRefused :insert tool :note "node2 fecc68f45b79aba7 (GLM, LEON-REPLY-WASTE) as a full record: readStreak without a cause, 6 writes refused by the check"
+ :record (:trialRun :id "N2-fecc68f4" :alias "ccZAiGlm53Flash" :served "ccZAiGlm53Flash"
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 300000))
+  :leon (:stop readStreak :turns 12 :signals (readStreak) :ops ((:read 3) (:write 7) (:query 3) (:tree 1)) :opErrors ((:ERR_TXN_ABORTED 5) (:ERR_RAW_MISSING 2)))))
+(:extra :expect wToolRoot :insert tool :note "node2 aa2fdfc4f4ce41a3 (K2, UNBALANCED-DIAG): every read refused ERR_NATIVE_STALE"
+ :record (:trialRun :id "N2-aa2fdfc4" :alias "ifmIfmK2Horizon375bA23b" :served "ifmIfmK2Horizon375bA23b"
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 303851))
+  :leon (:stop readStreak :turns 12 :signals (readStreak) :ops ((:read 9) (:run 2) (:gitDiff 1) (:gitLog 2) (:gitShow 1)) :opErrors ((:ERR_NATIVE_STALE 22)))))
+(:extra :expect wReadLoop :insert hint :note "node2 79b867840c71d07b (Nemotron Super, TOOL-QUERY-MEM-IGNORED): 950 reads, readStreak, no write"
+ :record (:trialRun :id "N2-79b86784" :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b"
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 900000))
+  :leon (:stop readStreak :turns 16 :signals (readStreak) :ops ((:read 950) (:tree 4)))))
+(:extra :expect wRepeat :insert tool :note "node2 production row"
+ :record (:t :unit "STD-TRIE" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop repeatFailure :lastStep (:turn 4 :op \"write\") :servedAlias \"nimNemotronUltra\" :servedMo" :ms 203456 :at 1793753842733))
+(:extra :expect wWall :insert limit :note "node2 production row"
+ :record (:t :unit "G-ACS" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop wallBudget :lastStep (:turn 36 :op \"edit\") :servedAlias \"ccDeepseekDeepseekV41Flash\" :s" :ms 3375412 :at 1793815357372))
+(:extra :expect wProvider :insert limit :note "node2 production row"
+ :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "providerFail: (:agent :status :failed :receipt (:agentReceipt :status :failed :stop provider :lastStep (:turn 10 :op \"run\") :servedAlias \"ccZAiGlm53Flash\" :servedModel \"z-ai/" :ms 3390263 :at 1793803428369))
+(:extra :expect wDoneNoWrite :insert hint :note "node2 production row"
+ :record (:t :unit "UTILS-LISTS" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop doneNoWrite :lastStep (:turn 22 :op \"done\") :servedAlias \"nimNvidiaNemotron35SuperVl120" :ms 83201 :at 1793769244613))
+(:extra :expect wVacuous :insert task :note "node2 production row"
+ :record (:t :unit "AUD-FINDING" :from writing :to blocked :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "escalated: vacuousGate: ./bin/asl test asl/tools/tests/auditFindingTest.asl" :ms 1003714 :at 1793759079917))
+(:extra :expect wNoEdit :insert harness :note "node2 production row"
+ :record (:t :unit "COV-ASL-RUNTIME-Float" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: noEdit" :ms 26875 :at 1793809410427))
+(:extra :expect wInfra :insert harness :note "node2 production row"
+ :record (:t :unit "TRAIN-PREEXISTING-MASK" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: stale branch recreate failed: fatal: no branch named 'sh/TRAIN-PREEXISTING-MASK'" :ms 0 :at 1793760000000))
+(:extra :expect unclassified :note "node2 gap: readStreak on 47212a0d7 has no :cause and the row has no ops"
+ :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :lastStep (:turn 12 :op \"run\") :servedAlias \"orNvidiaNemotron35SuperVlFree\"" :ms 73445 :at 1793772685811))
+(:extra :expect unclassified :note "node2 gap: Leon's gateIntegrity stop (passesOnRevert) has no trialStall-v1 class"
+ :record (:t :unit "CSV-WRITE" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :failed :stop gateIntegrity :lastStep (:turn 1 :op \"write\") :servedAlias \"nimNvidiaNemotron35SuperVl120b" :ms 11374 :at 1793751805524))
+(:extra :expect unclassified :note "node2 gap: needsReview stop"
+ :record (:t :unit "LL-BIT-RT" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :needsReview :stop needsReview :lastStep (:turn 20 :op \"write\") :servedAlias \"ccDeepseekDeepseekV41Flash" :ms 2740595 :at 1793755475425))
+(:extra :expect unclassified :note "node2 gap: LEDGER_FORGED, behind a tierHop prefix"
+ :record (:t :unit "TEXT-WRAP" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "tierHop paid->strong: LEDGER_FORGED: a writer commit touches .asl/mem/grades.asn" :ms 0 :at 1793821281083))
+(:extra :expect unclassified :note "node2 gap: the stall sweep killed the writer"
+ :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "stalled" :ms 0 :at 1793772498343))
+(:extra :expect unclassified :note "a passed production write row: later stages are not in the row"
+ :record (:t :unit "STD-TRIE" :from writing :to gating :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "written" :ms 28 :at 1793820705800))
+(:extra :expect wWall :insert limit :note "node2 production row: the pooled run outlived its lease"
+ :record (:t :unit "STD-STATS" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: lease ended before the pooled run did" :ms 0 :at 1793790000000))
