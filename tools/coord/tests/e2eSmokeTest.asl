@@ -35,7 +35,7 @@ fn smokeGate -> String
 fn gateDeclared? g: String -> Bool
   (let [(parts (stringSplit g " "))
         (at (fn [(i Int64)] -> String (optionOr (listGet parts i) "")))]
-    (and (= (listLength parts) 4)
+    (and (= (listLength parts) 3)
       (and (= (at 0) "./bin/asl")
         (and (= (at 1) "test") (stringEndsWith? (at 2) "Test.asl")))))
 
