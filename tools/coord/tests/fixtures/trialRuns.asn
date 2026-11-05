@@ -246,3 +246,7 @@
  :record (:t :unit "S1-stepTextQuote" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :lastStep (:turn 3 :op \"write\" :text \"he said \\\" :stop provider :x \\\"\") :stop repeatFailure :servedAlias \"nimA\")" :ms 1 :at 1))
 (:extra :expect wRepeat :insert tool :note "regrade S2 (M1r): an escaped quote and a paren in :lastStep :text neither close :lastStep nor lift the fake :stop provider to the top"
  :record (:t :unit "S2-stepTextQuoteParen" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :lastStep (:turn 3 :op \"write\" :text \"x \\\") :stop provider (:y \\\"\") :stop repeatFailure :servedAlias \"nimA\")" :ms 1 :at 1))
+(:extra :expect wReadLoop :insert hint :note "LEON-OPROWS-M3: a run the agent stopped itself at readOnlyTurnCap carries readStreak cause readOnly; before the mapping it fell outside wReadLoop"
+ :record (:trialRun :id "T1-Nim-readonly" :task T1 :alias "nimNvidiaNemotron35SuperVl120bA12b" :served "nimNvidiaNemotron35SuperVl120bA12b" :known merge
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :status :escalated :stop readStreak)" :ms 200000))
+  :leon (:stop readStreak :turns 16 :signals ((:signal :readStreak :cause readOnly)) :ops ((:read 16)))))

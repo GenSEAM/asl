@@ -58,7 +58,7 @@ fn ! testExtras -> Bool
         (quoted (byId "M2-quotedexit"))
         (gatesExit (byId "M2-gatesexit"))
         (unknown (byId "X1"))]
-    (do (assert (= (listLength fs) 49) (str "49 extra fixtures: " (stringFromInt64 (listLength fs))))
+    (do (assert (= (listLength fs) 50) (str "50 extra fixtures: " (stringFromInt64 (listLength fs))))
         (assert (listEmpty? bad) (str "each extra maps as expected: " (stringJoin bad "; ")))
         (assert (= h1.class "wReadLoop") (str "H1: 37 read-only turns and no signal is wReadLoop: " h1.class))
         (assert (and (= unknown.class "unclassified") (not (stringEmpty? unknown.why))) (str "an unknown shape is unclassified with a reason: " unknown.class))
