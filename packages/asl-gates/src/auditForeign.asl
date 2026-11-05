@@ -1193,14 +1193,28 @@ fn auditBaseline! root: String showAll: Bool baseEnv: String allow: Allow t: Tra
             ((err e) (err e))
             ((ok baseAllow) (ok (auditRatchet showAll allow t b ms c4 base baseText baseAllow totalLines limitLines totalPy inline)))))))))
 
+fn removeOne xs: (List String) x: String -> (List String)
+  (match (listHead xs)
+    ((none) (list))
+    ((some h) (let [(rest (optionOr (listTail xs) (list)))]
+                (if (= h x) rest (cons h (removeOne rest x))))))
+
+fn unmatchedRaises rs: (List Raise) pool: (List String) -> (List Raise)
+  (match (listHead rs)
+    ((none) (list))
+    ((some r) (let [(rest (optionOr (listTail rs) (list)))]
+                (if (listContains? pool r.form)
+                  (unmatchedRaises rest (removeOne pool r.form))
+                  (cons r (unmatchedRaises rest pool))))))
+
 fn auditRatchet showAll: Bool allow: Allow t: Tracked b: Baseline ms: (Map String (Pair Int64 Int64)) c4: (List Check) base: String baseText: (Option String) baseAllow: (Option String) totalLines: Int64 limitLines: Int64 totalPy: Int64 inline: InlineReport -> Audit
   (let [(rowCount (listLength b.order))
         (baseB (match baseText ((some bt) (parseBaseline bt)) ((none) (Baseline :order (list) :rows (mapEmpty) :raises (list) :bad (list)))))
         (raisedBad (match baseText
                      ((none) (list))
                      ((some _) (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (raisedFinding b baseB.rows base p))) (list) (sortedKeys b.order)))))
-        (headForms (map (fn [(r Raise)] -> String r.form) b.raises))
-        (missingRaises (filter (fn [(r Raise)] -> Bool (not (listContains? headForms r.form))) baseB.raises))
+        (missingRaises (unmatchedRaises baseB.raises (map (fn [(r Raise)] -> String r.form) b.raises)))
+        (headUnmatched (unmatchedRaises b.raises (map (fn [(r Raise)] -> String r.form) baseB.raises)))
         (missingBad (map (fn [(r Raise)] -> String (str "base :raise changed or deleted at head: " r.path " was " r.form)) missingRaises))
         (c5 (listAppend c4 (perItem "foreignRaise" (listAppend raisedBad missingBad) "ERR_BASELINE_RAISED" rowCount)))
         (baseEntries (match baseAllow ((some ba) (parseAllowlist ba).entries) ((none) (mapEmpty))))
@@ -1213,12 +1227,12 @@ fn auditRatchet showAll: Bool allow: Allow t: Tracked b: Baseline ms: (Map Strin
                                fresh)))
         (checks (listAppend c5 (perItem "foreignUntil" untilBad "ERR_UNTIL_NONE_REASON" (listLength fresh))))
         (baseForms (map (fn [(r Raise)] -> String r.form) baseB.raises))
-        (newRaises (filter (fn [(r Raise)] -> Bool (not (listContains? baseForms r.form))) b.raises))
+        (newAppended (if (> (listLength headUnmatched) (listLength missingRaises)) (- (listLength headUnmatched) (listLength missingRaises)) 0))
         (failEv (str (stringJoin (map (fn [(c Check)] -> String c.ev) (failedOf checks)) " ") " "))
         (inlineSummary (if (> inline.total 0) (str " :inlineForeignLines " (itos inline.total) " :inlineForeignByFile (" (stringJoin (listReverse inline.files) " ") ") :inlineByLang (" (langCountsText inline.counts) ")") ""))
         (head (str ":entries " (itos (listLength allow.order)) " :baselineRows " (itos rowCount) " :lines " (itos totalLines) " :limit " (itos limitLines)
                    " :embeddedPy " (itos totalPy) " :byLang (" (byLangText t ms) ") :base \"" (cut base 0 12) "\" :raiseBase " (if (some? baseText) ":present" ":none")
-                   " :raises " (itos (listLength b.raises)) " :newRaises " (itos (listLength newRaises)) inlineSummary))
+                   " :raises " (itos (listLength b.raises)) " :newRaises " (itos newAppended) (if (> (listLength missingRaises) 0) (str " :rewritten " (itos (listLength missingRaises))) "") inlineSummary))
         (shown (filter (fn [(r Raise)] -> Bool (or showAll (not (listContains? baseForms r.form)) (stringContains? failEv (str r.path " ")))) b.raises))]
     (Audit :checks checks :head head :tail (stringJoin (map raiseForm shown) " ")))
 

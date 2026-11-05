@@ -1,6 +1,6 @@
 (module ws/auditForeignAppendOnlyTest
   :x [runTests]
-  :i [(asl-gates/auditForeign :a af) (asl-gates/suiteRunner :a sr) (asl-proc/coreProcess :a p)])
+  :i [(asl-gates/auditForeign :a af) (asl-gates/suiteRunner :a sr) (asl-tools/fleet/run :a fr)])
 
 fn gitArgs args: (List String) -> (List String)
   (listAppend (list "-c" "init.defaultBranch=work" "-c" "commit.gpgsign=false" "-c" "core.autocrlf=false"
@@ -8,14 +8,11 @@ fn gitArgs args: (List String) -> (List String)
               args)
 
 fn runGit! root: String args: (List String) -> (Result String String)
-  (let [(c0 (p/withTimeout (p/withCwd (p/cmd "git" (gitArgs args)) root) 120000))]
-    (match (p/exec! c0)
-      ((err _) (err (str "git " (stringJoin args " ") " could not run")))
-      ((ok o) (if (= o.exitCode 0) (ok o.stdout) (err (str "git " (stringJoin args " ") ": " o.stderr))))))
+  (let [(d (fr/runOneLimited (fr/job (cons "git" (gitArgs args)) root (fr/childEnv (list))) (fr/limits 120 8)))]
+    (if (= d.exit 0) (ok d.out) (err (str "git " (stringJoin args " ") ": " d.out))))
 
 fn gitStep! root: String args: (List String) -> (Result Bool String)
   (resultMap (runGit! root args) (fn [(s String)] -> Bool true))
-
 
 fn allowText -> String
   (str "(:foreignAllowlist :v 1 :owner \"FBA\" :date \"2026-11-05\"\n"
@@ -49,6 +46,12 @@ fn rewrittenPast -> String
 fn deletedPast -> String
   (str (baseLines) ")\n")
 
+fn dupBase -> String
+  (str (baseLines) (pastRaise "4") "\n" (pastRaise "4") ")\n")
+
+fn reindentedOnly -> String
+  (str (baseLines) (str "    " (pastRaise "4")) ")\n")
+
 fn writeFile! root: String rel: String text: String -> (Result Bool String)
   (match (fileWrite (str root "/" rel) (stringToBytes text))
     ((ok _) (ok true))
@@ -74,6 +77,15 @@ fn buildRepo! root: String -> (Result String String)
           ((err e) (err e))
           ((ok _) (resultMap (runGit! root (list "rev-parse" "HEAD")) (fn [(s String)] -> String (stringTrim s)))))))))))
 
+fn commitText! root: String text: String msg: String -> (Result String String)
+  (match (writeFile! root "scripts/audit/foreignBaseline.asn" text)
+    ((err e) (err e))
+    ((ok _) (match (gitStep! root (list "add" "-A"))
+      ((err e) (err e))
+      ((ok _) (match (gitStep! root (list "commit" "-q" "--no-verify" "-m" msg))
+        ((err e) (err e))
+        ((ok _) (resultMap (runGit! root (list "rev-parse" "HEAD")) (fn [(s String)] -> String (stringTrim s)))))))))
+
 fn auditWith! root: String base: String baseTxt: String -> (Result Audit String)
   (match (writeFile! root "scripts/audit/foreignBaseline.asn" baseTxt)
     ((err e) (err e))
@@ -88,8 +100,16 @@ fn failingEv au: Audit -> String
 fn appendOnlyStatus au: Audit -> String
   (stringJoin (map (fn [(c Check)] -> String c.status) (filter (fn [(c Check)] -> Bool (= c.id "foreignRaise")) au.checks)) " ")
 
-fn movedFailing! root: String base: String -> (List String)
-  (resultOr (resultMap (auditWith! root base (movedClose)) (fn [(au Audit)] -> (List String) (failingIds au))) (list "auditError"))
+fn failingWith! root: String base: String text: String -> (List String)
+  (resultOr (resultMap (auditWith! root base text) (fn [(au Audit)] -> (List String) (failingIds au))) (list "auditError"))
+
+fn headWith! root: String base: String text: String -> String
+  (resultOr (resultMap (auditWith! root base text) (fn [(au Audit)] -> String au.head)) "auditError")
+
+fn dupFailing! root: String -> (List String)
+  (match (commitText! root (dupBase) "dup")
+    ((err _) (list "commitError"))
+    ((ok s) (failingWith! root s (baseOnly))))
 
 fn ! runTests -> Bool
   (match (sr/makeTempDir! "aslFbAppendOnly")
@@ -110,10 +130,14 @@ fn ! runTests -> Bool
                  (do
                    (assert (listEmpty? (failingIds appended)) (str "unchanged base plus an appended row is green, failing: " (stringJoin (failingIds appended) " ")))
                    (assert (= (appendOnlyStatus appended) ":passed") "the append-only check exists and passes for an appended row")
-                   (assert (listEmpty? (movedFailing! root base)) "an append that moves the closing paren off the old last row stays green")
+                   (assert (listEmpty? (failingWith! root base (movedClose))) "an append that moves the closing paren off the old last row stays green")
+                   (assert (listEmpty? (failingWith! root base (reindentedOnly))) "a reindented unchanged :raise row stays green")
                    (assert (listContains? (failingIds rewritten) "foreignRaise") "a past :raise row rewritten to other numbers fails foreignRaise")
                    (assert (stringContains? (failingEv rewritten) "a.sh") "the rewrite finding names the path")
                    (assert (stringContains? (failingEv rewritten) ":lines 4 :py 0") "the rewrite finding quotes the old form")
                    (assert (listContains? (failingIds deleted) "foreignRaise") "a past :raise row deleted at head fails foreignRaise")
                    (assert (stringContains? (failingEv deleted) "a.sh") "the deletion finding names the path")
+                   (assert (stringContains? (headWith! root base (rewrittenPast)) ":newRaises 0 :rewritten 1") "a rewrite is reported as rewritten, not as a new raise")
+                   (assert (stringContains? (headWith! root base (appendedOnly)) ":newRaises 1") "an appended row is reported as a new raise")
+                   (assert (listContains? (dupFailing! root) "foreignRaise") "dropping one of two identical base :raise rows fails foreignRaise")
                    true)))))))))))
