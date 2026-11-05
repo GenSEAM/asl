@@ -24,16 +24,16 @@ fn rcFor root: String dev: String devBranch: String -> cd/RealCfg
   (cd/realCfg (list "--repo" (str root "/repo") "--dev-repo" dev "--dev" devBranch "--worktrees" (str root "/wts") "--home" (str root "/home")) (str root "/store"))
 
 fn ! mergeOf! rc: cd/RealCfg root: String id: String -> cd/Res
-  (cd/realRes rc (str root "/store") "merge" (pf/unitIn id "sh check.sh impl.txt") (pf/cuIn id "merging" (str root "/wts/asex-" id) (str "sh/" id)))
+  (cd/realRes rc (str root "/store") "merge" (pf/unitIn id (pf/gate1)) (pf/cuIn id "merging" (str root "/wts/asex-" id) (str "sh/" id)))
 
 fn ! runTests -> Bool
   (let [(root (pf/scratch "mergeReal" "g3"))
         (_ (pf/cleanup root))
         (repo (pf/repoIn root))
-        (wtOk (pf/seedUnit! root (pf/unitIn "M1" "sh check.sh impl.txt") "merging" "impl.txt"))
-        (wtRed (pf/seedUnit! root (pf/unitIn "M2" "sh check.sh impl.txt") "merging" "impl.txt"))
-        (wtCe (pf/seedUnit! root (pf/unitIn "M3" "sh check.sh impl.txt") "merging" "impl.txt"))
-        (wtMain (pf/seedUnit! root (pf/unitIn "M4" "sh check.sh impl.txt") "merging" "impl.txt"))
+        (wtOk (pf/seedUnit! root (pf/unitIn "M1" (pf/gate1)) "merging" "impl.txt"))
+        (wtRed (pf/seedUnit! root (pf/unitIn "M2" (pf/gate1)) "merging" "impl.txt"))
+        (wtCe (pf/seedUnit! root (pf/unitIn "M3" (pf/gate1)) "merging" "impl.txt"))
+        (wtMain (pf/seedUnit! root (pf/unitIn "M4" (pf/gate1)) "merging" "impl.txt"))
         (dev (devClone! root "dev" "dev"))
         (devMain (devClone! root "devMain" "main"))
         (sha1 (gitIn repo "rev-parse sh/M1"))
@@ -56,7 +56,7 @@ fn ! runTests -> Bool
         (head3 (gitIn dev "rev-parse HEAD"))
         (_ (fileWrite (str dev "/.git/trainMode") "ok"))
         (_ (fileWrite (str dev "/.git/trainMode") "noop"))
-        (rMissing (cd/realRes rc (str root "/store") "merge" (pf/unitIn "NOPE" "sh check.sh impl.txt") (pf/cuIn "NOPE" "merging" (str root "/wts/asex-NOPE") "sh/NOPE")))
+        (rMissing (cd/realRes rc (str root "/store") "merge" (pf/unitIn "NOPE" (pf/gate1)) (pf/cuIn "NOPE" "merging" (str root "/wts/asex-NOPE") "sh/NOPE")))
         (head4 (gitIn dev "rev-parse HEAD"))
         (mainHead0 (gitIn devMain "rev-parse HEAD"))
         (rcMain (rcFor root devMain "main"))

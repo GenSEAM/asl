@@ -33,10 +33,10 @@ fn ! fixtureBinary! -> String
     (if (= d.exit 0) (optionOr (listGet lines (- (listLength lines) 1)) "") ""))
 
 fn greenGate -> String
-  "echo '3 assertion(s) executed (3 passed)'"
+  (str (fr/stubHostPath) " test green3.asl")
 
 fn redGate -> String
-  "echo 'suite: ERR_TYPE boom in conductorTest'; echo 'FAIL 1 of 3'; exit 1"
+  (str (fr/stubHostPath) " test red3.asl")
 
 fn task id: String owns: (List String) after: (List String) gate: String lane: String -> st/Task
   (st/Task :id id :owns owns :reads (list) :gate gate :channel lane :model "fake" :base "main" :after after :st "queued" :epoch 0 :receipt "")
@@ -1222,7 +1222,7 @@ fn ! testIntake bin: String -> Bool
         (_ (cleanup dir))
         (_ (dirCreate dir))
         (ledger (str dir "/plan.fixture.asn"))
-        (_ (fileWrite ledger "(:u :id N1 :auto true :do \"new unit\" :owns (\"p/n1\") :gate \"echo '3 assertion(s) executed (3 passed)'\")\n(:u :id P1 :queue conductor :do \"no owns yet\" :gate \"true\")\n"))
+        (_ (fileWrite ledger (str "(:u :id N1 :auto true :do \"new unit\" :owns (\"p/n1\") :gate \"" (greenGate) "\")\n(:u :id P1 :queue conductor :do \"no owns yet\" :gate \"true\")\n")))
         (ctx (ctxOf dir bin 4 4 400))
         (_ (cd/loopOnce! ctx (strongSnap 0) (fn [] -> Unit ()) false))
         (noCfg (listLength (cd/readCUnits! dir)))
@@ -1954,8 +1954,10 @@ fn ! testSweep -> Bool
 
 fn ! runTests -> Bool
   (let [(swept (sweepDeadRoots! (str (resultOr (realPath ".") ".") "/.asl/cache")))
-        (bin (fixtureBinary!))]
-    (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
+        (bin (fixtureBinary!))
+        (stub (fr/stubHost!))]
+    (do (assert (not (stringEmpty? stub)) "the stand-in host for declared-form gates is written")
+        (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
         (assert (testSweep) "dead-pid scratch roots left by a failed run are swept")
         (assert (testNoSchedFile) "the light pool equals the token count without sched.asn")
         (assert (testRotateProfiles) "writer profiles rotate per unit by weight")

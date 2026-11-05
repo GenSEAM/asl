@@ -33,7 +33,7 @@ fn ! scenario! tag: String replies: (List String) noop: String hubReply: String 
         (leon (if (stringEmpty? noop) (pf/scriptLeon! root replies) (pf/scriptNoopLeon! root (if (= noop "-") "" noop))))
         (dev (pf/devCloneFor! root))
         (hub (pf/startHubFor! root 900))
-        (u (pf/unitIn "E1" "sh check3.sh impl.txt"))
+        (u (pf/unitIn "E1" (pf/gate3)))
         (_ (fileWrite (str root "/store/tasks/E1.txt") "Create impl.txt containing the single word impl."))
         (put (st/put! (str root "/store") u))
         (ctx (pf/e2eCtx root 420))

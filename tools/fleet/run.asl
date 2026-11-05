@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateFiles stubHost! stubHostPath stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js)])
 
 (schema Job
@@ -752,7 +752,65 @@ fn ! runOne j: Job -> Done
 
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "the one place a (list \"sh\" \"-c\" cmd) argv literal is built for a caller that only has a command string, not an argv list already; freePool.asl's runGate! used to build this literal itself (a second textual sh -c site outside this file), this gives it (and any future command-string caller) the same single site runOneLimited's callers with an argv already in hand use")
 fn ! runShell! cmd: String cwd: String env: (List String) lim: Limits -> Done
-  (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim)
+  (let [(d (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim))]
+    (with d :out (gateOut cmd d.out)))
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the executed-assert count of a gate was read from any line of the gate's own stdout, so a command that echoed '5 assertion(s) executed' passed the conductor's asserts>0 check without running a suite. Now a gate counts only in the declared form ./bin/asl test FILE... (or asl test): the host prints one verdict line per FILE after the suite's own output, the lines must be exactly the declared files' verdicts and the last lines of the output; any other count or FAIL line is rewritten to 'claimed' or '(unrecorded) FAIL' and a marker row says why. A gate whose own files are modified by the unit under test (bin/asl itself) is not covered.")
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "test stand-in for the host's test command in hermetic fixtures: greenN.asl prints N passed, redN.asl fails after N asserts, any other file is run as sh and its 'assert ' lines are the count; stubHost! writes it once to a fixed path and returns the path, a gate is then (str (stubHost!) \" test greenN.asl\"), which has the declared form")
+fn stubHostText -> String
+  "#!/bin/sh\n[ \"$1\" = test ] || exit 2\nshift\nrc=0\nfor f in \"$@\"; do\n  b=${f##*/}\n  case \"$b\" in\n    green*.asl) n=${b#green}; n=${n%.asl}; echo \"$f: $n assertion(s) executed ($n passed)\" ;;\n    red*.asl) n=${b#red}; n=${n%.asl}; echo \"suite: ERR_TYPE boom in $b\"; echo \"FAIL $f: ERR_ASSERT: assertion failed: red (after $n asserts)\"; rc=1 ;;\n    *) out=$(sh \"$f\" 2>&1); r=$?; [ -z \"$out\" ] || printf '%s\\n' \"$out\"; n=$(printf '%s\\n' \"$out\" | /usr/bin/grep -c '^assert '); e=$(printf '%s\\n' \"$out\" | /usr/bin/grep -o 'ERR_[A-Z_]*' | head -1); if [ $r -eq 0 ]; then echo \"$f: $n assertion(s) executed ($n passed)\"; else echo \"FAIL $f: ${e:-exit $r} (after $n asserts)\"; rc=1; fi ;;\n  esac\ndone\nexit $rc\n"
+
+fn stubHostPath -> String
+  "/tmp/aslStubHost/bin/asl"
+
+fn ! stubHost! -> String
+  (let [(dir "/tmp/aslStubHost")
+        (path (stubHostPath))
+        (tmp (str dir "/bin/asl." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
+    (if (ok? (fileReadString path)) path
+      (let [(_ (dirCreate (str dir "/bin")))
+            (_ (fileWrite tmp (stubHostText)))
+            (r (runOne (job (list "sh" "-c" (str "chmod 755 '" tmp "' && mv '" tmp "' '" path "'")) dir (childEnv (list)))))]
+        path)))
+
+fn gateFiles cmd: String -> (List String)
+  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim cmd) " ")))
+        (bad (list ";" "&" "|" "<" ">" "$" "`" "\"" "'" "(" ")" "*" "?" "{" "}" "\\" "~" "!" "#"))
+        (files (listDrop toks 2))]
+    (if (and (>= (listLength toks) 3)
+             (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
+                 (and (stringStartsWith? (optionOr (listHead toks) "") "/") (stringEndsWith? (optionOr (listHead toks) "") "/bin/asl") (not (listAny? (fn [(c String)] -> Bool (stringContains? (optionOr (listHead toks) "") c)) bad))))
+             (= (optionOr (listGet toks 1) "") "test")
+             (not (listAny? (fn [(f String)] -> Bool (or (not (stringEndsWith? f ".asl")) (listAny? (fn [(c String)] -> Bool (stringContains? f c)) bad))) files)))
+      files
+      (list)))
+
+fn verdictFor line: String file: String -> Bool
+  (or (and (stringStartsWith? line (str file ": ")) (stringContains? line " assertion(s) executed") (stringEndsWith? line " passed)"))
+      (stringStartsWith? line (str "FAIL " file ": ")))
+
+fn claimed line: String -> String
+  (cond ((stringContains? line " assertion(s) executed") (stringReplace line " assertion(s) executed" " assertion(s) claimed"))
+        ((stringStartsWith? line "FAIL ") (str "(unrecorded) " line))
+        (else line))
+
+fn gateOut cmd: String out: String -> String
+  (let [(files (gateFiles cmd))
+        (lines (stringLines out))
+        (body (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines))
+        (k (listLength files))
+        (tail (listDrop body (max 0 (- (listLength body) k))))
+        (isVerdict (fn [(l String)] -> Bool (listAny? (fn [(f String)] -> Bool (verdictFor l f)) files)))
+        (isPass (fn [(l String)] -> Bool (and (isVerdict l) (not (stringStartsWith? l "FAIL ")))))
+        (all (listLength (filter isVerdict body)))
+        (okShape (and (> k 0) (= all k) (= (listLength (filter isPass tail)) (listLength (filter isPass body)))))
+        (neutral (stringJoin (map claimed lines) "\n"))
+        (marker (cond ((= k 0) "(:gateFormUndeclared :want \"./bin/asl test FILE.asl...\")")
+                      (okShape "")
+                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) ")"))))]
+    (if okShape
+      (let [(kept (stringJoin (map (fn [(l String)] -> String (if (isVerdict l) l (claimed l))) lines) "\n"))] kept)
+      (str neutral (if (stringEndsWith? neutral "\n") "" "\n") marker "\n")))
 
 fn numberBefore text: String marker: String -> (Option Int64)
   (let [(parts (stringSplit text marker))]

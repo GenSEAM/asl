@@ -16,7 +16,7 @@ fn ! fixtureBinary! -> String
     (if (= d.exit 0) (optionOr (listGet lines (- (listLength lines) 1)) "") ""))
 
 fn greenGate -> String
-  "echo '3 assertion(s) executed (3 passed)'"
+  (str (fr/stubHostPath) " test green3.asl")
 
 fn task id: String owns: (List String) -> st/Task
   (st/Task :id id :owns owns :reads (list) :gate (greenGate) :channel "leon" :model "fake" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
@@ -121,8 +121,10 @@ fn ! testDeployRange -> Bool
       true)
 
 fn ! runTests -> Bool
-  (let [(bin (fixtureBinary!))]
-    (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
+  (let [(bin (fixtureBinary!))
+        (stub (fr/stubHost!))]
+    (do (assert (not (stringEmpty? stub)) "the stand-in host for declared-form gates is written")
+        (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
         (assert (testDrain bin) "a restart drains in-flight stages and launches nothing")
         (assert (testDeadline bin) "a restart past its grace exits 0 and leaves the stage")
         (assert (testDeployRange) "deploy restarts only on coord changes")

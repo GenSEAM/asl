@@ -1,5 +1,5 @@
 (module asl-tools/coord/tests/fixtures/pipeFix
-  :x [scriptNoopLeon! e2eRepo! scriptLeon! devCloneFor! e2eLaunch e2eCtx tosOf journalLines startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
+  :x [scriptNoopLeon! e2eRepo! scriptLeon! devCloneFor! e2eLaunch e2eCtx tosOf journalLines startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn gate1 gate3 unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref PIPE-GATES :do "shared fixtures of the real-path pipeline tests: scratch dirs under this worktree's .asl/cache, a temp git repo with a gate script, a temp store, and the real stage child bin/asl run conductor.asl stage started only through fleet/run.asl under a timeout")
@@ -15,14 +15,21 @@ fn ! cleanup dir: String -> Unit
 fn ! sh c: String -> String
   (resultOr (fr/shellOut c 60000) "")
 
-; (:m :do "repo with main, check.sh (green when every named file holds impl) and an empty impl.txt-less base, so the gate sh check.sh impl.txt is red on the base; store, home and worktree dirs beside it")
+; (:m :do "repo with main, check.asl and check3.asl (stand-in suites for the stub host: green when impl.txt holds impl) and an empty impl.txt-less base, so the gate sh check.sh impl.txt is red on the base; store, home and worktree dirs beside it")
 fn ! repoIn root: String -> String
   (let [(repo (str root "/repo"))
-        (made (sh (str "mkdir -p " repo " " root "/store/tasks " root "/home/.asl " root "/wts && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
-                       " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"1 assertion(s) executed (1 passed)\"\\n' > check.sh"
-                       " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 3 :failed 1)\"; echo \"FAIL check3 (3 asserts)\"; exit 1; fi; done\necho \"(:gate :asserts 3 :failed 0)\"\necho \"3 assertion(s) executed (3 passed)\"\n' > check3.sh"
-                       " && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk")))]
-    (if (stringContains? made "madeOk") repo ""))
+        (stub (fr/stubHost!))
+        (init (sh (str "mkdir -p " repo " " root "/store/tasks " root "/home/.asl " root "/wts && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t && echo initOk")))
+        (w1 (fileWrite (str root "/repo/check.asl") "if [ \"$(cat impl.txt 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"assert 1\"; exit 1; fi\necho \"(:gate :asserts 1 :failed 0)\"\necho \"assert 1\"\n"))
+        (w3 (fileWrite (str root "/repo/check3.asl") "if [ \"$(cat impl.txt 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 3 :failed 1)\"; echo \"assert 1\"; echo \"assert 2\"; echo \"assert 3\"; exit 1; fi\necho \"(:gate :asserts 3 :failed 0)\"\necho \"assert 1\"\necho \"assert 2\"\necho \"assert 3\"\n"))
+        (made (sh (str "cd " repo " && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk")))]
+    (if (and (stringContains? stub "aslStubHost") (stringContains? init "initOk") (stringContains? made "madeOk")) repo ""))
+
+fn gate1 -> String
+  (str (fr/stubHostPath) " test check.asl")
+
+fn gate3 -> String
+  (str (fr/stubHostPath) " test check3.asl")
 
 fn unitIn id: String gate: String -> st/Task
   (st/Task :id id :owns (list "impl.txt") :reads (list) :gate gate :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")

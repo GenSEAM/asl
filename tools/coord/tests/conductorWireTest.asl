@@ -585,13 +585,18 @@ fn ! testGateCheckTimeout -> Bool
 ; (:m :ref UNIT-AHEAD-GATING :do "fixture for the stranded-branch loop: a repo whose gate script check.sh passes when every named file holds impl; base.txt holds it on main, so a gate on base.txt is green on the base; unit worktrees come from attachOrAdd like a claim")
 fn ! aheadRepo root: String -> String
   (let [(repo (str root "/repo"))
+        (stub (fr/stubHost!))
         (made (resultOr (fr/shellOut (str "mkdir -p " repo " " root "/store/tasks " root "/home && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
-                                         " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"1 assertion(s) executed (1 passed)\"\\n' > check.sh"
-                                         " && printf 'echo run >> ../../gateRuns\nsh check.sh impl.txt\n' > gImpl.sh && printf 'ls ../../store/runs > ../../markSeen 2>&1\nsh check.sh impl.txt\n' > gMark.sh && printf 'sh check.sh base.txt\n' > gBase.sh && printf 'sh check.sh impl.txt doc.txt\n' > gBoth.sh && printf impl > base.txt && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk") 60000) ""))]
-    (if (stringContains? made "madeOk") repo ""))
+                                         " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"assert 1\"\\n' > check.sh"
+                                         " && printf 'echo run >> ../../gateRuns\nsh check.sh impl.txt\n' > gImpl.asl && printf 'ls ../../store/runs > ../../markSeen 2>&1\nsh check.sh impl.txt\n' > gMark.asl && printf 'sh check.sh base.txt\n' > gBase.asl && printf 'sh check.sh impl.txt doc.txt\n' > gBoth.asl && printf impl > base.txt && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk") 60000) ""))]
+    (if (and (stringContains? made "madeOk") (stringContains? stub "aslStubHost")) repo ""))
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "fixture gates are written as sh gX.sh and run in the declared form through the stand-in host: gX.asl are the shell suites")
+fn declaredGate gate: String -> String
+  (stringReplace (stringReplace gate "sh " (str (fr/stubHostPath) " test ")) ".sh" ".asl")
 
 fn ! aheadUnit id: String gate: String -> st/Task
-  (st/Task :id id :owns (list "impl.txt" "doc.txt") :reads (list) :gate gate :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
+  (st/Task :id id :owns (list "impl.txt" "doc.txt") :reads (list) :gate (declaredGate gate) :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
 
 fn aheadCUnit id: String -> cd/CUnit
   (cd/CUnit :id id :st "writing" :lane "free" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch "" :wt "" :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await "")
@@ -767,7 +772,7 @@ fn ! testVacuousWithCommit -> Bool
         (repo (aheadRepo root))
         (dir (str root "/store"))
         (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
-        (gate "sh gImpl.sh")
+        (gate (declaredGate "sh gImpl.sh"))
         (out (str "(:agent :status :ok :receipt (:agentReceipt :status :ok :vacuousGates (\"" gate "\") :usage (:input 1)))"))
         (committing (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
                (let [(_ (commitFile p "impl.txt" "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")"))]
