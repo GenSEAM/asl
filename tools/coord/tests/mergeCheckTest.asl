@@ -305,8 +305,47 @@ fn ! testLedgerGrowth base: String -> Bool
       (assert (not (stringContains? moved "ledgerGrew")) (str "rows moved to new suite paths with the same failures do not block: " moved))
       (assert (not (stringContains? shrunk "ledgerGrew")) (str "removing rows does not block: " shrunk))
       (assert (and (stringContains? grown "ledgerGrew") (stringContains? grown ".asl/mem/skipAllowed.asn") (stringContains? grown ".asl/mem/knownRed.asn")) (str "added rows block and both ledgers are named: " grown))
-      (assert (mc/ledgerGrows ".asl/mem/knownRed.asn" (none) "  (:suite \"x\" :cause \"C\")\n") "a file created by a later commit with a row blocks")
-      (assert (not (mc/ledgerGrows ".asl/mem/knownRed.asn" (none) "(:knownRed :v 1)\n")) "an empty created ledger has no growth")
+      (assert (mc/ledgerGrows ".asl/mem/knownRed.asn" (none) "  (:suite \"x\" :cause \"C\")\n" (fn [(q String)] -> Bool true) (fn [(q String)] -> Bool true)) "a file created by a later commit with a row blocks")
+      (assert (not (mc/ledgerGrows ".asl/mem/knownRed.asn" (none) "(:knownRed :v 1)\n" (fn [(q String)] -> Bool true) (fn [(q String)] -> Bool true))) "an empty created ledger has no growth")
+      true))
+
+; (:m :ref LEDGER-SHRINK-ONLY :do "one fixture repo per case: files at base and head, ledger text at base and head, the structure! text for base..head")
+fn ! scenario! base: String name: String baseFiles: (List String) baseText: String headFiles: (List String) headText: String -> String
+  (let [(repo (str base "/sc-" name))
+        (_ (sh "." (list "mkdir" "-p" (str repo "/.asl/mem") (str repo "/suites"))))
+        (_ (git repo (list "init" "-q")))
+        (_ (put (str repo "/README") "x\n"))
+        (_ (map (fn [(f String)] -> Bool (put (str repo "/" f) "x\n")) baseFiles))
+        (_ (put (str repo "/.asl/mem/knownRed.asn") baseText))
+        (c0 (commit! repo "(:c :a fx :do \"base\" :ev (T))"))
+        (_ (map (fn [(f String)] -> Bool (if (listContains? headFiles f) true (do (git repo (list "rm" "-q" "-f" f)) true))) baseFiles))
+        (_ (map (fn [(f String)] -> Bool (put (str repo "/" f) "x\n")) headFiles))
+        (_ (put (str repo "/.asl/mem/knownRed.asn") headText))
+        (c1 (commit! repo "(:c :a fx :do \"head\" :ev (T))"))]
+    (stringJoin (mc/structure! repo c0 c1) " "))
+
+fn row s: String c: String d: String -> String
+  (str "  (:suite \"" s "\" :cause \"" c "\" :failedAssertDigest \"" d "\" :since \"s\")\n")
+
+fn ! testLedgerMoves base: String -> Bool
+  (let [(hdr "(:knownRed :v 1 :date \"d\"\n")
+        (a (row "suites/A.asl" "ERR_TIMEOUT" "dd"))
+        (b (row "suites/B.asl" "ERR_TIMEOUT" "dd"))
+        (swap (scenario! base "swap" (list "suites/A.asl") (str hdr a ")\n") (list "suites/A.asl" "suites/B.asl") (str hdr b ")\n")))
+        (rename (scenario! base "rename" (list "suites/A.asl") (str hdr a ")\n") (list "suites/B.asl") (str hdr b ")\n")))
+        (baseHad (scenario! base "baseHad" (list "suites/A.asl" "suites/B.asl") (str hdr a ")\n") (list "suites/B.asl") (str hdr b ")\n")))
+        (twice (scenario! base "twice" (list "suites/A.asl") (str hdr a ")\n") (list "suites/B.asl" "suites/C.asl") (str hdr (row "suites/B.asl" "ERR_TIMEOUT" "dd") (row "suites/C.asl" "ERR_TIMEOUT" "dd") ")\n")))
+        (hdrLine (scenario! base "hdrline" (list "suites/A.asl") (str hdr a ")\n") (list "suites/A.asl") (str "(:knownRed :v 1 :date \"d\" (:suite \"suites/Z.asl\" :cause \"ERR_RUNTIME\" :failedAssertDigest \"zz\" :since \"s\")\n" a ")\n")))
+        (sinceOnly (scenario! base "since" (list "suites/A.asl") (str hdr a ")\n") (list "suites/A.asl") (str "(:knownRed :v 1 :date \"d2\"\n" "  (:suite \"suites/A.asl\" :cause \"ERR_TIMEOUT\" :failedAssertDigest \"dd\" :since \"s2\")\n)\n")))
+        (changed (scenario! base "changed" (list "suites/A.asl") (str hdr a ")\n") (list "suites/A.asl") (str hdr (row "suites/A.asl" "ERR_RUNTIME" "ff") ")\n")))]
+    (do
+      (assert (not (stringContains? sinceOnly "ledgerGrew")) (str "a :since and :date rewrite of a row whose file still exists passes: " sinceOnly))
+      (assert (stringContains? swap "ledgerGrew") (str "swapping a listed suite for a new one with the same cause and digest blocks while the old file still exists: " swap))
+      (assert (not (stringContains? rename "ledgerGrew")) (str "a real rename A to B passes: " rename))
+      (assert (stringContains? baseHad "ledgerGrew") (str "a move onto a path that already existed at base blocks: " baseHad))
+      (assert (stringContains? twice "ledgerGrew") (str "one removed row cannot move into two new rows: " twice))
+      (assert (stringContains? hdrLine "ledgerGrew") (str "a row written on the header line is counted: " hdrLine))
+      (assert (stringContains? changed "ledgerGrew") (str "a row whose cause or digest changed is a new key: " changed))
       true))
 
 fn ! runTests -> Bool
@@ -315,5 +354,6 @@ fn ! runTests -> Bool
         (a (testPure))
         (b (testE2e base))
         (g (testLedgerGrowth base))
+        (h (testLedgerMoves base))
         (_ (pathRemove base))]
-    (and a (and b g)))
+    (and a (and b (and g h))))

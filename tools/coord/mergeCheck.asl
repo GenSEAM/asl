@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! structure! touchedSuites checkSide! gitOut! run! main]
+  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -294,46 +294,78 @@ fn ! structure! repo: String base: String head: String -> (List String)
                     (if (conflictMarkers? diff.out) "conflictMarkers" "")
                     (if (listEmpty? (grownLedgers! repo base head)) "" (str "ledgerGrew " (stringJoin (grownLedgers! repo base head) ","))))))
 
-; (:m :do "shrink-only ledgers: rows are compared by key between base and head, a key whose count grows blocks the merge, the header form, :date, digests of the file and :since are ignored, a suite moved to a new path with the same failure keeps its key; skipAllowed.asn rows are keyed whole and its creating commit is the one-time seed pinned by its own suite, any other ledger created with rows blocks")
+(schema LRow (:f path String) (:f cause String) (:f digest String) (:f whole String))
+
+; (:m :do "shrink-only ledgers: rows are parsed as forms by their opening marker wherever they sit, a row is keyed by suite path, cause and digest, a head row not in base blocks the merge unless it is a real move: a base row with the same cause and digest is gone at head, its old path no longer exists at head and the new path did not exist at base, each base row moves once; skipAllowed.asn rows are keyed whole and never move, its creating commit is the one-time seed pinned by its own suite, any other ledger created with rows blocks")
 fn ledgerPaths -> (List String)
   (list ".asl/mem/skipAllowed.asn" ".asl/mem/knownRed.asn")
 
-fn ledgerRow? l: String -> Bool
-  (let [(t (stringTrim l))]
-    (or (stringStartsWith? t "(:suite ") (or (stringStartsWith? t "(:skip :suite ") (stringStartsWith? t "(:flaky "))))
+fn firstLine s: String -> String
+  (stringTrim (optionOr (listHead (stringSplit s "\n")) ""))
 
-fn dropQuoted t: String key: String -> String
-  (match (stringIndexOf t key)
-    ((none) t)
+fn quotedAfter s: String key: String -> String
+  (match (stringIndexOf s key)
+    ((none) "")
     ((some i)
-     (let [(from (+ i (stringLength key)))
-           (rest (optionOr (stringSlice t from (stringLength t)) ""))
-           (close (optionOr (stringIndexOf rest "\"") 0))]
-       (str (optionOr (stringSlice t 0 i) "") (optionOr (stringSlice rest (+ close 1) (stringLength rest)) "")))))
+     (let [(rest (optionOr (stringSlice s (+ i (stringLength key)) (stringLength s)) ""))]
+       (optionOr (listHead (stringSplit rest "\"")) ""))))
 
-fn ledgerKey path: String l: String -> String
-  (let [(t (stringTrim l))]
-    (if (stringEndsWith? path "skipAllowed.asn") t (dropQuoted (dropQuoted t " :since \"") ":suite \"")))
+fn rowOf marker: String piece: String -> LRow
+  (let [(line (firstLine piece))
+        (path (optionOr (listGet (stringSplit piece "\"") 1) ""))]
+    (if (= marker "(:suite ")
+      (LRow :path path :cause (quotedAfter line ":cause \"") :digest (quotedAfter line ":failedAssertDigest \"") :whole (str marker line))
+      (LRow :path path :cause "" :digest "" :whole (str marker line))))
 
-fn ledgerKeys path: String text: String -> (List String)
-  (map (fn [(l String)] -> String (ledgerKey path l)) (filter ledgerRow? (stringLines text)))
+fn ledgerRows text: String -> (List LRow)
+  (listFlatMap (fn [(m String)] -> (List LRow) (map (fn [(p String)] -> LRow (rowOf m p)) (optionOr (listTail (stringSplit text m)) (list))))
+               (list "(:suite " "(:skip :suite " "(:flaky "))
 
-fn countOf k: String keys: (List String) -> Int64
-  (listLength (filter (fn [(x String)] -> Bool (= x k)) keys))
+fn ledgerRowKey r: LRow -> String
+  (if (stringEmpty? r.cause) r.whole (str r.path "|" r.cause "|" r.digest))
 
-fn ledgerGrows path: String base: (Option String) head: String -> Bool
-  (let [(hk (ledgerKeys path head))
-        (bk (match base ((some t) (ledgerKeys path t)) ((none) (list))))]
-    (cond
-      ((and (none? base) (stringEndsWith? path "skipAllowed.asn")) false)
-      (else (listAny? (fn [(k String)] -> Bool (> (countOf k hk) (countOf k bk))) hk))))
+fn findIdx pred: (fn [LRow] -> Bool) rows: (List LRow) -> (Option Int64)
+  (match (listHead (filter (fn [(e (Pair Int64 LRow))] -> Bool (pred (pairSecond e))) (enumerate rows)))
+    ((some e) (some (pairFirst e)))
+    ((none) (none)))
+
+fn removeKey rows: (List LRow) k: String -> (List LRow)
+  (match (findIdx (fn [(r LRow)] -> Bool (= (ledgerRowKey r) k)) rows)
+    ((none) rows)
+    ((some i) (listAppend (listTake rows i) (optionOr (listTail (listDrop rows i)) (list)))))
+
+fn ledgerMoveOk g: LRow n: LRow oldGone: (fn [String] -> Bool) newFresh: (fn [String] -> Bool) -> Bool
+  (and (not (stringEmpty? n.cause)) (and (= n.cause g.cause) (and (= n.digest g.digest) (and (oldGone g.path) (newFresh n.path)))))
+
+fn ledgerGrows path: String base: (Option String) head: String oldGone: (fn [String] -> Bool) newFresh: (fn [String] -> Bool) -> Bool
+  (if (and (none? base) (stringEndsWith? path "skipAllowed.asn"))
+    false
+    (let [(split (fold (fn [(acc (Pair (List LRow) (List LRow))) (h LRow)] -> (Pair (List LRow) (List LRow))
+                         (if (listAny? (fn [(b LRow)] -> Bool (= (ledgerRowKey b) (ledgerRowKey h))) (pairSecond acc))
+                           (pair (pairFirst acc) (removeKey (pairSecond acc) (ledgerRowKey h)))
+                           (pair (listAppend (pairFirst acc) (list h)) (pairSecond acc))))
+                       (pair (list) (match base ((some t) (ledgerRows t)) ((none) (list))))
+                       (ledgerRows head)))
+          (settled (fold (fn [(acc (Pair Int64 (List LRow))) (n LRow)] -> (Pair Int64 (List LRow))
+                           (match (findIdx (fn [(g LRow)] -> Bool (ledgerMoveOk g n oldGone newFresh)) (pairSecond acc))
+                             ((some i) (pair (pairFirst acc) (listAppend (listTake (pairSecond acc) i) (optionOr (listTail (listDrop (pairSecond acc) i)) (list)))))
+                             ((none) (pair (+ (pairFirst acc) 1) (pairSecond acc)))))
+                         (pair 0 (pairSecond split))
+                         (pairFirst split)))]
+      (> (pairFirst settled) 0)))
 
 fn ! showAt! repo: String rev: String path: String -> (Option String)
   (let [(d (gitOut! repo (list "show" (str rev ":" path))))]
     (if (= d.exit 0) (some d.out) (none)))
 
+fn ! existsAt! repo: String rev: String path: String -> Bool
+  (= (gitOut! repo (list "cat-file" "-e" (str rev ":" path))).exit 0)
+
 fn ! grownLedgers! repo: String base: String head: String -> (List String)
-  (filter (fn [(p String)] -> Bool (match (showAt! repo head p) ((none) false) ((some h) (ledgerGrows p (showAt! repo base p) h)))) (ledgerPaths))
+  (filter (fn [(p String)] -> Bool (match (showAt! repo head p)
+                                      ((none) false)
+                                      ((some h) (ledgerGrows p (showAt! repo base p) h (fn [(q String)] -> Bool (not (existsAt! repo head q))) (fn [(q String)] -> Bool (not (existsAt! repo base q)))))))
+          (ledgerPaths))
 
 ; (:m :do "suites at head whose text imports a touched module: git grep narrows by name, the import position decides")
 fn ! importerSuites! repo: String hd: String sha: String mods: (List String) -> (List String)
