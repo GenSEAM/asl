@@ -3,9 +3,9 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
       depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks reapLeases! leaseDead? holderPid stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
-  :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
+  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -577,6 +577,15 @@ fn ! requeueUnreadable! ctx: Ctx c: CUnit res: Res -> Unit
             (_ (move! ctx (noEpoch c) "ready" "requeue" "" 0 0 "reviewDiffUnreadable" res.ms))]
         ())))
 
+; (:m :ref COND-MODEL-ESCALATE :do "a model escalation parks the unit at once, no ladder hop and no retry: its tree is rescued as a wip commit, the lease dropped, one (:escalate :unit :seen :tried) row carries the model's reason in escalations.asn, the unit blocks with the signature modelEscalated: REASON, and one act-severity event of kind modelEscalated goes to the lead stream (the stream never blocks a writer: a failed emit changes nothing)")
+fn ! parkModelEscalated! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(_ (wipSave! ctx c.id "modelEscalated"))
+        (_ (dropLease! ctx c))
+        (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "the model asked for help: no ladder rung answers a model escalation"))
+        (_ (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "act" "modelEscalated" c.id c.id res.sig))
+        (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
+    ())
+
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
 fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
   (let [(u (resolved! (stringTrim (readOr (repoPath ctx.dir))) u0))
@@ -605,13 +614,15 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
                        false))
                   (_ (move! ctx (with c :await "rebase" :sig (str "STALE_NEEDS_REBASE leon " leon " main " main " head " headBefore)) "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
               ())
+          (if (modelEscalatedSig? res.sig)
+            (let [(_ (parkModelEscalated! ctx c res))] ())
           (if (vacuousSig? res.sig)
             (let [(_ (wipSave! ctx c.id "vacuousGate"))
                   (_ (dropLease! ctx c))
                   (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
                   (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
               ())
-            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))))))
+            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ()))))))))
       ((= c.st "gating")
         (if (and (= res.exit 0) (> res.asserts 0))
           (let [(_ (move! ctx c "awaitReview" "gates" "" 0 0 (str "green " (n res.asserts)) res.ms))] ())
@@ -1925,6 +1936,25 @@ fn ! briefTask! wt: String dir: String u: st/Task prior: String -> String
   (let [(text (bf/briefFor (taskText dir u) (ownedStates! wt u.owns)))]
     (if (stringEmpty? prior) text (str text "\n\n" prior)))
 
+; (:m :ref COND-MODEL-ESCALATE :do "the :stop of Leon's receipt: read from the final receipt row, and from the (:agentReceipt ...) form nested in an (:agent ... :receipt ...) wrapper when the row is the wrapper")
+fn stopOf out: String -> String
+  (stringTrim (stringReplace (stringReplace (sp/tokAfter (receiptRowOf out) ":stop") ")" "") "\"" ""))
+
+; (:m :ref COND-MODEL-ESCALATE :do "Leon's receipt :stop modelEscalated means the model itself asked for help, which no rung of the ladder answers: the write result carries the signature modelEscalated: REASON (the :reason of the receipt's :escalate form, else the gate signature) and finish! parks the unit at once; a readStreak whose reason names (refusedWrites) stays a normal failure with the cause in the signature, so the ladder and the lead both see why writes did not land")
+fn modelEscalatedSig out: String -> String
+  (let [(row (receiptRowOf out))
+        (reason (quotedAfter row ":reason \""))]
+    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (optionOr (stringSlice reason 0 (min 200 (stringLength reason))) reason))))
+
+fn modelEscalatedSig? sig: String -> Bool
+  (stringStartsWith? sig "modelEscalated: ")
+
+fn writeFailSig out: String -> String
+  (let [(row (receiptRowOf out))]
+    (if (and (= (stopOf out) "readStreak") (stringContains? row "(refusedWrites)"))
+      (str "refusedWrites: " (gateSig out))
+      (gateSig out)))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (writeResWith runWrite! rc dir u c)
 
@@ -1952,11 +1982,13 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (model (servedModel d.out))
               ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
               (vacuous (and (pairSecond pv) (not (commitsPast? p (baseRef u)))))
+              (stop (stopOf d.out))
+              (modelEsc (and (= stop "modelEscalated") (not vacuous)))
               (_ (if vacuous false (commitWrite! p u.owns u.id model)))
               ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
               (noEdit (and (= d.exit 0) (not (commitsPast? p (baseRef u)))))]
-          (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (not vacuous))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
-               :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))))
+          (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (and (not vacuous) (not modelEsc)))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
+               :sig (cond (vacuous (vacuousSig u.gate)) (modelEsc (modelEscalatedSig d.out)) ((!= d.exit 0) (writeFailSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))))
 
 fn ! currentBranch dir: String -> String
   (let [(d (fr/runOne (fr/job (list "git" "-C" dir "rev-parse" "--abbrev-ref" "HEAD") dir (fr/childEnv (list)))))]

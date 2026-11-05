@@ -602,6 +602,28 @@ fn ! aheadWt rc: cd/RealCfg u: st/Task f: String -> String
         (_ (if (stringEmpty? p) () (commitFile p f "impl" "(:c :a freePool :do \"row gate passed but the agent left it uncommitted; the driver committed on its behalf\")")))]
     p)
 
+; (:m :ref COND-MODEL-ESCALATE :do "through the write stage: a Leon run whose receipt says :stop modelEscalated is a failed write with the signature modelEscalated: REASON even when the process exited 0; a refusedWrites readStreak is a failed write with that cause in the signature")
+fn ! testWriteModelEscalated -> Bool
+  (let [(root (scratch "modelesc"))
+        (_ (cleanup root))
+        (_ (dirCreate root))
+        (repo (aheadRepo root))
+        (dir (str root "/store"))
+        (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
+        (outEsc "(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop modelEscalated :escalate (:escalate :reason \"the gate contradicts the task\") :usage (:input 1)))")
+        (outRef "(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :escalate (:escalate :reason \"9 turns in a row persisted nothing (refusedWrites)\") :usage (:input 1)))")
+        (runWith (fn [(out String) (code Int64)] -> (fn ! [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done)
+                   (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
+                     (fr/Done :idx 0 :exit code :out out :ms 0 :verdict "exit"))))
+        (uE (aheadUnit "E1" "sh gImpl.sh"))
+        (rE (cd/writeResWith (runWith outEsc 0) rc dir uE (aheadCUnit "E1")))
+        (uR (aheadUnit "E2" "sh gImpl.sh"))
+        (rR (cd/writeResWith (runWith outRef 1) rc dir uR (aheadCUnit "E2")))
+        (_ (cleanup root))]
+    (do (assert (and (= rE.ok 0) (= rE.sig "modelEscalated: the gate contradicts the task")) (str "a model escalation is a failed write with its reason: " (stringFromInt64 rE.ok) " " rE.sig))
+        (assert (and (= rR.ok 0) (stringStartsWith? rR.sig "refusedWrites: ")) (str "refusedWrites is in the signature: " rR.sig))
+        true))
+
 ; (:m :ref LEON-BASE-WIRE :do "the extra form keys the write stage hands the Leon run carry :base BRANCH, baseRef of the unit (main for an empty or HEAD base), next to the attractor arm key, so Leon's gate integrity reverts to merge-base(HEAD, base) and not to HEAD")
 fn ! testWriteCarriesBase -> Bool
   (let [(root (scratch "writebase"))
@@ -1229,6 +1251,7 @@ fn ! runTests -> Bool
       (assert (testHubGuard) "the write stage refuses a worktree without the hub client")
       (assert (testLeonGuard) "the write stage refuses a worktree without the deployed Leon")
       (assert (testAheadGating) "an ahead branch with a green gate goes to gating without a writer")
+      (assert (testWriteModelEscalated) "model escalation and refusedWrites reach the write signature")
       (assert (testWriteCarriesBase) "the write form carries :base")
       (assert (testVacuousWithCommit) "a vacuous receipt over a gate-passed commit goes to gating")
       (assert (testIntegrityOnBase) "the writer integrity revert is measured against the merge-base")
