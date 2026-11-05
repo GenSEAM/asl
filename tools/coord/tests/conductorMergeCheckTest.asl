@@ -51,6 +51,36 @@ fn ! parkOf! root: String id: String verdict: String sig: String -> cd/CUnit
         (_ (cd/finish! (ctxFor root) u c (resOf 0 verdict sig)))]
     (optionOr (listFind (fn [(x cd/CUnit)] -> Bool (= x.id id)) (cd/readCUnits! dir)) (pf/cuIn id "absent" "" "")))
 
+; (:m :ref MERGECHECK-BUDGET-LOWS :do "the budgets are read from the source because they are literals there: the digits after a marker, -1 when the marker is absent")
+fn numAfter text: String marker: String -> Int64
+  (let [(parts (stringSplit text marker))]
+    (if (< (listLength parts) 2) -1
+      (let [(rest (optionOr (listGet parts 1) ""))
+            (digits (optionOr (listHead (stringSplit (stringReplace (stringReplace rest ")" " ") "\n" " ") " ")) ""))]
+        (optionOr (stringToInt64 digits) -1))))
+
+; (:m :ref MERGECHECK-BUDGET-LOWS :do "gates the stage budgets: the stage child's argv carries --merge-check-sec when the conductor was given it, the flag reaches RealCfg, and the merge-check budget plus the train limit stay under the stage deadline (both literals in conductor.asl: the stage-sec default and the (fr/limits N 200) of the train run)")
+fn ! testBudgets -> Bool
+  (let [(src (resultOr (fileReadString "asl/tools/coord/conductor.asl") ""))
+        (stageDefault (numAfter src "\"stage-sec\" "))
+        (afterTrain (optionOr (listGet (stringSplit src "\"--commit\") rc.devRepo (mergeEnv))") 1) ""))
+        (trainLimit (numAfter afterTrain "(fr/limits "))
+        (dir "/tmp/mcBudgetStore")
+        (u (pf/unitIn "BG1" "sh check.sh impl.txt"))
+        (c (pf/cuIn "BG1" "merging" "" "sh/BG1"))
+        (withFlag ((cd/realLaunch (list "--repo" "/r" "--merge-check-sec" "777") dir) "merge" u c))
+        (without ((cd/realLaunch (list "--repo" "/r") dir) "merge" u c))
+        (at (fn [(argv (List String))] -> Int64 (optionOr (listIndexOf argv "--merge-check-sec") -1)))
+        (rcFlag (cd/realCfg (list "--repo" "/r" "--dev-repo" "/r" "--dev" "dev" "--merge-check-sec" "777") dir))
+        (rcDefault (cd/realCfg (list "--repo" "/r" "--dev-repo" "/r" "--dev" "dev") dir))]
+    (do (assert (and (>= (at withFlag) 0) (= (optionOr (listGet withFlag (+ (at withFlag) 1)) "") "777")) (str "the stage child gets --merge-check-sec with the given value: " (stringJoin withFlag " ")))
+        (assert (< (at without) 0) "without the flag the child argv carries none, so the default applies in the child too")
+        (assert (= rcFlag.mergeCheckSec 777) (str "the flag reaches RealCfg: " (stringFromInt64 rcFlag.mergeCheckSec)))
+        (assert (> rcDefault.mergeCheckSec 0) "the default merge-check budget is set")
+        (assert (and (> stageDefault 0) (> trainLimit 0)) (str "the budgets are found in the source: stage " (stringFromInt64 stageDefault) " train " (stringFromInt64 trainLimit)))
+        (assert (< (+ rcDefault.mergeCheckSec trainLimit) stageDefault) (str "default merge-check budget plus train limit stay under the stage deadline: " (stringFromInt64 rcDefault.mergeCheckSec) " + " (stringFromInt64 trainLimit) " vs " (stringFromInt64 stageDefault)))
+        true))
+
 fn ! runTests -> Bool
   (let [(root (pf/scratch "condMc" "w"))
         (_ (pf/cleanup root))
@@ -96,7 +126,8 @@ fn ! runTests -> Bool
         (statusText (cd/status! (ctxFor root)))
         (wtKept (fileExists? (str wtGrow "/.git")))
         (_ (pf/cleanup root))]
-    (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? dev)) (and (not (stringEmpty? wtClean)) (and (not (stringEmpty? wtGrow)) (and (not (stringEmpty? wtHold)) (not (stringEmpty? wtStub))))))) "fixture: source repo, dev clone and four unit branches are up")
+    (do (assert (testBudgets) "the stage budgets hold")
+        (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? dev)) (and (not (stringEmpty? wtClean)) (and (not (stringEmpty? wtGrow)) (and (not (stringEmpty? wtHold)) (not (stringEmpty? wtStub))))))) "fixture: source repo, dev clone and four unit branches are up")
         (assert (and (= rGrow.ok 0) (= rGrow.verdict "block") (stringStartsWith? rGrow.sig "mergeCheck:") (stringContains? rGrow.sig "ledgerGrew")) (str "a branch that grows knownRed.asn is blocked with the ledger in the signature: " rGrow.verdict " " rGrow.sig))
         (assert (and (= headGrow head0) (stringEmpty? argsGrow)) (str "a blocked check leaves dev where it was and never starts the train: " argsGrow))
         (assert wtKept "a blocked check keeps the unit worktree")
