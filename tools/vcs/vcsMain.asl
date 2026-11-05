@@ -21,9 +21,8 @@ fn ! show r: v/VcsReceipt -> (Result Int64 String)
   (do (println r.text) (ok r.code))
 
 fn ! rootOf repo: String args: (List String) -> String
-  (let [(f (cg/flagVal args "--asl-root"))
-        (e (optionOr (envGet "ASL_ROOT") ""))]
-    (cond ((not (stringEmpty? f)) f) ((not (stringEmpty? e)) e) (else repo)))
+  (let [(f (cg/flagVal args "--asl-root"))]
+    (if (stringEmpty? f) repo f))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(op (optionOr (listHead args) ""))

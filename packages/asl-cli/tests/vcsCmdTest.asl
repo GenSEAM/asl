@@ -53,7 +53,10 @@ fn ! scenarios root: String base: String -> Bool
         (o4 (vcs root (list "commit" "--repo" r2 "--asl-root" root "--" "good.asl")))
         (o5 (vcs root (list "frobnicate")))
         (o6 (vcs root (list "status" "--repo" r2)))
-        (o7 (vcs root (list "head" "--repo" r2)))]
+        (o7 (vcs root (list "head" "--repo" r2)))
+        (r3 (repoAt base "noRoot"))
+        (_d (put (str r3 "/g.asl") (goodAsl)))
+        (o8 (vcs root (list "commit" "--repo" r3 "--msg" (goodMsg) "--" "g.asl")))]
     (do
       (assert (= o1.exit 1) (str "an unbalanced staged file exits 1: " o1.exit " " o1.out))
       (assert (stringContains? o1.out ":status :refused") (str "the receipt says refused: " o1.out))
@@ -68,6 +71,7 @@ fn ! scenarios root: String base: String -> Bool
       (assert (= o6.exit 0) (str "status exits 0: " o6.out))
       (assert (stringContains? o6.out "?? stray.txt") "status lists the stray file")
       (assert (and (= o7.exit 0) (stringContains? o7.out (head r2))) "head prints the sha")
+      (assert (= o8.exit 0) (str "without --asl-root the CLI passes its own root, no env needed: " o8.out))
       true))
 
 fn ! runTests -> Bool

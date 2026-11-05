@@ -199,7 +199,7 @@ fn ! train! ctx: sys/Context args: (List String) -> Int64
 fn ! vcs! ctx: sys/Context args: (List String) -> Int64
   (let [(entry (str ctx.root "/asl/tools/vcs/vcsMain.asl"))]
     (if (sys/isFile? entry)
-      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list (str "ASL_ROOT=" ctx.root)))
+      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry (if (or (listContains? args "--asl-root") (listEmpty? args)) args (cons (first args) (cons "--asl-root" (cons ctx.root (rest args)))))))) (list))
       (do (sys/sayErr! "Error: the vcs tool entry asl/tools/vcs/vcsMain.asl was not found") 1)))
 
 fn ! shim! ctx: sys/Context mode: String args: (List String) -> Int64
