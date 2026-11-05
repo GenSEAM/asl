@@ -1,5 +1,5 @@
 (module asl-tools/coord/tests/fixtures/pipeFix
-  :x [scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
+  :x [startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref PIPE-GATES :do "shared fixtures of the real-path pipeline tests: scratch dirs under this worktree's .asl/cache, a temp git repo with a gate script, a temp store, and the real stage child bin/asl run conductor.asl stage started only through fleet/run.asl under a timeout")
@@ -20,6 +20,7 @@ fn ! repoIn root: String -> String
   (let [(repo (str root "/repo"))
         (made (sh (str "mkdir -p " repo " " root "/store/tasks " root "/home/.asl " root "/wts && cd " repo " && git init -q -b main && git config user.email t@example.invalid && git config user.name t"
                        " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 1 :failed 1)\"; echo \"FAIL check (1 asserts)\"; exit 1; fi; done\\necho \"(:gate :asserts 1 :failed 0)\"\\necho \"1 assertion(s) executed (1 passed)\"\\n' > check.sh"
+                       " && printf 'for f in \"$@\"; do if [ \"$(cat $f 2>/dev/null)\" != impl ]; then echo \"(:gate :asserts 3 :failed 1)\"; echo \"FAIL check3 (3 asserts)\"; exit 1; fi; done\necho \"(:gate :asserts 3 :failed 0)\"\necho \"3 assertion(s) executed (3 passed)\"\n' > check3.sh"
                        " && printf a > a.txt && git add -A && git commit -qm c0 && echo madeOk")))]
     (if (stringContains? made "madeOk") repo ""))
 
@@ -56,14 +57,17 @@ fn ! listenWait! path: String attempts: Int64 -> Bool
   (if (<= attempts 0) false
     (if (fileExists? path) true (do (sleepMs 50) (listenWait! path (- attempts 1)))))
 
-; (:m :do "stand-in hub (fixtures/hubVerdictStub.asl) started through fleet/run.asl guardStart!: own process group, lease, timeout; returns the pid, 0 when it did not come up")
-fn ! startHub! root: String -> Int64
+; (:m :do "stand-in hub (fixtures/hubVerdictStub.asl) started through fleet/run.asl guardStart! in its own process group with a lease; the stub also exits on its own after sec seconds or its request cap (hubDeadlineTest); returns the pid, 0 when it did not come up")
+fn ! startHubFor! root: String sec: Int64 -> Int64
   (let [(h (here))
         (sock (str root "/hub.sock"))
-        (g (fr/guardStart! (list (str h "/bin/asl") "run" (str h "/asl/tools/coord/tests/fixtures/hubVerdictStub.asl") sock (str root "/hubSeen.txt") (str root "/hubReply.txt")) h (fr/childEnv (list)) (fr/limits 900 50)))]
+        (g (fr/guardStart! (list (str h "/bin/asl") "run" (str h "/asl/tools/coord/tests/fixtures/hubVerdictStub.asl") sock (str root "/hubSeen.txt") (str root "/hubReply.txt") (stringFromInt64 sec) "50") h (fr/childEnv (list)) (fr/limits (+ sec 60) 50)))]
     (match g
       ((err _) 0)
       ((ok r) (if (listenWait! sock 1200) r.run.pid (do (fr/killTree! r.run.pid) 0)))))
+
+fn ! startHub! root: String -> Int64
+  (startHubFor! root 300)
 
 fn ! stopHub! pid: Int64 -> Bool
   (do (if (> pid 0) (fr/killTree! pid) 0) true)
@@ -81,3 +85,25 @@ fn lanesText -> String
        "(:lane :alias flashLow :tier free :quality 0 :allowance 5) (:lane :alias orNemotronUltraFree :tier free :quality 0 :allowance 3)"
        "(:lane :alias ocLongcat :tier free :quality 0 :allowance 3) (:lane :alias ocDeepseekFlash :tier paid :quality 0 :allowance 5)"
        "(:lane :alias kmK31Pro :tier strong :quality 0 :allowance 3)))")
+
+; (:m :ref PIPE-GATES :do "review-stage helpers shared by reviewRealTest and the probe: the child env (own HOME, hub.asn naming the stand-in, native CLI cache kept so the child does not cold-build), the home files, a proven receipt and the verdict and signature of a stage row")
+fn ! envFor root: String -> (List String)
+  (list (str "HOME=" root "/home") (str "ASL_NATIVE_CLI_CACHE=" (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))) "ASL_GATEWAY_URL=http://127.0.0.1:1/v1/chat/completions" (str "ASL_GATEWAY_CONFIG=" root "/home/.asl/gateway.asn"))
+
+fn ! prepare! root: String -> Bool
+  (let [(_ (dirCreate (str root "/home/.asl")))
+        (_ (dirCreate (str root "/store/runs")))
+        (a (fileWrite (str root "/home/.asl/gateway.asn") (str (gatewayText) "\n")))
+        (b (fileWrite (str root "/home/lanes.asn") (str (lanesText) "\n")))
+        (c (fileWrite (str root "/home/.asl/hub.asn") (str "(:hub :sock \"" root "/hub.sock\" :class \"lead\")\n")))
+        (d (fileWrite (str root "/hubReply.txt") "(:verdict :pass :defects () :model m)"))]
+    (and (ok? a) (and (ok? b) (and (ok? c) (ok? d)))))
+
+fn ! receiptFor! root: String id: String -> Bool
+  (ok? (fileWrite (cd/runPath (str root "/store") id "receipt" "asn") (str "(:receipt \"" id "\" :gates ((:gate \"g\" :exit 0 :executed 3)) :redBefore ((:gate \"g\" :exit 1 :executed 0)))\n")))
+
+fn verdictOf r: (Result cd/Res String) -> String
+  (match r ((ok x) x.verdict) ((err e) (str "noRow: " e)))
+
+fn sigOf r: (Result cd/Res String) -> String
+  (match r ((ok x) x.sig) ((err _) ""))

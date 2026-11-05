@@ -1,22 +1,22 @@
 (module asl-tools/coord/tests/fixtures/reviewDiffProbe
   :x [runTests]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf) (asl-tools/coord/tests/reviewRealTest :a rt)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
 
 ; (:m :ref PIPE-GATES :do "PROBE, not a suite (not named *Test): the review stage when its git diff fails or is empty; run with ./bin/asl test asl/tools/coord/tests/fixtures/reviewDiffProbe.asl; each assert fails while realReview passes a review it could not read: the hub stand-in answers pass to everything, so a pass here means no reviewer was shown the change (conductor.asl:realReview feeds diff.out to the ladder without checking diff.exit)")
 fn ! runTests -> Bool
   (let [(root (pf/scratch "reviewProbe" "g4"))
         (_ (pf/cleanup root))
         (repo (pf/repoIn root))
-        (prep (rt/prepare! root))
+        (prep (pf/prepare! root))
         (hub (pf/startHub! root))
-        (env (rt/envFor root))
+        (env (pf/envFor root))
         (uB (with (pf/unitIn "RB" "sh check.sh impl.txt") :base "noSuchRef"))
         (uC (pf/unitIn "RC" "sh check.sh impl.txt"))
         (uE (pf/unitIn "RE" "sh check.sh impl.txt"))
         (wtB (pf/seedUnit! root uB "reviewing" "impl.txt"))
         (wtC (pf/seedUnit! root uC "reviewing" "impl.txt"))
         (wtE (pf/seedUnit! root uE "reviewing" ""))
-        (rcpts (and (rt/receiptFor! root "RB") (and (rt/receiptFor! root "RC") (rt/receiptFor! root "RE"))))
+        (rcpts (and (pf/receiptFor! root "RB") (and (pf/receiptFor! root "RC") (pf/receiptFor! root "RE"))))
         (dB (pf/stageChild! root "review" "RB" (list) env 600))
         (resB (pf/readResOf! root "RB" "review"))
         (_ (pf/cleanup wtC))
@@ -27,6 +27,6 @@ fn ! runTests -> Bool
         (_ (pf/stopHub! hub))
         (_ (pf/cleanup root))]
     (do (assert (and (not (stringEmpty? repo)) (and prep (and (> hub 0) rcpts))) "fixture")
-        (assert (and (not (= (rt/verdictOf resB) "pass")) (and (not (= (rt/verdictOf resC) "pass")) (not (= (rt/verdictOf resE) "pass"))))
-                (str "no unreadable review may pass; verdicts: base ref missing " (rt/verdictOf resB) ", worktree gone " (rt/verdictOf resC) ", empty diff " (rt/verdictOf resE)))
+        (assert (and (not (= (pf/verdictOf resB) "pass")) (and (not (= (pf/verdictOf resC) "pass")) (not (= (pf/verdictOf resE) "pass"))))
+                (str "no unreadable review may pass; verdicts: base ref missing " (pf/verdictOf resB) ", worktree gone " (pf/verdictOf resC) ", empty diff " (pf/verdictOf resE)))
         true))
