@@ -20,29 +20,38 @@ fn beforeDashes args: (List String) -> (List String)
 fn ! show r: v/VcsReceipt -> (Result Int64 String)
   (do (println r.text) (ok r.code))
 
-fn ! rootOf repo: String args: (List String) -> String
-  (let [(f (cg/flagVal args "--asl-root"))]
-    (if (stringEmpty? f) repo f))
+; (:m :ref VCS-CLI-ENTRY :do "flags (--asl-root V --repo V --msg V --warn) are read anywhere before the -- and removed, the positionals are what remains, so an injected or reordered flag never shifts BASE HEAD or RANGE")
+fn positionals xs: (List String) -> (List String)
+  (match (listHead xs)
+    ((none) (list))
+    ((some a)
+      (let [(rest (optionOr (listTail xs) (list)))]
+        (cond
+          ((listContains? (list "--asl-root" "--repo" "--msg") a) (positionals (optionOr (listTail rest) (list))))
+          ((= a "--warn") (positionals rest))
+          (else (cons a (positionals rest)))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(op (optionOr (listHead args) ""))
         (rest (optionOr (listTail args) (list)))
-        (repoFlag (cg/flagVal args "--repo"))
-        (repo (if (stringEmpty? repoFlag) (resultOr (realPath ".") ".") repoFlag))
+        (pre (beforeDashes rest))
         (paths (pathsAfter rest))
-        (pre (beforeDashes rest))]
+        (pos (positionals pre))
+        (repoFlag (cg/flagVal pre "--repo"))
+        (repo (if (stringEmpty? repoFlag) (resultOr (realPath ".") ".") repoFlag))
+        (root (let [(f (cg/flagVal pre "--asl-root"))] (if (stringEmpty? f) repo f)))]
     (cond
       ((= op "commit")
         (cond
-          ((not (cg/hasFlag args "--msg")) (usage "commit needs --msg M"))
+          ((not (cg/hasFlag pre "--msg")) (usage "commit needs --msg M"))
           ((listEmpty? paths) (usage "commit needs paths after --"))
-          (else (show (v/commit! repo (rootOf repo args) paths (cg/flagVal args "--msg") (if (cg/hasFlag args "--warn") "warn" "commit"))))))
+          (else (show (v/commit! repo root paths (cg/flagVal pre "--msg") (if (cg/hasFlag pre "--warn") "warn" "commit"))))))
       ((= op "status") (show (v/status! repo paths)))
       ((= op "head") (show (v/head! repo)))
       ((= op "diff")
-        (if (< (listLength (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) pre)) 2)
+        (if (< (listLength pos) 2)
           (usage "diff needs BASE HEAD")
-          (show (v/diff! repo (optionOr (listGet pre 0) "") (optionOr (listGet pre 1) "") paths))))
+          (show (v/diff! repo (optionOr (listGet pos 0) "") (optionOr (listGet pos 1) "") paths))))
       ((= op "log")
-        (if (listEmpty? pre) (usage "log needs RANGE") (show (v/log! repo (optionOr (listHead pre) "") paths "%h %s"))))
+        (if (listEmpty? pos) (usage "log needs RANGE") (show (v/log! repo (optionOr (listHead pos) "") paths "%h %s"))))
       (else (usage (str "unknown op " op)))))

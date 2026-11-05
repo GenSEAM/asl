@@ -39,6 +39,9 @@ fn ! committed dir: String -> String
 fn ! vcs root: String args: (List String) -> fr/Done
   (sh root (cons (str root "/bin/asl") (cons "vcs" args)))
 
+fn ! vcsIn dir: String root: String args: (List String) -> fr/Done
+  (sh dir (cons (str root "/bin/asl") (cons "vcs" args)))
+
 fn ! scenarios root: String base: String -> Bool
   (let [(r1 (repoAt base "bad"))
         (_a (put (str r1 "/bad.asl") "(module fx/bad\n  :x [f]\n"))
@@ -54,6 +57,15 @@ fn ! scenarios root: String base: String -> Bool
         (o5 (vcs root (list "frobnicate")))
         (o6 (vcs root (list "status" "--repo" r2)))
         (o7 (vcs root (list "head" "--repo" r2)))
+        (d1 (vcsIn r2 root (list "diff" "HEAD~1" "HEAD")))
+        (d2 (vcs root (list "diff" "--repo" r2 "HEAD~1" "HEAD")))
+        (d3 (vcs root (list "diff" "HEAD~1" "HEAD" "--repo" r2)))
+        (l1 (vcsIn r2 root (list "log" "HEAD~1..HEAD")))
+        (l2 (vcs root (list "log" "--repo" r2 "HEAD~1..HEAD")))
+        (r4 (repoAt base "warned"))
+        (_w (put (str r4 "/bad.asl") "(module fx/bad\n  :x [f]\n"))
+        (w1 (vcs root (list "commit" "--repo" r4 "--asl-root" root "--warn" "--msg" (goodMsg) "--" "bad.asl")))
+        (wlog (resultOr (fileReadString (str r4 "/.asl/log/commitGuard.asn")) ""))
         (r3 (repoAt base "noRoot"))
         (_d (put (str r3 "/g.asl") (goodAsl)))
         (o8 (vcs root (list "commit" "--repo" r3 "--msg" (goodMsg) "--" "g.asl")))]
@@ -71,6 +83,13 @@ fn ! scenarios root: String base: String -> Bool
       (assert (= o6.exit 0) (str "status exits 0: " o6.out))
       (assert (stringContains? o6.out "?? stray.txt") "status lists the stray file")
       (assert (and (= o7.exit 0) (stringContains? o7.out (head r2))) "head prints the sha")
+      (assert (and (= d1.exit 0) (stringContains? d1.out "good.asl")) (str "diff HEAD~1 HEAD with the injected root: " d1.exit " " d1.out))
+      (assert (and (= d2.exit 0) (stringContains? d2.out "good.asl")) (str "diff with --repo before the refs: " d2.out))
+      (assert (and (= d3.exit 0) (stringContains? d3.out "good.asl")) (str "diff with --repo after the refs: " d3.out))
+      (assert (and (= l1.exit 0) (stringContains? l1.out "fixture")) (str "log HEAD~1..HEAD: " l1.exit " " l1.out))
+      (assert (and (= l2.exit 0) (stringContains? l2.out "fixture")) (str "log with --repo before the range: " l2.out))
+      (assert (and (= w1.exit 0) (stringContains? w1.out ":status :warned")) (str "--warn commits and says warned: " w1.out))
+      (assert (stringContains? wlog ":rule :balance") (str "--warn records the blocking rows: " wlog))
       (assert (= o8.exit 0) (str "without --asl-root the CLI passes its own root, no env needed: " o8.out))
       true))
 
