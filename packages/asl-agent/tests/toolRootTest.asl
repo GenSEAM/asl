@@ -3,7 +3,7 @@
   :i [(aslAgent/core :a c) (aslAgent/main :a m)
       (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
-; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; trees are symlink clones of this checkout with only bin/asl replaced")
+; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; the stale tree is a symlink clone of this checkout with bin/asl replaced; the good tree is a clone whose bin/asl logs and execs this checkout; the run carries :wallBudget 120 so a run rooted in it by mistake ends by its budget and fails the asserts")
 
 fn ! sh command: String -> Int64
   (processRun command).exitCode
@@ -18,8 +18,8 @@ fn ! runWith! tag: String stale: String tool: String -> String
         repo (gk/initGitRepo! root "toolRoot" "tool-root@example.invalid")
         fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         d (dirCreate fixtureDir)
-        f (fileWrite (str fixtureDir "/t" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "t" tag) (list "(:step :op \"check\" :file \"subject.txt\")" "(:done)")))
-        form (str "(:agent :task \"check subject\" :backend \"script/t" tag "\" :root \"" (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\") :budget 4 :contextTokens 8000"
+        f (fileWrite (str fixtureDir "/t" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "t" tag) (list "(:step :op \"check\" :file \"subject.txt\")" "(:step :op \"write\" :file \"new.txt\" :content \"made\")" "(:step :op \"edit\" :file \"subject.txt\" :old \"red\" :new \"green\")" "(:step :op \"write\" :file \"other.txt\" :content \"nope\")" "(:done)")))
+        form (str "(:agent :task \"check subject\" :backend \"script/t" tag "\" :root \"" (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\" \"new.txt\") :budget 8 :wallBudget 120 :contextTokens 8000"
                (if (stringEmpty? tool) "" (str " :toolRoot \"" (c/escapeAsn tool) "\"")) ")")
         res (m/mainWithRoots (list form) stale root)
         names (resultOr (dirList (str root "/.asl/run/agentLoop")) (list))
@@ -35,15 +35,23 @@ fn ! runTests -> Bool
         staleLog (str base "/stale.log")
         goodLog (str base "/good.log")
         a (cloneTree! stale repo (str "#!/bin/sh\necho \"$PWD|$1\" >> " staleLog "\necho '(:asl :status :failed :error ERR_NATIVE_STALE :message \"stale\")'\nexit 2\n"))
-        b (cloneTree! good repo (str "#!/bin/sh\necho \"$PWD|$1\" >> " goodLog "\necho '(:asl :status :ok :message \"fakeGoodTree\")'\nexit 0\n"))
+        b (cloneTree! good repo (str "#!/bin/sh\necho \"$PWD|$1\" >> " goodLog "\nexec " repo "/bin/asl \"$@\"\n"))
         chmod (sh (str "chmod +x " stale "/bin/asl " good "/bin/asl"))
         withTool (runWith! "with" stale good)
         withoutTool (runWith! "without" stale "")
+        runRoot (optionOr (listHead (stringLines withTool)) "?")
+        rootNew (resultOr (fileReadString (str runRoot "/new.txt")) "")
+        rootSubject (resultOr (fileReadString (str runRoot "/subject.txt")) "")
+        rootOther (fileExists? (str runRoot "/other.txt"))
+        toolHas (or (fileExists? (str good "/new.txt")) (or (fileExists? (str good "/subject.txt")) (or (fileExists? (str good "/other.txt")) (fileExists? (str good "/.asl")))))
         goodText (resultOr (fileReadString goodLog) "")
         staleText (resultOr (fileReadString staleLog) "")
         cleaned (sh (str "rm -rf " base))]
     (do
       (assert (and a b) "the two tree clones were built")
+      (assert (and (= rootNew "made") (stringContains? rootSubject "green")) "with :toolRoot a written and an edited owned file land in the run root")
+      (assert (not toolHas) "the :toolRoot tree gets none of the run's files, no journal and no write")
+      (assert (and (not rootOther) (stringContains? withTool "ERR_OWNS")) "a write outside :owns is refused in the run root")
       (assert (stringContains? goodText "|(:check") "with :toolRoot the check op ran <toolRoot>/bin/asl")
       (assert (stringContains? goodText (optionOr (listHead (stringLines withTool)) "?")) "the tool ran with the run root as cwd")
       (assert (not (stringContains? withTool "ERR_NATIVE_STALE")) "with :toolRoot no step is refused ERR_NATIVE_STALE")
