@@ -51,6 +51,8 @@ fn ! pureTests -> Bool
         formOp (list (pair "type" (c/kvStr "escalate")) (pair "form" (c/kvStr form)))
         stepOp (list (pair "op" (c/kvStr "escalate")) (pair "reason" (c/kvStr "via step")))]
     (do
+      (assert (not (= (m/opKey (list (pair "op" (c/kvStr "read")) (pair "file" (c/kvStr "a\nx=b"))))
+                  (m/opKey (list (pair "op" (c/kvStr "read")) (pair "file" (c/kvStr "a")) (pair "x" (c/kvStr "b")))))) "a value holding a newline and key=value does not collide with a step that has that key")
       (assert (and (= (listLength (pairFirst deduped)) 2) (= (pairSecond deduped) 3)) "identical reads in one reply collapse to the distinct ones in order")
       (assert (and (= (listLength (pairFirst afterWrite)) 3) (= (pairSecond afterWrite) 1)) "a write between two identical reads makes the second one count again")
       (assert (= (m/modelEscalationReason (list r1 formOp)) (some "stuck on parser")) "escalate form reason is read")

@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr toolRootUsable? nextReadStreakOf stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1666,9 +1666,13 @@ fn modelEscalationReceipt ops: (List (List (Pair String c/KvVal))) -> (Option St
     ((none) none))
 
 ; (:m :ref LEON-YIELD-F4 :do "node2 2026-11-04: one turn sent 724 reads of one file over 16 turns; a read-only step identical to an earlier one in the same reply ignoring its :id (parse already drops byte-identical steps and counts them in facts.repeated), with no write, edit, run or other mutating step between them, runs once, and the reply says how many were dropped")
+; (:m :ref LEON-YIELD-LOWS-F4 :do "opKey joined key=value rows with a newline, so a value holding newline and another key=value collided with a step that really had that key; every key and value now carries its byte length in front, so no value can imitate a boundary")
+fn opKeyPart text: String -> String
+  (str (stringFromInt64 (stringLength text)) ":" text)
+
 fn opKey op: (List (Pair String c/KvVal)) -> String
-  (stringJoin (map (fn [p] (str (pairFirst p) "=" (match (pairSecond p) ((c/kvStr t) t) ((c/kvInt t) t))))
-    (filter (fn [p] (not (listContains? (list "form" "id") (pairFirst p)))) op)) "\n")
+  (stringJoin (map (fn [p] (str (opKeyPart (pairFirst p)) (opKeyPart (match (pairSecond p) ((c/kvStr t) t) ((c/kvInt t) t)))))
+    (filter (fn [p] (not (listContains? (list "form" "id") (pairFirst p)))) op)) "")
 
 fn dedupeReadOps ops: (List (List (Pair String c/KvVal))) seen: (List String) kept: (List (List (Pair String c/KvVal))) dropped: Int64 -> (Pair (List (List (Pair String c/KvVal))) Int64)
   (if (listEmpty? ops)
