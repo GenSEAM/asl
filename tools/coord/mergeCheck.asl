@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? touchedSuites checkSide! gitOut! run! main]
+  :x [failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? grownLedgers structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -291,7 +291,27 @@ fn ! structure! repo: String base: String head: String -> (List String)
                     (if (stringEmpty? (stringTrim (stringJoin files ""))) "emptyDiff" "")
                     (if (listEmpty? shas) "noHeadCommits" "")
                     (if (listEmpty? bad) "" (str "notOneAsnLine " (stringJoin (map (fn [(s String)] -> String (optionOr (stringSlice s 0 9) s)) bad) ",")))
-                    (if (conflictMarkers? diff.out) "conflictMarkers" ""))))
+                    (if (conflictMarkers? diff.out) "conflictMarkers" "")
+                    (if (listEmpty? (grownLedgers diff.out)) "" (str "ledgerGrew " (stringJoin (grownLedgers diff.out) ","))))))
+
+(schema LedgerScan (:f cur String) (:f isNew Bool) (:f hits (List String)))
+
+; (:m :do "shrink-only ledgers: an added row line in a diff of skipAllowed.asn or knownRed.asn blocks the merge, a file created by that diff is the one-time seed and is pinned by its own suite")
+fn ledgerPaths -> (List String)
+  (list ".asl/mem/skipAllowed.asn" ".asl/mem/knownRed.asn")
+
+fn scanLedgerLine acc: LedgerScan l: String -> LedgerScan
+  (cond
+    ((stringStartsWith? l "diff --git a/")
+     (LedgerScan :cur (optionOr (listHead (stringSplit (optionOr (stringSlice l 13 (stringLength l)) "") " b/")) "") :isNew false :hits acc.hits))
+    ((stringStartsWith? l "new file mode") (LedgerScan :cur acc.cur :isNew true :hits acc.hits))
+    ((and (stringStartsWith? l "+") (not (stringStartsWith? l "+++")) (stringStartsWith? (stringTrim (optionOr (stringSlice l 1 (stringLength l)) "")) "(:") (not acc.isNew) (listContains? (ledgerPaths) acc.cur) (not (listContains? acc.hits acc.cur)))
+     (LedgerScan :cur acc.cur :isNew acc.isNew :hits (listAppend acc.hits (list acc.cur))))
+    (else acc))
+
+fn grownLedgers diff: String -> (List String)
+  (let [(st (fold scanLedgerLine (LedgerScan :cur "" :isNew false :hits (list)) (stringLines diff)))]
+    st.hits)
 
 ; (:m :do "suites at head whose text imports a touched module: git grep narrows by name, the import position decides")
 fn ! importerSuites! repo: String hd: String sha: String mods: (List String) -> (List String)

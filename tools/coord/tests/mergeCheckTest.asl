@@ -271,10 +271,40 @@ fn ! testE2e base: String -> Bool
       (assert (and (= (pairFirst r11) 0) (stringContains? (out r11) ":headCheckout false")) (str "an existing head checkout is used: " (out r11)))
       true))
 
+; (:m :ref LEDGER-SHRINK-ONLY :do "an added row in skipAllowed.asn or knownRed.asn blocks in structure!, a removal and the file's creating commit do not, the pure diff scan names each grown file once")
+fn ! testLedgerGrowth base: String -> Bool
+  (let [(repo (str base "/lg"))
+        (_ (sh "." (list "mkdir" "-p" (str repo "/.asl/mem"))))
+        (_ (git repo (list "init" "-q")))
+        (_ (put (str repo "/README") "x\n"))
+        (cNone (commit! repo "(:c :a fx :do \"none\" :ev (T))"))
+        (_ (put (str repo "/.asl/mem/skipAllowed.asn") "(:skipAllowed :suite \"a\")\n(:skipAllowed :suite \"b\")\n"))
+        (_ (put (str repo "/.asl/mem/knownRed.asn") "(:knownRed :v 1\n  (:suite \"k1\")\n  (:suite \"k2\")\n)\n"))
+        (cSeed (commit! repo "(:c :a fx :do \"seed\" :ev (T))"))
+        (_ (put (str repo "/.asl/mem/skipAllowed.asn") "(:skipAllowed :suite \"a\")\n"))
+        (_ (put (str repo "/.asl/mem/knownRed.asn") "(:knownRed :v 1\n  (:suite \"k1\")\n)\n"))
+        (cShrunk (commit! repo "(:c :a fx :do \"shrink\" :ev (T))"))
+        (_ (put (str repo "/.asl/mem/skipAllowed.asn") "(:skipAllowed :suite \"a\")\n(:skipAllowed :suite \"rogueTest\")\n"))
+        (_ (put (str repo "/.asl/mem/knownRed.asn") "(:knownRed :v 1\n  (:suite \"k1\")\n  (:suite \"k9\")\n)\n"))
+        (cGrown (commit! repo "(:c :a fx :do \"grow\" :ev (T))"))
+        (seed (mc/structure! repo cNone cSeed))
+        (shrunk (mc/structure! repo cSeed cShrunk))
+        (grown (mc/structure! repo cShrunk cGrown))
+        (grownText (stringJoin grown " "))
+        (diff "diff --git a/.asl/mem/skipAllowed.asn b/.asl/mem/skipAllowed.asn\n--- a/x\n+++ b/x\n+(:skipAllowed :suite \"z\")\n+(:skipAllowed :suite \"y\")\ndiff --git a/other.asn b/other.asn\n+(:suite \"q\")\n")]
+    (do
+      (assert (not (stringContains? (stringJoin seed " ") "ledgerGrew")) (str "the commit that creates the ledgers is the seed: " (stringJoin seed " ")))
+      (assert (not (stringContains? (stringJoin shrunk " ") "ledgerGrew")) (str "removing rows does not block: " (stringJoin shrunk " ")))
+      (assert (stringContains? grownText "ledgerGrew") (str "an added row blocks: " grownText))
+      (assert (and (stringContains? grownText ".asl/mem/skipAllowed.asn") (stringContains? grownText ".asl/mem/knownRed.asn")) (str "both ledgers are named: " grownText))
+      (assert (= (mc/grownLedgers diff) (list ".asl/mem/skipAllowed.asn")) "two added rows name the file once, another file is ignored")
+      true))
+
 fn ! runTests -> Bool
   (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/mergeCheckTest-" (stringFromInt64 (procSelf))))
         (_ (sh "." (list "mkdir" "-p" base)))
         (a (testPure))
         (b (testE2e base))
+        (g (testLedgerGrowth base))
         (_ (pathRemove base))]
-    (and a b))
+    (and a (and b g)))
