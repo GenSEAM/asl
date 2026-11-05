@@ -27,6 +27,9 @@ fn srcHelper -> String
 fn srcString -> String
   (str "(module m\n  :x [f]\n  :i [])\n\nfn ! f! -> Bool\n  (ok? (runShell \"" (g) " add -A\"))\n")
 
+fn srcShell body: String -> String
+  (str "(module m\n  :x [f]\n  :i [])\n\nfn ! f! -> Bool\n  (ok? (runShell \"" body "\"))\n")
+
 fn srcNonVerb -> String
   (str "(module m\n  :x [f]\n  :i [])\n\nfn ! f! -> Bool\n  (ok? (run (list \"" (g) "\" \"status\")))\n")
 
@@ -61,6 +64,9 @@ fn testStale -> Bool
 fn testPatterns -> Bool
   (do (assert (= (keysOf (list (pairOf "t/h.asl" (srcHelper)))) (list "t/h.asl#f!|git commit")) "a call of a git-named helper with a verb literal is a site")
       (assert (= (keysOf (list (pairOf "t/s.asl" (srcString)))) (list "t/s.asl#f!|git add")) "a string starting with the git word and a verb is a site")
+      (assert (= (keysOf (list (pairOf "t/q.asl" (srcShell (str "cd x && " (g) " add -A"))))) (list "t/q.asl#f!|git add")) "a shell string with git after && is a site")
+      (assert (= (keysOf (list (pairOf "t/q.asl" (srcShell (str "cd x; " (g) " reset --hard && " (g) " commit -m y"))))) (list "t/q.asl#f!|git reset" "t/q.asl#f!|git commit")) "every git segment after ; and && is a site")
+      (assert (= (keysOf (list (pairOf "t/q.asl" (srcShell (str "echo " (g) " add -A"))))) (list)) "git in the middle of a segment, not at its start, is not a site")
       (assert (= (keysOf (list (pairOf "t/n.asl" (srcNonVerb)))) (list)) "a git status argv is not a covered verb")
       (assert (= (keysOf (list (pairOf "t/c.asl" (srcComment)))) (list)) "comment text and prose strings are not sites")
       (assert (= (keysOf (list (pairOf "asl/tools/vcs/git.asl" (srcList "commit")))) (list)) "the vcs layer itself is excluded")

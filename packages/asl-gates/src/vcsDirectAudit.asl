@@ -54,10 +54,15 @@ fn verbOf strs: (List String) -> (Option String)
       ((some w) (if (listContains? (vcsVerbs) w) (some w) none))
       ((none) none)))
 
-fn stringVerb text: String -> (Option String)
-  (if (stringStartsWith? text "git ")
-    (verbOf (stringSplit text " "))
-    none)
+; (:m :do "the verbs of a shell string: every segment split at && ; or a newline that starts with git and a space, so cd x && git add is a site")
+fn stringVerbs text: String -> (List String)
+  (let [(flat (stringReplace (stringReplace text "&&" ";") "\n" ";"))
+        (segs (map stringTrim (stringSplit flat ";")))]
+    (listFlatMap (fn [(seg String)] -> (List String)
+                   (if (stringStartsWith? seg "git ")
+                     (match (verbOf (stringSplit seg " ")) ((some v) (list v)) ((none) (list)))
+                     (list)))
+                 segs))
 
 fn addSite scan: Scan file: String verb: String -> Scan
   (let [(s (Site :file file :symbol scan.symbol :verb verb))]
@@ -99,9 +104,7 @@ fn step file: String scan: Scan tok: lex/Token -> Scan
                       ((none) base))
                     base))]
     (if (and isStr (not (excluded? file)))
-      (match (stringVerb text)
-        ((some v) (addSite withColl file v))
-        ((none) withColl))
+      (fold (fn [(acc Scan) (v String)] -> Scan (addSite acc file v)) withColl (stringVerbs text))
       withColl))
 
 ; (:m :do "the sites of one source text, in no particular order, empty for a file under asl/tools/vcs")
