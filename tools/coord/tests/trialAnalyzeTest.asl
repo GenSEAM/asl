@@ -58,7 +58,7 @@ fn ! testExtras -> Bool
         (quoted (byId "M2-quotedexit"))
         (gatesExit (byId "M2-gatesexit"))
         (unknown (byId "X1"))]
-    (do (assert (= (listLength fs) 43) (str "43 extra fixtures: " (stringFromInt64 (listLength fs))))
+    (do (assert (= (listLength fs) 47) (str "47 extra fixtures: " (stringFromInt64 (listLength fs))))
         (assert (listEmpty? bad) (str "each extra maps as expected: " (stringJoin bad "; ")))
         (assert (= h1.class "wReadLoop") (str "H1: 37 read-only turns and no signal is wReadLoop: " h1.class))
         (assert (and (= unknown.class "unclassified") (not (stringEmpty? unknown.why))) (str "an unknown shape is unclassified with a reason: " unknown.class))
@@ -104,7 +104,7 @@ fn ! testReport -> Bool
         (assert (stringContains? r ":insert ((:hint 5) (:tool 4) (:limit 2) (:harness 12) (:task 3) (:model 2) (:none 1))") (str "insert totals: " r))
         (assert (stringContains? r "(:class wReadLoop :n 1 :insert hint :models (\"nimNvidiaNemotron35SuperVl120bA12b\") :exemplar \"T1-Nim-readloop\")") (str "byClass row: " r))
         (assert (stringContains? r ":unclassifiedWhy ())") (str "no unclassified reasons: " r))
-        (assert (stringContains? all (str ":runs " (stringFromInt64 (+ 29 extras)) " :merged 1 :unclassified 15 :partial 24 :pinBroken 2 :pinUnknown 1 ")) (str "full report counts: " all))
+        (assert (stringContains? all (str ":runs " (stringFromInt64 (+ 29 extras)) " :merged 1 :unclassified 15 :partial 27 :pinBroken 2 :pinUnknown 1 ")) (str "full report counts: " all))
         (assert (stringContains? all "(:why \"readStreak without :cause and without op evidence\" :n 2)") (str "reasons grouped: " all))
         true))
 

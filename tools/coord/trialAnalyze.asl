@@ -161,9 +161,10 @@ fn condOf v: String -> String
       ((stringStartsWith? s "providerFail: ") "provider")
       (else "")))
 
+; (:m :ref TRIAL-ANALYZE-M1r :do "the body arrives with the one level of escaping of its :verdict or :sig string already undone by unq, and is parsed as it is: an escaped quote inside a receipt string stays inside it")
 ; (:m :ref TRIAL-ANALYZE-M1 :do "the Leon receipt inside a verdict body, read with the ASN reader: the body itself when its head is :agentReceipt, or the :receipt key of an (:agent ...) wrapper; a receipt cut short by the conductor still yields the keys before the cut")
 fn receiptOf body: String -> (Option rd/SExpr)
-  (let [(x (rd/parseSexpr (stringReplace body "\\" "")))
+  (let [(x (rd/parseSexpr body))
         (h (rd/sexprHead x))]
     (cond
       ((= h ":agentReceipt") (some x))
@@ -178,6 +179,10 @@ fn servedOf rc: rd/SExpr -> String
       ((and (>= n 2) (and (stringStartsWith? a "\"") (stringEndsWith? a "\""))) (unq a))
       ((stringContains? a "\"") "")
       (else a)))
+
+; (:m :ref TRIAL-ANALYZE-L6 :do "a providerFail tag on a receipt with no top-level :stop is the conductor's own provider verdict; a receipt that names its stop keeps it")
+fn providerTag v: String kind: String stop: String -> String
+  (if (and (= kind "receipt") (and (stringEmpty? stop) (stringStartsWith? (stripWrap (stringTrim v)) "providerFail: "))) "provider" kind)
 
 fn emptyFacts -> Facts
   (Facts :id "" :alias "" :served "" :pinBroken false :pinUnknown false :known "" :seeded false :partial false :defect ""
@@ -229,7 +234,7 @@ fn trialFacts r: rd/SExpr -> Facts
       :turns (intOf lf ":turns" 0) :malformed (intOf lf ":malformed" 0)
       :errClass (strOf (headed (subOf lf ":err")) ":class")
       :gateExit (intOf gate ":exit" -1) :gateError (rawOf gate ":error") :gateFailed (intOf gate ":failed" 0)
-      :hasWrite (some? w) :writeOk (boolOf wf ":ok") :writeSig (rawOf wf ":sig") :cond (condOf (rawOf wf ":sig")) :killed (boolOf wf ":killed")
+      :hasWrite (some? w) :writeOk (boolOf wf ":ok") :writeSig (rawOf wf ":sig") :cond (providerTag (rawOf wf ":sig") (condOf (rawOf wf ":sig")) (strOf lf ":stop")) :killed (boolOf wf ":killed")
       :hasGates (some? g) :gatesExit (intOf gf ":exit" -1) :executed (intOf gf ":executed" 0)
       :redBefore (match rb ((some x) (!= (intOf x ":exit" 0) 0)) ((none) false))
       :hasReview (some? rv) :reviewVerdict (strOf rf ":verdict") :reviewSig (rawOf rf ":sig")
@@ -256,7 +261,7 @@ fn rowFacts r: rd/SExpr -> Facts
       :pinUnknown (and (not (stringEmpty? served)) (and (not (stringEmpty? model)) (and (!= model "unknown") (!= model served))))
       :hasLeon (some? rc) :stop stop
       :signals (if (stringEmpty? stop) (list) (list stop))
-      :hasWrite true :writeOk (or (= to "gating") (= kind "written")) :writeSig v :cond kind))
+      :hasWrite true :writeOk (or (= to "gating") (= kind "written")) :writeSig v :cond (providerTag v kind stop)))
 
 fn factsOf r: rd/SExpr -> Facts
   (if (= (rd/sexprHead r) ":t") (rowFacts r) (trialFacts r))
@@ -298,10 +303,13 @@ fn firstWord s: String -> String
   (let [(w (optionOr (listHead (stringSplit (stringTrim s) " ")) ""))]
     (if (stringEndsWith? w ":") (optionOr (stringSlice w 0 (- (stringLength w) 1)) w) w))
 
-; (:m :ref TRIAL-ANALYZE-L1 :do "the gate's own error code is the first token that starts with ERR_, colons trimmed; an assertion text that says parse error is ERR_ASSERT, not a compile error")
+; (:m :ref TRIAL-ANALYZE-L7 :do "the gate error's own code leads it: the first token, or the second after a path:line:col: location; an ERR_ code quoted later in an assertion text is not the error's code")
 fn firstErrCode text: String -> String
-  (let [(toks (map (fn [(t String)] -> String (stringReplace t ":" "")) (stringSplit text " ")))]
-    (optionOr (listFind (fn [(t String)] -> Bool (stringStartsWith? t "ERR_")) toks) ""))
+  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim text) " ")))
+        (lead (optionOr (listHead toks) ""))
+        (located (and (stringEndsWith? lead ":") (or (stringContains? lead "/") (stringContains? lead "."))))
+        (code (if (and located (not (stringStartsWith? lead "ERR_"))) (optionOr (listHead (optionOr (listTail toks) (list))) "") lead))]
+    (if (stringStartsWith? code "ERR_") (stringReplace code ":" "") ""))
 
 fn compileCodes -> (List String)
   (list "ERR_UNRESOLVED_IMPORT" "ERR_UNKNOWN_SYMBOL" "ERR_TYPE_MISMATCH" "ERR_ARITY" "ERR_NOT_EXPORTED" "ERR_UNDEFINED_EXPORT" "ERR_UNTYPED_PARAM" "ERR_PARSE" "ERR_UNBALANCED")

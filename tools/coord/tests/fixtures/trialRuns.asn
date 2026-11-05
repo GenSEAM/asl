@@ -232,3 +232,13 @@
  :record (:t :unit "M1-noEditText" :from writing :to ready :stage write :model "unknown" :verdict "fail: gate tests/noEditTest.asl missing" :ms 1 :at 1))
 (:extra :expect wRepeat :insert tool :note "L3: a receipt cut inside its servedAlias keeps the row's :model and is not pinUnknown"
  :record (:t :unit "L3-cutAlias" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :stop repeatFailure :servedAlias \"nimNvid" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "regrade A1 (M1r): an escaped quote inside a receipt string does not end it, so the fake :stop provider in it is text and the real :stop repeatFailure wins"
+ :record (:t :unit "A1-escInject" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :note \"he said \\\" :stop provider :x \\\"\" :stop repeatFailure :servedAlias \"nimA\")" :ms 1 :at 1))
+(:extra :expect wProvider :insert limit :note "regrade A2 (L6): a providerFail tag on a receipt with no top-level :stop is the conductor's provider verdict"
+ :record (:t :unit "A2-providerTagNoStop" :from writing :to ready :stage write :model "unknown" :verdict "providerFail: (:agent :status :failed :receipt (:agentReceipt :status :failed :lastStep (:turn 2 :stop gateIntegrity)))" :ms 1 :at 1))
+(:extra :expect wGateRed :insert model :note "regrade A3 (L7): ERR_PARSE inside an assertion text is not the gate error's leading code"
+ :record (:trialRun :id "A3-errParseInAssertText" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "gate red"))
+  :leon (:stop done :turns 8 :signals () :ops ((:write 3)) :lastGate (:exit 1 :error "assertion failed: expected ERR_PARSE got ok" :failed 1))))
+(:extra :expect wNoEdit :insert harness :note "regrade L8: a tierHop wrapper is stripped before the anchored fail: noEdit"
+ :record (:t :unit "L8-tierHopNoEdit" :from writing :to ready :stage write :model "unknown" :verdict "tierHop paid->strong: fail: noEdit" :ms 1 :at 1))
