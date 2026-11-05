@@ -28,6 +28,17 @@ fn ! leftover repo: String -> Unit
         (_ (sh (list "git" "-C" repo "branch" "-D" "sh/E2E1") repo 60))]
     ())
 
+; (:m :ref E2E-SMOKE-DECLARED-GATE :do "the unit gate is exactly ./bin/asl test SUITE, the declared form, so its assert count is read from the suite; the doc content is asserted below from the dev clone, and the runner owns env policy")
+fn smokeGate -> String
+  "./bin/asl test asl/tools/coord/tests/briefTest.asl"
+
+fn gateDeclared? g: String -> Bool
+  (let [(parts (stringSplit g " "))
+        (at (fn [(i Int64)] -> String (optionOr (listGet parts i) "")))]
+    (and (= (listLength parts) 4)
+      (and (= (at 0) "./bin/asl")
+        (and (= (at 1) "test") (stringEndsWith? (at 2) "Test.asl")))))
+
 fn ! e2e -> Bool
   (let [(repo (resultOr (realPath ".") "."))
         (root (scratch "run"))
@@ -46,7 +57,7 @@ fn ! e2e -> Bool
         (_ (dirCreate (str store "/tasks")))
         (_ (fileWrite (str store "/tasks/E2E1.txt")
                       "Create the file docs/e2eSmoke.md containing exactly one line: conductor e2e smoke. Change nothing else."))
-        (put (st/put! store (st/Task :id "E2E1" :owns (list "docs/e2eSmoke.md") :reads (list) :gate "grep -q 'conductor e2e smoke' docs/e2eSmoke.md && env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl test asl/tools/coord/tests/briefTest.asl" :channel "free" :model "" :base baseSha :after (list) :st "queued" :epoch 0 :receipt "")))
+        (put (st/put! store (st/Task :id "E2E1" :owns (list "docs/e2eSmoke.md") :reads (list) :gate (smokeGate) :channel "free" :model "" :base baseSha :after (list) :st "queued" :epoch 0 :receipt "")))
         (ctx (cd/Ctx :dir store :holder "e2e" :ttlMs 3600000 :maxWait 100 :maxSame 3 :stageSec 3000 :maxDesc 200 :launch (cd/realLaunch args store) :pace (cd/fixedPace 1 1)))
         (settled (pump! ctx (+ (/ (nowNs) 1000000) 2400000)))
         (journal (readOr (str store "/journal.asn")))
@@ -74,9 +85,13 @@ fn ! e2e -> Bool
 
 fn ! runTests -> Bool
   (let [(on (enabled))]
+    (do (assert (gateDeclared? (smokeGate)) "the e2e unit gate is the declared form ./bin/asl test SUITE")
+        (assert (not (gateDeclared? "grep -q x f && ./bin/asl test a/bTest.asl")) "a compound gate is not declared")
+        (assert (not (gateDeclared? "env -u ASL_ROOT ./bin/asl test a/bTest.asl")) "an env prefix is not declared")
+        (assert (not (gateDeclared? "echo '1 assertion(s) executed (1 passed)'")) "an echo gate is not declared")
     (if on
       (do (assert (e2e) "e2e smoke")
           true)
       (do (println "(:skip :suite e2eSmokeTest :why \"ASL_E2E is not 1\")")
           (assert (not (enabled)) "the skip cause holds: ASL_E2E is not 1")
-          true)))
+          true))))
