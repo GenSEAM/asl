@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [suiteGateChecks! Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! vcsDirectCheck! Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -10,6 +10,7 @@
       (asl-gates/runnerLedger :a rl)
       (asl-gates/suiteRunner :a sr)
       (asl-gates/auditForeign :a af)
+      (asl-gates/vcsDirectAudit :a vda)
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
       (asl-tools/agentSurfaceAudit :a asa)
@@ -770,13 +771,25 @@ fn cmdCheck! root: String argv: (List String) -> AuditRun
                         argv))]
       (emit "check" checks "" "" false)))
 
+; (:m :ref VCS-AUDIT-WIRE :do "vcsDirectAudit as one consistency check: a git commit, add, push, update-ref or checkout site outside the allowlist (.asl/mem/vcsDirectAllow.asn, compared with the merge base with main) fails it and the evidence names the sites; a tree without the allowlist skips it, an audit error fails it")
+fn vcsDirectCheck! root: String -> Check
+  (let [(allow (str root "/.asl/mem/vcsDirectAllow.asn"))]
+    (if (not (isFile! allow))
+      (skippedCheck "vcsDirect" ".asl/mem/vcsDirectAllow.asn absent")
+      (match (vda/auditAt! root allow "")
+        ((err e) (failCheck "vcsDirect" "ERR_VCS_DIRECT_AUDIT" e (none) (none)))
+        ((ok receipt)
+          (if (stringContains? receipt ":status :ok")
+            (passCheck "vcsDirect" (none) (none))
+            (failCheck "vcsDirect" "ERR_VCS_DIRECT" receipt (none) (none)))))))
+
 fn cmdConsistency! root: String argv: (List String) -> AuditRun
   (let [(c1 (syntaxCheck! root "syntax"))
         (c2 (list (remoteCheck! root) (ssotCheck! root)))
         (c3 (emojiCheck! root))
         (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
-        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root)))
+        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheck! root)))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]
     (emit "consistency" checks "" "" false))
 
