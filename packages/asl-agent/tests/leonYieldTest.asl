@@ -61,6 +61,9 @@ fn ! pureTests -> Bool
       (assert (= (m/nextReadStreakOf false true 3 5) 5) "a stalled turn past the cap holds the streak")
       (assert (= (m/nextReadStreakOf false true 1 5) 6) "a stalled turn within the cap extends it")
       (assert (= (m/nextReadStreakOf false false 9 5) 6) "a plain read extends it")
+      (assert (= (m/nextReadStreakOf false true 2 5) 6) "boundary: a stalled streak equal to the cap still extends")
+      (assert (= (m/nextReadStreakOf false true 3 5) 5) "boundary: one past the cap holds")
+      (assert (and (= (m/stalledTurnCapIn "") 12) (= (m/stalledTurnCapIn "(:aslConfig :agentLoop (:stalledTurnCap 3))") 3)) "stalledTurnCap defaults to 12 and reads the :agentLoop row")
       (assert (= (m/nextReadStreakOf true false 0 5) 0) "a persisted write resets it")
       true))
 
@@ -73,8 +76,9 @@ fn ! runTests -> Bool
     (do
       (assert pure "pure helpers")
       (assert (stringContains? reads.journal ":signal :readStreak") "control: sixteen pure-read turns with a red gate still stop as readStreak")
-      (assert (not (stringContains? refused.journal ":signal :readStreak")) "sixteen turns of refused writes with a red gate do not stop as readStreak")
-      (assert (stringContains? refused.journal ":reply \"(:step :op \\\"write\\\" :file \\\"other15.txt\\\"") "the refused-write run really reached its sixteenth turn")
+      (assert (not (stringContains? refused.journal ":signal :readStreak :reason")) "refused writes do not end as the plain readStreak stop")
+      (assert (stringContains? refused.journal ":signal :readStreak :cause :refusedWrites") "twelve stalled turns after a persisted write stop as readStreak with cause refusedWrites")
+      (assert (and (stringContains? refused.journal "other11.txt") (not (stringContains? refused.journal "other12.txt"))) "the stop lands on the twelfth stalled turn")
       (assert (stringContains? escalated.journal ":signal :modelEscalated :reason \"cannot see the cause\"") "a model escalate stops the run as modelEscalated with its reason")
       (assert (not (stringContains? escalated.journal ":signal :readStreak")) "a model escalate is not recorded as readStreak")
       (assert (not (stringContains? escalated.journal "(:turn 4 :reply")) "the run ends at the escalate turn")

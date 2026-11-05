@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf nextReadStreakOf stalledTurnCapIn dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1688,6 +1688,15 @@ fn duplicateOpsNote dropped: Int64 -> String
 fn writeAttempt? ops: (List (List (Pair String c/KvVal))) -> Bool
   (listAny? (fn [o] (listContains? (list "write" "edit") (liveOpName o))) ops)
 
+; (:m :ref LEON-YIELD-F2B :do "audit: after one persisted write, refused writes on every turn were stopped only by wallBudget; stalledTurnCap (adopted 12, :agentLoop :stalledTurnCap in the run root's .asl.config.asn) consecutive turns that persisted nothing and read a missing file or attempted a write or edit stop the run as readStreak with cause refusedWrites (notFound when no write was attempted)")
+fn defaultStalledTurnCap -> Int64
+  12
+
+fn stalledTurnCapIn cfgText: String -> Int64
+  (match (ac/agentLoopValue cfgText ":stalledTurnCap")
+    ((some v) (optionOr (ac/positiveInt v) (defaultStalledTurnCap)))
+    ((none) (defaultStalledTurnCap)))
+
 fn nextReadStreakOf wrote: Bool stalledTurn: Bool stalledStreak: Int64 readStreak: Int64 -> Int64
   (cond (wrote 0) ((and stalledTurn (> stalledStreak (notFoundStreakCap))) readStreak) (else (+ readStreak 1)))
 
@@ -2120,6 +2129,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   modelReason (optionOr (modelEscalationReason operations) "")
                   modelStop (and (some? modelEscalation) (not terminal))
                   _ (if modelStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :modelEscalated :reason \"" (c/escapeAsn modelReason) "\")\n"))) true)
+                  stalledStop (and (not terminal) (and notFoundTurn (>= notFoundStreak (stalledTurnCapIn (ac/configText! rootDir)))))
+                  stalledCause (if (writeAttempt? operations) "refusedWrites" "notFound")
+                  stalledReason (str (stringFromInt64 notFoundStreak) " turns in a row persisted nothing (" stalledCause ")")
+                  _ (if stalledStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readStreak :cause :" stalledCause " :reason \"" stalledReason "\")\n"))) true)
                   wallHalt (and wallStop (not terminal))
                   wallReason (str (stringFromInt64 (optionOr gateLeft 0)) " s of the wall budget left, under the " (stringFromInt64 gateMin) " s a gate run needs")
                   _ (if wallHalt (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :wallBudget :reason \"" wallReason "\")\n"))) true)
@@ -2127,6 +2140,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (modelStop
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "modelEscalated") modelEscalation state.runStarted) counts)))
+                    (stalledStop
+                      (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
+                        "escalated" (some "readStreak") (some (str "(:escalate :reason \"" stalledReason "\")")) state.runStarted) counts)))
                     (wallHalt
                       (rl/withState nextRun0 (withCounts (rl/withHeadState nextRun0.state turn nextRun0.state.readStreak writesPersisted deliver allGates lastGates
                         "escalated" (some "wallBudget") (some (str "(:escalate :reason \"" wallReason "\")")) state.runStarted) counts)))
@@ -2141,7 +2157,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                         "escalated" (some "repeatFailure") (some (str "(:escalate :reason \"" repeatReason "\")")) state.runStarted) counts)))
                     (else (rl/withState nextRun0 (with (withMalformedStreak (withDoneStreak (withCounts nextRun0.state counts) doneStreak) malformedStreak) :notFoundStreak notFoundStreak))))]
               (pair (rl/ProviderRun :run nextRun :provider response.provider :history history)
-                    (if (or terminal (or repeatStop (or wallHalt (or doneStop (or malformedStop modelStop))))) (stop) (nextTurn)))))))))
+                    (if (or terminal (or repeatStop (or wallHalt (or doneStop (or malformedStop (or modelStop stalledStop)))))) (stop) (nextTurn)))))))))
 
 fn ! liveJournal ra: RunArgs rootDir: String -> (Result (Pair String String) String)
   (match (dirCreate (pyJoin rootDir ".asl/run/agentLoop"))
