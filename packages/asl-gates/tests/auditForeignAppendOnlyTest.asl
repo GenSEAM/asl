@@ -38,6 +38,11 @@ fn appendedOnly -> String
        "  (:raise :path \"a.sh\" :lang :shell :lines 3 :py 0 :reason \"fixture\" :date \"2026-11-01\")"
        ")\n")
 
+fn movedClose -> String
+  (str (baseLines) (pastRaise "4") "\n"
+       "  (:raise :path \"a.sh\" :lang :shell :lines 3 :py 0 :reason \"fixture\" :date \"2026-11-01\")\n"
+       ")\n")
+
 fn rewrittenPast -> String
   (str (baseLines) (pastRaise "7") ")\n")
 
@@ -83,6 +88,9 @@ fn failingEv au: Audit -> String
 fn appendOnlyStatus au: Audit -> String
   (stringJoin (map (fn [(c Check)] -> String c.status) (filter (fn [(c Check)] -> Bool (= c.id "foreignRaise")) au.checks)) " ")
 
+fn movedFailing! root: String base: String -> (List String)
+  (resultOr (resultMap (auditWith! root base (movedClose)) (fn [(au Audit)] -> (List String) (failingIds au))) (list "auditError"))
+
 fn ! runTests -> Bool
   (match (sr/makeTempDir! "aslFbAppendOnly")
     ((err e) (do (assert false (str "temp dir: " e)) false))
@@ -102,6 +110,7 @@ fn ! runTests -> Bool
                  (do
                    (assert (listEmpty? (failingIds appended)) (str "unchanged base plus an appended row is green, failing: " (stringJoin (failingIds appended) " ")))
                    (assert (= (appendOnlyStatus appended) ":passed") "the append-only check exists and passes for an appended row")
+                   (assert (listEmpty? (movedFailing! root base)) "an append that moves the closing paren off the old last row stays green")
                    (assert (listContains? (failingIds rewritten) "foreignRaise") "a past :raise row rewritten to other numbers fails foreignRaise")
                    (assert (stringContains? (failingEv rewritten) "a.sh") "the rewrite finding names the path")
                    (assert (stringContains? (failingEv rewritten) ":lines 4 :py 0") "the rewrite finding quotes the old form")
