@@ -1,5 +1,5 @@
 (module asl-tools/coord/tests/fixtures/pipeFix
-  :x [startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
+  :x [e2eRepo! scriptLeon! devCloneFor! e2eLaunch e2eCtx tosOf journalLines startHubFor! envFor prepare! receiptFor! verdictOf sigOf scratch cleanup sh here repoIn unitIn cuIn seedUnit! stageChild! readResOf! listenWait! startHub! stopHub! hubSeen gatewayText lanesText]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref PIPE-GATES :do "shared fixtures of the real-path pipeline tests: scratch dirs under this worktree's .asl/cache, a temp git repo with a gate script, a temp store, and the real stage child bin/asl run conductor.asl stage started only through fleet/run.asl under a timeout")
@@ -107,3 +107,57 @@ fn verdictOf r: (Result cd/Res String) -> String
 
 fn sigOf r: (Result cd/Res String) -> String
   (match r ((ok x) x.sig) ((err _) ""))
+
+; (:m :ref PIPE-E2E-HERMETIC :do "fixtures of the whole-cycle test: a temp repo that also carries a hub-client stub and an ignored bin/asl, which is the scripted Leon (the conductor starts Leon as REPO/bin/asl with an (:agent ...) form; the stand-in adds :backend script/e2e so the real Leon loop runs against a fixture of replies, every other call passes to the real bin/asl); a dev clone with a recording train stand-in; the stage launch argv with a temp HOME; a Ctx")
+fn escTurn s: String -> String
+  (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n")
+
+fn ! e2eRepo! root: String -> String
+  (let [(repo (repoIn root))
+        (made (if (stringEmpty? repo) ""
+                (sh (str "cd " repo " && mkdir -p asl/packages/asl-agent/src && printf 'fn hubAsnPath -> String\n  \"\"\n' > asl/packages/asl-agent/src/providers.asl"
+                         " && printf '(:aslConfig :agentLoop (:specCheck false :baseline false))\n' > .asl.config.asn"
+                         " && printf '.asl/\ntests/\nbin/\n' >> .git/info/exclude && git add -A && git commit -qm c1 && echo madeOk"))))]
+    (if (stringContains? made "madeOk") repo ""))
+
+; (:m :do "replies: one scripted Leon turn each; the wrapper copies the fixture into the worktree it runs in (its cwd), then runs the real Leon on it")
+fn ! scriptLeon! root: String replies: (List String) -> Bool
+  (let [(h (here))
+        (fixture (str root "/leonFixture.asn"))
+        (turns (stringJoin (map (fn [(pr (Pair Int64 String))] -> String (str "    (:turn :num " (stringFromInt64 (+ (pairFirst pr) 1)) " :reply \"" (escTurn (pairSecond pr)) "\")\n")) (enumerate replies)) ""))
+        (_ (fileWrite fixture (str "(:script :id \"e2e\" :mode :scout\n  :turns (\n" turns "  )\n)\n")))
+        (exports (stringJoin (map (fn [(r String)] -> String (str "  export " r "\n")) (fr/cacheEnv!)) ""))
+        (body (str "#!/bin/sh\ncase \"$1\" in\n\"(:agent\"*)\n  mkdir -p \"$PWD/tests/fixtures/agentLoop/mvp\" && cp " fixture " \"$PWD/tests/fixtures/agentLoop/mvp/e2e.asn\"\n"
+                   exports "  F=\"${1%)}\"\n  " h "/bin/asl \"$F :backend \\\"script/e2e\\\")\"\n  C=$?\n  echo '(:servedBy :model \"kmK31Pro\")'\n  exit $C ;;\n*) exec " h "/bin/asl \"$@\" ;;\nesac\n"))
+        (_ (dirCreate (str root "/repo/bin")))
+        (w (fileWrite (str root "/repo/bin/asl") body))
+        (c (sh (str "chmod 755 " root "/repo/bin/asl && echo chmodOk")))]
+    (and (ok? w) (stringContains? c "chmodOk")))
+
+; (:m :do "dev clone on branch dev of the temp repo, taken after the repo's last commit; its bin/asl records its argv in .git/trainArgs and merges the branch it is given (the one stand-in of a merge: a real train needs a full workspace)")
+fn ! devCloneFor! root: String -> String
+  (let [(dev (str root "/dev"))
+        (made (sh (str "git clone -q " root "/repo " dev " && cd " dev " && git config user.email t@example.invalid && git config user.name t && git checkout -q -b dev && mkdir -p bin"
+                       " && printf '#!/bin/sh\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\necho \"$@\" >> \"$D/.git/trainArgs\"\ngit -C \"$D\" merge --no-ff -q -m \"train $2\" \"$2\" || exit 1\nexit 0\n' > bin/asl && chmod 755 bin/asl && echo bin/asl >> .git/info/exclude && echo madeOk")))]
+    (if (stringContains? made "madeOk") dev ""))
+
+; (:m :do "stage child argv: the real conductor stage with its own HOME (hub.asn, gateway.asn, lanes), gateway env pointing nowhere so only the hub answers, the temp repo as repo and the dev clone as dev repo")
+fn e2eLaunch root: String -> (fn [String st/Task cd/CUnit] -> (List String))
+  (let [(h (here))]
+    (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String)
+      (listAppend (listAppend (list "/usr/bin/env" (str "HOME=" root "/home")) (fr/cacheEnv!))
+        (list "ASL_GATEWAY_URL=http://127.0.0.1:1/v1/chat/completions" (str "ASL_GATEWAY_CONFIG=" root "/home/.asl/gateway.asn")
+              (str h "/bin/asl") "run" (str h "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" (str root "/store") "--repo" (str root "/repo")
+              "--dev-repo" (str root "/dev") "--dev" "dev" "--worktrees" (str root "/wts") "--home" (str root "/home") "--lanes" (str root "/home/lanes.asn")))))
+
+fn e2eCtx root: String stageSec: Int64 -> cd/Ctx
+  (cd/Ctx :dir (str root "/store") :holder "pipeE2eTest" :ttlMs 3600000 :maxWait 5 :maxSame 3 :stageSec stageSec :maxDesc 200
+          :launch (e2eLaunch root) :pace (cd/fixedPace 4 4))
+
+fn ! journalLines dir: String -> (List String)
+  (match (fileReadString (cd/journalPath dir)) ((ok t) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines t))) ((err _) (list)))
+
+; (:m :do "the :to states of one unit's transition rows, in journal order")
+fn ! tosOf dir: String id: String -> (List String)
+  (map (fn [(l String)] -> String (optionOr (listHead (stringSplit (optionOr (listGet (stringSplit l ":to ") 1) "") " ")) ""))
+       (filter (fn [(l String)] -> Bool (stringContains? l (str "(:t :unit \"" id "\" "))) (journalLines dir)))
