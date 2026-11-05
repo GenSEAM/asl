@@ -1030,7 +1030,7 @@ fn dirOf p: String -> String
   (let [(parts (stringSplit p "/"))]
     (stringJoin (listTake parts (max 0 (- (listLength parts) 1))) "/"))
 
-; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can; a refusal needs positive evidence, an unreadable or ambiguous case is admitted: an owned path whose directory is absent on the base but was on its history (removed, as asl/agentLoop was for asl/packages/asl-agent, 17 node2 units) while the task text does not name it, a gate file absent on the base that was on its history and that the unit neither owns, nor sits under an owned directory of, nor names in its task, a handoff branch the task cites (main..sh/NAME) that is merged into the base, or is missing while no commit on the base carries NAME in its message and no commit sha the task cites exists; a directory that never existed (a new tests/ under a live package) is the unit's to create")
+; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can; a refusal needs positive evidence, an unreadable or ambiguous case is admitted: an owned path whose directory is absent on the base but was on its history (removed, as asl/agentLoop was for asl/packages/asl-agent, 17 node2 units) while the task text does not name it, a gate file absent on the base that was on its history and that the unit neither owns, nor sits under an owned directory of, nor names in its task, a handoff branch the task cites (main..sh/NAME) that is merged into the base when the task is only the handoff (GRADE-AND-LAND), or is missing while no commit on the base carries NAME in its message (a cited tip sha that still exists does not admit it); a directory that never existed (a new tests/ under a live package) is the unit's to create")
 fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
   (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
     (if (stringEmpty? repo) ""
@@ -1038,7 +1038,7 @@ fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
             (base (baseRef u))
             (task (taskText ctx.dir u))
             (onBase (fn [(path String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str base ":" path))).exit 0)))
-            (hadOnBase (fn [(path String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" base "--" path)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
+            (hadOnBase (fn [(path String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" path)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
             (plain (filter (fn [(p String)] -> Bool (and (not (stringContains? p "*")) (not (stringEndsWith? p "/")))) u.owns))
             (declared (fn [(d String)] -> Bool (or (stringContains? task d) (listAny? (fn [(o String)] -> Bool (and (stringEndsWith? o "/") (stringStartsWith? (str d "/") o))) u.owns))))
             (ownedDirs (listAppend (map dirOf plain) (map (fn [(o String)] -> String (optionOr (stringSlice o 0 (- (stringLength o) 1)) o)) (filter (fn [(o String)] -> Bool (stringEndsWith? o "/")) u.owns))))
@@ -1046,12 +1046,9 @@ fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
             (badDir (listFind (fn [(p String)] -> Bool (let [(d (dirOf p))] (and (not (stringEmpty? d)) (and (not (onBase d)) (and (not (declared d)) (hadOnBase d)))))) plain))
             (badGate (listFind (fn [(f String)] -> Bool (and (not (onBase f)) (and (not (createsGate f)) (hadOnBase f)))) (gateFiles u.gate)))
             (branches (filter (fn [(b String)] -> Bool (not (stringEmpty? b))) (handoffBranches task)))
-            (shas (filter (fn [(w String)] -> Bool (and (>= (stringLength w) 7) (and (<= (stringLength w) 40) (listAll? (fn [(ch String)] -> Bool (or (and (>= (charCode ch) 48) (<= (charCode ch) 57)) (and (>= (charCode ch) 97) (<= (charCode ch) 102)))) (stringChars w)))))
-                          (map (fn [(w String)] -> String (stringReplace (stringReplace (stringReplace (stringReplace w "(" "") ")" "") "," "") "." "")) (stringSplit (stringReplace task "\n" " ") " "))))
-            (shaLive (listAny? (fn [(w String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str w "^{commit}"))).exit 0)) shas))
             (onMain (fn [(b String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--fixed-strings" (str "--grep=" b) base)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
-            (missing (listFind (fn [(b String)] -> Bool (and (!= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/sh/" b))).exit 0) (and (not shaLive) (not (onMain b))))) branches))
-            (merged (listFind (fn [(b String)] -> Bool (= (gitOut repo (list "merge-base" "--is-ancestor" (str "refs/heads/sh/" b) base)).exit 0)) branches))]
+            (missing (listFind (fn [(b String)] -> Bool (and (!= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/sh/" b))).exit 0) (not (onMain b)))) branches))
+            (merged (listFind (fn [(b String)] -> Bool (and (stringContains? task "GRADE-AND-LAND") (= (gitOut repo (list "merge-base" "--is-ancestor" (str "refs/heads/sh/" b) base)).exit 0))) branches))]
         (cond
           ((some? badDir) (str "ownsDirMissing " (dirOf (optionOr badDir "")) " on " base))
           ((some? badGate) (str "gateFileMissing " (optionOr badGate "")))
