@@ -4,7 +4,8 @@
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
       (aslAgent/core :a c) (aslAgent/gates :a g) (asl-json/json :a j)
-      (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)])
+      (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)
+      (asl-tools/vcs/vcs :a vcs)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
@@ -671,24 +672,20 @@ fn ! relativeTo path: String rootDir: String -> String
 fn distinct xs: (List String) -> (List String)
   (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
 
+; (:m :ref LEON-COMMIT-VIA-VCS :do "Leon's writes are committed through the vcs layer: vcs/commit! stages exactly the paths the run wrote, commitGuard judges the blobs that land, and a refusal ends the run commitError with the guard receipt (HEAD unchanged); the layer never uses warn here; :indexStale true lands the commit but leaves a journal row and a flag on the commit row so the stale shared index is visible")
 fn ! commitWritten! env: s/LoopEnv run: LoopRun rootDir: String message: String -> (Result (Pair (Option String) (Option String)) String)
   (let [paths (distinct (map (fn [p] (relativeTo p rootDir))
     (listAppend run.state.writtenFiles (writtenPaths run.written))))]
     (if (listEmpty? paths)
       (commitFailed! env "the run wrote no path to commit")
-      (match (jr/git! rootDir (listAppend (list "ls-files" "--others" "--exclude-standard" "--") paths))
-        ((err e) (err e))
-        ((ok listed)
-          (let [newFiles (filter (fn [f] (not (stringEmpty? f))) (map ctx/pyStrip (stringLines listed.stdout)))]
-            (match (if (listEmpty? newFiles) (ok 0) (match (jr/git! rootDir (listAppend (list "add" "--") newFiles)) ((err e) (err e)) ((ok o) (ok o.exitCode))))
+      (let [r (vcs/commit! rootDir rootDir paths message "commit")]
+        (if (= r.code 0)
+          (if (stringContains? r.text ":indexStale true")
+            (match (headSha! rootDir)
               ((err e) (err e))
-              ((ok _)
-                (match (jr/git! rootDir (listAppend (list "commit" "-m" message "--") paths))
-                  ((err e) (err e))
-                  ((ok done)
-                    (if (= done.exitCode 0)
-                      (committed! env rootDir)
-                      (commitFailed! env (ctx/pyStrip (if (stringEmpty? done.stderr) done.stdout done.stderr)))))))))))))
+              ((ok sha) (journaled! env (str "(:commit \"" sha "\")\n(:commitIndexStale \"" sha "\")\n") (pair (some sha) none))))
+            (committed! env rootDir))
+          (commitFailed! env r.text)))))
 
 fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGreen: Bool -> (Result (Pair (Option String) (Option String)) String)
   (let [message (optionOr run.commitMessage "")]
