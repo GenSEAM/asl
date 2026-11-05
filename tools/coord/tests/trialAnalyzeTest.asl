@@ -53,12 +53,20 @@ fn ! testExtras -> Bool
         (byId (fn [(id String)] -> ta/Verdict
                 (ta/classify (recordOf (optionOr (listFind (fn [(f rd/SExpr)] -> Bool (= (field (recordOf f) ":id") id)) fs) (rd/makeList (list)))))))
         (h1 (byId "H1-readonly"))
+        (p6 (ta/classify (recordOf (optionOr (listFind (fn [(f rd/SExpr)] -> Bool (= (field (recordOf f) ":unit") "P6")) fs) (rd/makeList (list))))))
+        (cut (ta/classify (recordOf (optionOr (listFind (fn [(f rd/SExpr)] -> Bool (= (field (recordOf f) ":unit") "L3-cutAlias")) fs) (rd/makeList (list))))))
+        (quoted (byId "M2-quotedexit"))
+        (gatesExit (byId "M2-gatesexit"))
         (unknown (byId "X1"))]
-    (do (assert (= (listLength fs) 20) (str "20 extra fixtures: " (stringFromInt64 (listLength fs))))
+    (do (assert (= (listLength fs) 43) (str "43 extra fixtures: " (stringFromInt64 (listLength fs))))
         (assert (listEmpty? bad) (str "each extra maps as expected: " (stringJoin bad "; ")))
         (assert (= h1.class "wReadLoop") (str "H1: 37 read-only turns and no signal is wReadLoop: " h1.class))
         (assert (and (= unknown.class "unclassified") (not (stringEmpty? unknown.why))) (str "an unknown shape is unclassified with a reason: " unknown.class))
         (assert (stringEmpty? unknown.insert) "an unclassified record names no insertion point")
+        (assert (and p6.pinUnknown (= p6.model "glmB")) (str "a row served by another alias than :model is flagged pinUnknown: " (ta/classifyText p6)))
+        (assert (and (not cut.pinUnknown) (= cut.model "nimA")) (str "a cut servedAlias is unknown, the row keeps its :model: " (ta/classifyText cut)))
+        (assert (= quoted.why "malformed :exit in gates") (str "a quoted integer is malformed, not -1: " quoted.why))
+        (assert (= gatesExit.why "missing :exit in gates") (str "a missing required key names itself: " gatesExit.why))
         true))
 
 fn ! swapRed a: String b: String -> Bool
@@ -77,6 +85,9 @@ fn ! testPrecedence -> Bool
       (assert (swapRed "wStallKill" "wReadLoop") "swapping wStallKill and wReadLoop misclassifies a fixture")
       (assert (swapRed "wRevertGreen" "wVacuous") "swapping wRevertGreen and wVacuous misclassifies a fixture")
       (assert (swapRed "wNeedsReview" "wGateRed") "swapping wNeedsReview and wGateRed misclassifies a fixture")
+      (assert (swapRed "wMalformed" "wReadLoop") "swapping wMalformed and wReadLoop misclassifies a fixture")
+      (assert (swapRed "wReadLoop" "wRefused") "swapping wReadLoop and wRefused misclassifies a fixture")
+      (assert (swapRed "wCompile" "wGateRed") "swapping wCompile and wGateRed misclassifies a fixture")
       (assert (not (swapRed "wProvider" "noSuchClass")) "a swap with an unknown class changes nothing")
       true)
 
@@ -93,8 +104,8 @@ fn ! testReport -> Bool
         (assert (stringContains? r ":insert ((:hint 5) (:tool 4) (:limit 2) (:harness 12) (:task 3) (:model 2) (:none 1))") (str "insert totals: " r))
         (assert (stringContains? r "(:class wReadLoop :n 1 :insert hint :models (\"nimNvidiaNemotron35SuperVl120bA12b\") :exemplar \"T1-Nim-readloop\")") (str "byClass row: " r))
         (assert (stringContains? r ":unclassifiedWhy ())") (str "no unclassified reasons: " r))
-        (assert (stringContains? all (str ":runs " (stringFromInt64 (+ 29 extras)) " :merged 1 :unclassified 5 :partial 14 ")) (str "full report counts: " all))
-        (assert (stringContains? all "(:why \"readStreak without :cause and without op evidence\" :n 1)") (str "reasons grouped: " all))
+        (assert (stringContains? all (str ":runs " (stringFromInt64 (+ 29 extras)) " :merged 1 :unclassified 15 :partial 24 :pinBroken 2 :pinUnknown 1 ")) (str "full report counts: " all))
+        (assert (stringContains? all "(:why \"readStreak without :cause and without op evidence\" :n 2)") (str "reasons grouped: " all))
         true))
 
 fn ! testRecordsOf -> Bool
@@ -112,8 +123,8 @@ fn ! testRecordsOf -> Bool
         true))
 
 fn ! runTests -> Bool
-  (do (assert (testClasses) "one fixture per class maps to its class and insert")
-      (assert (testExtras) "H1, unknown shapes, node2 records and rows map as expected")
+  (do (assert (testExtras) "H1, unknown shapes, node2 records and rows map as expected")
+      (assert (testClasses) "one fixture per class maps to its class and insert")
       (assert (testPrecedence) "precedence swaps that a fixture pins go red")
       (assert (testReport) "report counts by model, class and insert")
       (assert (testRecordsOf) "file reading: write rows per line, trialRun forms across lines")

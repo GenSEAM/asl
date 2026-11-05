@@ -151,7 +151,7 @@
  :record (:t :unit "AUD-FINDING" :from writing :to blocked :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "escalated: vacuousGate: ./bin/asl test asl/tools/tests/auditFindingTest.asl" :ms 1003714 :at 1793759079917))
 (:extra :expect wNoEdit :insert harness :note "node2 production row"
  :record (:t :unit "COV-ASL-RUNTIME-Float" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: noEdit" :ms 26875 :at 1793809410427))
-(:extra :expect wInfra :insert harness :note "node2 production row"
+(:extra :expect wInfra :insert harness :note "reconstructed from a node2 row: the real TRAIN-PREEXISTING-MASK verdict is longer (untracked-files tail cut here) and its :at differs"
  :record (:t :unit "TRAIN-PREEXISTING-MASK" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: stale branch recreate failed: fatal: no branch named 'sh/TRAIN-PREEXISTING-MASK'" :ms 0 :at 1793760000000))
 (:extra :expect unclassified :note "node2 gap: readStreak on 47212a0d7 has no :cause and the row has no ops"
  :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "unknown" :tokens 0 :costUsd 0.000000 :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :lastStep (:turn 12 :op \"run\") :servedAlias \"orNvidiaNemotron35SuperVlFree\"" :ms 73445 :at 1793772685811))
@@ -165,5 +165,70 @@
  :record (:t :unit "FPIN-R4" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "stalled" :ms 0 :at 1793772498343))
 (:extra :expect unclassified :note "a passed production write row: later stages are not in the row"
  :record (:t :unit "STD-TRIE" :from writing :to gating :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "written" :ms 28 :at 1793820705800))
-(:extra :expect wWall :insert limit :note "node2 production row: the pooled run outlived its lease"
+(:extra :expect wWall :insert limit :note "reconstructed: the verdict text is real (LL-BUF-RT, RELAY-PUSH-SHORTNAME, AUDIT-META-ROUTE rows), the unit and :at are made up"
  :record (:t :unit "STD-STATS" :from writing :to ready :stage write :model "" :tokens 0 :costUsd 0.000000 :verdict "fail: lease ended before the pooled run did" :ms 0 :at 1793790000000))
+(:extra :expect wProvider :insert limit :note "M3 noTransient: a transient gateway error with no provider stop"
+ :record (:trialRun :id "M3-transient" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "boom" :ms 1000))
+  :leon (:stop "" :turns 4 :signals () :ops ((:read 2) (:write 1)) :err (:class :transient :code "ERR_NO_UPSTREAM"))))
+(:extra :expect wReadLoop :insert hint :note "M3 causeFirst: the first signal says refusedWrites, the last notFound; the last one counts"
+ :record (:trialRun :id "M3-lastcause" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "(:agentReceipt :stop readStreak)" :ms 1000))
+  :leon (:stop readStreak :turns 12 :signals ((:readStreak :cause refusedWrites) (:readStreak :cause notFound)) :ops ((:read 10) (:write 2)))))
+(:extra :expect wPinBroken :insert harness :note "M3 pinFlagIgnored: the record's :pinBroken flag with served equal to alias"
+ :record (:trialRun :id "M3-pinflag" :alias "hzQwen3827b" :served "hzQwen3827b" :pinBroken true :known merge
+  :stages ((:write :ok true :exit 0 :sig "written" :ms 900) (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false))) (:merge :ok true :sig "" :branch "trialDev-M3"))))
+(:extra :expect wWall :insert limit :note "M3 wallNoKilled: the child killed at its limit without a wallBudget signal"
+ :record (:trialRun :id "M3-killed" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 137 :sig "timeout" :killed true :ms 1800000))
+  :leon (:stop "" :turns 5 :signals () :ops ((:read 2) (:write 2)))))
+(:extra :expect unclassified :note "audit P1: an assert message mentioning 429 is not a provider error"
+ :record (:t :unit "P1" :from writing :to ready :stage write :model "unknown" :verdict "fail: ERR_ASSERT: assertion failed: expected 429 got 200" :ms 1 :at 1))
+(:extra :expect unclassified :note "audit P2: readStreak with a path noEdits? in the receipt stays the readStreak gap"
+ :record (:t :unit "P2" :from writing :to ready :stage write :model "unknown" :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :lastStep (:turn 12 :op \"read\" :file \"src/noEdits?.asl\") :servedAlias \"nimNemotronUltra\"" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "audit P3: ERR_NATIVE_STALE in task text quoted by the receipt is not a tool-root error"
+ :record (:t :unit "P3" :from writing :to ready :stage write :model "unknown" :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :findings (\"task text: map ERR_NATIVE_STALE to a retry\") :stop repeatFailure :lastStep (:turn 4 :op \"write\") :servedAlias \"nimNemotronUltra\"" :ms 1 :at 1))
+(:extra :expect unclassified :note "audit P4: unsettled is not a settle verdict"
+ :record (:t :unit "P4" :from writing :to ready :stage write :model "unknown" :verdict "fail: test unsettled timing" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "audit P5: a quoted :stop provider before the receipt's own :stop"
+ :record (:t :unit "P5" :from writing :to ready :stage write :model "unknown" :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :findings (\"the log said :stop provider once\") :stop repeatFailure :lastStep (:turn 7 :op \"write\") :servedAlias \"nimNemotronUltra\"" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "audit P6 and L3: served by glmB while the row names nimA; classed, flagged :pinUnknown"
+ :record (:t :unit "P6" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :stop repeatFailure :lastStep (:turn 5 :op \"write\") :servedAlias \"glmB\")" :ms 1 :at 1))
+(:extra :expect wDoneNoWrite :insert hint :note "audit P7: a task about a circuit breaker is not a provider breaker"
+ :record (:t :unit "P7" :from writing :to ready :stage write :model "unknown" :verdict "fail: (:agent :status :failed :receipt (:agentReceipt :status :escalated :findings (\"task: circuit breaker module\") :stop doneNoWrite :lastStep (:turn 22 :op \"done\") :servedAlias \"nimNemotronUltra\"" :ms 1 :at 1))
+(:extra :expect unclassified :note "audit P8: an unknown stop with an edit path vacuousGate.asl"
+ :record (:t :unit "P8" :from writing :to ready :stage write :model "unknown" :verdict "fail: (:agentReceipt :status :escalated :stop fooBar :lastStep (:turn 3 :op \"edit\" :file \"tools/vacuousGate.asl\") :servedAlias \"nimNemotronUltra\")" :ms 1 :at 1))
+(:extra :expect unclassified :note "audit odd02 (M2): a write stage without :ok"
+ :record (:trialRun :id "M2-writeok" :alias "hzQwen3827b" :served "hzQwen3827b" :stages ((:write :exit 1 :sig "x")) :leon (:stop doneNoWrite :turns 3 :signals (doneNoWrite) :ops ((:read 3)))))
+(:extra :expect unclassified :note "audit odd03 (M2): a gates stage without :exit"
+ :record (:trialRun :id "M2-gatesexit" :alias "hzQwen3827b" :served "hzQwen3827b" :stages ((:write :ok true :sig "written") (:gates :executed 5)) :leon (:stop done :turns 3 :signals () :ops ((:write 1)) :lastGate (:exit 0 :error "" :failed 0))))
+(:extra :expect unclassified :note "audit odd04 (M2): a review stage with a misspelt verdict key"
+ :record (:trialRun :id "M2-verdict" :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :sig "written") (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4)) (:review :verdikt pass :reviewers ()))))
+(:extra :expect unclassified :note "audit odd10 (M2, L5): a quoted integer in gates :exit"
+ :record (:trialRun :id "M2-quotedexit" :alias "hzQwen3827b" :served "hzQwen3827b" :stages ((:write :ok true :sig "written") (:gates :exit "0" :executed 5)) :leon (:stop done :turns 3 :signals () :lastGate (:exit 0 :error "" :failed 0))))
+(:extra :expect wGateRed :insert model :note "audit odd06 (L1): an assertion message saying parse error is not a compile error"
+ :record (:trialRun :id "L1-parsetext" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "gate red"))
+  :leon (:stop done :turns 6 :signals () :ops ((:write 2)) :lastGate (:exit 1 :error "ERR_ASSERT assertion failed: want a parse error for (a" :failed 1))))
+(:extra :expect unclassified :note "audit odd09 (L2): constraint is not train"
+ :record (:trialRun :id "L2-constraint" :alias "hzQwen3827b" :served "hzQwen3827b" :known merge
+  :stages ((:write :ok true :sig "written") (:gates :exit 0 :executed 12 :redBefore (:exit 1 :executed 4))
+           (:review :verdict pass :sig "" :reviewers ((:alias "hzQwen3827bGrade" :verdict pass :defects 0 :empty false))) (:merge :ok false :sig "constraint check failed"))))
+(:extra :expect wMalformed :insert tool :note "precedence: malformed replies during a notFound read loop; pins wMalformed before wReadLoop"
+ :record (:trialRun :id "PR-malread" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "x"))
+  :leon (:stop readStreak :turns 12 :signals ((:readStreak :cause notFound)) :ops ((:read 12)) :malformed 3)))
+(:extra :expect wReadLoop :insert hint :note "precedence: a notFound read loop that also had an owns refusal; pins wReadLoop before wRefused"
+ :record (:trialRun :id "PR-readrefused" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "x"))
+  :leon (:stop readStreak :turns 12 :signals ((:readStreak :cause notFound)) :ops ((:read 11)) :ownsRejected 2)))
+(:extra :expect wCompile :insert hint :note "precedence: a compile error and a failed assert in one gate run; pins wCompile before wGateRed"
+ :record (:trialRun :id "PR-compilered" :alias "hzQwen3827b" :served "hzQwen3827b"
+  :stages ((:write :ok false :exit 1 :sig "gate red"))
+  :leon (:stop done :turns 8 :signals () :ops ((:write 3)) :lastGate (:exit 1 :error "asl/x.asl:3:1: ERR_UNKNOWN_SYMBOL unbound symbol: foo" :failed 1))))
+(:extra :expect unclassified :note "M1: noEdit inside a longer conductor text is not the anchored verdict fail: noEdit"
+ :record (:t :unit "M1-noEditText" :from writing :to ready :stage write :model "unknown" :verdict "fail: gate tests/noEditTest.asl missing" :ms 1 :at 1))
+(:extra :expect wRepeat :insert tool :note "L3: a receipt cut inside its servedAlias keeps the row's :model and is not pinUnknown"
+ :record (:t :unit "L3-cutAlias" :from writing :to ready :stage write :model "nimA" :verdict "fail: (:agentReceipt :status :escalated :stop repeatFailure :servedAlias \"nimNvid" :ms 1 :at 1))

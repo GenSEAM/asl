@@ -5,12 +5,12 @@
 ; (:m :ref TRIAL-ANALYZE :do "pure stall classifier for the Leon trial, taxonomy trialStall-v1 (scratchpad leonTrialDesign.asn :analysis): a (:trialRun ...) record, or a partial record from a production (:t ... :stage write) row, becomes one class and its insertion point; the class comes from the first stage that did not pass, inside write from the Leon :stop, the last signal and the gate output, checked in the order of rules; no rule matching means :unclassified with a reason, never a guess")
 
 (schema Facts
-  (:f id String) (:f alias String) (:f served String) (:f pinBroken Bool) (:f known String) (:f seeded Bool) (:f partial Bool)
+  (:f id String) (:f alias String) (:f served String) (:f pinBroken Bool) (:f pinUnknown Bool) (:f known String) (:f seeded Bool) (:f partial Bool) (:f defect String)
   (:f hasLeon Bool) (:f stop String) (:f signals (List String)) (:f cause String)
   (:f opsKnown Bool) (:f ops (List (Pair String Int64))) (:f opErrors (List (Pair String Int64)))
   (:f ownsRejected Int64) (:f needsConfirm Int64) (:f turns Int64) (:f malformed Int64) (:f errClass String)
   (:f gateExit Int64) (:f gateError String) (:f gateFailed Int64)
-  (:f hasWrite Bool) (:f writeOk Bool) (:f writeSig String) (:f killed Bool)
+  (:f hasWrite Bool) (:f writeOk Bool) (:f writeSig String) (:f cond String) (:f killed Bool)
   (:f hasGates Bool) (:f gatesExit Int64) (:f executed Int64) (:f redBefore Bool)
   (:f hasReview Bool) (:f reviewVerdict String) (:f reviewSig String) (:f reviewers Int64) (:f reviewersEmpty Int64) (:f leadCheck String)
   (:f hasMerge Bool) (:f mergeOk Bool) (:f mergeSig String))
@@ -19,7 +19,7 @@
   (:f class String) (:f stage String) (:f insert String) (:f alt String) (:f test (fn [Facts] -> Bool)))
 
 (schema Verdict
-  (:f id String) (:f model String) (:f class String) (:f insert String) (:f alt String) (:f why String) (:f partial Bool) (:f pinBroken Bool))
+  (:f id String) (:f model String) (:f class String) (:f insert String) (:f alt String) (:f why String) (:f partial Bool) (:f pinBroken Bool) (:f pinUnknown Bool))
 
 fn taxonomy -> String
   "trialStall-v1"
@@ -106,13 +106,86 @@ fn signalCause x: rd/SExpr -> String
 fn kvCause xs: (List rd/SExpr) -> String
   (match (kvPairs xs ":cause") ((some v) (bare (atomOf v))) ((none) ""))
 
+; (:m :ref TRIAL-ANALYZE-M2 :do "required keys per stage: write :ok and merge :ok are true or false, gates :exit and :executed are plain integers, review has a :verdict; Leon counts and the lastGate, err and redBefore numbers, when present, are plain integers; a missing or malformed key makes the record unclassified with a reason naming the key and stage, never a nearby class, and a quoted integer is malformed, never a default")
+fn okKind v: rd/SExpr kind: String -> Bool
+  (cond
+    ((= kind "int") (and (rd/isAtom? v) (some? (stringToInt64 (atomOf v)))))
+    ((= kind "bool") (and (rd/isAtom? v) (listContains? (list "true" "false") (atomOf v))))
+    (else true))
+
+fn keyDefect s: rd/SExpr key: String stage: String kind: String -> String
+  (match (kvOf s key)
+    ((none) (str "missing " key " in " stage))
+    ((some v) (if (okKind v kind) "" (str "malformed " key " in " stage))))
+
+fn optDefect s: rd/SExpr key: String stage: String kind: String -> String
+  (if (has? s key) (keyDefect s key stage kind) "")
+
+fn firstDefect ds: (List String) -> String
+  (optionOr (listFind (fn [(d String)] -> Bool (not (stringEmpty? d))) ds) "")
+
+fn stageDefects st: (Option rd/SExpr) checks: (fn [rd/SExpr] -> (List String)) -> (List String)
+  (match st ((some x) (checks x)) ((none) (list)))
+
+fn dropPrefix s: String ps: (List String) -> String
+  (match (listFind (fn [(p String)] -> Bool (stringStartsWith? s p)) ps)
+    ((some p) (optionOr (stringSlice s (stringLength p) (stringLength s)) ""))
+    ((none) s))
+
+; (:m :ref TRIAL-ANALYZE-M1 :do "a tierHop A->B: wrapper is the conductor's own prefix before the verdict it moved; it is dropped as often as it repeats")
+fn stripWrap s: String -> String
+  (if (stringStartsWith? s "tierHop ")
+    (match (stringIndexOf s ": ")
+      ((some at) (stripWrap (optionOr (stringSlice s (+ at 2) (stringLength s)) "")))
+      ((none) s))
+    s)
+
+fn verdictBody v: String -> String
+  (dropPrefix (stripWrap (stringTrim v)) (list "fail: " "escalated: " "providerFail: "))
+
+fn infraPrefixes -> (List String)
+  (list "settle" "writeGuard" "waitedOut" "aheadGreen" "pool unreachable" "worktree attach failed" "worktree add failed" "stale branch recreate failed" "stage died" "stage run row lost" "ERR_HUB_CLIENT_MISSING")
+
+; (:m :ref TRIAL-ANALYZE-M1 :do "the conductor-authored kind of a write verdict or Res sig, matched only as the verdict's own prefix after its tierHop wrappers and its fail:, escalated: or providerFail: tag: receipt when the body is a form, else stalled, vacuousGate, noEdit, leaseEnded, infra, written, provider for a providerFail tag with no receipt, or empty; text inside a receipt or a sig is never searched")
+fn condOf v: String -> String
+  (let [(s (stripWrap (stringTrim v)))
+        (body (verdictBody v))]
+    (cond
+      ((stringStartsWith? body "(") "receipt")
+      ((or (= body "stalled") (stringStartsWith? body "stalled:")) "stalled")
+      ((stringStartsWith? body "vacuousGate: ") "vacuousGate")
+      ((= body "noEdit") "noEdit")
+      ((stringStartsWith? body "lease ended before") "leaseEnded")
+      ((listAny? (fn [(p String)] -> Bool (stringStartsWith? body p)) (infraPrefixes)) "infra")
+      ((= body "written") "written")
+      ((stringStartsWith? s "providerFail: ") "provider")
+      (else "")))
+
+; (:m :ref TRIAL-ANALYZE-M1 :do "the Leon receipt inside a verdict body, read with the ASN reader: the body itself when its head is :agentReceipt, or the :receipt key of an (:agent ...) wrapper; a receipt cut short by the conductor still yields the keys before the cut")
+fn receiptOf body: String -> (Option rd/SExpr)
+  (let [(x (rd/parseSexpr (stringReplace body "\\" "")))
+        (h (rd/sexprHead x))]
+    (cond
+      ((= h ":agentReceipt") (some x))
+      ((= h ":agent") (match (kvOf x ":receipt") ((some y) (if (= (rd/sexprHead y) ":agentReceipt") (some y) none)) ((none) none)))
+      (else none)))
+
+; (:m :ref TRIAL-ANALYZE-L3 :do "the served alias of a receipt counts only when its quoted string is whole; the conductor cuts long verdicts, and a cut alias is unknown, not a new model")
+fn servedOf rc: rd/SExpr -> String
+  (let [(a (match (kvOf rc ":servedAlias") ((some v) (atomOf v)) ((none) "")))
+        (n (stringLength a))]
+    (cond
+      ((and (>= n 2) (and (stringStartsWith? a "\"") (stringEndsWith? a "\""))) (unq a))
+      ((stringContains? a "\"") "")
+      (else a)))
+
 fn emptyFacts -> Facts
-  (Facts :id "" :alias "" :served "" :pinBroken false :known "" :seeded false :partial false
+  (Facts :id "" :alias "" :served "" :pinBroken false :pinUnknown false :known "" :seeded false :partial false :defect ""
          :hasLeon false :stop "" :signals (list) :cause ""
          :opsKnown false :ops (list) :opErrors (list)
          :ownsRejected 0 :needsConfirm 0 :turns 0 :malformed 0 :errClass ""
          :gateExit -1 :gateError "" :gateFailed 0
-         :hasWrite false :writeOk false :writeSig "" :killed false
+         :hasWrite false :writeOk false :writeSig "" :cond "" :killed false
          :hasGates false :gatesExit -1 :executed 0 :redBefore false
          :hasReview false :reviewVerdict "" :reviewSig "" :reviewers 0 :reviewersEmpty 0 :leadCheck ""
          :hasMerge false :mergeOk false :mergeSig "")
@@ -134,10 +207,19 @@ fn trialFacts r: rd/SExpr -> Facts
         (mf (optionOr m (rd/makeList (list))))
         (revs (itemsOf (subOf rf ":reviewers")))
         (known (strOf r ":known"))
-        (rb (match (kvOf gf ":redBefore") ((some x) (some (headed x))) ((none) none)))]
+        (rb (match (kvOf gf ":redBefore") ((some x) (some (headed x))) ((none) none)))
+        (defect (firstDefect (flatten (list
+                  (stageDefects w (fn [(x rd/SExpr)] -> (List String) (list (keyDefect x ":ok" "write" "bool") (optDefect x ":killed" "write" "bool"))))
+                  (stageDefects g (fn [(x rd/SExpr)] -> (List String) (list (keyDefect x ":exit" "gates" "int") (keyDefect x ":executed" "gates" "int"))))
+                  (stageDefects rb (fn [(x rd/SExpr)] -> (List String) (list (optDefect x ":exit" "redBefore" "int"))))
+                  (stageDefects rv (fn [(x rd/SExpr)] -> (List String) (list (keyDefect x ":verdict" "review" "any"))))
+                  (stageDefects m (fn [(x rd/SExpr)] -> (List String) (list (keyDefect x ":ok" "merge" "bool"))))
+                  (stageDefects leon (fn [(x rd/SExpr)] -> (List String)
+                    (map (fn [(k String)] -> String (optDefect lf k "leon" "int")) (list ":turns" ":ownsRejected" ":needsConfirm" ":malformed"))))
+                  (list (optDefect gate ":exit" "lastGate" "int") (optDefect gate ":failed" "lastGate" "int"))))))]
     (with (emptyFacts)
       :id (strOf r ":id") :alias (strOf r ":alias") :served (strOf r ":served")
-      :pinBroken (boolOf r ":pinBroken") :known known
+      :pinBroken (boolOf r ":pinBroken") :known known :defect defect
       :seeded (or (boolOf r ":seeded") (or (= known "reviewFail") (= known "refuse")))
       :hasLeon (some? leon) :stop (strOf lf ":stop")
       :signals (map signalName sigs)
@@ -147,7 +229,7 @@ fn trialFacts r: rd/SExpr -> Facts
       :turns (intOf lf ":turns" 0) :malformed (intOf lf ":malformed" 0)
       :errClass (strOf (headed (subOf lf ":err")) ":class")
       :gateExit (intOf gate ":exit" -1) :gateError (rawOf gate ":error") :gateFailed (intOf gate ":failed" 0)
-      :hasWrite (some? w) :writeOk (boolOf wf ":ok") :writeSig (rawOf wf ":sig") :killed (boolOf wf ":killed")
+      :hasWrite (some? w) :writeOk (boolOf wf ":ok") :writeSig (rawOf wf ":sig") :cond (condOf (rawOf wf ":sig")) :killed (boolOf wf ":killed")
       :hasGates (some? g) :gatesExit (intOf gf ":exit" -1) :executed (intOf gf ":executed" 0)
       :redBefore (match rb ((some x) (!= (intOf x ":exit" 0) 0)) ((none) false))
       :hasReview (some? rv) :reviewVerdict (strOf rf ":verdict") :reviewSig (rawOf rf ":sig")
@@ -155,39 +237,32 @@ fn trialFacts r: rd/SExpr -> Facts
       :leadCheck (strOf rf ":leadCheck")
       :hasMerge (some? m) :mergeOk (boolOf mf ":ok") :mergeSig (rawOf mf ":sig")))
 
-fn wordAfter text: String key: String -> String
-  (match (stringIndexOf text key)
-    ((none) "")
-    ((some at)
-      (let [(rest (optionOr (stringSlice text (+ at (stringLength key)) (stringLength text)) ""))
-            (w (optionOr (listHead (stringSplit rest " ")) ""))]
-        (stringReplace (stringReplace w ")" "") "\"" ""))))
+fn flatten xss: (List (List String)) -> (List String)
+  (fold (fn [(acc (List String)) (xs (List String))] -> (List String) (listAppend acc xs)) (list) xss)
 
-; (:m :ref TRIAL-ANALYZE :do "a production write row (:t :unit U :from writing :to T :stage write :model M :verdict V) carries the Leon receipt cut into V; escapes are flattened, :stop and :servedAlias are read from the text, ops are unknown, so read-loop and refusal evidence is absent and such rows only classify on what V states")
+; (:m :ref TRIAL-ANALYZE-M1 :do "a production write row (:t :unit U :from writing :to T :stage write :model M :verdict V): the conductor kind of V by anchored prefix, and when V's body is a receipt its own :stop and :servedAlias read by key; ops are unknown, so read-loop and refusal evidence is absent; a receipt served by another alias than a real :model sets :pinUnknown (L3) and the row is counted under the served alias")
 fn rowFacts r: rd/SExpr -> Facts
-  (let [(v (stringReplace (rawOf r ":verdict") "\\" ""))
+  (let [(v (rawOf r ":verdict"))
         (to (strOf r ":to"))
-        (stop (wordAfter v ":stop "))
-        (served (wordAfter v ":servedAlias "))
+        (kind (condOf v))
+        (rc (if (= kind "receipt") (receiptOf (verdictBody v)) none))
+        (rf (optionOr rc (rd/makeList (list))))
+        (stop (strOf rf ":stop"))
+        (served (servedOf rf))
         (model (rawOf r ":model"))]
     (with (emptyFacts)
       :id (rawOf r ":unit") :alias (if (stringEmpty? served) model served) :partial true
-      :hasLeon (stringContains? v "agentReceipt") :stop stop
+      :defect (if (has? r ":verdict") "" "missing :verdict in row")
+      :pinUnknown (and (not (stringEmpty? served)) (and (not (stringEmpty? model)) (and (!= model "unknown") (!= model served))))
+      :hasLeon (some? rc) :stop stop
       :signals (if (stringEmpty? stop) (list) (list stop))
-      :hasWrite true :writeOk (or (= to "gating") (= v "written")) :writeSig v))
+      :hasWrite true :writeOk (or (= to "gating") (= kind "written")) :writeSig v :cond kind))
 
 fn factsOf r: rd/SExpr -> Facts
   (if (= (rd/sexprHead r) ":t") (rowFacts r) (trialFacts r))
 
 fn writeRow? r: rd/SExpr -> Bool
   (and (= (rd/sexprHead r) ":t") (and (= (strOf r ":stage") "write") (= (strOf r ":from") "writing")))
-
-
-fn lower s: String -> String
-  (stringLower s)
-
-fn anyIn text: String pats: (List String) -> Bool
-  (let [(t (lower text))] (listAny? (fn [(p String)] -> Bool (stringContains? t (lower p))) pats))
 
 fn lastSignal f: Facts -> String
   (optionOr (listLast f.signals) "")
@@ -205,7 +280,7 @@ fn writeOps f: Facts -> Int64
   (+ (+ (countFor f.ops "write") (countFor f.ops "edit")) (+ (countFor f.ops "txn") (countFor f.ops "patch")))
 
 fn hasErr f: Facts code: String -> Bool
-  (or (> (countFor f.opErrors code) 0) (stringContains? f.writeSig code))
+  (> (countFor f.opErrors code) 0)
 
 fn writeFailed f: Facts -> Bool
   (and f.hasWrite (not f.writeOk))
@@ -219,22 +294,27 @@ fn gatesPassed f: Facts -> Bool
 fn reviewPassed f: Facts -> Bool
   (and (gatesPassed f) (and f.hasReview (= f.reviewVerdict "pass")))
 
-fn providerPats -> (List String)
-  (list "stop provider" "err_vendor" "err_no_upstream" "bad gateway" "service unavailable" "overloaded" " 502" " 503" " 504" " 429" "breaker")
+fn firstWord s: String -> String
+  (let [(w (optionOr (listHead (stringSplit (stringTrim s) " ")) ""))]
+    (if (stringEndsWith? w ":") (optionOr (stringSlice w 0 (- (stringLength w) 1)) w) w))
 
-fn infraPats -> (List String)
-  (list "settle" "writeGuard" "waitedOut" "aheadGreen" "pool unreachable" "worktree attach failed" "worktree add failed" "stale branch recreate failed" "stage died" "stage run row lost" "ERR_HUB_CLIENT_MISSING")
+; (:m :ref TRIAL-ANALYZE-L1 :do "the gate's own error code is the first token that starts with ERR_, colons trimmed; an assertion text that says parse error is ERR_ASSERT, not a compile error")
+fn firstErrCode text: String -> String
+  (let [(toks (map (fn [(t String)] -> String (stringReplace t ":" "")) (stringSplit text " ")))]
+    (optionOr (listFind (fn [(t String)] -> Bool (stringStartsWith? t "ERR_")) toks) ""))
 
 fn compileCodes -> (List String)
-  (list "ERR_UNRESOLVED_IMPORT" "ERR_UNKNOWN_SYMBOL" "ERR_TYPE_MISMATCH" "ERR_ARITY" "ERR_NOT_EXPORTED" "ERR_UNDEFINED_EXPORT" "ERR_UNTYPED_PARAM" "ERR_READ_" "ERR_PARSE" "unbalanced" "parse error")
+  (list "ERR_UNRESOLVED_IMPORT" "ERR_UNKNOWN_SYMBOL" "ERR_TYPE_MISMATCH" "ERR_ARITY" "ERR_NOT_EXPORTED" "ERR_UNDEFINED_EXPORT" "ERR_UNTYPED_PARAM" "ERR_PARSE" "ERR_UNBALANCED")
 
-; (:m :ref TRIAL-ANALYZE :do "wWall also takes the conductor text lease ended before the pooled run did: the run outlived its lease, a limit (node2 2026-11-04, 6 rows)")
+fn compileCode? code: String -> Bool
+  (or (listContains? (compileCodes) code) (stringStartsWith? code "ERR_READ_"))
+
 ; (:m :ref TRIAL-ANALYZE :do "wReadLoop's turn cap: 20 turns with no write op and no stop signal, the turn Leon's noWriteNudge names as the no-write stop (adopted); H1 on node2 was 37 read turns")
 fn readLoopCap -> Int64
   20
 
 fn pProvider f: Facts -> Bool
-  (and (writeFailed f) (or (= f.stop "provider") (or (= f.errClass "transient") (anyIn f.writeSig (providerPats)))))
+  (and (writeFailed f) (or (= f.stop "provider") (or (= f.errClass "transient") (= f.cond "provider"))))
 
 fn pPinBroken f: Facts -> Bool
   (or f.pinBroken (and (not f.partial) (and (not (stringEmpty? f.served)) (and (not (stringEmpty? f.alias)) (!= f.served f.alias)))))
@@ -243,7 +323,7 @@ fn pToolRoot f: Facts -> Bool
   (and (writeFailed f) (hasErr f "ERR_NATIVE_STALE"))
 
 fn pInfra f: Facts -> Bool
-  (and (writeFailed f) (and (not f.hasLeon) (anyIn f.writeSig (infraPats))))
+  (and (writeFailed f) (and (not f.hasLeon) (= f.cond "infra")))
 
 fn pMalformed f: Facts -> Bool
   (and (writeFailed f) (or (signalled f "malformedReply") (or (signalled f "parseDefect") (> f.malformed 0))))
@@ -270,30 +350,31 @@ fn pDoneNoWrite f: Facts -> Bool
 fn pEscalated f: Facts -> Bool
   (and (writeFailed f) (signalled f "modelEscalated"))
 
+; (:m :ref TRIAL-ANALYZE :do "wWall also takes the conductor verdict lease ended before the pooled run did: the run outlived its lease, a limit (node2 2026-11-04, 6 rows)")
 fn pWall f: Facts -> Bool
-  (and (writeFailed f) (or (signalled f "wallBudget") (or f.killed (stringContains? f.writeSig "lease ended before"))))
+  (and (writeFailed f) (or (signalled f "wallBudget") (or f.killed (= f.cond "leaseEnded"))))
 
-; (:m :ref TRIAL-ANALYZE :do "three classes added to v1 on 2026-11-05 from the node2 slice: wStallKill, the conductor stall sweep killed the writer (verdict stalled, 146 rows); wRevertGreen, Leon's own revert check found the gate green with the change reverted (stop gateIntegrity or passesOnRevert, 71 rows); wNeedsReview, Leon stopped asking for review (stop needsReview, 20 rows)")
+; (:m :ref TRIAL-ANALYZE :do "three classes added to v1 on 2026-11-05 from the node2 slice: wStallKill, the conductor stall sweep killed the writer (verdict stalled, 146 rows); wRevertGreen, Leon's own revert check found the gate green with the change reverted (stop gateIntegrity, 71 rows); wNeedsReview, Leon stopped asking for review (stop needsReview, 20 rows)")
 fn pStallKill f: Facts -> Bool
-  (and (writeFailed f) (or (= (stringTrim f.writeSig) "stalled") (or (stringStartsWith? f.writeSig "stalled:") (= f.stop "stalled"))))
+  (and (writeFailed f) (or (= f.cond "stalled") (= f.stop "stalled")))
 
 fn pRevertGreen f: Facts -> Bool
-  (and (writeFailed f) (or (signalled f "gateIntegrity") (stringContains? f.writeSig "passesOnRevert")))
+  (and (writeFailed f) (signalled f "gateIntegrity"))
 
 fn pNeedsReview f: Facts -> Bool
   (and (writeFailed f) (signalled f "needsReview"))
 
 fn pCompile f: Facts -> Bool
-  (and (writeFailed f) (and (> f.gateExit 0) (anyIn f.gateError (compileCodes))))
+  (and (writeFailed f) (and (> f.gateExit 0) (compileCode? (firstErrCode f.gateError))))
 
 fn pGateRed f: Facts -> Bool
   (and (writeFailed f) (and (> f.gateExit 0) (> f.gateFailed 0)))
 
 fn pNoEdit f: Facts -> Bool
-  (and (writeFailed f) (stringContains? f.writeSig "noEdit"))
+  (and (writeFailed f) (= f.cond "noEdit"))
 
 fn pVacuous f: Facts -> Bool
-  (and (writeFailed f) (stringContains? f.writeSig "vacuousGate"))
+  (and (writeFailed f) (= f.cond "vacuousGate"))
 
 fn pRerunRed f: Facts -> Bool
   (and (writePassed f) (and f.hasGates (and (!= f.gatesExit 0) (= f.gateExit 0))))
@@ -307,12 +388,12 @@ fn pNotRedBefore f: Facts -> Bool
 fn pEmpty f: Facts -> Bool
   (and (gatesPassed f)
        (and f.hasReview
-            (or (= f.reviewVerdict "empty")
-                (or (and (stringEmpty? f.reviewVerdict) (stringEmpty? f.reviewSig))
-                    (and (> f.reviewers 0) (= f.reviewers f.reviewersEmpty))))))
+            (or (listContains? (list "empty" "") f.reviewVerdict)
+                (and (> f.reviewers 0) (= f.reviewers f.reviewersEmpty)))))
 
+; (:m :ref TRIAL-ANALYZE-L2 :do "review and merge sigs are matched by their first word, colon trimmed: noDiff or diffUnreadable; refused, promote or fetch; train or commitError")
 fn pNoDiff f: Facts -> Bool
-  (and (gatesPassed f) (and f.hasReview (anyIn f.reviewSig (list "noDiff" "diff failed" "empty diff" "diffUnreadable"))))
+  (and (gatesPassed f) (and f.hasReview (listContains? (list "noDiff" "diffUnreadable") (firstWord f.reviewSig))))
 
 fn pFalseBlock f: Facts -> Bool
   (and (gatesPassed f) (and (= f.reviewVerdict "block") (and (= f.known "merge") (= f.leadCheck "notHold"))))
@@ -324,10 +405,10 @@ fn pFalsePass f: Facts -> Bool
   (and f.seeded (reviewPassed f))
 
 fn pMergeRefused f: Facts -> Bool
-  (and (reviewPassed f) (and f.hasMerge (and (not f.mergeOk) (anyIn f.mergeSig (list "refused" "promote" "fetch" "devBranch")))))
+  (and (reviewPassed f) (and f.hasMerge (and (not f.mergeOk) (listContains? (list "refused" "promote" "fetch") (firstWord f.mergeSig)))))
 
 fn pTrainRed f: Facts -> Bool
-  (and (reviewPassed f) (and f.hasMerge (and (not f.mergeOk) (anyIn f.mergeSig (list "train" "commitError")))))
+  (and (reviewPassed f) (and f.hasMerge (and (not f.mergeOk) (listContains? (list "train" "commitError") (firstWord f.mergeSig)))))
 
 fn pMerged f: Facts -> Bool
   (and (reviewPassed f) (and f.hasMerge f.mergeOk))
@@ -386,16 +467,18 @@ fn whyUnmatched f: Facts -> String
     ((writeFailed f) (str "write failed, stop " (if (stringEmpty? f.stop) "none" f.stop) ", no rule matched"))
     ((and f.hasGates (!= f.gatesExit 0)) "gates red without Leon's own gate result")
     ((and f.hasReview (= f.reviewVerdict "block")) "review block without a lead check")
+    ((and f.hasMerge (not f.mergeOk)) "merge failed with a sig that is not a merge verdict")
     ((writePassed f) (str "stopped after " (if f.hasReview "review" (if f.hasGates "gates" "write")) " with no further stage"))
     (else "no rule matched"))
 
 fn classifyWith rs: (List Rule) r: rd/SExpr -> Verdict
   (let [(f (factsOf r))
-        (hit (listFind (fn [(x Rule)] -> Bool (x.test f)) rs))
+        (hit (if (stringEmpty? f.defect) (listFind (fn [(x Rule)] -> Bool (x.test f)) rs) none))
         (model (if (stringEmpty? f.alias) "unknown" f.alias))]
     (match hit
-      ((some x) (Verdict :id f.id :model model :class x.class :insert x.insert :alt x.alt :why "" :partial f.partial :pinBroken (pPinBroken f)))
-      ((none) (Verdict :id f.id :model model :class "unclassified" :insert "" :alt "" :why (whyUnmatched f) :partial f.partial :pinBroken (pPinBroken f)))))
+      ((some x) (Verdict :id f.id :model model :class x.class :insert x.insert :alt x.alt :why "" :partial f.partial :pinBroken (pPinBroken f) :pinUnknown f.pinUnknown))
+      ((none) (Verdict :id f.id :model model :class "unclassified" :insert "" :alt ""
+                       :why (if (stringEmpty? f.defect) (whyUnmatched f) f.defect) :partial f.partial :pinBroken (pPinBroken f) :pinUnknown f.pinUnknown))))
 
 fn classify r: rd/SExpr -> Verdict
   (classifyWith (rules) r)
@@ -408,8 +491,7 @@ fn classifyText v: Verdict -> String
        (if (stringEmpty? v.insert) "" (str " :insert " v.insert))
        (if (stringEmpty? v.alt) "" (str " :alt " v.alt))
        (if (stringEmpty? v.why) "" (str " :why \"" (esc v.why) "\""))
-       (if v.partial " :partial true" "") (if v.pinBroken " :pinBroken true" "") ")")
-
+       (if v.partial " :partial true" "") (if v.pinBroken " :pinBroken true" "") (if v.pinUnknown " :pinUnknown true" "") ")")
 
 fn bump xs: (List (Pair String Int64)) k: String -> (List (Pair String Int64))
   (if (listAny? (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) k)) xs)
@@ -449,7 +531,7 @@ fn classText vs: (List Verdict) c: String -> String
          " :models (" (stringJoin (map (fn [(m String)] -> String (str "\"" (esc m) "\"")) (uniq (map (fn [(v Verdict)] -> String v.model) mine))) " ")
          ") :exemplar \"" (esc (match (listHead mine) ((some v) v.id) ((none) ""))) "\")"))
 
-; (:m :ref TRIAL-ANALYZE :do "the report: :runs counts every record, :byModel leaves out pinBroken records (their served model is not the pinned one), :byClass lists the classes present in precedence order with unclassified last, :insert totals classified records per insertion point, :unclassifiedWhy groups the reasons")
+; (:m :ref TRIAL-ANALYZE :do "the report: :runs counts every record, :byModel leaves out pinBroken records (their served model is not the pinned one), :pinUnknown counts production rows served by another alias than their :model, :byClass lists the classes present in precedence order with unclassified last, :insert totals classified records per insertion point, :unclassifiedWhy groups the reasons")
 fn reportOf vs: (List Verdict) date: String -> String
   (let [(modelVs (filter (fn [(v Verdict)] -> Bool (not v.pinBroken)) vs))
         (models (listSortBy (fn [(m String)] -> String m) (uniq (map (fn [(v Verdict)] -> String v.model) modelVs))))
@@ -462,6 +544,7 @@ fn reportOf vs: (List Verdict) date: String -> String
          " :merged " (n (countFor classes "merged")) " :unclassified " (n unc)
          " :partial " (n (listLength (filter (fn [(v Verdict)] -> Bool v.partial) vs)))
          " :pinBroken " (n (listLength (filter (fn [(v Verdict)] -> Bool v.pinBroken) vs)))
+         " :pinUnknown " (n (listLength (filter (fn [(v Verdict)] -> Bool v.pinUnknown) vs)))
          " :byModel (" (stringJoin (map (fn [(m String)] -> String (modelText modelVs m)) models) " ")
          ") :byClass (" (stringJoin (map (fn [(c String)] -> String (classText vs c)) present) " ")
          ") :insert (" (countsText (ordered inserts (list "hint" "tool" "limit" "harness" "task" "model" "none")))
