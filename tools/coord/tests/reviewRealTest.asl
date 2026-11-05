@@ -63,8 +63,8 @@ fn ! testUnreadable -> Bool
         (_ (pf/stopHub! hub))
         (_ (pf/cleanup root))]
     (do (assert (and (not (stringEmpty? repo)) (and prep (and (> hub 0) rcpts))) "fixture")
-        (assert (and (= (pf/verdictOf resB) "fail") (stringContains? (pf/sigOf resB) "reviewDiffUnreadable")) (str "a missing base ref is a requeueing failure: " (pf/verdictOf resB) " " (pf/sigOf resB)))
-        (assert (and (= (pf/verdictOf resC) "fail") (stringContains? (pf/sigOf resC) "reviewDiffUnreadable")) (str "a gone worktree is a requeueing failure: " (pf/verdictOf resC) " " (pf/sigOf resC)))
+        (assert (and (= (pf/verdictOf resB) "requeue") (stringContains? (pf/sigOf resB) "reviewDiffUnreadable")) (str "a missing base ref is a requeue: " (pf/verdictOf resB) " " (pf/sigOf resB)))
+        (assert (and (= (pf/verdictOf resC) "requeue") (stringContains? (pf/sigOf resC) "reviewDiffUnreadable")) (str "a gone worktree is a requeue: " (pf/verdictOf resC) " " (pf/sigOf resC)))
         (assert (and (= (pf/verdictOf resE) "block") (stringContains? (pf/sigOf resE) "reviewDiffEmpty")) (str "an empty diff is a block: " (pf/verdictOf resE) " " (pf/sigOf resE)))
         true))
 

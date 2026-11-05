@@ -565,6 +565,18 @@ fn ! ledgerGuard dir: String u: st/Task c: CUnit res0: Res -> Res
       (let [(sig (ledgerSig! dir c.wt (baseRef u)))] (if (stringEmpty? sig) res0 (with res0 :verdict "fail" :sig sig))))
     (else res0))
 
+; (:m :ref COND-RECOVER-C3 :do "a review that could not be shown the change (gone worktree, failed git diff) is a transient, not a review failure: the unit goes to ready with stage requeue and verdict reviewDiffUnreadable, its fail count and ladder lane untouched, so no rung is spent and reviewFailedSinceWriter? stays false; settleWt! then re-attaches sh/UNIT and the ahead check sends it to gating; each requeue is one retries.asn row and past :blockedRetryMax the unit blocks with the unreadable signature")
+fn ! requeueUnreadable! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(r (retryLast! ctx.dir c.id))
+        (_ (dropLease! ctx c))]
+    (if (>= (pairFirst r) (blockedRetryMax ctx.dir))
+      (let [(c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig (str "review diff unreadable " (n (+ (pairFirst r) 1)) "x")))
+            (_ (move! ctx c1 "blocked" "review" "" 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
+        ())
+      (let [(_ (retryNote! ctx.dir c.id "reviewDiff" (+ (pairFirst r) 1)))
+            (_ (move! ctx (noEpoch c) "ready" "requeue" "" 0 0 "reviewDiffUnreadable" res.ms))]
+        ())))
+
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
 fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
   (let [(u (resolved! (stringTrim (readOr (repoPath ctx.dir))) u0))
@@ -619,6 +631,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
                   (_ (dropLease! ctx c2))
                   (_ (move! ctx (noEpoch c2) "blocked" "review" res.model res.tokens res.costMicro "block" res.ms))]
               ()))
+          ((= res.verdict "requeue") (let [(_ (requeueUnreadable! ctx c res))] ()))
           (else (let [(_ (fail! ctx c "review" res.model res.sig res.ms))] ()))))
       ((= c.st "merging")
         (if (= res.ok 1)
@@ -2108,7 +2121,7 @@ fn ! writerOf! dir: String c: CUnit -> String
         (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l " :from writing ") (and (stringContains? l " :stage write ") (and (not (stringEmpty? (pick l))) (or (stringContains? l " :to gating ") (!= (pick l) "unknown"))))))) (journalLinesOf dir)))]
     (match (listLast rows) ((some l) (pick l)) ((none) c.model)))
 
-; (:m :ref REVIEW-NO-DIFF :do "a review never passes a change no reviewer was shown: a gone worktree, a failed git diff (missing base ref) or an empty diff ends the review before any model call: an empty diff as block, an unreadable one (gone worktree, failed git diff) as a failure that requeues the unit to ready, where the writer recreates the worktree from sh/UNIT")
+; (:m :ref REVIEW-NO-DIFF :do "a review never passes a change no reviewer was shown: a gone worktree, a failed git diff (missing base ref) or an empty diff ends the review before any model call: an empty diff as block, an unreadable one (gone worktree, failed git diff) as verdict requeue, which finish! turns into a transient move to ready (no fail count, capped through retries.asn)")
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
         (lanesText (readOr rc.lanes))
@@ -2124,7 +2137,7 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
     (if (or (!= diff.exit 0) (stringEmpty? (stringTrim diff.out)))
       (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0
            :sig (if (!= diff.exit 0) (str "reviewDiffUnreadable: git diff " (baseRef u) "...HEAD exit " (n diff.exit) " " (repoClip diff.out)) (str "reviewDiffEmpty: no change past " (baseRef u)))
-           :ms 0 :exit 0 :asserts 0 :verdict (if (!= diff.exit 0) "fail" "block"))
+           :ms 0 :exit 0 :asserts 0 :verdict (if (!= diff.exit 0) "requeue" "block"))
     (match (rs/reviewUnit! gatewayText lanesText (pacesNow rc) rc.repo usage ru diff.out (readOr (runPath dir u.id "receipt" "asn")) call)
       ((err e) (failRes (str "ladder: " e)))
       ((ok r)

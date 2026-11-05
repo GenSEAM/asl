@@ -1548,6 +1548,32 @@ fn ! testLeaseDeadGuard -> Bool
         (assert (not (cd/leaseDead? ctx (list idle) mine old)) "a lease of this conductor is never dead")
         true))
 
+; (:m :ref COND-RECOVER-C3 :do "a review result with verdict requeue (unreadable diff) moves the unit to ready with stage requeue and verdict reviewDiffUnreadable, leaves :fails and the lane alone, takes no review-failure row, records one retries.asn row, and past :blockedRetryMax blocks it with the unreadable signature")
+fn ! testReviewRequeue bin: String -> Bool
+  (let [(dir (scratch "revrequeue"))
+        (_ (cleanup dir))
+        (u (task "RQ" (list "p/rq") (list) (greenGate) "free"))
+        (_ (putAll! dir (list u)))
+        (ctx (with (ctxOf dir bin 0 0 30) :holder "conductorTest"))
+        (res (cd/Res :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "reviewDiffUnreadable: git diff main...HEAD exit 128 fatal" :ms 0 :exit 0 :asserts 0 :verdict "requeue" :tiers ""))
+        (round (fn [(k Int64)] -> cd/CUnit
+                 (let [(_ (cd/writeCUnit! dir (with (cuSt "RQ" "reviewing") :launched 1 :fails 1 :lane "paid")))
+                       (_ (cd/finish! ctx u (with (cuSt "RQ" "reviewing") :launched 1 :fails 1 :lane "paid") res))]
+                   (cuOf dir "RQ"))))
+        (c1 (round 1))
+        (j1 (stringJoin (journalLines dir) "\n"))
+        (c2 (round 2))
+        (c3 (round 3))
+        (retries (readOr dir "retries.asn"))
+        (_ (cleanup dir))]
+    (do (assert (and (= c1.st "ready") (= c1.fails 1) (= c1.lane "paid")) (str "requeue: ready, fail count and lane untouched: " c1.st " " (stringFromInt64 c1.fails) " " c1.lane))
+        (assert (and (stringContains? j1 ":stage requeue") (stringContains? j1 "reviewDiffUnreadable")) (str "journalled as stage requeue: " j1))
+        (assert (not (stringContains? j1 ":stage review ")) "and not as a review failure")
+        (assert (= c2.st "ready") (str "the second requeue is within the cap: " c2.st))
+        (assert (and (= c3.st "blocked") (stringStartsWith? c3.sig "reviewDiffUnreadable")) (str "past the cap the unit blocks with the unreadable signature: " c3.st " " c3.sig))
+        (assert (stringContains? retries "(:retry :unit \"RQ\" :why \"reviewDiff\" :n 2 ") (str "each requeue is a retries row: " retries))
+        true))
+
 ; (:m :ref COND-RECOVER-C3 :do "a blocked unit with a transient cause (provider, lease, stall) goes back to ready once its backoff passed and while it has retries left, each retry one retries.asn row; one with none left, one still inside its backoff, one with a plain writer failure on the top rung and a review block stay blocked; an escalated writer failure whose next rung has room hops there; (:conductor :blockedRetryMax 0) turns the policy off")
 fn ! testBlockedPolicy -> Bool
   (let [(dir (scratch "blockedpolicy"))
@@ -1838,6 +1864,7 @@ fn ! runTests -> Bool
         (assert (testDeadHolder) "a dead holder's lease is reaped and the units it blocked get one retry")
         (assert (testImpossible) "admission refuses units that can never be written, before any claim")
         (assert (testLeaseDeadGuard) "an in-flight stage keeps its lease from the reaper")
+        (assert (testReviewRequeue bin) "an unreadable review requeues without a fail count, capped")
         (assert (testBlockedPolicy) "blocked units with a transient cause retry with backoff and a cap, others stay")
         (assert (testAdmitGate) "writer admission: token and memory floor")
         (assert (testAdmitWarm) "writer admission: warm first")
