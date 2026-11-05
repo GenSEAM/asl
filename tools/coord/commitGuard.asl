@@ -339,7 +339,25 @@ fn ! exportStaged! cfg: Cfg paths: (List String) -> (Pair String String)
       ((!= mk.exit 0) (pair dir (str "cannot create the export dir: " mk.out)))
       ((listEmpty? paths) (pair dir ""))
       (else (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths)))]
-              (pair dir (if (= x.exit 0) "" (str "git checkout-index failed: " x.out)))))))
+              (if (!= x.exit 0) (pair dir (str "git checkout-index failed: " x.out))
+                (if (listAny? aslPath? paths) (pair dir (exportContext! cfg dir paths)) (pair dir "")))))))
+
+; (:m :ref COMMIT-GUARD-PKG-RESOLVE :do "the index entries of every other .asl and .asn file (manifests, the root .asl.config.asn, sibling and dependency modules), so asl check of an exported file resolves imports in its own package and workspace exactly as a plain check at that path would; a quoted path (special characters under quotepath off) is skipped, since checkout-index takes the raw name")
+fn ! contextPaths! cfg: Cfg paths: (List String) -> (Result (List String) String)
+  (let [(ls (git! cfg (list "ls-files" "--cached" "--" "*.asl" "*.asn")))]
+    (if (!= ls.exit 0) (err (str "git ls-files failed: " (stringTrim ls.out)))
+      (ok (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (and (not (stringStartsWith? p "\"")) (not (listContains? paths p)))))
+                  (stringLines ls.out)))))
+
+; (:m :ref COMMIT-GUARD-PKG-RESOLVE :do "export the context paths in chunks of 400 into dir beside the changed files; the first failure is the message, empty on success")
+fn ! exportContext! cfg: Cfg dir: String paths: (List String) -> String
+  (match (contextPaths! cfg paths)
+    ((err e) e)
+    ((ok ctx) (fold (fn [(acc String) (chunk (List String))] -> String
+                      (if (not (stringEmpty? acc)) acc
+                        (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") chunk)))]
+                          (if (= x.exit 0) "" (str "git checkout-index of the package context failed: " x.out)))))
+                    "" (chunksOf ctx 400))))
 
 ; (:m :do "the block row for a failed export, none when the export succeeded")
 fn exportHits msg: String -> (List Hit)
