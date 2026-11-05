@@ -82,7 +82,7 @@ fn commitText! root: String text: String msg: String -> (Result String String)
     ((err e) (err e))
     ((ok _) (match (gitStep! root (list "add" "-A"))
       ((err e) (err e))
-      ((ok _) (match (gitStep! root (list "commit" "-q" "--no-verify" "-m" msg))
+      ((ok _) (match (gitStep! root (list "commit" "-q" "--no-verify" "--allow-empty" "-m" msg))
         ((err e) (err e))
         ((ok _) (resultMap (runGit! root (list "rev-parse" "HEAD")) (fn [(s String)] -> String (stringTrim s)))))))))
 
@@ -106,10 +106,10 @@ fn failingWith! root: String base: String text: String -> (List String)
 fn headWith! root: String base: String text: String -> String
   (resultOr (resultMap (auditWith! root base text) (fn [(au Audit)] -> String au.head)) "auditError")
 
-fn dupFailing! root: String -> (List String)
+fn dupWith! root: String text: String -> (List String)
   (match (commitText! root (dupBase) "dup")
     ((err _) (list "commitError"))
-    ((ok s) (failingWith! root s (baseOnly))))
+    ((ok s) (failingWith! root s text)))
 
 fn ! runTests -> Bool
   (match (sr/makeTempDir! "aslFbAppendOnly")
@@ -139,5 +139,6 @@ fn ! runTests -> Bool
                    (assert (stringContains? (failingEv deleted) "a.sh") "the deletion finding names the path")
                    (assert (stringContains? (headWith! root base (rewrittenPast)) ":newRaises 0 :rewritten 1") "a rewrite is reported as rewritten, not as a new raise")
                    (assert (stringContains? (headWith! root base (appendedOnly)) ":newRaises 1") "an appended row is reported as a new raise")
-                   (assert (listContains? (dupFailing! root) "foreignRaise") "dropping one of two identical base :raise rows fails foreignRaise")
+                   (assert (listContains? (dupWith! root (baseOnly)) "foreignRaise") "dropping one of two identical base :raise rows fails foreignRaise")
+                   (assert (listEmpty? (dupWith! root (dupBase))) "two identical base :raise rows kept at head stay green")
                    true)))))))))))
