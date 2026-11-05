@@ -1,5 +1,5 @@
 (module asl-tools/vcs/vcs
-  :x [VcsReceipt head! status! diff! stage! commit! branch! mergeFf! log! isAncestor! receiptOf]
+  :x [VcsReceipt head! status! diff! stage! commit! commitWith! branch! mergeFf! log! isAncestor! receiptOf]
   :i [(asl-tools/vcs/git :a g) (asl-tools/coord/commitGuard :a cg)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the backend-neutral version-control API: every op takes a repo root and answers an ASN receipt line; the git backend is vcs/git.asl, the only file that spawns git, so a different backend replaces that one file; commit lands exactly the blobs the guard judged and refuses when commitGuard blocks or leaves a file unchecked")
@@ -47,6 +47,10 @@ fn ! stage! repo: String paths: (List String) -> VcsReceipt
 
 ; (:m :do "commit exactly paths: refuse an empty list or an unaccepted path, build a private index from HEAD plus the named paths (the shared index and the guard's view never differ from what lands), run commitGuard on that index in process, refuse on a block or a partial check (mode commit) or record and go on (mode warn), then commit-tree and update-ref against the recorded HEAD; the receipt carries :sha and the guard receipt, a refusal leaves the shared index as it was")
 fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode: String -> VcsReceipt
+  (commitWith! repo aslRoot "" paths msg mode)
+
+; (:m :ref WORKTREE-COLD-CACHE :do "commit! whose guard checks run by toolRoot's bin/asl (a warm tree) with cwd and ASL_ROOT of aslRoot; empty toolRoot is commit!")
+fn ! commitWith! repo: String aslRoot: String toolRoot: String paths: (List String) msg: String mode: String -> VcsReceipt
   (cond
     ((listEmpty? paths) (refused "commit" "no paths named"))
     ((not (listEmpty? (badPaths! repo paths))) (refused "commit" (str "path not accepted: " (stringJoin (badPaths! repo paths) ","))))
@@ -55,7 +59,7 @@ fn ! commit! repo: String aslRoot: String paths: (List String) msg: String mode:
       (let [(tx (g/prepare! repo paths))]
         (if (not tx.ok)
           (let [(_ (g/discard! tx))] (refused "commit" tx.why))
-          (let [(j (cg/guardIndex! repo aslRoot paths msg (= mode "warn") tx.index))]
+          (let [(j (cg/guardIndexWith! repo aslRoot toolRoot paths msg (= mode "warn") tx.index))]
             (if (= j.code 1)
               (let [(_ (g/discard! tx))] (VcsReceipt :code 1 :text (str "(:vcs :op :commit :status :refused :guard " j.text ")")))
               (let [(c (g/finish! repo tx msg paths))

@@ -321,7 +321,7 @@ fn ! stubRoot! base: String name: String body: String -> String
     (do (assert (= (sh "." (list "mkdir" "-p" (str dir "/bin"))).exit 0) (str name ": stub dir"))
         (assert (put (str dir "/bin/asl") body) (str name ": stub body"))
         (assert (= (sh "." (list "chmod" "+x" (str dir "/bin/asl"))).exit 0) (str name ": stub exec"))
-        (assert (put (str dir "/.asl.config.asn") "(:aslConfig\n  :commitGuardPerFileS 1\n  :commitGuardPerKbMs 2000\n)\n") (str name ": stub config"))
+        (assert (put (str dir "/.asl.config.asn") "(:aslConfig\n  :commitGuardPerFileS 1\n  :commitGuardWarmS 1\n  :commitGuardPerKbMs 2000\n)\n") (str name ": stub config"))
         dir))
 
 fn ! partialGates root: String base: String -> Bool

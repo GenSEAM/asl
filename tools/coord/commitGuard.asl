@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [recordText! guardIndex! cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -15,7 +15,9 @@
   (:f perFileS Int64)
   (:f totalS Int64)
   (:f gitS Int64)
-  (:f indexFile String :default ""))
+  (:f indexFile String :default "")
+  (:f checkBin String :default "")
+  (:f warmS Int64 :default 600))
 
 (schema Hit
   (:f rule String)
@@ -241,9 +243,30 @@ fn unchecked path: String why: String -> Hit
 fn firstErr lines: (List String) -> String
   (optionOr (listHead (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) lines)) (optionOr (listHead lines) ""))
 
+; (:m :ref WORKTREE-COLD-CACHE :do "the asl binary of every check: the given warm tree's bin/asl (run with cwd and ASL_ROOT of the commit's own aslRoot so imports resolve there), else the aslRoot's own")
+fn checkBinOf cfg: Cfg -> String
+  (if (stringEmpty? cfg.checkBin) (str cfg.aslRoot "/bin/asl") cfg.checkBin)
+
+; (:m :ref WORKTREE-COLD-CACHE :do "adopted 600 s for the one warm-up check that precedes the per-file checks, so a cold native cache is built once under a deadline that fits a build, then the per-file deadlines hold; a workspace tunes it with :commitGuardWarmS N in aslRoot/.asl.config.asn, never an env var")
+fn defaultWarmS -> Int64
+  600
+
+; (:m :ref WORKTREE-COLD-CACHE :do "one asl check of a trivial module bounded by warmS: no rows when the toolchain answers; otherwise every file is unchecked and the row names the cause (toolchain warm-up) instead of a per-file timeout")
+fn ! warmRows! cfg: Cfg src: String files: (List String) -> (List Hit)
+  (if (listEmpty? files)
+    (list)
+    (let [(name ".guardWarm.asl")
+          (w (fileWrite (str src "/" name) "(module guardWarm\n  :x []\n  :i [])\n"))
+          (rows (checkChunk! cfg src (list name) cfg.warmS))
+          (gone (pathRemove (str src "/" name)))]
+      (if (listEmpty? rows)
+        (list)
+        (let [(why (str "toolchain warm-up failed (" (stringFromInt64 cfg.warmS) " s limit): " (optionOr (listHead (map (fn [(h Hit)] -> String h.why) rows)) "no verdict")))]
+          (map (fn [(p String)] -> Hit (unchecked p why)) files)))))
+
 ; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one BLOCKING toolchain row (fail closed: a stale native CLI is not a verdict on the file) plus unchecked files, any other failure blocks per file with its first error line")
 fn ! checkChunk! cfg: Cfg src: String files: (List String) secs: Int64 -> (List Hit)
-  (let [(d (fr/runOneLimited (fr/job (listAppend (list (str cfg.aslRoot "/bin/asl") "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
+  (let [(d (fr/runOneLimited (fr/job (listAppend (list (checkBinOf cfg) "check") (map (fn [(p String)] -> String (str src "/" p)) files)) cfg.aslRoot (fr/childEnv (list (str "ASL_ROOT=" cfg.aslRoot)))) (fr/limits secs 200)))]
     (chunkRows src files secs d.exit d.verdict d.out))
 
 ; (:m :ref COMMIT-GUARD-VERDICT :do "the rows of one asl check chunk from its exit code, verdict and output: pure; exit 0 counts a file clean only when the output carries its ok line, so a silent or foreign checker leaves it unchecked")
@@ -291,7 +314,8 @@ fn ! cfgFor! repo: String aslRoot: String -> Cfg
     (Cfg :repo repo :aslRoot aslRoot :range "" :msg "" :hasMsg false :paths (list) :warn false
          :perFileS (optionOr (configNum text ":commitGuardPerFileS") d.perFileS)
          :totalS (optionOr (configNum text ":commitGuardTotalS") d.totalS)
-         :gitS d.gitS))
+         :gitS d.gitS
+         :warmS (optionOr (configNum text ":commitGuardWarmS") (defaultWarmS))))
 
 fn ! kbOf! src: String files: (List String) -> Int64
   (/ (fold (fn [(acc Int64) (p String)] -> Int64 (+ acc (stringLength (resultOr (fileReadString (str src "/" p)) "")))) 0 files) 1024)
@@ -384,7 +408,8 @@ fn ! gather! cfg: Cfg -> (Pair Int64 (List Hit))
         (bal (somes! srcPaths (fn [(p String)] -> (Option Hit) (balanceHit! src p))))
         (balBad (map (fn [(h Hit)] -> String h.path) bal))
         (aslGood (filter (fn [(p String)] -> Bool (and (aslPath? p) (not (listContains? balBad p)))) paths))
-        (chk (if (not (listEmpty? exRow)) (list) (checkLoop! cfg src (chunksOf aslGood 10) (+ t0 (* (+ cfg.totalS (- (scaledSecs! cfg src aslGood) cfg.perFileS)) 1000)) (list))))
+        (warm (if (not (listEmpty? exRow)) (list) (warmRows! cfg src aslGood)))
+        (chk (if (or (not (listEmpty? exRow)) (not (listEmpty? warm))) warm (checkLoop! cfg src (chunksOf aslGood 10) (+ t0 (* (+ cfg.totalS (- (scaledSecs! cfg src aslGood) cfg.perFileS)) 1000)) (list))))
         (bt (readText! (str cfg.repo "/scripts/audit/foreignBaseline.asn")))
         (fgn (if (or (stringEmpty? bt) (not (listEmpty? exRow))) (list)
                (fold (fn [(acc (List Hit)) (c Change)] -> (List Hit)
@@ -440,8 +465,13 @@ fn ! guard! repo: String aslRoot: String paths: (List String) msg: String warn: 
 
 ; (:m :ref VCS-LAYER-CORE :do "guard! judging the entries of the given index file instead of the shared index (the git children get GIT_INDEX_FILE), so the vcs layer judges exactly the blobs it then commits")
 fn ! guardIndex! repo: String aslRoot: String paths: (List String) msg: String warn: Bool indexFile: String -> Receipt
+  (guardIndexWith! repo aslRoot "" paths msg warn indexFile)
+
+; (:m :ref WORKTREE-COLD-CACHE :do "guardIndex! with the checks run by toolRoot's bin/asl (a warm tree) in the commit's aslRoot; an empty toolRoot is the aslRoot's own binary")
+fn ! guardIndexWith! repo: String aslRoot: String toolRoot: String paths: (List String) msg: String warn: Bool indexFile: String -> Receipt
   (let [(base (cfgFor! repo aslRoot))
-        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS :indexFile indexFile))]
+        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS :indexFile indexFile
+                  :checkBin (if (stringEmpty? toolRoot) "" (str toolRoot "/bin/asl")) :warmS base.warmS))]
     (judge! cfg))
 
 fn ! judge! cfg: Cfg -> Receipt
@@ -486,7 +516,7 @@ fn ! stage! cfg: Cfg paths: (List String) -> fr/Done
 ; (:m :do "the own commit entry: stage exactly paths, judge them and the message on their staged blobs, then commit only those paths; a block commits nothing and leaves HEAD as it was (the paths stay staged); --warn commits anyway and records the rows; the receipt carries :commit :done :sha S, :refused, or :failed")
 fn ! commit! repo: String aslRoot: String paths: (List String) msg: String warn: Bool -> Receipt
   (let [(base (cfgFor! repo aslRoot))
-        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS))]
+        (cfg (Cfg :repo repo :aslRoot aslRoot :range "" :msg msg :hasMsg true :paths paths :warn warn :perFileS base.perFileS :totalS base.totalS :gitS base.gitS :warmS base.warmS))]
     (if (listEmpty? paths)
       (Receipt :code 1 :status "block" :rows (list (hit "commit" "" "no paths named; commit takes exactly the paths after --"))
                :text (receiptText cfg 0 0 (list (hit "commit" "" "no paths named; commit takes exactly the paths after --")) " :commit :refused"))
