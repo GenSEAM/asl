@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -678,14 +678,22 @@ fn ! commitWritten! env: s/LoopEnv run: LoopRun rootDir: String message: String 
     (listAppend run.state.writtenFiles (writtenPaths run.written))))]
     (if (listEmpty? paths)
       (commitFailed! env "the run wrote no path to commit")
-      (let [r (vcs/commit! rootDir rootDir paths message "commit")]
-        (if (= r.code 0)
-          (if (stringContains? r.text ":indexStale true")
-            (match (headSha! rootDir)
-              ((err e) (err e))
-              ((ok sha) (journaled! env (str "(:commit \"" sha "\")\n(:commitIndexStale \"" sha "\")\n") (pair (some sha) none))))
-            (committed! env rootDir))
-          (commitFailed! env r.text)))))
+      (commitLanded! env rootDir (vcs/commit! rootDir rootDir paths message "commit"))))
+
+; (:m :ref LEON-COMMIT-VIA-VCS :do "a landed vcs receipt becomes the run commit pair; :indexStale true keeps the sha and puts indexStale in the second slot, which commitFields prints as :commitIndexStale true on the result line the conductor reads, and the journal row stays")
+fn ! commitLanded! env: s/LoopEnv rootDir: String r: vcs/VcsReceipt -> (Result (Pair (Option String) (Option String)) String)
+  (if (= r.code 0)
+    (if (stringContains? r.text ":indexStale true")
+      (match (headSha! rootDir)
+        ((err e) (err e))
+        ((ok sha) (journaled! env (str "(:commit \"" sha "\")\n(:commitIndexStale \"" sha "\")\n") (pair (some sha) (some "indexStale")))))
+      (committed! env rootDir))
+    (commitFailed! env r.text))
+
+fn commitFields commit: (Pair (Option String) (Option String)) -> String
+  (match (pairFirst commit)
+    ((some sha) (str " :commit \"" sha "\"" (match (pairSecond commit) ((some _) " :commitIndexStale true") ((none) ""))))
+    ((none) (match (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
 
 fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGreen: Bool -> (Result (Pair (Option String) (Option String)) String)
   (let [message (optionOr run.commitMessage "")]
@@ -766,9 +774,7 @@ fn resultText state: s/LoopState session: String status: String unbacked: Int64 
       (if (listEmpty? claims) "" (str " :unbackedClaims (" (quoted claims) ")"))
       " :contextTokens " (stringFromInt64 (optionOr state.contextTokens 0))
       (match state.error ((some e) (str " :error :" (stripColons e))) ((none) ""))
-      (match (pairFirst commit)
-        ((some sha) (str " :commit \"" sha "\""))
-        ((none) (match (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
+      (commitFields commit)
       (if commitMissing " :commitMissing true" "")
       (match state.deliver ((some d) (if (stringEmpty? d) "" (str " :deliver :" d))) ((none) ""))
       " :phases (" (phasesText state.phases) ")"

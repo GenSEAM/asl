@@ -3,7 +3,7 @@
   :i [(aslAgent/runLoop :a rl) (aslAgent/loopState :a s)
       (aslAgent/providers :a pv) (aslAgent/gates :a g) (asl-json/json :a j)
       (aslAgent/tests/loopRunFixture :a f) (aslAgent/plan :a p) (aslAgent/core :a c)
-      (aslAgent/journal :a jr) (aslAgent/runOps :a ro) (asl-proc/coreProcess :a cp)])
+      (aslAgent/journal :a jr) (aslAgent/runOps :a ro) (asl-tools/fleet/run :a fr) (asl-tools/vcs/vcs :a vcs)])
 
 fn fakeTurn prompt: String system: String -> pv/Turn
   (pv/Turn :provider (pv/scriptProvider "loopRunTest" (list) 0)
@@ -155,20 +155,21 @@ fn ! writeRun! run: rl/LoopRun rel: String text: String -> jr/Written
     ((err _) run.written)
     ((ok w) (do (fileWrite (str w.root "/" rel) text) w)))
 
+; (:m :ref SPAWN-SAFETY :do "every child of this test starts through asl/tools/fleet/run.asl with a timeout and a descendant limit")
+fn ! viaFleet! argv: (List String) cwd: String -> fr/Done
+  (fr/runOneLimited (fr/job argv cwd (fr/childEnv (list))) (fr/limits 60 16))
+
 fn ! gitOut! root: String args: (List String) -> String
-  (match (cp/exec! (cp/withCwd (cp/cmd "git" args) root)) ((ok o) (stringTrim o.stdout)) ((err _) "ERR_GIT"))
+  (let [(d (viaFleet! (cons "git" args) root))]
+    (if (= d.exit 0) (stringTrim d.out) "ERR_GIT"))
 
 fn ! gitOk! args: (List String) -> Bool
-  (match (cp/exec! (cp/cmd "git" args))
-    ((ok o) (= o.exitCode 0))
-    ((err _) false))
+  (= (viaFleet! (cons "git" args) ".").exit 0)
 
 
 ; (:m :ref LEON-COMMIT-VIA-VCS :do "a scripted Leon run that writes one owned path and asks for a commit: an unbalanced .asl ends commitError with the guard rows and HEAD unchanged; a good file commits exactly that path and journals the commit")
 fn ! gitIn! root: String args: (List String) -> Bool
-  (match (cp/exec! (cp/withCwd (cp/cmd "git" (listAppend (list "-c" "user.name=t" "-c" "user.email=t@example.invalid" "-c" "commit.gpgsign=false") args)) root))
-    ((ok o) (= o.exitCode 0))
-    ((err _) false))
+  (= (viaFleet! (cons "git" (listAppend (list "-c" "user.name=t" "-c" "user.email=t@example.invalid" "-c" "commit.gpgsign=false") args)) root).exit 0)
 
 fn ! repoAt! base: String name: String -> String
   (let [dir (str base "/" name)
@@ -217,8 +218,15 @@ fn ! runTests -> Bool
       (assert (= shown "note.txt") (str "exactly the written path is committed: " shown))
       (assert (stringContains? status "?? stray.txt") "an unwritten stray file stays untracked")
       (assert (stringContains? (journalText (str good "/loop.asn")) "(:commit \"") "the journal has the commit row")
+      (assert (stringContains? (rl/commitFields (pair (some "abc") (some "indexStale"))) " :commit \"abc\" :commitIndexStale true") "the result line carries commitIndexStale beside the sha")
+      (assert (= (rl/commitFields (pair (some "abc") none)) " :commit \"abc\"") "a plain commit prints no stale flag")
+      (let [stale (rl/commitLanded! (makeEnv "wireStale" "stale" good (str good "/loopStale.asn") 2 none (list) none) good (vcs/VcsReceipt :code 0 :text "(:vcs :op :commit :status :done :indexStale true)"))]
+        (match stale
+          ((ok pr) (do (assert (= (pairSecond pr) (some "indexStale")) "an :indexStale landing is flagged in the commit pair")
+                       (assert (some? (pairFirst pr)) "and still returns the sha")))
+          ((err e) (assert false (str "commitLanded! failed: " e)))))
       (assert (= (shRm base) 0) "private base removed")
       true))
 
 fn ! shRm path: String -> Int64
-  (match (cp/exec! (cp/cmd "rm" (list "-rf" path))) ((ok o) o.exitCode) ((err _) 1))
+  (viaFleet! (list "rm" "-rf" path) ".").exit
