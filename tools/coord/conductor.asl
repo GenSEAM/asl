@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -1685,12 +1685,32 @@ fn ! ownedChanges! p: String owns: (List String) -> (List String)
 
 ; (:m :ref FLEET-COMMIT-VIA-VCS :do "a unit with no :owns used to be committed by add -A; the vcs layer commits only named paths, so the dirty paths of the worktree are named here (untracked ones included)")
 fn ! dirtyPaths! p: String -> (List String)
-  (let [(r (gitOut p (list "status" "--porcelain" "--untracked-files=all")))]
-    (if (!= r.exit 0) (list)
-      (map (fn [(l String)] -> String
-             (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))]
-               (match (stringIndexOf path " -> ") ((some at) (optionOr (stringSlice path (+ at 4) (stringLength path)) path)) ((none) path))))
-           (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) (stringLines r.out)))))
+  (let [(r (gitOut p (list "-c" "core.quotePath=false" "status" "--porcelain" "--untracked-files=all")))]
+    (if (!= r.exit 0) (list) (porcelainPaths (stringLines r.out))))
+
+; (:m :ref FLEET-COMMIT-VIA-VCS :do "the paths of git status --porcelain lines: a quoted path is unquoted (backslash, quote, tab, newline escapes), and a rename or copy names both the old and the new path")
+fn unquoteGit s: String -> String
+  (if (and (>= (stringLength s) 2) (and (stringStartsWith? s "\"") (stringEndsWith? s "\"")))
+    (unescapeGit (optionOr (stringSlice s 1 (- (stringLength s) 1)) s) 0 "")
+    s)
+
+fn unescapeGit s: String i: Int64 acc: String -> String
+  (if (>= i (stringLength s))
+    acc
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (if (and (= c "\\") (< (+ i 1) (stringLength s)))
+        (let [(d (optionOr (stringSlice s (+ i 1) (+ i 2)) ""))]
+          (unescapeGit s (+ i 2) (str acc (cond ((= d "t") "\t") ((= d "n") "\n") (else d)))))
+        (unescapeGit s (+ i 1) (str acc c)))))
+
+fn porcelainPaths lines: (List String) -> (List String)
+  (listFlatMap (fn [(l String)] -> (List String)
+                 (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))
+                       (renamed (or (stringStartsWith? l "R") (or (stringStartsWith? l "C") (or (stringStartsWith? (optionOr (stringSlice l 1 2) "") "R") (stringStartsWith? (optionOr (stringSlice l 1 2) "") "C")))))]
+                   (match (if renamed (stringIndexOf path " -> ") none)
+                     ((some at) (list (unquoteGit (optionOr (stringSlice path 0 at) "")) (unquoteGit (optionOr (stringSlice path (+ at 4) (stringLength path)) ""))))
+                     ((none) (list (unquoteGit path))))))
+               (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) lines))
 
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "the driver commit stages only the owned paths that changed; true when a commit landed")
 fn ! commitWrite! p: String owns: (List String) id: String model: String -> Bool
