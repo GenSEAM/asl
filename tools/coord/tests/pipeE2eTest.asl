@@ -5,7 +5,7 @@
 ; (:m :ref PIPE-E2E-HERMETIC :do "the whole conductor cycle in a temp world: tick! drives one unit through the real stage children (bin/asl run conductor.asl stage ...: writeRes with the real Leon loop on a scripted reply fixture, gatesStage, realReview against the stand-in hub, mergeRes onto a dev clone); the only stand-ins are the Leon replies, the hub verdicts and the dev clone's train; three scenarios: a write that lands and merges, a write that changes nothing, a review that fails")
 (schema Out
   (:f ready Bool) (:f why String) (:f tos (List String)) (:f st String) (:f sig String) (:f fails Int64) (:f devBefore String) (:f devAfter String) (:f unitSha String)
-  (:f inDev Bool) (:f devImpl String) (:f wtGone Bool) (:f hubSeen String) (:f prior String) (:f trainArgs String) (:f journal String) (:f ticks Int64))
+  (:f inDev Bool) (:f devImpl String) (:f wtGone Bool) (:f hubSeen String) (:f prior String) (:f trainArgs String) (:f journal String) (:f ticks Int64) (:f agentForm String) (:f repoReal String))
 
 fn terminal? s: String -> Bool
   (listContains? (list "merged" "blocked" "failed") s)
@@ -51,6 +51,7 @@ fn ! scenario! tag: String replies: (List String) noop: String hubReply: String 
                   :wtGone (not (fileExists? (str root "/wts/asex-E1/.git")))
                   :hubSeen (pf/hubSeen root)
                   :prior (resultOr (fileReadString (cd/runPath (str root "/store") "E1" "prior" "txt")) "")
+                  :agentForm (resultOr (fileReadString (str root "/agentForm.txt")) "") :repoReal (resultOr (realPath repo) repo)
                   :trainArgs (stringTrim (resultOr (fileReadString (str dev "/.git/trainArgs")) ""))
                   :journal (stringJoin (pf/journalLines (str root "/store")) "\n") :ticks ticks))
         (_ (pf/stopHub! hub))
@@ -72,6 +73,7 @@ fn ! runTests -> Bool
         (assert (= merged.tos (list "ready" "writing" "gating" "awaitReview" "reviewing" "merging" "merged")) (str "scenario merge: the journal path of the unit: " (stringJoin merged.tos " ") " / " merged.sig))
         (assert (and (!= merged.devAfter merged.devBefore) (and merged.inDev (= merged.devImpl "impl"))) "scenario merge: dev HEAD moved and holds the unit commit and its file")
         (assert (stringStartsWith? merged.trainArgs "train sh/E1 --onto HEAD --repo ") (str "scenario merge: the train ran onto dev with the unit branch: " merged.trainArgs))
+        (assert (stringContains? merged.agentForm (str ":toolRoot \"" merged.repoReal "\"")) (str "scenario merge: the write stage hands Leon :toolRoot with the repo realpath: " merged.agentForm))
         (assert merged.wtGone "scenario merge: the unit worktree is collected")
         (assert (and (stringContains? merged.hubSeen "diff --git") (stringContains? merged.hubSeen "+impl")) "scenario merge: the reviewers' request carries the unit's diff itself (a git diff header and the added line), not only the task text")
         (assert (and (listContains? (list "blocked" "failed") nothing.st) (and (not (listContains? nothing.tos "merging")) (and (= nothing.devAfter nothing.devBefore) (stringContains? nothing.sig ":status :failed")))) (str "scenario nothing: a Leon that writes nothing ends blocked or failed, never reaches merge, dev is untouched and the signature is the failed Leon run: " (stringJoin nothing.tos " ") " / " nothing.sig))

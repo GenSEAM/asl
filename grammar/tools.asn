@@ -158,6 +158,7 @@
         (:resume :type str :default "")
         (:root :type str)
         (:task :type str :req true)
+        (:toolRoot :type str :default "" :note "absolute repo whose bin/asl runs the tool ops, default the :root checkout")
         (:timeout :type int :default 600 :note "execution seconds")
         (:wallBudget :type int)
       )

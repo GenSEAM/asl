@@ -115,7 +115,7 @@ fn escTurn s: String -> String
 fn ! e2eRepo! root: String -> String
   (let [(repo (repoIn root))
         (made (if (stringEmpty? repo) ""
-                (sh (str "cd " repo " && mkdir -p asl/packages/asl-agent/src && printf 'fn hubAsnPath -> String\n  \"\"\n' > asl/packages/asl-agent/src/providers.asl"
+                (sh (str "cd " repo " && mkdir -p asl/packages/asl-agent/src asl && cp -R " (here) "/asl/grammar asl/grammar && cp " (here) "/asl/packages/asl-agent/src/effects.asn asl/packages/asl-agent/src/effects.asn && printf 'fn hubAsnPath -> String\n  \"\"\n' > asl/packages/asl-agent/src/providers.asl"
                          " && printf '(:aslConfig :agentLoop (:specCheck false :baseline false))\n' > .asl.config.asn"
                          " && printf '.asl/\ntests/\nbin/\n' >> .git/info/exclude && git add -A && git commit -qm c1 && echo madeOk"))))]
     (if (stringContains? made "madeOk") repo ""))
@@ -127,7 +127,7 @@ fn ! scriptLeon! root: String replies: (List String) -> Bool
         (turns (stringJoin (map (fn [(pr (Pair Int64 String))] -> String (str "    (:turn :num " (stringFromInt64 (+ (pairFirst pr) 1)) " :reply \"" (escTurn (pairSecond pr)) "\")\n")) (enumerate replies)) ""))
         (_ (fileWrite fixture (str "(:script :id \"e2e\" :mode :scout\n  :turns (\n" turns "  )\n)\n")))
         (exports (stringJoin (map (fn [(r String)] -> String (str "  export " r "\n")) (fr/cacheEnv!)) ""))
-        (body (str "#!/bin/sh\ncase \"$1\" in\n\"(:agent\"*)\n  mkdir -p \"$PWD/tests/fixtures/agentLoop/mvp\" && cp " fixture " \"$PWD/tests/fixtures/agentLoop/mvp/e2e.asn\"\n"
+        (body (str "#!/bin/sh\ncase \"$1\" in\n\"(:agent\"*)\n  printf '%s' \"$1\" > " root "/agentForm.txt\n  mkdir -p \"$PWD/tests/fixtures/agentLoop/mvp\" && cp " fixture " \"$PWD/tests/fixtures/agentLoop/mvp/e2e.asn\"\n"
                    exports "  F=\"${1%)}\"\n  " h "/bin/asl \"$F :backend \\\"script/e2e\\\")\"\n  C=$?\n  echo '(:servedBy :model \"kmK31Pro\")'\n  exit $C ;;\n*) exec " h "/bin/asl \"$@\" ;;\nesac\n"))
         (_ (dirCreate (str root "/repo/bin")))
         (w (fileWrite (str root "/repo/bin/asl") body))
