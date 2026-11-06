@@ -516,8 +516,63 @@ fn ! testKeyNoClobber -> Bool
         (assert (not (stringContains? (pairSecond good) other)) "the key is not in the note")
         true))
 
+; (:m :ref VCS-STORE-LOWS-G3 :do "the digest binds the row key: a clean file's signed row copied under a dirty file's key is a miss and the dirty site is still named")
+fn ! testKeyBound -> Bool
+  (let [(store (str "/tmp/vcsDirectAuditBound-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove store))
+        (dirty (pairOf "t/a.asl" (srcList "push")))
+        (clean (pairOf "t/c.asl" "(module t/c\n  :x [f]\n  :i [])\n\nfn f -> Int64\n  1\n"))
+        (files (list dirty clean))
+        (plain (siteKeys (va/scanFiles files)))
+        (cold (va/scanCached! store files))
+        (rows (rowsOf store))
+        (kDirty (optionOr (listHead (filter (fn [(k String)] -> Bool (stringContains? (optionOr (mapGet rows k) "") "push")) (mapKeys rows))) ""))
+        (kClean (optionOr (listHead (filter (fn [(k String)] -> Bool (not (stringContains? (optionOr (mapGet rows k) "") "push"))) (mapKeys rows))) ""))
+        (cleanRow (optionOr (mapGet rows kClean) ""))
+        (_ (fileWrite (str store "/vcsDirectAudit.v1") (str kDirty "\t" cleanRow (va/rowEnd) "\n" kClean "\t" cleanRow (va/rowEnd) "\n")))
+        (swapped (siteKeys (pairFirst (va/scanCached! store files))))
+        (_ (pathRemove store))]
+    (do (assert (and (= (siteKeys (pairFirst cold)) plain) (= (listLength plain) 1)) (str "the cold run names the one dirty site: " (stringJoin plain ",")))
+        (assert (and (not (stringEmpty? kDirty)) (not (stringEmpty? kClean)) (not (= kDirty kClean))) "both files have their own row")
+        (assert (= swapped plain) (str "a clean signed row under the dirty key is a miss, the site is named: " (stringJoin swapped ",")))
+        true))
+
+; (:m :ref VCS-STORE-LOWS-G7 :do "the rewrite keeps only verified rows: an unsigned row planted under a key no file uses is not signed into the store")
+fn ! testPlantedUnused -> Bool
+  (let [(store (str "/tmp/vcsDirectAuditUnused-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove store))
+        (_ (dirCreate store))
+        (files (list (pairOf "t/a.asl" (srcList "push"))))
+        (_ (fileWrite (str store "/vcsDirectAudit.v1") (str "zzUnusedKey\t\t" (va/rowEnd) "\n")))
+        (run (va/scanCached! store files))
+        (secret (stringTrim (resultOr (fileReadString (str store "/" (va/keyFile))) "")))
+        (rows (rowsOf store))
+        (verified (va/verifiedRows secret rows))
+        (_ (pathRemove store))]
+    (do (assert (= (pairSecond run) "") (str "the run wrote the store: " (pairSecond run)))
+        (assert (= (mapSize verified) 1) (str "the rewrite holds one verified row, the scanned file's: " (stringFromInt64 (mapSize verified))))
+        (assert (not (some? (mapGet verified "zzUnusedKey"))) "the planted unsigned row is not signed into the store")
+        true))
+
+; (:m :ref VCS-STORE-LOWS-G6 :do "each store makes its own random key: two fresh stores get two different well-formed keys")
+fn ! testKeysDiffer -> Bool
+  (let [(a (str "/tmp/vcsDirectAuditKeyA-" (stringFromInt64 (procSelf))))
+        (b (str "/tmp/vcsDirectAuditKeyB-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove a))
+        (_ (pathRemove b))
+        (files (list (pairOf "t/a.asl" (srcList "push"))))
+        (_ (va/scanCached! a files))
+        (_ (va/scanCached! b files))
+        (ka (stringTrim (resultOr (fileReadString (str a "/" (va/keyFile))) "")))
+        (kb (stringTrim (resultOr (fileReadString (str b "/" (va/keyFile))) "")))
+        (_ (pathRemove a))
+        (_ (pathRemove b))]
+    (do (assert (and (= (stringLength ka) 64) (= (stringLength kb) 64)) "both stores made a 64-hex key")
+        (assert (not (= ka kb)) "two fresh stores get different keys")
+        true))
+
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))
