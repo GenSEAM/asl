@@ -75,6 +75,11 @@
 fn job argv: (List String) cwd: String env: (List String) -> Job
   (Job :argv argv :cwd cwd :env env)
 
+; (:m :ref GITCONFIG-GUARD :do "an inherited GIT_ variable reaches a child only when it names an identity, a transport or a prompt; GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_CONFIG_* and every other one is dropped, since a child that inherits them from a git hook or a fixture runs every git call against that repository (GIT_DIR=<main>/.git git init --bare set core.bare=true in the shared config); a caller that means one passes it as an override")
+fn inheritedOk? name: String -> Bool
+  (or (not (stringStartsWith? name "GIT_"))
+      (listContains? (list "GIT_AUTHOR_NAME" "GIT_AUTHOR_EMAIL" "GIT_AUTHOR_DATE" "GIT_COMMITTER_NAME" "GIT_COMMITTER_EMAIL" "GIT_COMMITTER_DATE" "GIT_SSH" "GIT_SSH_COMMAND" "GIT_ASKPASS" "GIT_TERMINAL_PROMPT" "GIT_EDITOR" "GIT_PAGER") name))
+
 fn secretName? name: String -> Bool
   (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
 
@@ -106,7 +111,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (names (map nameOf rows))]
     (listAppend rows
       (filter (fn [(row String)] -> Bool
-                (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
+                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (inheritedOk? k)))))
               (envList))))
 
 ; (:m :ref HL-FIXWAVE :do "HL-DELETE retired asl/host/out/asl-host for good: builtBinary! used to fall back to it whenever bin/asl was present but not yet proven fresh (avoiding every parallel caller tripping bin/asl's rebuild lock at once); there is no longer a second, always-ready binary to fall back to, so the only honest answer is bin/asl itself (fresh or not -- bin/asl's own lock protocol already serializes concurrent rebuilders) or nothing")

@@ -8,7 +8,7 @@
 # AgentSlang Universal Installer bootstrap: it only finds the native asl entry point (bin/asl) and runs the ASL installer through it, hostless
 # Canonical URL: https://aslang.dev/install.sh
 # Usage: curl -fsSL https://aslang.dev/install.sh | sh
-set -eu
+set -eu; unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE GIT_PREFIX GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 REPO_URL="${REPO_URL:-https://github.com/GenSEAM/asl.git}"
 export REPO_URL
 FROM=pipe
@@ -77,19 +77,9 @@ elif [ -e /dev/tty ]; then
   if (: </dev/tty) 2>/dev/null; then TTY=devtty; else TTY=devttyFail; fi
 fi
 INSTALLER="$PKG/packages/asl-target-sh/src/distrib.asl"
-if [ "$DRY" -eq 0 ] && [ -e "$TREE/.git" ] && git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
-  # a linked worktree shares .git/config with its main checkout: the driver names the main checkout's tools, never this worktree's
-  GD="$(cd "$TREE" && cd "$(git rev-parse --git-dir)" && pwd -P)" || GD=""
-  GC="$(cd "$TREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" || GC=""
-  DPKG="$PKG"; DBIN="$ASLBIN"
-  if [ -z "$GD" ] || [ -z "$GC" ]; then DBIN=""
-  elif [ "$GD" != "$GC" ]; then
-    if DPKG="$(pkg_of "$(dirname "$GC")")" && DBIN="$(asl_of "$DPKG")"; then :; else DBIN=""; fi
-  fi
-  if [ -n "$DBIN" ]; then
-    git -C "$TREE" config --local merge.asnRows.driver "\"$DBIN\" run \"$DPKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
-    git -C "$TREE" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'
-  fi
+if [ "$DRY" -eq 0 ] && [ "$(git -C "$TREE" rev-parse --git-dir 2>/dev/null)" = .git ]; then
+  git -C "$TREE" config --local merge.asnRows.driver "\"$ASLBIN\" run \"$PKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
+  git -C "$TREE" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'
 fi
 if [ "$TTY" = devtty ]; then exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@" </dev/tty; fi
 exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@"
