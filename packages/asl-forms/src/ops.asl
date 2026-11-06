@@ -464,7 +464,10 @@ fn runNested! root: String id: Int64 form: String held: (List String) -> StepOut
   (let [(p (k/parseStep form))
         (bad (t/unknownKeys! (knowContext! root) p.op p.kwargs))]
     (if (listEmpty? (pairFirst bad))
-      (runStepHeld! root id p.op p.kwargs p.args held form)
+      (let [(wrong (t/badTypes! (knowContext! root) p.op p.kwargs))]
+        (if (listEmpty? wrong)
+          (runStepHeld! root id p.op p.kwargs p.args held form)
+          (rejected id p.op "ERR_PARAM_TYPE" (str " :params (" (stringJoin (map (fn [(w (Pair String (Pair String String)))] -> String (str "(:" (pairFirst w) " :type " (pairFirst (pairSecond w)) " :got " (str "\"" (k/escapeAsnVal (pairSecond (pairSecond w))) "\"") ")")) wrong) " ") ")"))))
       (rejected id p.op "ERR_UNKNOWN_KEY" (str " :keys (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairFirst bad)) " ") ") :accepted (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairSecond bad)) " ") ")"))))
 
 fn targetRun! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> StepOutcome

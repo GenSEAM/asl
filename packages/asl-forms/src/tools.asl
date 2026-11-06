@@ -1,5 +1,5 @@
 (module asl-forms/tools
-  :x [ToolOp Registry loadRegistry! toolsStep! helpStep! visibleOps! unknownKeys!]
+  :x [ToolOp Registry loadRegistry! toolsStep! helpStep! visibleOps! unknownKeys! paramTypeOk? badTypes!]
   :i [(asl-forms/kernel :a k) (asl-forms/search :a s) (asl-forms/similarity :a sm) (asl-proc/coreProcess :a cp) (asl-checker/types :a ty) (asl-ir/lower :a lo)])
 
 
@@ -144,14 +144,14 @@ fn reqTrue? t: String -> Bool
   (let [(b (stringToBytes t)) (n (stringLength t))]
     (>= (pairFirst (searchFrom t b n 0 (fn [(i Int64)] -> Int64 (let [(v (keyThenWs b n i ":req"))] (if (and (>= v 0) (startsAt? b n v "true") (not (wordB? (byteAt b n (+ v 4))))) (+ v 4) -1))))) 0))
 
-(schema Param (:f name String) (:f req Bool) (:f compact String))
+(schema Param (:f name String) (:f req Bool) (:f ptype String) (:f compact String))
 
 fn paramOf pbody: String name: String -> Param
   (let [(req (reqTrue? pbody))
         (pt (typeOf pbody))
         (rd (if req "req" (let [(d (defaultToken pbody))] (if (stringEmpty? d) "\"\"" d))))
         (note (optionOr (keyString pbody ":note") ""))]
-    (Param :name name :req req
+    (Param :name name :req req :ptype pt
            :compact (cond
                       ((not (stringEmpty? note)) (str "(:" name " " pt " " rd " \"" (k/escapeAsnVal note) "\")"))
                       ((= rd "\"\"") (str "(:" name " " pt ")"))
@@ -271,6 +271,29 @@ fn ! unknownKeys! ctx: s/KnowCtx op: String kw: (Map String String) -> (Pair (Li
             (if (listEmpty? accepted)
               (pair (list) (list))
               (pair (listSort (filter (fn [(k String)] -> Bool (not (listContains? accepted k))) (mapKeys kw))) accepted)))))))
+
+; (:m :ref FORMS-PARAM-TYPES :do "a value against the :type the catalogue declares: int is a decimal integer, bool is true or false (a bare flag with no value passes); str, sym, forms and any other declared type are not checked")
+fn paramTypeOk? typ: String val: String -> Bool
+  (cond
+    ((= typ "int") (some? (stringToInt64 val)))
+    ((= typ "bool") (or (stringEmpty? val) (or (= val "true") (= val "false"))))
+    (else true))
+
+; (:m :ref FORMS-PARAM-TYPES :do "the keys a step passes whose value does not fit the declared :type, as (key (type value)) sorted by key; an op or key the catalogue does not declare yields none, unknown keys are the other check")
+fn ! badTypes! ctx: s/KnowCtx op: String kw: (Map String String) -> (List (Pair String (Pair String String)))
+  (match (loadRegistry! ctx)
+    ((none) (list))
+    ((some reg)
+      (match (mapGet reg.ops op)
+        ((none) (list))
+        ((some o)
+          (let [(ps (paramItems o.paramsRaw (stringToBytes o.paramsRaw) (stringLength o.paramsRaw) 0 (list)))]
+            (listSortBy (fn [(b (Pair String (Pair String String)))] -> String (pairFirst b))
+              (fold (fn [(acc (List (Pair String (Pair String String)))) (p Param)] -> (List (Pair String (Pair String String)))
+                      (match (mapGet kw p.name)
+                        ((none) acc)
+                        ((some v) (if (paramTypeOk? p.ptype v) acc (listAppend acc (list (pair p.name (pair p.ptype v))))))))
+                    (list) ps)))))))
 
 fn ! anyAslFile? dir: String -> Bool
   (match (dirList dir)
