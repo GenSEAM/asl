@@ -84,7 +84,7 @@ fn ! testDrain bin: String -> Bool
         (assert (and (stringContains? starts2 "A gates") (stringContains? starts2 "B write")) "the resumed run launched what the drain held back")
         true))
 
-; (:m :do "conductor restart (the CLI the deploy runs, here with a long grace, then the file is re-armed to 1 s right before the loop so CLI start latency cannot expire it) while C's write sleeps 30 s: runLoop! returns 0 after the grace with C recorded as left and its stage still running; a refresh that writes the stop file bounds the loop if the restart file were ignored")
+; (:m :do "conductor restart (the CLI the deploy runs, here with a long grace, then the file is re-armed with a deadline 60 s in the past right before the loop, so the drain stops after one tick whatever the machine speed) while C's write sleeps 30 s: runLoop! returns 0 after the grace with C recorded as left and its stage still running; a refresh that writes the stop file bounds the loop if the restart file were ignored")
 fn ! testDeadline bin: String -> Bool
   (let [(dir (scratch "deadline"))
         (_ (cleanup dir))
@@ -95,7 +95,7 @@ fn ! testDeadline bin: String -> Bool
         (row (readOr dir "restart"))
         (until (cd/restartUntil! dir))
         (graceMs (- until (/ (nowNs) 1000000)))
-        (rearmed (cd/requestRestart! dir 1))
+        (rearmed (cd/requestRestart! dir (- 0 60)))
         (t0 (/ (nowNs) 1000000))
         (code (cd/runLoop! ctx (fn [] -> (List (Pair String Int64)) (list)) (fn [] -> Unit (let [(_ (cd/requestStop! dir))] ())) 0 0 1))
         (ms (- (/ (nowNs) 1000000) t0))
@@ -103,6 +103,9 @@ fn ! testDeadline bin: String -> Bool
         (pid (match (cd/runRow dir "C" "write") ((some r) (pairFirst r)) ((none) -1)))
         (alive (up? pid))
         (journal (readOr dir "journal.asn"))
+        (restartLeft (fileExists? (cd/restartPath dir)))
+        (stopLeft (fileExists? (cd/stopPath dir)))
+        (diag (str " / restartFile " (if restartLeft "yes" "no") " stopFile " (if stopLeft "yes" "no") " code " (stringFromInt64 code) " ms " (stringFromInt64 ms) " cst " c.st " launched " (stringFromInt64 c.launched) " alive " (if alive "yes" "no") " cli " (stringFromInt64 cli.exit) " rows " (stringFromInt64 (listLength (stringLines journal)))))
         (stopped (cd/stopAll! ctx))
         (_ (cleanup dir))]
     (do (assert (and (ok? putC) writing) "C is writing")
@@ -110,7 +113,8 @@ fn ! testDeadline bin: String -> Bool
         (assert (and (>= graceMs 590000) (<= graceMs 600000)) (str "the CLI --grace-sec 600 sets the deadline 590 to 600 s ahead: " (stringFromInt64 graceMs) " ms"))
         (assert (and (stringContains? row ":untilMs ") (> until 0)) (str "the file carries its deadline: " row))
         (assert (and rearmed (= code 0)) (str "the loop ends with exit 0: " (stringFromInt64 code)))
-        (assert (stringContains? journal "(:restart :finished () :left (\"C\") ") (str "C is recorded as left at the deadline: " journal))
+        (assert (stringContains? journal "(:restart :finished ") (str "a restart row exists: the drain ran and was not preempted by the stop file" diag " / " journal))
+        (assert (stringContains? journal "(:restart :finished () :left (\"C\") ") (str "C is recorded as left at the deadline: " journal diag))
         (assert (< ms 20000) (str "the drain stops at the grace deadline, not at C's end: " (stringFromInt64 ms) " ms"))
         (assert (and (= c.st "writing") (and (= c.launched 1) alive)) (str "C's stage is left running for the next start: " c.st " alive " (if alive "true" "false")))
         (assert (= stopped 1) "the fixture stops C's stage")
