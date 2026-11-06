@@ -39,6 +39,14 @@ fn ! walk! dir: String -> (List String)
                                ((err _) (list))))))
     (resultOr (dirList dir) (list)))
 
+; (:m :ref TOOLROOT-59-FLAKE :do "the checkout .asl is listed whole except the dirs and files other runs write while this test runs (cache holds the native CLI builds and test caches, ratchet.lock the gate lock), so a suite running beside this one cannot turn the listing red; a dry run that wrote anywhere else under .asl still does")
+fn sharedAsl -> (List String)
+  (list "cache" "ratchet.lock")
+
+fn ! aslWatch! repo: String -> (List String)
+  (map (fn [n] (str repo "/.asl/" n))
+    (filter (fn [n] (not (listContains? (sharedAsl) n))) (resultOr (dirList (str repo "/.asl")) (list))))
+
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
         base (str (optionOr (envGet "TMPDIR") "/tmp") "/toolRootTest_" (stringFromInt64 (procSelf)) "_" (stringFromInt64 (nowNs)))
@@ -84,7 +92,7 @@ fn ! runTests -> Bool
         dryRoot (rk/freshRecorderRoot! "dry")
         dryGit (gk/initGitRepo! dryRoot "dryRun" "dry-run@example.invalid")
         dryForm (fn [extra] (str "(:agent :task \"x\" :dryRun true :root \"" (c/escapeAsn dryRoot) "\"" extra ")"))
-        watched (list (str repo "/.asl") dryTree dryRoot)
+        watched (listAppend (aslWatch! repo) (list dryTree dryRoot))
         runsBefore (listFlatMap walk! watched)
         dryWith (m/mainWithRoots (list (dryForm (str " :toolRoot \"" (c/escapeAsn dryTree) "\""))) repo dryRoot)
         dryWithout (m/mainWithRoots (list (dryForm "")) repo dryRoot)
