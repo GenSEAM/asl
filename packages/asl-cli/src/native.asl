@@ -698,21 +698,32 @@ fn ! stagedViews! ctx: sys/Context files: (List String) -> (Result (List verify/
             ((ok ss) (match (stagedView! ctx a) ((err e) (err e)) ((ok s) (ok (listAppend ss (list s))))))))
         (ok (list)) files)
 
+fn ! bareSweepRefused! verb: String -> Int64
+  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every suite\")")) 2)
+
+fn ! allWithPaths! verb: String -> Int64
+  (do (sys/say! (str "(:" verb " :status :failed :error ERR_USAGE :message \"asl " verb " --all takes no paths\")")) 2)
+
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (if (listEmpty? args)
-    (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1)))
-    (let [(outside (filter (fn [(a String)] -> Bool (outsideAsl? ctx a)) args))
-          (others (filter (fn [(a String)] -> Bool (not (outsideAsl? ctx a))) args))]
-      (if (listEmpty? outside)
-        (cmd/dispatch! ctx "check" args)
-        (match (stagedViews! ctx outside)
-          ((err e) (do (sys/sayErr! e) 1))
-          ((ok views)
-            (let [(inRootAsl (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) others))
-                  (nonAsl (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) others))
-                  (all (listAppend views (map (fn [(a String)] -> verify/Staged (verify/Staged :actual a :shown a :maps (list))) inRootAsl)))
-                  (rc (verify/checkStaged! all nonAsl))]
-              rc))))))
+  (cond
+    ((listEmpty? args) (bareSweepRefused! "check"))
+    ((and (listContains? args "--all") (> (listLength args) 1)) (allWithPaths! "check"))
+    ((= args (list "--all")) (match (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
+    (else (checkPaths! ctx args)))
+
+fn ! checkPaths! ctx: sys/Context args: (List String) -> Int64
+  (let [(outside (filter (fn [(a String)] -> Bool (outsideAsl? ctx a)) args))
+        (others (filter (fn [(a String)] -> Bool (not (outsideAsl? ctx a))) args))]
+    (if (listEmpty? outside)
+      (cmd/dispatch! ctx "check" args)
+      (match (stagedViews! ctx outside)
+        ((err e) (do (sys/sayErr! e) 1))
+        ((ok views)
+          (let [(inRootAsl (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) others))
+                (nonAsl (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) others))
+                (all (listAppend views (map (fn [(a String)] -> verify/Staged (verify/Staged :actual a :shown a :maps (list))) inRootAsl)))
+                (rc (verify/checkStaged! all nonAsl))]
+            rc)))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rootedAbs ctx (resultOr (realPath a) a))
@@ -732,13 +743,14 @@ fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
 
 fn ! test! ctx: sys/Context args: (List String) dir: String -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
-        (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (not (= (first args) "--native")))))
+        (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (and (not (listContains? args "--all")) (not (= (first args) "--native"))))))
         (hosted (or (listContains? args "--compare") (or tracing (and (not plainFiles) (not (atRoot? ctx))))))]
     (cond
       (hosted (cmd/dispatch! ctx "test" args))
       ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir))
       ((listContains? args "--changed") (changedTest! ctx args))
-      ((listEmpty? args) (sweepTest! ctx))
+      ((listEmpty? args) (bareSweepRefused! "test"))
+      ((listContains? args "--all") (if (= args (list "--all")) (sweepTest! ctx) (allWithPaths! "test")))
       ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
       (else (match (cmd/testFiles! args (list))
               ((err code) code)

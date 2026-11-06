@@ -403,10 +403,13 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
         (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test --native SUITE... runs from the workspace root " ctx.root "\")")) 2)
         (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/asl/tools/nativeTest.asl") suites)))
                     (list))))
-    (let [(files (filter (fn [(a String)] -> Bool (!= a "--trace")) args))
+    (let [(files (filter (fn [(a String)] -> Bool (and (!= a "--trace") (!= a "--all"))) args))
+          (all (listContains? args "--all"))
           (tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
           (host ctx.hostBin)]
       (cond
+        ((and all (not (listEmpty? files))) (do (sys/say! "(:test :status :failed :error ERR_USAGE :message \"asl test --all takes no paths\")") 2))
+        ((and (listEmpty? files) (not all)) (do (sys/say! "(:test :status :failed :error ERR_BARE_SWEEP :message \"asl test needs paths or --all; a bare asl test would sweep every suite\")") 2))
         ((not (sys/executable? host)) (do (sys/say! (sys/hostAbsent "test")) 2))
         ((listEmpty? files)
           (let [(rc (sys/run! (list host "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "test" host)))]
@@ -469,7 +472,13 @@ fn ! workspaceOf! dir: String -> (Option String)
     (else (workspaceOf! (parentDir dir))))
 
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (if (listEmpty? args)
+  (cond
+    ((and (listContains? args "--all") (> (listLength args) 1)) (do (sys/say! "(:check :status :failed :error ERR_USAGE :message \"asl check --all takes no paths\")") 2))
+    ((listEmpty? args) (do (sys/say! "(:check :status :failed :error ERR_BARE_SWEEP :message \"asl check needs paths or --all; a bare asl check would sweep every file\")") 2))
+    (else (checkOrSweep! ctx args)))
+
+fn ! checkOrSweep! ctx: sys/Context args: (List String) -> Int64
+  (if (= args (list "--all"))
     (if (not (sys/executable? ctx.hostBin))
       (do (sys/say! (sys/hostAbsent "check")) 2)
       (sys/execv! (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "check" ctx.hostBin) (list)))

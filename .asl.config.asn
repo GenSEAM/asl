@@ -39,7 +39,7 @@
   :tasks [
     (:task :name "project" :cmd "asl project" :doc "Transpile all declared ASN projections to host targets")
     (:task :name "gate" :cmd "asl gate" :doc "Run full 7-gate pure ASL verification")
-    (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
+    (:task :name "test" :cmd "asl test --all" :doc "Run native ASL test suites")
     (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")
     (:task :name "telemetry" :cmd "asl telemetry" :doc "Collect performance telemetry and token metrics")
     (:task :name "web:build" :cmd "asl run asl/web/tools/build.asl" :doc "Prerender aslang.dev and compile web/site to site.wasm into web/dist")

@@ -230,7 +230,7 @@
   (:portableHarness
     :status :target
     :manifestSniffing [
-      (:manifest :priority 1 :file ".asl.config.asn" :ecosystem :asl :build "./bin/asl check" :test "asl/host/out/asl-host test" :lint "./bin/asl audit consistency")
+      (:manifest :priority 1 :file ".asl.config.asn" :ecosystem :asl :build "./bin/asl check --all" :test "asl/host/out/asl-host test" :lint "./bin/asl audit consistency")
       (:manifest :priority 2 :file "Cargo.toml" :ecosystem :rust :build "cargo check" :test "cargo test" :lint "cargo clippy")
       (:manifest :priority 3 :file "pyproject.toml" :ecosystem :python :build "python -m py_compile" :test "pytest" :lint "ruff check")
       (:manifest :priority 4 :file "package.json" :ecosystem :nodeTypescript :build "npm run build" :test "npm test" :lint "npm run lint")

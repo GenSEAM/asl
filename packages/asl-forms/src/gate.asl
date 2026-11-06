@@ -1013,10 +1013,10 @@ fn stagedFailure! env: GateEnv sp: (Pair String String) -> String
 
 fn workspaceCheck! env: GateEnv cwd: String aslRoot: (Option String) -> (Pair Int64 String)
   (let [(bin (k/joinPath env.binDir "asl"))
-        (r (runArgv! (list bin "check") (some cwd) (optionMap (fn [(v String)] -> (List String) (withEnv! "ASL_ROOT" v)) aslRoot) 300000 0))]
+        (r (runArgv! (list bin "check" "--all") (some cwd) (optionMap (fn [(v String)] -> (List String) (withEnv! "ASL_ROOT" v)) aslRoot) 300000 0))]
     (cond
       ((not (stringEmpty? r.failure)) (pair -1 (osErrorText r.failure bin)))
-      (r.timedOut (pair -1 (timeoutText (list bin "check") 300)))
+      (r.timedOut (pair -1 (timeoutText (list bin "check" "--all") 300)))
       (else (pair r.code (let [(e (stringTrim r.errText)) (o (stringTrim r.out))] (pyTrunc (cond ((not (stringEmpty? e)) e) ((not (stringEmpty? o)) o) (else "workspace check failed")) 400))))))
 
 fn checkWorkspace! env: GateEnv id: Int64 op: String -> GateOutcome
