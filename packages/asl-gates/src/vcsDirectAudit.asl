@@ -34,7 +34,7 @@
   (:f inSig Bool))
 
 fn vcsVerbs -> (List String)
-  (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout")
+  (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout" "restore" "apply" "clean" "stash" "rm")
 
 fn valueOptions -> (List String)
   (list "-C" "-c" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env")
@@ -134,6 +134,7 @@ fn verbLoop xs: (List String) skipPh: Bool skipNext: Bool seenPh: Bool -> String
           ((mark? x) (cond (skipPh (verbLoop rest skipPh false (or seenPh (= x (paramMark))))) ((= x (paramMark)) "param") (else "none")))
           ((option? x) (verbLoop rest skipPh false seenPh))
           ((and skipPh (pathLike? x)) (verbLoop rest skipPh false seenPh))
+          ((and (= x "worktree") (listContains? (list "add" "remove" "prune" "move") (optionOr (listHead rest) ""))) "v:worktree")
           ((listContains? (vcsVerbs) x) (str "v:" x))
           (else "word")))))
 
@@ -451,8 +452,12 @@ fn contentSha text: String -> String
 fn namesDigest h: Helpers -> String
   (contentSha (stringJoin (listSort h.names) " "))
 
+; (:m :do "the verbs a scan reports are part of every cache key, so widening the verb list never serves rows scanned with the old list")
+fn verbsTag -> String
+  (optionOr (stringSlice (contentSha (stringJoin (vcsVerbs) " ")) 0 12) "")
+
 fn viewKey sha: String hd: String h: Helpers file: String -> String
-  (str sha "|" hd "|" (if (excluded? file) "x" "n") "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
+  (str sha "|" hd "|" (verbsTag) "|" (if (excluded? file) "x" "n") "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
 
 ; (:m :do "one cache row: key TAB helper symbols TAB sites as verb-space-symbol, items joined by the item separator")
 fn encodeRow key: String found: (List String) sites: (List Site) file: String -> String

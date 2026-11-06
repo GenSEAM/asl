@@ -571,8 +571,23 @@ fn ! testKeysDiffer -> Bool
         (assert (not (= ka kb)) "two fresh stores get different keys")
         true))
 
+; (:m :ref VCSDIRECT-READ-VERBS :do "the mutating verbs restore apply clean stash rm are sites, worktree only with add remove prune move; a read verb (status, diff, log, worktree list) is not")
+fn testMutatingVerbs -> Bool
+  (let [(one (fn [(body String)] -> (List String) (keysOf (list (pairOf "t/m.asl" (srcShell body))))))
+        (site (fn [(verb String)] -> (List String) (list (str "t/m.asl#f!|git " verb))))]
+    (do (assert (= (one (str (g) " restore --staged x")) (site "restore")) "a raw restore is a site")
+        (assert (= (one (str (g) " -C d apply p.diff")) (site "apply")) "apply is a site")
+        (assert (= (one (str (g) " clean -fd")) (site "clean")) "clean is a site")
+        (assert (= (one (str (g) " stash push")) (site "stash")) "stash is a site")
+        (assert (= (one (str (g) " rm --cached x")) (site "rm")) "rm is a site")
+        (assert (= (one (str (g) " worktree add ../w b")) (site "worktree")) "worktree add is a site")
+        (assert (= (one (str (g) " worktree remove ../w")) (site "worktree")) "worktree remove is a site")
+        (assert (= (one (str (g) " worktree list")) (list)) "worktree list reads and is not a site")
+        (assert (= (one (str (g) " status --short")) (list)) "status is not a site")
+        true))
+
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))
