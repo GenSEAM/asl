@@ -10,7 +10,7 @@ fn ! gitIn dir: String args: String -> String
 fn ! readOr path: String -> String
   (resultOr (fileReadString path) "")
 
-; (:m :do "scripted Leon: the conductor starts <repo>/bin/asl with the (:agent ...) form in the unit worktree; any other call goes to the real CLI of this worktree; in readloop mode it also moves the production stand-in ref trialProbe one commit back, a stage moving a production head mid-run; a good run first copies seeded.txt, when its worktree has one, to <repo>/.git/seen-<id>")
+; (:m :do "scripted Leon: the conductor starts <repo>/bin/asl with the (:agent ...) form in the unit worktree; any other call goes to the real CLI of this worktree; in readloop mode it also moves the production stand-in ref trialProbe one commit back, a stage moving a production head mid-run, and fast-forwards the trial repo main to sh/BASE, a trial main moving mid-run (DEV-PROMOTE); a good run first copies seeded.txt, when its worktree has one, to <repo>/.git/seen-<id>")
 fn leonScript here: String repo: String prod: String -> String
   (str "#!/bin/sh\ncase \"$1\" in\n  \"(:agent\"*) ;;\n  *) exec " here "/bin/asl \"$@\" ;;\nesac\n"
        "id=$(basename \"$PWD\"); id=${id#asex-}\nmode=$(cat " repo "/.git/leonMode-$id 2>/dev/null)\nmkdir -p .asl/run/agentLoop\nj=.asl/run/agentLoop/s$id.journal\n"
@@ -18,6 +18,7 @@ fn leonScript here: String repo: String prod: String -> String
        "  for t in 1 2 3; do echo \"(:turn $t :reply \\\"(:step :op read :file check.asl)\\\")\" >> $j; done\n"
        "  echo \"(:turn 3 :signal :readStreak :cause :notFound :reason \\\"3 turns in a row persisted nothing\\\")\" >> $j\n"
        "  git -C " prod " branch -f trialProbe HEAD~1\n"
+       "  git -C " repo " fetch -q --update-head-ok . sh/BASE:main\n"
        "  echo \"(:result :status :escalated :stop readStreak :turns 3)\" >> $j\n"
        "  echo \"(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :servedAlias \\\"flashLow\\\" :turns 3))\"\n"
        "  exit 1\nfi\n"
@@ -156,6 +157,7 @@ fn ! testCycle -> Bool
         (devCur (gitIn dev "branch --show-current"))
         (devBase1 (gitIn dev "rev-parse dev"))
         (repoMain1 (gitIn (str root "/repo") "rev-parse main"))
+        (baseSha (gitIn (str root "/repo") "rev-parse sh/BASE"))
         (prodSha1 (gitIn prod "rev-parse trialProbe"))
         (trainArgs (readOr (str dev "/.git/trainArgs")))
         (ev2 (readOr (str root "/store/trial/T2-A/sT2-A.journal")))
@@ -194,7 +196,7 @@ fn ! testCycle -> Bool
         (assert (and (= cBroken.exit 1) (and (stringContains? cBroken.out "devRepoBuild:notRunnable") (not (stringContains? cBroken.out "devRepoRemote")))) (str "check refuses a dev host build that does not run: " cBroken.out))
         (assert (and (= cGood.exit 0) (stringContains? cGood.out "(:check :problems ())")) (str "check passes on the trial setup: " (stringFromInt64 cGood.exit) " " cGood.out))
         (assert (and (= cBad.exit 1) (and (stringContains? cBad.out "devRepoOnMain:main") (stringContains? cBad.out "isProduction:"))) (str "check refuses a devRepo on main inside a production repo: " cBad.out))
-        (assert (and (= rRun.exit 1) (and (stringContains? rRun.out ":cells 4 :merged 3 ") (stringContains? rRun.out (str ":headProblems (\"headMoved:" prod "@trialProbe\")")))) (str "run: four cells, three merged, and exit 1 naming the head a stage moved mid-run: " (stringFromInt64 rRun.exit) " " rRun.out " " (optionOr (stringSlice runs 0 2400) runs)))
+        (assert (and (= rRun.exit 1) (and (stringContains? rRun.out ":cells 4 :merged 3 ") (stringContains? rRun.out (str ":headProblems (\"headMoved:" prod "@trialProbe\" \"headMoved:" root "/repo@main\")")))) (str "run: four cells, three merged, and exit 1 naming the production head and the trial main a stage moved mid-run: " (stringFromInt64 rRun.exit) " " rRun.out " " (optionOr (stringSlice runs 0 2400) runs)))
         (assert (and (stringContains? t1 ":merged true ") (and (stringContains? t1 "(:write :ok true") (and (stringContains? t1 "(:gates :exit 0 :executed 1 :redBefore (:exit 1 :executed 1)") (and (stringContains? t1 "(:review :verdict \"pass\"") (stringContains? t1 "(:merge :ok true"))))) (str "T1-A passed all four stages: " t1))
         (assert (and (stringContains? t1 ":devBranch \"trialDev-T1-A\"") (and (= devFile "impl") (= devHub "impl"))) (str "T1-A landed on its scratch branch trialDev-T1-A, written from the spec base sh/BASE, not main: " devFile))
         (assert (and (stringContains? t1 ":src leon") (and (stringContains? t1 ":turns 7") (and (stringContains? t1 ":served \"flashLow\"") (stringContains? t1 ":pinBroken false")))) (str "T1-A Leon facts come from the <id>-leon.asn receipt: " t1))
@@ -204,7 +206,7 @@ fn ! testCycle -> Bool
         (assert (and (stringContains? t3 ":merged true ") (and (stringContains? t3 ":seeded false :skipWrite true ") (and (not (stringContains? t3 "(:write ")) (and (not (stringContains? t3 " :leon ")) (= devFile3 "impl"))))) (str "seeded T3 skipped write, passed gates and review and merged: " t3))
         (assert (and (= (stringTrim seen4) "bug") (and (= seedBr4 "bug") (and (= devBug4 "bug") (and (= devImpl4 "impl") (stringContains? t4 ":base \"trialSeed-T4-A\""))))) (str "writer cell T4-A started from trialSeed-T4-A, base plus its seed, saw the seeded bug and merged on top of it: seen=" seen4 " br=" seedBr4 " dev=" devBug4 " impl=" devImpl4 " " t4))
         (assert (stringContains? t3 ":merged true ") "seeded T3 ran although an interrupted run left its worktree behind")
-        (assert (and (= devCur "dev") (and (= devBase1 devBase0) (and (= repoMain1 repoMain0) (and (not (stringEmpty? prodSha1)) (!= prodSha1 prodSha))))) (str "devRepo back on dev, dev and source main unmoved, the production stand-in moved by the stage: " devCur))
+        (assert (and (= devCur "dev") (and (= devBase1 devBase0) (and (!= repoMain1 repoMain0) (and (= repoMain1 baseSha) (and (not (stringEmpty? prodSha1)) (!= prodSha1 prodSha)))))) (str "devRepo back on dev, dev unmoved, the production stand-in and the trial main moved by the stage: " devCur " dev " devBase0 "->" devBase1 " main " repoMain0 "->" repoMain1 " base " baseSha))
         (assert (and (stringContains? trainArgs "train sh/T1-A --onto HEAD") (not (stringContains? trainArgs "sh/T2-A"))) (str "the train ran for merged cells only: " trainArgs))
         (assert (and (ok? wInfra) (and (= rAgain.exit 0) (and (stringContains? rAgain.out ":cells 1 :merged 1 ") (and (= (listLength t1rows) 3) (and (stringContains? t1last ":merged true ") (= (listLength t2rows) 1)))))) (str "the next run retries only the cell whose last record is an infra failure (T1-A incomplete), not the task-failed T2-A: " rAgain.out))
         (assert (and (ok? sRun) (and (ok? sEv) (and (ok? sOther) (and (not staleRun) (and (not staleEv) (and newEv (and otherKept (and (not (stringEmpty? oldT1)) (and (not (stringEmpty? newT1)) (!= newT1 oldT1)))))))))) (str "a retried cell starts clean: its old runs/T1-A-* and trial/T1-A evidence are gone, T1-A-B files kept, sh/T1-A is a new branch: " oldT1 " -> " newT1))

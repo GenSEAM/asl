@@ -583,11 +583,16 @@ fn cuModel c: cd/CUnit model: String -> cd/CUnit
 fn ! condAfterWrite! s: Spec id: String r: cd/Res -> Bool
   (ok? (cd/writeCUnit! s.store (cuModel (cuOf id "gating" (if (stringEmpty? r.wt) (wtOf s id) r.wt) (if (stringEmpty? r.branch) (str "sh/" id) r.branch)) r.model)))
 
+; (:m :ref DEV-PROMOTE :do "the merge stage merges the trial repo main into every trialDev-<cell> before its train, so cells compare only while that main stays put: run records it before the first stage and reports headMoved:<repo>@main when it differs after the last")
+fn ! trialMainMoved! s: Spec sha0: String -> (List String)
+  (if (= (gitText s.repo (list "rev-parse" "main")) sha0) (list) (list (str "headMoved:" s.repo "@main")))
+
 fn ! run! s: Spec only: String -> Int64
   (let [(ps (specProblems! s))]
     (if (not (listEmpty? ps))
       (do (println (str "(:refuse :problems " (st/qList ps) ")")) 1)
       (let [(t0 (nowMs))
+            (trialMain0 (gitText s.repo (list "rev-parse" "main")))
             (_ (dirCreate (trialDir s)))
             (doneAlready (doneIds! s))
             (retried (retryIds! s))
@@ -629,7 +634,7 @@ fn ! run! s: Spec only: String -> Int64
                                   (row (recordText s c chain failed leon red (reviewersOf (readOr (cd/journalPath s.store)) c.id) (- now t0) now))]
                               (let [(_ (fileAppend (runsPath s) (str row "\n")))] row)))
                           cells))
-            (after (headProblems! s))
+            (after (listAppend (headProblems! s) (trialMainMoved! s trialMain0)))
             (merged (listLength (filter (fn [(r String)] -> Bool (stringContains? r " :merged true ")) records)))]
         (do (println (str "(:trialRun :cells " (n (listLength cells)) " :merged " (n merged) " :runs " (st/q (runsPath s)) " :headProblems " (st/qList after) ")"))
             (if (listEmpty? after) 0 1)))))
