@@ -42,6 +42,7 @@ fn ! runTests -> Bool
             (r2 (refused binary fixtureRoot "check" (list) "bare asl check" "ERR_BARE_SWEEP"))
             (r3 (refused binary fixtureRoot "test" (list "--all" "onlyFile.asl") "asl test --all with a path" "ERR_USAGE"))
             (r4 (refused binary fixtureRoot "check" (list "--all" "onlyFile.asl") "asl check --all with a path" "ERR_USAGE"))
+            (r5 (refused binary fixtureRoot "test" (list "--trace") "asl test --trace alone" "ERR_BARE_SWEEP"))
             (all (cli! binary fixtureRoot (list "check" "--all")))
             (removed (pathRemove base))]
         (do
@@ -49,4 +50,4 @@ fn ! runTests -> Bool
           (assert (= all.exit 0) (str "asl check --all still sweeps the fixture and passes: " all.out))
           (assert (stringContains? all.out "(:sweep :verb check :runner \"native\" :status :passed :files 1") (str "asl check --all reports the one-file sweep: " all.out))
           (assert (ok? removed) "scratch fixture tree removed")
-          (and r1 (and r2 (and r3 r4)))))))
+          (and r1 (and r2 (and r3 (and r4 r5))))))))

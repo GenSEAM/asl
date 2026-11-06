@@ -51,7 +51,7 @@ host/out/asl-host eval '<expr>'
 Through the CLI (`asl help` lists the commands):
 
 ```bash
-asl check <file>       # delimiter balance, then asl-host check for .asl; bare: every tracked file
+asl check <file|--all> # delimiter balance, then asl-host check for .asl; --all: every tracked file, bare is refused
 asl test <file|dir>    # suites on asl-host; bare: every discovered suite; --changed [BASE] selects by impact
 asl run <file.asl>     # load the file and call its main
 asl intel <subcmd>     # coupling, deadcode, vacuity, sweep, graph, complexity, stubs, trace, lint, outline, impact, query
