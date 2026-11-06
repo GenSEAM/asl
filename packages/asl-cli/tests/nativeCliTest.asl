@@ -81,9 +81,13 @@ fn telemetry? line: String -> Bool
   (listAny? (fn [(p String)] -> Bool (stringStartsWith? line p))
             (list "NATIVE-SELF " "NATIVE-PRELUDE-" "NATIVE-MODULE-PHASE" "NATIVE-CACHE " "NATIVE-WORKERS " "NATIVE-EVAL"))
 
+; (:m :ref INBOX-RELEASE-PIN :do "the version banner carries the release tag and commit of the tree under test, which change with every commit; the line keeps its banner and the word release, the tag and commit are masked to $RELEASE (releaseTest pins their values)")
+fn releaseMask line: String -> String
+  (if (stringStartsWith? line "asl 0.1.0 (bin/asl) release ") "asl 0.1.0 (bin/asl) release $RELEASE" line)
+
 fn normalize text: String root: String sweep: String -> String
   (let [(lines (stringSplit (stringReplace (stringReplace (stringReplace (stringReplace text sweep "$SWEEP") root "$ROOT") ":runner \"native\"" ":runner \"asl-host\"") " (cached)" "") "\n"))]
-    (stringJoin (filter (fn [(l String)] -> Bool (not (telemetry? l))) lines) "\n"))
+    (stringJoin (map releaseMask (filter (fn [(l String)] -> Bool (not (telemetry? l))) lines)) "\n"))
 
 fn envName row: String -> String
   (optionOr (listHead (stringSplit row "=")) row)
