@@ -1,6 +1,6 @@
 (module asl-tools/coord/tests/condRestartTest
   :x [runTests]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (tools/remote/vps :a vps)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (tools/remote/vps :a vps) (tools/remote/coordDeps :a cdp)])
 
 ; (:m :ref COND-GRACEFUL-RESTART :do "the restart file drains the conductor loop: an in-flight stage finishes and is journalled, nothing new starts (no admission, no next stage), the loop ends; a stage past the grace deadline is left running and recorded as left; the next start resumes from the rows; stores are scratch dirs under .asl/cache, stages are the conductorStage fixture")
 fn ! scratch name: String -> String
@@ -84,16 +84,17 @@ fn ! testDrain bin: String -> Bool
         (assert (and (stringContains? starts2 "A gates") (stringContains? starts2 "B write")) "the resumed run launched what the drain held back")
         true))
 
-; (:m :do "conductor restart --grace-sec 1 (the CLI the deploy runs) while C's write sleeps 30 s: runLoop! returns 0 after the grace with C recorded as left and its stage still running; a refresh that writes the stop file bounds the loop if the restart file were ignored")
+; (:m :do "conductor restart (the CLI the deploy runs, here with a long grace, then the file is re-armed to 1 s right before the loop so CLI start latency cannot expire it) while C's write sleeps 30 s: runLoop! returns 0 after the grace with C recorded as left and its stage still running; a refresh that writes the stop file bounds the loop if the restart file were ignored")
 fn ! testDeadline bin: String -> Bool
   (let [(dir (scratch "deadline"))
         (_ (cleanup dir))
         (putC (st/put! dir (task "C" (list "p/c"))))
         (ctx (ctxOf dir bin))
         (writing (tickUntil! ctx dir "C" "writing" 40))
-        (cli (fr/runOneLimited (fr/job (list (fr/nativeCli!) "run" "asl/tools/coord/conductor.asl" "restart" "--store" dir "--grace-sec" "1") "." (fr/childEnv (list))) (fr/limits 600 64)))
+        (cli (fr/runOneLimited (fr/job (list (fr/nativeCli!) "run" "asl/tools/coord/conductor.asl" "restart" "--store" dir "--grace-sec" "600") "." (fr/childEnv (list))) (fr/limits 600 64)))
         (row (readOr dir "restart"))
         (until (cd/restartUntil! dir))
+        (rearmed (cd/requestRestart! dir 1))
         (t0 (/ (nowNs) 1000000))
         (code (cd/runLoop! ctx (fn [] -> (List (Pair String Int64)) (list)) (fn [] -> Unit (let [(_ (cd/requestStop! dir))] ())) 0 0 1))
         (ms (- (/ (nowNs) 1000000) t0))
@@ -106,7 +107,7 @@ fn ! testDeadline bin: String -> Bool
     (do (assert (and (ok? putC) writing) "C is writing")
         (assert (and (= cli.exit 0) (stringContains? cli.out "(:restart :requested true)")) (str "conductor restart writes the file: " cli.out))
         (assert (and (stringContains? row ":untilMs ") (> until 0)) (str "the file carries its deadline: " row))
-        (assert (= code 0) (str "the loop ends with exit 0: " (stringFromInt64 code)))
+        (assert (and rearmed (= code 0)) (str "the loop ends with exit 0: " (stringFromInt64 code)))
         (assert (stringContains? journal "(:restart :finished () :left (\"C\") ") (str "C is recorded as left at the deadline: " journal))
         (assert (< ms 20000) (str "the drain stops at the grace deadline, not at C's end: " (stringFromInt64 ms) " ms"))
         (assert (and (= c.st "writing") (and (= c.launched 1) alive)) (str "C's stage is left running for the next start: " c.st " alive " (if alive "true" "false")))
@@ -116,7 +117,9 @@ fn ! testDeadline bin: String -> Bool
 ; (:m :do "vps sync --deploy runs conductor restart only when the deployed range touches asl/tools/coord")
 fn ! testDeployRange -> Bool
   (do (assert (vps/coordTouched? "tools/remote/vps.asl\nasl/tools/coord/conductor.asl\n") "a coord path in the range restarts the conductor")
-      (assert (not (vps/coordTouched? "asl/tools/fleet/run.asl\nasl/tools/coordinate.asl\n")) "paths outside asl/tools/coord/ do not")
+      (assert (vps/coordTouched? "asl/tools/fleet/run.asl\n") "without an import closure any changed path restarts (fails closed)")
+      (assert (not (cdp/coordTouchedIn? "asl/tools/fleet/run.asl\nasl/tools/coordinate.asl\n" (list "asl/tools/coord/conductor.asl"))) "with a closure, paths outside asl/tools/coord/ and outside the closure do not")
+      (assert (cdp/coordTouchedIn? "asl/tools/fleet/run.asl\n" (list "asl/tools/coord/conductor.asl" "asl/tools/fleet/run.asl")) "with a closure, a changed closure member outside asl/tools/coord/ does")
       (assert (not (vps/coordTouched? "")) "an empty range does not")
       true)
 
