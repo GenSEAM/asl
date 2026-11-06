@@ -320,6 +320,32 @@ fn ! testForgery -> Bool
         (assert (and trackedStaged (stringContains? tracked "ERR_VCS_CACHE_TRACKED")) (str "a tracked path under .asl/cache is refused: " tracked))
         true))
 
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verb list is part of the cache key: a store whose rows carry a valid mac but were written under the key without the verb digest (as before the list was widened), with sites emptied, does not hide a restore site; the real audit rescans and names it")
+fn dropKeyPart k: String -> String
+  (stringReplace k (str "|" (va/verbsTag) "|") "|")
+
+fn ! testCacheKeyVerbs -> Bool
+  (let [(root (str "/tmp/vcsDirectAuditVerbs-" (stringFromInt64 (procSelf))))
+        (store (str root "-store"))
+        (_ (pathRemove root))
+        (_ (pathRemove store))
+        (based (repoWith! root))
+        (allow (str root "/.asl/mem/vcsDirectAllow.asn"))
+        (newSite (and (put! root "t/r.asl" (srcList "restore")) (stage! root)))
+        (honest (receiptOr (va/auditWith! root allow "" store)))
+        (path (str store "/vcsDirectAudit.v1"))
+        (secret (stringTrim (resultOr (fileReadString (str store "/" (va/keyFile))) "")))
+        (rows (va/verifiedRows secret (va/parseCache (resultOr (fileReadString path) ""))))
+        (stale (fold (fn [(m (Map String String)) (k String)] -> (Map String String) (mapSet m (dropKeyPart k) (emptySites (optionOr (mapGet rows k) "")))) (mapEmpty) (mapKeys rows)))
+        (wrote (ok? (fileWrite path (va/cacheText (va/signRows secret stale)))))
+        (after (receiptOr (va/auditWith! root allow "" store)))
+        (_ (pathRemove store))
+        (_ (pathRemove root))]
+    (do (assert (and based newSite wrote) "temp repo with a restore site and a store rewritten under old keys")
+        (assert (and (> (listLength (mapKeys rows)) 0) (stringContains? honest ":new (\"t/r.asl#f!|git restore\")")) (str "the honest audit names the restore site: " honest))
+        (assert (stringContains? after ":new (\"t/r.asl#f!|git restore\")") (str "old-key rows with sites emptied do not hide the restore site: " after))
+        true))
+
 ; (:m :ref VCS-AUDIT-LOWS-F1 :do "the key names the file text, the helper set, whether the path is the vcs layer and the file's own helpers: each part changes the key; an identical text under an excluded path cannot hide the sites of the same text under a normal path")
 fn testKeys -> Bool
   (let [(h0 (va/Helpers :local (list) :names (list)))
@@ -588,6 +614,6 @@ fn testMutatingVerbs -> Bool
 
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testCacheKeyVerbs) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))

@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey verbsTag namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -35,6 +35,9 @@
 
 fn vcsVerbs -> (List String)
   (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout" "restore" "apply" "clean" "stash" "rm")
+
+fn worktreeVerbs -> (List String)
+  (list "add" "remove" "prune" "move")
 
 fn valueOptions -> (List String)
   (list "-C" "-c" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env")
@@ -134,7 +137,7 @@ fn verbLoop xs: (List String) skipPh: Bool skipNext: Bool seenPh: Bool -> String
           ((mark? x) (cond (skipPh (verbLoop rest skipPh false (or seenPh (= x (paramMark))))) ((= x (paramMark)) "param") (else "none")))
           ((option? x) (verbLoop rest skipPh false seenPh))
           ((and skipPh (pathLike? x)) (verbLoop rest skipPh false seenPh))
-          ((and (= x "worktree") (listContains? (list "add" "remove" "prune" "move") (optionOr (listHead rest) ""))) "v:worktree")
+          ((and (= x "worktree") (listContains? (worktreeVerbs) (optionOr (listHead rest) ""))) "v:worktree")
           ((listContains? (vcsVerbs) x) (str "v:" x))
           (else "word")))))
 
@@ -454,7 +457,7 @@ fn namesDigest h: Helpers -> String
 
 ; (:m :do "the verbs a scan reports are part of every cache key, so widening the verb list never serves rows scanned with the old list")
 fn verbsTag -> String
-  (optionOr (stringSlice (contentSha (stringJoin (vcsVerbs) " ")) 0 12) "")
+  (optionOr (stringSlice (contentSha (stringJoin (listAppend (vcsVerbs) (map (fn [(w String)] -> String (str "worktree " w)) (worktreeVerbs))) " ")) 0 12) "")
 
 fn viewKey sha: String hd: String h: Helpers file: String -> String
   (str sha "|" hd "|" (verbsTag) "|" (if (excluded? file) "x" "n") "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
