@@ -315,14 +315,36 @@ fn withFieldDoc fields: (List rd/SExpr) doc: String -> (List rd/SExpr)
     ((none) fields)
     ((some lastF) (let [(fItems (rd/sexprToList lastF))]
                     (if (>= (listLength fItems) 3)
-                      (cons (rd/makeList (list (rd/makeAtom ":field") (optionOr (listGet fItems 1) (rd/makeAtom "")) (optionOr (listGet fItems 2) (rd/makeAtom "")) (rd/makeAtom (str "\"" doc "\"")))) (optionOr (listTail fields) (list)))
+                      (cons (rd/makeList (listAppend (list (rd/makeAtom ":field") (optionOr (listGet fItems 1) (rd/makeAtom "")) (optionOr (listGet fItems 2) (rd/makeAtom "")) (rd/makeAtom (str "\"" doc "\""))) (optionOr (listSlice fItems 4 (listLength fItems)) (list)))) (optionOr (listTail fields) (list)))
                       fields))))
+
+; (:m :ref SCHEMA-DEFAULT-INDENT :do "a :default VALUE after a field of an indentation-form schema is kept on that field as :default VALUE after its doc slot (a string, a number, a symbol or one balanced group), where it used to be dropped and the constructor then reported the field missing")
+fn withFieldDefault fields: (List rd/SExpr) value: rd/SExpr -> (List rd/SExpr)
+  (match (listHead fields)
+    ((none) fields)
+    ((some lastF) (cons (rd/makeList (listAppend (rd/sexprToList lastF) (list (rd/makeAtom ":default") value))) (optionOr (listTail fields) (list)))))
+
+fn schemaDefaultStep toks: (List ilx/IndentToken) fields: (List rd/SExpr) -> (List rd/SExpr)
+  (match (listHead toks)
+    ((none) (listReverse fields))
+    ((some v) (let [(rest (optionOr (listTail toks) (list)))
+                    (opens (match v.kind ((ilx/tokLparen) true) ((ilx/tokLbracket) true) (_ false)))]
+                (if opens
+                  (let [(g (takeBalancedGroup toks))
+                        (value (optionOr (listHead (parseTokensToExprList g.group)) (rd/makeAtom "")))]
+                    (schemaFieldsLoop g.rest (withFieldDefault fields value) (none)))
+                  (let [(value (match v.kind
+                                 ((ilx/tokString text) (rd/makeAtom (str "\"" (escapeStringContent text) "\"")))
+                                 (_ (rd/makeAtom v.rawText))))]
+                    (schemaFieldsLoop rest (withFieldDefault fields value) (none)))))))
 
 fn schemaFieldsLoop toks: (List ilx/IndentToken) fields: (List rd/SExpr) pending: (Option String) -> (List rd/SExpr)
   (match (listHead toks)
     ((none) (listReverse fields))
     ((some t) (let [(rest (optionOr (listTail toks) (list)))
                     (opens (match t.kind ((ilx/tokLparen) true) ((ilx/tokLbracket) true) (_ false)))]
+                (if (and (= t.rawText ":default") (not (listEmpty? fields)))
+                  (schemaDefaultStep rest fields)
                 (match t.kind
                   ((ilx/tokSymbol s) (match pending
                                    ((none) (schemaFieldsLoop rest fields (some s)))
@@ -334,7 +356,7 @@ fn schemaFieldsLoop toks: (List ilx/IndentToken) fields: (List rd/SExpr) pending
                                              (ty (optionOr (listHead (parseTokensToExprList g.group)) (rd/makeAtom "")))]
                                          (schemaFieldsLoop g.rest (cons (schemaField fName ty) fields) (none)))
                                        (schemaFieldsLoop rest fields pending)))
-                       ((none) (schemaFieldsLoop rest fields pending))))))))
+                       ((none) (schemaFieldsLoop rest fields pending)))))))))
 
 fn parseSchemaFieldTokens toks: (List ilx/IndentToken) -> (List rd/SExpr)
   (schemaFieldsLoop toks (list) (none))
