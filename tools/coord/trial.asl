@@ -1,6 +1,6 @@
 (module asl-tools/coord/trial
   :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! stageArgv recordText leonFacts runsPath trialDir
-      check! run! collect! Setup Step setupOf setupSteps trialLanesText runSpecText setup! main]
+      check! run! collect! forgetAttempt! Setup Step setupOf setupSteps trialLanesText runSpecText setup! main]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv)])
 
 ; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER: N pinned writer models on the same tasks through the real stage CLI (conductor.asl stage write|gates|review|merge), one attempt per (task, model) cell, no ladder and no tick; each merge lands on its own scratch branch <devPrefix><cell> in a devRepo that is never main, and the production heads named in the spec are compared before and after so the trial never moves them")
@@ -535,15 +535,23 @@ fn ! doneIds! s: Spec -> (List String)
 fn ! retryIds! s: Spec -> (List String)
   (map (fn [(l String)] -> String (sp/quotedAfter l ":id")) (filter infra? (latestRows (readOr (runsPath s)))))
 
-; (:m :ref SEED-RETRY :do "a retried cell starts clean: its stage results, TRIAL-PIN receipt, copied evidence, worktree and branch sh/<id> from the failed attempt are removed")
+; (:m :ref SEED-RETRY :do "only an id that names a cell of this spec, never empty and without / or .., is forgotten (else -1, nothing removed); a retried cell starts clean: its stage results, TRIAL-PIN receipt, copied evidence, worktree and branch sh/<id> from the failed attempt are removed")
+fn safeCellId? id: String ids: (List String) -> Bool
+  (and (not (stringEmpty? id)) (and (not (stringContains? id "/")) (and (not (stringContains? id "..")) (listContains? ids id))))
+
+; (:m :ref SEED-RETRY :do "the files of one cell in the runs dir: <id>-<stage>.<ext> where the stage holds no dash, so cell T1 never claims T1-A files")
+fn ownRunFile? f: String id: String -> Bool
+  (and (stringStartsWith? f (str id "-")) (not (stringContains? (optionOr (stringSlice f (+ (stringLength id) 1) (stringLength f)) "") "-")))
+
 fn ! forgetAttempt! s: Spec id: String -> Int64
-  (let [(dir (cd/runsDir s.store))
-        (mine (filter (fn [(f String)] -> Bool (stringStartsWith? f (str id "-"))) (resultOr (dirList dir) (list))))
-        (_ (map (fn [(f String)] -> Bool (ok? (pathRemove (str dir "/" f)))) mine))
-        (_ (fr/runOneLimited (fr/job (list "rm" "-rf" (str (trialDir s) "/" id)) "." (fr/childEnv (list))) (fr/limits 60 4)))
-        (_ (dropWorktree! s (wtOf s id)))
-        (_ (git s.repo (list "branch" "-D" (str "sh/" id))))]
-    (listLength mine))
+  (if (not (safeCellId? id (map (fn [(c Cell)] -> String c.id) (cellsOf s)))) -1
+    (let [(dir (cd/runsDir s.store))
+          (mine (filter (fn [(f String)] -> Bool (ownRunFile? f id)) (resultOr (dirList dir) (list))))
+          (_ (map (fn [(f String)] -> Bool (ok? (pathRemove (str dir "/" f)))) mine))
+          (_ (fr/runOneLimited (fr/job (list "rm" "-rf" (str (trialDir s) "/" id)) "." (fr/childEnv (list))) (fr/limits 60 4)))
+          (_ (dropWorktree! s (wtOf s id)))
+          (_ (git s.repo (list "branch" "-D" (str "sh/" id))))]
+      (listLength mine)))
 
 fn lookup ps: (List (Pair String cd/Res)) id: String -> (Option cd/Res)
   (match (listFind (fn [(p (Pair String cd/Res))] -> Bool (= (pairFirst p) id)) ps) ((some p) (some (pairSecond p))) ((none) (none)))
