@@ -6,7 +6,7 @@ fn srcText -> String
   "(module p/m\n  :x [alpha beta\n      Gamma gone]\n  :i [])\n(module p/n :x [delta] :i [])\nfn alpha x: Int64 -> Int64 x\n"
 
 fn testText -> String
-  "(module p/mTest :x [runTests] :i [(p/m :a m)])\nfn ! runTests -> Bool\n  (and (= (m/alpha 1) 1) (= (m/beta 2) 2) (= (delta 3) 3))\n"
+  "(module p/mTest :x [runTests] :i [(p/m :a m)])\nfn ! runTests -> Bool\n  (and (= (m/alpha 1) 1) (= (m/beta 2) 2) (= (delta 3) 3))\n; gone is named here only in a comment\n(:m :ref X :do gone)\n"
 
 fn ignoredText -> String
   "(assert (gone 1) \"only inside node_modules\")\n"
@@ -67,7 +67,14 @@ fn ! runTests -> Bool
       (assert (= (cr/afterLastSeparator "plain") "plain") "a bare name stays whole")
       (assert (mapHas? (cr/tokenSet "(m/beta 2) note" (mapEmpty)) "beta") "a token inside a call is found")
       (assert (not (mapHas? (cr/tokenSet "(m/beta 2)" (mapEmpty)) "alp")) "a prefix of a name is not the name")
-      (assert (= (coveredOf rows "p") 3) "alpha, beta and delta are called, gone appears only under node_modules")
+      (assert (not (mapHas? (cr/tokenSet "(x 1) ; gamma here\n(y 2)" (mapEmpty)) "gamma")) "a name only in a ; comment is not a token")
+      (assert (mapHas? (cr/tokenSet "(x 1) ; gamma here\n(y 2)" (mapEmpty)) "y") "the line after a comment is read")
+      (assert (not (mapHas? (cr/tokenSet "(:m :ref A :do \"zeta) yy\" (k (q))) (kappa 1)" (mapEmpty)) "zeta")) "a name only in a (:m ...) form is not a token, even past a paren inside its string")
+      (assert (mapHas? (cr/tokenSet "(:m :ref A :do \"zeta) yy\" (k (q))) (kappa 1)" (mapEmpty)) "kappa") "the form after a (:m ...) form is read")
+      (assert (mapHas? (cr/tokenSet "(:mx omega)" (mapEmpty)) "omega") "a keyword that only starts with :m is not a meta form")
+      (assert (mapHas? (cr/tokenSet "(f \"a;b\" omega)" (mapEmpty)) "omega") "a ; inside a string does not start a comment")
+      (assert (mapHas? (cr/tokenSet "(f \"a\\\";b\" omega)" (mapEmpty)) "omega") "an escaped quote does not end the string")
+      (assert (= (coveredOf rows "p") 3) "alpha, beta and delta are called; gone appears only under node_modules, in a ; comment and in a (:m ...) form")
       (assert (= (match (counts rows "p") ((some c) c.exports) ((none) 0)) 4) "the package has four lowercase exports")
       (assert (none? (counts rows "q")) "a package without exports has no row")
       (assert (err? missing) "no baseline file is an error that names --update")

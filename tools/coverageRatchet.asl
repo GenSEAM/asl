@@ -1,5 +1,5 @@
 (module asl-tools/coverageRatchet
-  :x [Count readTokens! Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
+  :x [Count commentFree readTokens! Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
   :i [])
 
 (schema Count
@@ -26,6 +26,35 @@ fn afterLastSeparator tok: String -> String
   (let [(b (stringToBytes tok)) (n (bytesLength b))]
     (lastSeparator tok b n (- n 1)))
 
+fn lineEnd b: Bytes n: Int64 i: Int64 -> Int64
+  (if (or (>= i n) (= (bytesGet b i) 10)) i (lineEnd b n (+ i 1)))
+
+fn metaAt? b: Bytes n: Int64 i: Int64 -> Bool
+  (and (< (+ i 2) n) (= (bytesGet b i) 40) (= (bytesGet b (+ i 1)) 58) (= (bytesGet b (+ i 2)) 109) (or (>= (+ i 3) n) (isDelim (bytesGet b (+ i 3)))))
+
+fn groupEnd b: Bytes n: Int64 i: Int64 depth: Int64 inString: Bool -> Int64
+  (cond
+    ((>= i n) n)
+    (inString (cond ((= (bytesGet b i) 92) (groupEnd b n (+ i 2) depth true)) ((= (bytesGet b i) 34) (groupEnd b n (+ i 1) depth false)) (else (groupEnd b n (+ i 1) depth true))))
+    ((= (bytesGet b i) 34) (groupEnd b n (+ i 1) depth true))
+    ((= (bytesGet b i) 59) (groupEnd b n (lineEnd b n i) depth false))
+    ((= (bytesGet b i) 40) (groupEnd b n (+ i 1) (+ depth 1) false))
+    ((= (bytesGet b i) 41) (if (<= depth 1) (+ i 1) (groupEnd b n (+ i 1) (- depth 1) false)))
+    (else (groupEnd b n (+ i 1) depth false)))
+
+fn keepLoop src: String b: Bytes n: Int64 start: Int64 i: Int64 inString: Bool acc: (List String) -> (List String)
+  (cond
+    ((>= i n) (cons (cut src start n) acc))
+    (inString (cond ((= (bytesGet b i) 92) (keepLoop src b n start (+ i 2) true acc)) ((= (bytesGet b i) 34) (keepLoop src b n start (+ i 1) false acc)) (else (keepLoop src b n start (+ i 1) true acc))))
+    ((= (bytesGet b i) 34) (keepLoop src b n start (+ i 1) true acc))
+    ((= (bytesGet b i) 59) (let [(j (lineEnd b n i))] (keepLoop src b n j j false (cons (cut src start i) acc))))
+    ((metaAt? b n i) (let [(j (groupEnd b n i 0 false))] (keepLoop src b n j j false (cons " " (cons (cut src start i) acc)))))
+    (else (keepLoop src b n start (+ i 1) false acc)))
+
+; (:m :ref COVERAGE-RATCHET-COMMENT-CREDIT :do "a name mentioned only in a ; comment or a (:m ...) meta form is not test coverage, so both are cut before tokens are read; a ; inside a string literal is not a comment")
+fn commentFree src: String -> String
+  (let [(b (stringToBytes src))] (stringJoin (listReverse (keepLoop src b (bytesLength b) 0 0 false (list))) ""))
+
 fn tokenLoop src: String b: Bytes n: Int64 i: Int64 acc: (Map String Bool) -> (Map String Bool)
   (cond
     ((>= i n) acc)
@@ -35,7 +64,7 @@ fn tokenLoop src: String b: Bytes n: Int64 i: Int64 acc: (Map String Bool) -> (M
         (tokenLoop src b n j (mapSet (if (= s t) acc (mapSet acc s true)) t true)))))
 
 fn tokenSet src: String acc: (Map String Bool) -> (Map String Bool)
-  (let [(b (stringToBytes src))] (tokenLoop src b (bytesLength b) 0 acc))
+  (let [(clean (commentFree src)) (b (stringToBytes clean))] (tokenLoop clean b (bytesLength b) 0 acc))
 
 fn lowerFirst? name: String -> Bool
   (let [(b (stringToBytes name))]
@@ -66,7 +95,7 @@ fn rowLine c: Count -> String
 
 fn renderBaseline date: String rows: (List Count) -> String
   (str "(:coverageBaseline :date \"" date "\" :unit COVRATCHET\n"
-       "  :method \"per package under asl/packages: module :x exports whose name starts lowercase, covered when the bare name (or its part after the last . or /) is a token of any .asl under a tests/ or test/ directory; tools/coverageRatchet.asl counts it; a name that appears in a test counts, so the figures are an upper bound (a mention in a comment or a same-named function elsewhere counts); a package covered count only rises\"\n"
+       "  :method \"per package under asl/packages: module :x exports whose name starts lowercase, covered when the bare name (or its part after the last . or /) is a token of any .asl under a tests/ or test/ directory; tools/coverageRatchet.asl counts it; a name in a ; comment or a (:m ...) meta form does not count; the figures are still an upper bound (a mention in a string or a same-named function elsewhere counts); a package covered count only rises\"\n"
        (stringJoin (map rowLine rows) "\n") ")\n")
 
 fn parseRow line: String -> (Option Count)
