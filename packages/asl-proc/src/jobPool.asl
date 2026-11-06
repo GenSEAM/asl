@@ -1,5 +1,5 @@
 (module asl-proc/jobPool
-  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv secretName? executedOf errorLinesOf quoteArgv]
+  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix secretName? executedOf errorLinesOf quoteArgv]
   :i [])
 
 ; (:m :ref HL-FIXWAVE-M4 :do "the bounded-job, process-tree-killing engine asl/tools/fleet/run.asl carries (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL) moved here verbatim so the published asl/ subtree (asl-cli/nativeBuild.asl, asl-cli/native.asl) can build and run its own native CLI without importing tools/, which lives outside asl/ and is absent from a standalone checkout; asl/tools/fleet/run.asl keeps its own copy for its many existing callers (fleetRunTest.asl and the fleetCompareTest/fleetGuardTest/fleetWatchTest/fleetReceiptTest/fleetRedBeforeTest families, none of them under asl/), since re-exporting a schema type under a second module name is not available here")
@@ -52,7 +52,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (names (map nameOf overrides))]
     (listAppend overrides
       (filter (fn [(row String)] -> Bool
-                (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
+                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (inheritedOk? k)))))
               (envList))))
 
 fn quoteArgv argv: (List String) -> String
@@ -98,7 +98,7 @@ fn walkDesc m: (Map Int64 (List Int64)) frontier: (List Int64) acc: (List Int64)
 fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
-; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "the inheritedOk? of asl/tools/fleet/run.asl, copied like the rest of this engine: an inherited GIT_ variable reaches a child only when it names an identity, a transport or a prompt")
+; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "the one definition, which asl/tools/fleet/run.asl imports: childEnv here and there and both shellOut defs use it; an inherited GIT_ variable reaches a child only when it names an identity, a transport or a prompt")
 fn inheritedOk? name: String -> Bool
   (or (not (stringStartsWith? name "GIT_"))
       (listContains? (list "GIT_AUTHOR_NAME" "GIT_AUTHOR_EMAIL" "GIT_AUTHOR_DATE" "GIT_COMMITTER_NAME" "GIT_COMMITTER_EMAIL" "GIT_COMMITTER_DATE" "GIT_SSH" "GIT_SSH_COMMAND" "GIT_ASKPASS" "GIT_TERMINAL_PROMPT" "GIT_EDITOR" "GIT_PAGER") name))

@@ -1,6 +1,6 @@
 (module asl-tools/fleet/run
   :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
-  :i [(asl-tools/fleet/jobserver :a js)])
+  :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
 
 (schema Job
   (:f argv (List String))
@@ -75,11 +75,6 @@
 fn job argv: (List String) cwd: String env: (List String) -> Job
   (Job :argv argv :cwd cwd :env env)
 
-; (:m :ref GITCONFIG-GUARD :do "an inherited GIT_ variable reaches a child only when it names an identity, a transport or a prompt; GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_CONFIG_* and every other one is dropped, since a child that inherits them from a git hook or a fixture runs every git call against that repository (GIT_DIR=<main>/.git git init --bare set core.bare=true in the shared config); a caller that means one passes it as an override")
-fn inheritedOk? name: String -> Bool
-  (or (not (stringStartsWith? name "GIT_"))
-      (listContains? (list "GIT_AUTHOR_NAME" "GIT_AUTHOR_EMAIL" "GIT_AUTHOR_DATE" "GIT_COMMITTER_NAME" "GIT_COMMITTER_EMAIL" "GIT_COMMITTER_DATE" "GIT_SSH" "GIT_SSH_COMMAND" "GIT_ASKPASS" "GIT_TERMINAL_PROMPT" "GIT_EDITOR" "GIT_PAGER") name))
-
 fn secretName? name: String -> Bool
   (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
 
@@ -111,7 +106,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (names (map nameOf rows))]
     (listAppend rows
       (filter (fn [(row String)] -> Bool
-                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (inheritedOk? k)))))
+                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (jp/inheritedOk? k)))))
               (envList))))
 
 ; (:m :ref HL-FIXWAVE :do "HL-DELETE retired asl/host/out/asl-host for good: builtBinary! used to fall back to it whenever bin/asl was present but not yet proven fresh (avoiding every parallel caller tripping bin/asl's rebuild lock at once); there is no longer a second, always-ready binary to fall back to, so the only honest answer is bin/asl itself (fresh or not -- bin/asl's own lock protocol already serializes concurrent rebuilders) or nothing")
@@ -191,14 +186,8 @@ fn walkDesc m: (Map Int64 (List Int64)) frontier: (List Int64) acc: (List Int64)
 fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
-; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "processSpawn hands the child this process's whole environment, so shellOut opens the command with an unset of every inherited name inheritedOk? drops (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* ...): a hook's or a fixture's repository variables never reach it; only plain shell names are listed, any other name is left for the child's shell to ignore")
-fn ! gitUnsetPrefix -> String
-  (let [(plain? (fn [(n String)] -> Bool (and (not (stringEmpty? n)) (not (listAny? (fn [(c String)] -> Bool (stringContains? n c)) (list " " ";" "&" "|" "$" "`" "'" "\"" "(" ")" "<" ">" "\\" "*" "?" "\n" "\t" "-" "."))))))
-        (names (filter (fn [(n String)] -> Bool (and (not (inheritedOk? n)) (plain? n))) (map (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)) (envList))))]
-    (if (listEmpty? names) "" (str "unset " (stringJoin names " ") "; ")))
-
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (match (processSpawn (str (gitUnsetPrefix) cmd))
+  (match (processSpawn (str (jp/gitUnsetPrefix) cmd))
     ((err e) (err (str "spawn failed: " e)))
     ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))
