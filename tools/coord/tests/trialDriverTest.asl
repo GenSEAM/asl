@@ -15,7 +15,7 @@ fn leonScript here: String repo: String prod: String -> String
   (str "#!/bin/sh\ncase \"$1\" in\n  \"(:agent\"*) ;;\n  *) exec " here "/bin/asl \"$@\" ;;\nesac\n"
        "id=$(basename \"$PWD\"); id=${id#asex-}\nmode=$(cat " repo "/.git/leonMode-$id 2>/dev/null)\nmkdir -p .asl/run/agentLoop\nj=.asl/run/agentLoop/s$id.journal\n"
        "if [ \"$mode\" = readloop ]; then\n"
-       "  for t in 1 2 3; do echo \"(:turn $t :reply \\\"(:step :op read :file check.sh)\\\")\" >> $j; done\n"
+       "  for t in 1 2 3; do echo \"(:turn $t :reply \\\"(:step :op read :file check.asl)\\\")\" >> $j; done\n"
        "  echo \"(:turn 3 :signal :readStreak :cause :notFound :reason \\\"3 turns in a row persisted nothing\\\")\" >> $j\n"
        "  git -C " prod " branch -f trialProbe HEAD~1\n"
        "  echo \"(:result :status :escalated :stop readStreak :turns 3)\" >> $j\n"
@@ -37,10 +37,10 @@ fn specText root: String here: String prodSha: String devRepo: String -> String
        " :minFreeMb 0 :minDiskMb 1)\n"
        "(:head :repo \"" root "/p/repo\" :sha \"" prodSha "\" :ref \"trialProbe\")\n"
        "(:model :tag \"A\" :alias \"flashLow\")\n"
-       "(:task :id \"T1\" :owns (\"impl.txt\") :gate \"sh check.sh impl.txt marker.txt\" :do \"write impl into impl.txt\" :known merge)\n"
-       "(:task :id \"T2\" :owns (\"impl.txt\") :gate \"sh check.sh impl.txt marker.txt\" :do \"write impl into impl.txt\" :known stall)\n"
-       "(:task T3 :owns (\"impl.txt\") :gate \"sh check3.sh impl.txt marker.txt\" :do \"seeded\" :skipWrite true :seed \"" root "/seedT3.patch\" :known merge)\n"
-       "(:task :id \"T4\" :owns (\"impl.txt\") :gate \"sh check.sh impl.txt marker.txt\" :do \"fix the seeded bug\" :seed \"" root "/seedT4.patch\" :known merge)\n")
+       "(:task :id \"T1\" :owns (\"impl.txt\") :gate \"" (pf/gate1) "\" :do \"write impl into impl.txt\" :known merge)\n"
+       "(:task :id \"T2\" :owns (\"impl.txt\") :gate \"" (pf/gate1) "\" :do \"write impl into impl.txt\" :known stall)\n"
+       "(:task T3 :owns (\"impl.txt\") :gate \"" (pf/gate3) "\" :do \"seeded\" :skipWrite true :seed \"" root "/seedT3.patch\" :known merge)\n"
+       "(:task :id \"T4\" :owns (\"impl.txt\") :gate \"" (pf/gate1) "\" :do \"fix the seeded bug\" :seed \"" root "/seedT4.patch\" :known merge)\n")
 
 ; (:m :do "stand-in host build of the dev clone: aslNativeBuild answers its usage line on stderr with exit 2 as the real one does; broken prints nothing")
 fn builderScript broken: Bool -> String
@@ -52,7 +52,7 @@ fn ! fixture! root: String here: String -> Bool
         (prep (pf/prepare! root))
         (dev (pf/devCloneFor! root))
         (prod (pf/e2eRepo! (str root "/p")))
-        (base (pf/seedUnit! root (pf/unitIn "BASE" "sh check.sh marker.txt") "parked" "marker.txt"))
+        (base (pf/seedUnit! root (pf/unitIn "BASE" (pf/gate1)) "parked" "marker.txt"))
         (m (pf/sh (str "git -C " prod " branch trialProbe && mkdir -p " repo "/bin " dev "/asl/host/out && echo asl/host/out/ >> " dev "/.git/info/exclude && echo madeOk")))
         (l (fileWrite (str repo "/bin/asl") (leonScript here repo prod)))
         (lm (fileWrite (str repo "/.git/leonMode-T2-A") "readloop\n"))
@@ -212,6 +212,7 @@ fn ! testCycle -> Bool
         (assert (and (ok? emptyRow) (and (= rEmpty.exit 0) (and (stringContains? rEmpty.out ":cells 0 ") (and (= runsAfter runsBefore) (and (stringContains? runsAfter "\n(:trialRun :id \"\" ") trialKept))))) (str "an infra row with an empty id is never forgotten: runs.asn and the trial dir stay: " rEmpty.out))
         (assert (and (= cMoved.exit 1) (stringContains? cMoved.out "headMoved:")) (str "check fails once a production head moved: " cMoved.out))
         (assert (and (= rMoved.exit 1) (stringContains? rMoved.out "(:refuse ")) (str "run refuses once a production head moved: " rMoved.out))
+        (fr/stubRemove!)
         true))
 
 ; (:m :ref SEED-RETRY :do "forgetAttempt! direct: an empty, unknown or / or .. holding id (a spec model tag can carry them) is refused before any delete, so <store>/trial and runs.asn stay; run! never passes an empty id (distinct drops it), this pins the guard itself")
