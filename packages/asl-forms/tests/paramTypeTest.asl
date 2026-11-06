@@ -47,8 +47,20 @@ fn ! testMulti -> Bool
         (assert (and (stringContains? one "ERR_PARAM_TYPE") (not (stringContains? one ":plan"))) (str "one wrong key names only it: " one))
         true))
 
+; (:m :ref CATALOGUE-ORDER-UNGATED :do "agent declares plan before timeout, which is also alphabetical, so a sort of the receipt keys passed the test; intel declares strict before limit, the reverse of the alphabet: a sorted receipt names limit first and is red here; intel is read-only, so a removed check can only run an outline")
+fn ! testOrderNotAlphabetical -> Bool
+  (let [(a (line! "(:intel :op outline :limit abc :strict maybe)"))
+        (b (line! "(:intel :op outline :strict maybe :limit abc)"))
+        (sa (optionOr (stringIndexOf a "(:strict :type bool :got \"maybe\")") -1))
+        (la (optionOr (stringIndexOf a "(:limit :type int :got \"abc\")") -1))]
+    (do (assert (and (>= sa 0) (>= la 0)) (str "both wrong keys are named: " a))
+        (assert (< sa la) (str "strict before limit, the catalogue's order and not the alphabet's: " a))
+        (assert (= a b) (str "the same receipt whichever order the step wrote the keys: " a " vs " b))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testPure) "type predicate")
       (assert (testDispatch) "dispatch")
       (assert (testMulti) "two wrong keys in one step")
+      (assert (testOrderNotAlphabetical) "wrong keys keep the catalogue order when it is not alphabetical")
       true)
