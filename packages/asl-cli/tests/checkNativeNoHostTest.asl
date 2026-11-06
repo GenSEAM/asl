@@ -31,7 +31,7 @@ fn ! buildPoisonHost! path: String -> Bool
 
 fn ! testBareSweepIgnoresPoisonHost binary: String root: String fixtureRoot: String poison: String -> Bool
   (let [(env (isolatedEnv fixtureRoot (list (str "ASL_ROOT=" fixtureRoot) (str "ASL_CLI_HOST_BIN=" poison) (str "ASL_HOST=" poison))))
-        (d (run/runOneLimited (run/job (list binary "check") root env) (run/limits 60 16)))]
+        (d (run/runOneLimited (run/job (list binary "check" "--all") root env) (run/limits 60 16)))]
     (do
       (assert (= d.verdict "exit") (str "the native binary ended on its own for bare check: " d.out))
       (assert (= d.exit 0) (str "bare check on a one-file fixture passes without asl-host: " d.out))
