@@ -165,7 +165,7 @@
       :accepts (role)
       :examples (
         "(:agent :task \"Survey the parser\")"
-        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check\"))"
+        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check src\"))"
       )
       :errors (ERR_UNKNOWN_ARG ERR_MISSING_ARG ERR_CONTEXT_FILE ERR_BACKEND ERR_OWNS ERR_EFFECT_UNDECLARED ERR_PARSE ERR_NO_REPLY ERR_VENDOR ERR_GATEWAY_OFFLINE)
       :doc "Leon loop. Receipt: status session journal findings gates queueWaitSec execSec; exit 1 failed or escalated, 2 bad invocation.")
