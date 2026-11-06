@@ -252,6 +252,7 @@
         (:content :type str :req true :note "complete staged file content")
         (:force :type bool :default false :note "stage despite balance or syntax errors")
       )
+      :accepts (path pick)
       :examples (
         "(:write :file \".asl/scratch.asn\" :content \"(:scratch true)\" :force true)"
       )
