@@ -74,6 +74,7 @@ fn ! testStalledHolder -> Bool
           (do (assert locked "fixture: the holder's lock is written")
               (assert (= r.exitCode 1) (str "a waiter behind an alive holder that writes nothing gives up: " r.exitCode " " r.stdout))
               (assert (stringContains? r.stderr "made no progress") (str "and says why: " r.stderr))
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building " cache "/out")) (str "and names the holder it waits on, its pid and out dir, before giving up: " r.stderr))
               (assert (stringStartsWith? kept (str h.pid "\n")) (str "the live holder's lock is left alone: " kept))
               (assert (ok? gone) "the fixture dir is removed")
               true)))))

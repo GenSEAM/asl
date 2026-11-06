@@ -46,7 +46,7 @@ cold_lock() {
       [ "$(sed -n 1p "$L/holder" 2>/dev/null || true)" = "$pid" ] && rm -rf "$L"
       continue
     fi
-    [ "$pid" = "$last" ] || { last=$pid; seen=$(date +%s); cpu0=""; }
+    [ "$pid" = "$last" ] || { last=$pid; seen=$(date +%s); cpu0=""; [ -z "$pid" ] || echo "build.sh: waiting for the cold-start build lock held by pid $pid building ${dir:-unknown} (one cold-start build per node, give up after ${win}s without progress)" >&2 || true; }
     if [ -n "$pid" ]; then
       cpu=$(cold_cpu "$pid" "${wp:-0}")
       if { [ -n "$cpu0" ] && [ "$cpu" -gt "$cpu0" ]; } || cold_files "$pid" "${dir:-$L}" "$1" "$mark" "${wp:-0}"; then seen=$(date +%s); : > "$mark"; fi
