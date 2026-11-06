@@ -260,7 +260,7 @@ fn ! warmRows! cfg: Cfg src: String files: (List String) -> (List Hit)
           (hadCfg (fileExists? cfgPath))
           (c (if hadCfg (ok ()) (fileWrite cfgPath "(:aslConfig\n  :workspace \"guardWarm\"\n  :root true\n)\n")))
           (w (fileWrite (str src "/" name) "(module guardWarm\n  :x []\n  :i [])\n"))
-          (rows (checkChunk! cfg cfg.aslRoot src (list name) cfg.warmS))
+          (rows (checkChunkOnce! cfg cfg.aslRoot src (list name) cfg.warmS))
           (gone (pathRemove (str src "/" name)))
           (gone2 (if hadCfg (ok ()) (pathRemove cfgPath)))]
       (if (listEmpty? rows)
@@ -269,9 +269,16 @@ fn ! warmRows! cfg: Cfg src: String files: (List String) -> (List Hit)
           (map (fn [(p String)] -> Hit (unchecked p why)) files)))))
 
 ; (:m :do "one asl check over a chunk of .asl files under src with the workspace of aslRoot, bounded by secs; returns the rows: a timeout or spawn failure marks every file unchecked, ERR_NATIVE_STALE is one BLOCKING toolchain row (fail closed: a stale native CLI is not a verdict on the file) plus unchecked files, any other failure blocks per file with its first error line")
-fn ! checkChunk! cfg: Cfg ws: String src: String files: (List String) secs: Int64 -> (List Hit)
+fn ! checkChunkOnce! cfg: Cfg ws: String src: String files: (List String) secs: Int64 -> (List Hit)
   (let [(d (fr/runOneLimited (fr/job (listAppend (list (checkBinOf cfg) "check") (map (fn [(p String)] -> String (str src "/" p)) files)) ws (fr/childEnv (list (str "ASL_ROOT=" ws)))) (fr/limits secs 200)))]
     (chunkRows src files secs d.exit d.verdict d.out))
+
+; (:m :ref GUARD-COLD-DEADLINE :do "a chunk that exceeded its deadline is checked once more under warmS (the first run leaves the per-module cache of a fresh worktree partly built, so a cold check of a large file finishes inside the second); a second timeout stays unchecked, so no check is skipped or weakened")
+fn ! checkChunk! cfg: Cfg ws: String src: String files: (List String) secs: Int64 -> (List Hit)
+  (let [(rows (checkChunkOnce! cfg ws src files secs))]
+    (if (and (< secs cfg.warmS) (listAny? (fn [(h Hit)] -> Bool (stringStartsWith? h.why "asl check exceeded ")) rows))
+      (checkChunkOnce! cfg ws src files cfg.warmS)
+      rows))
 
 ; (:m :ref COMMIT-GUARD-VERDICT :do "the rows of one asl check chunk from its exit code, verdict and output: pure; exit 0 counts a file clean only when the output carries its ok line, so a silent or foreign checker leaves it unchecked")
 fn chunkRows src: String files: (List String) secs: Int64 exit: Int64 verdict: String out: String -> (List Hit)
