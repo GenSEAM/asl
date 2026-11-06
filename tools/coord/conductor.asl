@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -2213,6 +2213,16 @@ fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option
               (_ (ls/emitAt! (dirOf store) (nowMs) "conductor" "warn" "mergeCheckHold" u.id u.id why))]
           (some (with (failRes why) :verdict "hold"))))))
 
+; (:m :ref MERGECHECK-CLAMP :do "the budget literals live once: the train child's limit and the stage deadline default; the merge-check budget is clamped so it plus the train limit plus a 60 s margin stays under the stage deadline, whatever --merge-check-sec says")
+fn trainLimitSec -> Int64
+  3600
+
+fn stageSecDefault -> Int64
+  5400
+
+fn clampMergeCheckSec requested: Int64 stageSec: Int64 -> Int64
+  (max 60 (min requested (- (- stageSec (trainLimitSec)) 60)))
+
 fn ! mergeRes rc: RealCfg store: String u: st/Task c: CUnit -> Res
   (mergeResWith rc store u c realMergeCheck!)
 
@@ -2229,13 +2239,16 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
               (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
                          (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
               (mb (if (= fetched.exit 0) (gitOut rc.devRepo (list "merge-base" "HEAD" c.branch)) fetched))
-              ; (:m :ref CONDUCTOR-MERGE-CHECK :do "no merge base or a failed fetch skips the check, the train below fails on the same cause with its own signature")
-              (verdict (if (and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check rc c (stringTrim mb.out))) (none)))]
+              ; (:m :ref MERGECHECK-CLAMP :do "a failed fetch skips the check (the train below fails on the same cause with its own signature); a good fetch with no merge base is not a pass: the unit holds as unverified exit 3, so a branch unrelated to dev is never merged unchecked")
+              (verdict (cond
+                         ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check rc c (stringTrim mb.out))))
+                         ((= fetched.exit 0) (mergeVerdictRes! store u (pair 3 "(:mergeCheck :verdict unverified :unverified (\"noMergeBase\") :structure () :regressions ())")))
+                         (else (none))))]
           (match verdict
             ((some stopped) stopped)
             ((none)
               (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
-                                         (fr/limits 3600 200)))]
+                                         (fr/limits (trainLimitSec) 200)))]
                 (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
                   (let [(_ (w/removeWt! rc.wt u.id true))]
                     (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
@@ -2606,7 +2619,7 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
              :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec (st/intOpt args "lease-sec" 3600) :gateSec 3600
              :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
-             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600) :mergeCheckSec (st/intOpt args "merge-check-sec" 1200)))
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600) :mergeCheckSec (clampMergeCheckSec (st/intOpt args "merge-check-sec" 1200) (st/intOpt args "stage-sec" (stageSecDefault)))))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -2632,7 +2645,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (dir (st/opt args "store" (str (resultOr (getHomeDir) ".") "/.asl/run/conductor")))
         (rc (realCfg args dir))
         (ctx (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
-                  :stageSec (st/intOpt args "stage-sec" 5400) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
+                  :stageSec (st/intOpt args "stage-sec" (stageSecDefault)) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
     (cond
       ((= cmd "stage") (ok (stageMain! args dir)))
       ((= cmd "tick") (match (tick! ctx) ((ok c) (do (println (str "(:tick :changed " (n c) ")")) (ok 0))) ((err e) (do (eprintln e) (ok 1)))))
