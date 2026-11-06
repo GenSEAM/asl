@@ -214,7 +214,7 @@ fn ! testCycle -> Bool
         (assert (and (= rMoved.exit 1) (stringContains? rMoved.out "(:refuse ")) (str "run refuses once a production head moved: " rMoved.out))
         true))
 
-; (:m :ref SEED-RETRY :do "forgetAttempt! direct: an empty, dotted or unknown id is refused before any delete, so <store>/trial and runs.asn stay; run! never passes an empty id (distinct drops it), this pins the guard itself")
+; (:m :ref SEED-RETRY :do "forgetAttempt! direct: an empty, unknown or / or .. holding id (a spec model tag can carry them) is refused before any delete, so <store>/trial and runs.asn stay; run! never passes an empty id (distinct drops it), this pins the guard itself")
 fn ! testForgetGuard -> Bool
   (let [(root (pf/scratch "trialDriver" "forget"))
         (store (str root "/store"))
@@ -224,9 +224,17 @@ fn ! testForgetGuard -> Bool
         (rEmpty (tr/forgetAttempt! s ""))
         (rDots (tr/forgetAttempt! s ".."))
         (rUnknown (tr/forgetAttempt! s "T1-A"))
-        (kept (and (fileExists? (str store "/trial/runs.asn")) (fileExists? (str store "/trial/T1-A"))))
+        (t1 (tr/TTask :id "T1" :owns (list) :gate "" :text "" :skipWrite false :seed "" :known ""))
+        (s2 (with s :tasks (list t1) :models (list (tr/Model :tag "a/b" :alias "a") (tr/Model :tag ".." :alias "a"))))
+        (ids2 (map (fn [(c tr/Cell)] -> String c.id) (tr/cellsOf s2)))
+        (_ (pf/sh (str "mkdir -p " store "/trial/T1-a/b " store "/trial/T1-..")))
+        (rSlash (tr/forgetAttempt! s2 "T1-a/b"))
+        (rDotCell (tr/forgetAttempt! s2 "T1-.."))
+        (load2 (tr/specProblems! s2))
+        (kept (and (fileExists? (str store "/trial/runs.asn")) (and (fileExists? (str store "/trial/T1-A")) (and (fileExists? (str store "/trial/T1-a/b")) (fileExists? (str store "/trial/T1-.."))))))
         (_ (pf/cleanup root))]
-    (do (assert (and (ok? w) (and (= rEmpty -1) (and (= rDots -1) (and (= rUnknown -1) kept)))) (str "forgetAttempt! refuses empty, dotted and non-cell ids and deletes nothing: " (stringFromInt64 rEmpty) " " (stringFromInt64 rDots) " " (stringFromInt64 rUnknown)))
+    (do (assert (and (ok? w) (and (= rEmpty -1) (and (= rDots -1) (and (= rUnknown -1) (and (= (stringJoin ids2 ",") "T1-a/b,T1-..") (and (= rSlash -1) (and (= rDotCell -1) kept))))))) (str "forgetAttempt! refuses empty, unknown, and spec cell ids holding / or .. (model tags), deleting nothing: " (stringFromInt64 rEmpty) " " (stringFromInt64 rDots) " " (stringFromInt64 rUnknown) " " (stringFromInt64 rSlash) " " (stringFromInt64 rDotCell) " " (stringJoin ids2 ",")))
+        (assert (and (listContains? load2 "badId:a/b") (and (listContains? load2 "badId:..") (not (stringContains? (stringJoin load2 " ") "badId:T1 ")))) (str "check refuses a task id or model tag holding / or .. at load: " (stringJoin load2 " ")))
         true))
 
 fn ! runTests -> Bool

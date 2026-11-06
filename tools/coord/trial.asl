@@ -261,6 +261,10 @@ fn ! devBuildProblems! dev: String -> (List String)
       (else (let [(d (fr/runOneLimited (fr/job (list nb) dev (fr/childEnv (list))) (fr/limits 30 4)))]
               (if (stringContains? d.out "usage: nativeBuild") (list) (list (str "devRepoBuild:notRunnable:" (n d.exit))))))))
 
+; (:m :ref SEED-RETRY :do "a task id or model tag forms the cell id that names <store>/trial/<id>, sh/<id> and the worktree, so an empty one or one holding / or .. is refused at load")
+fn badId? x: String -> Bool
+  (or (stringEmpty? x) (or (stringContains? x "/") (stringContains? x "..")))
+
 fn ! specProblems! s: Spec -> (List String)
   (let [(missing (map (fn [(k String)] -> String (str "missing:" k))
                       (filter (fn [(k String)] -> Bool (stringEmpty? (cond ((= k "store") s.store) ((= k "repo") s.repo) ((= k "devRepo") s.devRepo) ((= k "worktrees") s.worktrees) ((= k "home") s.home) (else s.lanes))))
@@ -273,6 +277,7 @@ fn ! specProblems! s: Spec -> (List String)
         (repoRemote (if (stringEmpty? (gitText s.repo (list "remote"))) (list) (list "repoRemote")))
         (same (if (same? s.devRepo s.repo) (list "devRepoIsRepo") (list)))
         (tool (if (fileExists? (str s.toolRoot "/bin/asl")) (list) (list "toolRoot")))
+        (badIds (map (fn [(x String)] -> String (str "badId:" x)) (filter badId? (listAppend (map (fn [(t TTask)] -> String t.id) s.tasks) (map (fn [(m Model)] -> String m.tag) s.models)))))
         (gateway (readOr (str s.home "/.asl/gateway.asn")))
         (aliases (map (fn [(m Model)] -> String (str "aliasUnknown:" m.alias)) (filter (fn [(m Model)] -> Bool (not (aliasKnown? gateway m.alias))) s.models)))
         (dead (let [(nc (noCreditAliases (readOr s.lanes)))] (map (fn [(m Model)] -> String (str "aliasNoCredit:" m.alias)) (filter (fn [(m Model)] -> Bool (listContains? nc m.alias)) s.models))))
@@ -281,7 +286,7 @@ fn ! specProblems! s: Spec -> (List String)
         (prodPaths (prodPathProblems! s ""))
         (mem (if (<= s.minFreeMb 0) (list) (let [(m (memAvailableMb!))] (cond ((< m 0) (list "memUnknown")) ((< m s.minFreeMb) (list (str "memLow:" (n m)))) (else (list))))))
         (disk (if (<= s.minDiskMb 0) (list) (let [(d (diskFreeMb! (if (fileExists? s.store) s.store ".")))] (if (< d s.minDiskMb) (list (str "diskLow:" (n d))) (list)))))]
-    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build prodPaths aliases dead seeds mem disk (headProblems! s))))
+    (fold listAppend (list) (list missing cells badIds prefix devMain devRemote repoRemote same tool build prodPaths aliases dead seeds mem disk (headProblems! s))))
 
 ; (:m :ref TRIAL-SETUP :do "aliases the trial lanes file lists under :noCredit (written by setup)")
 fn noCreditAliases lanes: String -> (List String)
