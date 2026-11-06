@@ -83,7 +83,7 @@ fn ! testPure -> Bool
         (assert (= (tr/devBranchOf s "T1-A") "trialDev-T1-A") "dev branch is the prefix plus the cell id")
         true))
 
-; (:m :do "the corpus on main is one multi-line (:trialCorpus :tasks (...)) form; a spec naming it gets its six tasks, the seeded ones with their seeds, and check names the base-seed task the driver cannot run yet")
+; (:m :do "the corpus on main is one multi-line (:trialCorpus :tasks (...)) form; a spec naming it gets its six tasks, the seeded ones with their seeds, and check names the base-seed task the driver cannot run yet; :skip (T4) leaves it out")
 fn ! testCorpus -> Bool
   (let [(here (pf/here))
         (root (pf/scratch "trialDriver" "corpus"))
@@ -97,11 +97,17 @@ fn ! testCorpus -> Bool
         (skips (map (fn [(t tr/TTask)] -> String t.id) (filter (fn [(t tr/TTask)] -> Bool t.skipWrite) s.tasks)))
         (seeded (map (fn [(t tr/TTask)] -> String t.id) (filter (fn [(t tr/TTask)] -> Bool (not (stringEmpty? t.seed))) s.tasks)))
         (ps (tr/specProblems! s))
+        (specSkip (str root "/specSkip.asn"))
+        (w2 (fileWrite specSkip (str "(:trialSpec :toolRoot \"" here "\")\n(:model :tag \"A\" :alias \"flashLow\")\n(:corpus :path \"asl/tools/coord/trial/corpus.asn\" :skip (\"T4\"))\n")))
+        (s2 (resultOr (tr/specLines! specSkip) (tr/emptySpec)))
+        (ids2 (map (fn [(t tr/TTask)] -> String t.id) s2.tasks))
+        (ps2 (tr/specProblems! s2))
         (_ (pf/cleanup root))]
     (do (assert (and (ok? w) (= ids (list "T1" "T2" "T3" "T4" "T5" "T6"))) (str "the multi-line corpus yields six tasks: " (stringJoin ids " ")))
         (assert (and (stringStartsWith? t1.text "Write asl-utils/humanBytes") (and (= t1.known "merge") (= t1.owns (list "asl/packages/asl-utils/src/humanBytes.asl" "asl/packages/asl-utils/tests/humanBytesTest.asl")))) (str "T1 text, known and owns survive the join: " t1.text))
         (assert (and (= skips (list "T5" "T6")) (= seeded (list "T4" "T5" "T6"))) (str "seeded tasks keep skipWrite and seed: " (stringJoin skips " ") " / " (stringJoin seeded " ")))
         (assert (and (listContains? ps "baseSeedUnsupported:T4") (and (not (listContains? ps "baseSeedUnsupported:T5")) (not (listContains? ps "seedMissing:T5")))) (str "check names the base-seed writer task and finds the seed files: " (stringJoin ps " ")))
+        (assert (and (ok? w2) (and (= ids2 (list "T1" "T2" "T3" "T5" "T6")) (not (stringContains? (stringJoin ps2 " ") "baseSeedUnsupported")))) (str "a corpus row :skip leaves those tasks out: " (stringJoin ids2 " ")))
         true))
 
 fn ! testCycle -> Bool

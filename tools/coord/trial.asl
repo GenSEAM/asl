@@ -1,6 +1,6 @@
 (module asl-tools/coord/trial
   :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! stageArgv recordText leonFacts runsPath trialDir
-      check! run! collect! main]
+      check! run! collect! Setup Step setupOf setupSteps trialLanesText runSpecText setup! main]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv)])
 
 ; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER: N pinned writer models on the same tasks through the real stage CLI (conductor.asl stage write|gates|review|merge), one attempt per (task, model) cell, no ladder and no tick; each merge lands on its own scratch branch <devPrefix><cell> in a devRepo that is never main, and the production heads named in the spec are compared before and after so the trial never moves them")
@@ -138,7 +138,7 @@ fn taskChunks text: String -> (List String)
     (map (fn [(p String)] -> String (stringJoin (map stringTrim (stringLines (balancedHead (str "(:task " p)))) " "))
          (listDrop (stringSplit text "(:task ") 1)))
 
-; (:m :do "the spec plus the task forms of every (:corpus :path P) it names (P relative to the tool root); corpus files contribute their (:task ...) forms only, single- or multi-line")
+; (:m :do "the spec plus the task forms of every (:corpus :path P) it names (P relative to the tool root); corpus files contribute their (:task ...) forms only, single- or multi-line, less the ids its :skip lists")
 fn ! specLines! path: String -> (Result Spec String)
   (match (fileReadString path)
     ((err e) (err (str "spec unreadable: " e)))
@@ -146,7 +146,14 @@ fn ! specLines! path: String -> (Result Spec String)
       (let [(s0 (parseSpec text))
             (extra (stringJoin (map (fn [(p String)] -> String (stringJoin (taskChunks (resultOr (fileReadString (rooted s0.toolRoot p)) "")) "\n"))
                                     s0.corpus) "\n"))]
-        (ok (parseSpec (str text "\n" extra))))))
+        (ok (withoutTasks (parseSpec (str text "\n" extra)) (corpusSkips text))))))
+
+; (:m :do "task ids the (:corpus :path P :skip (ID ...)) rows of a spec leave out")
+fn corpusSkips text: String -> (List String)
+  (fold listAppend (list) (map (fn [(l String)] -> (List String) (items (fieldsOf l) "skip")) (filter (fn [(l String)] -> Bool (= (tagOf l) "corpus")) (rowLines text))))
+
+fn withoutTasks s: Spec ids: (List String) -> Spec
+  (with s :tasks (filter (fn [(t TTask)] -> Bool (not (listContains? ids t.id))) s.tasks))
 
 
 fn cellId t: TTask m: Model -> String
@@ -239,12 +246,22 @@ fn ! specProblems! s: Spec -> (List String)
         (tool (if (fileExists? (str s.toolRoot "/bin/asl")) (list) (list "toolRoot")))
         (gateway (readOr (str s.home "/.asl/gateway.asn")))
         (aliases (map (fn [(m Model)] -> String (str "aliasUnknown:" m.alias)) (filter (fn [(m Model)] -> Bool (not (aliasKnown? gateway m.alias))) s.models)))
+        (dead (let [(nc (noCreditAliases (readOr s.lanes)))] (map (fn [(m Model)] -> String (str "aliasNoCredit:" m.alias)) (filter (fn [(m Model)] -> Bool (listContains? nc m.alias)) s.models))))
         (seeds (map (fn [(t TTask)] -> String (str "seedMissing:" t.id)) (filter (fn [(t TTask)] -> Bool (and (or t.skipWrite (not (stringEmpty? t.seed))) (or (stringEmpty? t.seed) (not (fileExists? (rooted s.toolRoot t.seed)))))) s.tasks)))
         (baseSeed (map (fn [(t TTask)] -> String (str "baseSeedUnsupported:" t.id)) (filter (fn [(t TTask)] -> Bool (and (not t.skipWrite) (not (stringEmpty? t.seed)))) s.tasks)))
         (build (devBuildProblems! s.devRepo))
         (mem (if (<= s.minFreeMb 0) (list) (let [(m (memAvailableMb!))] (cond ((< m 0) (list "memUnknown")) ((< m s.minFreeMb) (list (str "memLow:" (n m)))) (else (list))))))
         (disk (if (<= s.minDiskMb 0) (list) (let [(d (diskFreeMb! (if (fileExists? s.store) s.store ".")))] (if (< d s.minDiskMb) (list (str "diskLow:" (n d))) (list)))))]
-    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build aliases seeds baseSeed mem disk (headProblems! s))))
+    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build aliases dead seeds baseSeed mem disk (headProblems! s))))
+
+; (:m :ref TRIAL-SETUP :do "aliases the trial lanes file lists under :noCredit (written by setup)")
+fn noCreditAliases lanes: String -> (List String)
+  (match (stringIndexOf lanes ":noCredit (")
+    ((none) (list))
+    ((some i)
+      (let [(rest (optionOr (stringSlice lanes i (stringLength lanes)) ""))
+            (parts (stringSplit rest ":aliases ("))]
+        (map bareTok (filter (fn [(x String)] -> Bool (not (stringEmpty? (stringTrim x)))) (stringSplit (optionOr (listHead (stringSplit (optionOr (listGet parts 1) "") ")")) "") " "))))))
 
 fn ! check! s: Spec -> Int64
   (let [(ps (specProblems! s))]
@@ -539,14 +556,174 @@ fn ! collect! s: Spec -> Int64
     (do (println summary)
         (if (and (= d.exit 0) (and (fileExists? report) (> (listLength rows) 0))) 0 1)))
 
+(schema Setup
+  (:f src String) (:f ref String) (:f seed String) (:f lanesFrom String) (:f reviewers (List String)) (:f noCredit (List String))
+  (:f noCreditPrefix (List String)) (:f heads (List String)) (:f out String) (:f date String) (:f build (List String)))
+
+fn outOr u: Setup out: String -> Setup
+  (if (stringEmpty? u.out) (with u :out out) u)
+
+; (:m :do "op is empty for a command run as argv in cwd; switch (argv branch base) and seedCommit (argv patch message) are vcs-layer operations on the repo in cwd")
+(schema Step (:f argv (List String)) (:f cwd String) (:f sec Int64) (:f op String))
+
+; (:m :ref TRIAL-SETUP :do "the (:setup ...) row of a spec: the production source checkout and ref the trial source is cut from, an optional seed patch, the production lanes file the trial panel is read from, the panel, the noCredit providers and alias prefixes, the production repos whose heads the run spec pins, and the run spec it writes")
+fn setupOf text: String -> Setup
+  (let [(fs (match (listFind (fn [(l String)] -> Bool (= (tagOf l) "setup")) (rowLines text)) ((some l) (fieldsOf l)) ((none) (list))))]
+    (Setup :src (txt fs "src") :ref (txtOr fs "ref" "main") :seed (txt fs "seed") :lanesFrom (txt fs "lanesFrom") :reviewers (items fs "reviewers")
+           :noCredit (items fs "noCredit") :noCreditPrefix (items fs "noCreditPrefix") :heads (items fs "heads") :out (txt fs "out") :date (txt fs "date")
+           :build (let [(b (items fs "build"))] (if (listEmpty? b) (list "sh" "asl/host/build.sh") b))))
+
+fn step argv: (List String) cwd: String -> Step
+  (Step :argv argv :cwd cwd :sec 600 :op "")
+
+fn vcsStep op: String repo: String args: (List String) -> Step
+  (Step :argv args :cwd repo :sec 600 :op op)
+
+; (:m :do "the host build of one tree, by default sh asl/host/build.sh, run in the tree with the caller's ASL_ROOT and ASL_PRELUDE removed")
+fn buildStep u: Setup dir: String -> Step
+  (Step :argv (listAppend (list "env" "-u" "ASL_ROOT" "-u" "ASL_PRELUDE") u.build) :cwd dir :sec 3600 :op "")
+
+fn identity dir: String -> (List Step)
+  (list (step (list "git" "-C" dir "config" "user.email" "trial@example.invalid") ".") (step (list "git" "-C" dir "config" "user.name" "trial") "."))
+
+; (:m :ref TRIAL-SETUP :do "the commands of a setup, git and build.sh only: the trial source is a repo with no remote whose main is the production ref plus the seed commit (switch and seed commit through the vcs layer), the dev repo a repo with no remote on devBase at that main; both are fetched by path, never cloned (a clone would add an origin), and each gets its own host build; no deploy!, no systemctl, nothing is pushed")
+fn setupSteps s: Spec u: Setup sha: String repoNew: Bool devNew: Bool -> (List Step)
+  (fold listAppend (list)
+    (list (if repoNew (list (step (list "git" "init" "-q" "-b" "main" s.repo) ".")) (list))
+          (identity s.repo)
+          (list (step (list "git" "-C" s.repo "fetch" "-q" "--no-tags" u.src sha) ".")
+                (vcsStep "switch" s.repo (list "main" sha)))
+          (if (stringEmpty? u.seed) (list)
+            (list (step (list "git" "-C" s.repo "apply" (rooted s.toolRoot u.seed)) ".")
+                  (vcsStep "seedCommit" s.repo (list (rooted s.toolRoot u.seed) "(:c :a trial :do \"trial seed\")"))))
+          (list (buildStep u s.repo))
+          (if devNew (list (step (list "git" "init" "-q" "-b" s.devBase s.devRepo) ".")) (list))
+          (identity s.devRepo)
+          (list (step (list "git" "-C" s.devRepo "fetch" "-q" "--no-tags" s.repo "main") ".")
+                (vcsStep "switch" s.devRepo (list s.devBase "FETCH_HEAD"))
+                (buildStep u s.devRepo)
+                (step (list "mkdir" "-p" s.store (str s.store "/trial") s.worktrees) "."))))
+
+fn stepText x: Step -> String
+  (if (stringEmpty? x.op)
+    (str "(:cmd :cwd " (st/q x.cwd) " :argv " (st/qList x.argv) ")")
+    (str "(:vcs :op " x.op " :repo " (st/q x.cwd) " :args " (st/qList x.argv) ")"))
+
+fn laneRowsOf text: String -> (List String)
+  (fold (fn [(acc (List String)) (l String)] -> (List String)
+          (match (stringIndexOf l "(:lane :alias ")
+            ((none) acc)
+            ((some i)
+              (let [(rest (optionOr (stringSlice l i (stringLength l)) ""))
+                    (row (str (optionOr (listHead (stringSplit rest ")")) "") ")"))]
+                (listAppend acc (list row))))))
+        (list) (stringLines text))
+
+fn providerOf gateway: String alias: String -> String
+  (match (stringIndexOf gateway (str "(:model :id " alias " "))
+    ((none) "")
+    ((some i) (wordAt (optionOr (listHead (stringSplit (optionOr (stringSlice gateway i (stringLength gateway)) "") ")")) "") ":provider")))
+
+fn noCredit? u: Setup gateway: String alias: String -> Bool
+  (or (listContains? u.noCredit (providerOf gateway alias)) (listAny? (fn [(p String)] -> Bool (stringStartsWith? alias p)) u.noCreditPrefix))
+
+; (:m :ref TRIAL-SETUP :do "the trial lanes file: the production lane rows of the fixed panel only, noCredit lanes (commandCode, cc*) dropped and listed under :noCredit, so review never rotates onto a lane without credit and check refuses a pinned writer on one")
+fn trialLanesText u: Spec setup: Setup src: String gateway: String -> String
+  (let [(rows (laneRowsOf src))
+        (dead (distinct (map (fn [(r String)] -> String (wordAt r ":alias")) (filter (fn [(r String)] -> Bool (noCredit? setup gateway (wordAt r ":alias"))) rows))))
+        (keep (filter (fn [(r String)] -> Bool (and (listContains? setup.reviewers (wordAt r ":alias")) (not (noCredit? setup gateway (wordAt r ":alias"))))) rows))
+        (fam (sp/quotedAfter src ":familyExtra"))]
+    (str "(:reviewLanes :v 1 :date " (st/q setup.date) " :by trialSetup :from " (st/q setup.lanesFrom)
+         " :method \"fixed trial review panel from the production lanes; noCredit lanes dropped\""
+         (if (stringEmpty? fam) "" (str " :familyExtra " (st/q fam)))
+         " :noCredit (:providers " (st/qList setup.noCredit) " :prefixes " (st/qList setup.noCreditPrefix) " :aliases " (st/qList dead) ")"
+         "\n  :lanes (" (stringJoin keep "\n          ") "))\n"))
+
+fn ! headRows! u: Setup -> (List String)
+  (map (fn [(h String)] -> String (str "(:head :repo " (st/q h) " :sha " (st/q (gitText h (list "rev-parse" "HEAD"))) ")")) u.heads)
+
+; (:m :ref TRIAL-SETUP :do "the run spec setup writes: every row of the setup spec but its (:head ...) and (:setup ...) rows, plus one (:head ...) row per production repo pinned at its current HEAD")
+fn runSpecText text: String heads: (List String) -> String
+  (str (stringJoin (filter (fn [(l String)] -> Bool (not (or (= (tagOf l) "head") (= (tagOf l) "setup")))) (rowLines text)) "\n") "\n" (stringJoin heads "\n") "\n")
+
+fn ! setupProblems! s: Spec u: Setup sha: String lanesSrc: String gateway: String -> (List String)
+  (let [(prod (listAppend (list u.src) u.heads))
+        (paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (list s.repo s.devRepo s.store s.worktrees s.lanes u.out)))
+        (inProd (fold listAppend (list) (map (fn [(h String)] -> (List String) (map (fn [(p String)] -> String (str "isProduction:" p)) (filter (fn [(p String)] -> Bool (inside? p h)) paths))) prod)))
+        (rows (laneRowsOf lanesSrc))
+        (aliases (map (fn [(r String)] -> String (wordAt r ":alias")) rows))]
+    (fold listAppend (list)
+      (list (if (stringEmpty? u.src) (list "missing:setup.src") (list))
+            (if (stringEmpty? sha) (list (str "srcRef:" u.ref)) (list))
+            (if (or (stringEmpty? s.repo) (or (stringEmpty? s.devRepo) (same? s.repo s.devRepo))) (list "repoDevRepo") (list))
+            (if (or (stringEmpty? s.devBase) (or (= s.devBase "main") (= s.devBase "master"))) (list (str "devBase:" s.devBase)) (list))
+            (if (or (stringEmpty? s.lanes) (same? s.lanes u.lanesFrom)) (list "lanesOverwrite") (list))
+            (if (listEmpty? rows) (list (str "lanesFrom:" u.lanesFrom)) (list))
+            (map (fn [(a String)] -> String (str "reviewerMissing:" a)) (filter (fn [(a String)] -> Bool (not (listContains? aliases a))) u.reviewers))
+            (map (fn [(a String)] -> String (str "reviewerNoCredit:" a)) (filter (fn [(a String)] -> Bool (noCredit? u gateway a)) u.reviewers))
+            (map (fn [(m Model)] -> String (str "writerNoCredit:" m.alias)) (filter (fn [(m Model)] -> Bool (noCredit? u gateway m.alias)) s.models))
+            (if (and (not (stringEmpty? u.seed)) (not (fileExists? (rooted s.toolRoot u.seed)))) (list (str "seedMissing:" u.seed)) (list))
+            inProd)))
+
+fn doneOf o: gv/Out -> fr/Done
+  (fr/Done :idx 0 :exit o.exit :out o.out :ms 0 :verdict "")
+
+fn ! runStep! x: Step -> fr/Done
+  (cond
+    ((= x.op "switch") (doneOf (gv/switch! x.cwd (optionOr (listGet x.argv 0) "") (optionOr (listGet x.argv 1) ""))))
+    ((= x.op "seedCommit") (let [(patch (optionOr (listGet x.argv 0) ""))] (doneOf (seedCommit! x.cwd (patchPaths (gitText x.cwd (list "apply" "--numstat" patch))) (optionOr (listGet x.argv 1) "")))))
+    (else (fr/runOneLimited (fr/job x.argv x.cwd (fr/childEnv (list))) (fr/limits x.sec 200))))
+
+fn ! runSteps! xs: (List Step) -> (Option (Pair Step fr/Done))
+  (match (listHead xs)
+    ((none) (none))
+    ((some x)
+      (let [(d (runStep! x))]
+        (if (!= d.exit 0) (some (pair x d)) (runSteps! (optionOr (listTail xs) (list)))))))
+
+; (:m :ref TRIAL-SETUP :do "setup --spec S [--dry-run]: refuses on any setup problem; --dry-run prints the commands, the files it would write and the pinned heads and changes nothing (its only reads are git rev-parse and the lanes and gateway files); without it the commands run in order through fleet/run.asl, the trial lanes file and the run spec are written, then check runs on the run spec")
+fn ! setup! path: String dry: Bool -> Int64
+  (match (specLines! path)
+    ((err e) (do (println (str "(:setup :error " (st/q e) ")")) 2))
+    ((ok s)
+      (let [(text (readOr path))
+            (u0 (setupOf text))
+            (u (outOr u0 (str s.store "/trialSpec.asn")))
+            (sha (gitText u.src (list "rev-parse" "--verify" (str u.ref "^{commit}"))))
+            (lanesSrc (readOr u.lanesFrom))
+            (gateway (readOr (str s.home "/.asl/gateway.asn")))
+            (ps (setupProblems! s u sha lanesSrc gateway))]
+        (if (not (listEmpty? ps))
+          (do (println (str "(:setup :refuse :problems " (st/qList ps) ")")) 1)
+          (let [(xs (setupSteps s u sha (not (fileExists? (str s.repo "/.git"))) (not (fileExists? (str s.devRepo "/.git")))))
+                (lanes (trialLanesText s u lanesSrc gateway))
+                (_ (map (fn [(x Step)] -> Unit (println (stepText x))) xs))]
+            (if dry
+              (let [(heads (headRows! u))]
+                (do (println (str "(:write :path " (st/q s.lanes) " :lanes " (n (listLength (laneRowsOf lanes))) ")"))
+                    (println (str "(:write :path " (st/q u.out) " :heads " (st/qList heads) ")"))
+                    (println (str "(:setup :dryRun true :src " (st/q u.src) " :sha " (st/q sha) " :steps " (n (listLength xs)) ")"))
+                    0))
+              (match (runSteps! xs)
+                ((some p) (do (println (str "(:setup :failed " (stepText (pairFirst p)) " :exit " (n (pairSecond p).exit) " :out " (clip (pairSecond p).out) ")")) 1))
+                ((none)
+                  (let [(heads (headRows! u))
+                        (w1 (fileWrite s.lanes lanes))
+                        (w2 (fileWrite u.out (runSpecText text heads)))
+                        (c (match (specLines! u.out) ((ok s2) (check! s2)) ((err _) 1)))]
+                    (do (println (str "(:setup :done true :src " (st/q u.src) " :sha " (st/q sha) " :steps " (n (listLength xs)) " :lanes " (st/q s.lanes) " :spec " (st/q u.out) " :check " (n c) ")"))
+                        (if (and (ok? w1) (and (ok? w2) (= c 0))) 0 1)))))))))))
+
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listHead args) ""))
         (path (st/opt args "spec" ""))]
-    (match (specLines! path)
-      ((err e) (do (eprintln (str "(:trial :error " (st/q e) ")")) (ok 2)))
-      ((ok s)
-        (cond
-          ((= cmd "check") (ok (check! s)))
-          ((= cmd "run") (ok (run! s (st/opt args "only" ""))))
-          ((= cmd "collect") (ok (collect! s)))
-          (else (do (eprintln "usage: trial.asl check|run|collect --spec S [--only CELL]") (ok 2)))))))
+    (if (= cmd "setup")
+      (ok (setup! path (listContains? args "--dry-run")))
+      (match (specLines! path)
+        ((err e) (do (eprintln (str "(:trial :error " (st/q e) ")")) (ok 2)))
+        ((ok s)
+          (cond
+            ((= cmd "check") (ok (check! s)))
+            ((= cmd "run") (ok (run! s (st/opt args "only" ""))))
+            ((= cmd "collect") (ok (collect! s)))
+            (else (do (eprintln "usage: trial.asl setup|check|run|collect --spec S [--dry-run] [--only CELL]") (ok 2))))))))
