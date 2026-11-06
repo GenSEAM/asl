@@ -79,6 +79,25 @@ fn ! testStalledHolder -> Bool
               (assert (ok? gone) "the fixture dir is removed")
               true)))))
 
+; (:m :ref COLDLOCK-PARTIAL-HOLDER :do "a holder file read before its line 2 is written names the holder as building unknown, and the waiter names the out dir once line 2 appears: the lock holds only the pid line, a helper writes the full file two seconds into a probe that gives up after 8 s")
+fn ! testPartialHolder -> Bool
+  (let [(cache (fresh! "partial"))
+        (out (str cache "/out"))]
+    (match (fr/spawnSep (list "/bin/sh" "-c" "exec sleep 37") "." (fr/childEnv (list)))
+      ((err d) (do (assert false (str "holder spawn failed: " d.stderr)) false))
+      ((ok h)
+        (let [(_ (fdClose h.outFd))
+              (_ (fdClose h.errFd))
+              (made (and (ok? (dirCreate (str cache "/build.lockd"))) (ok? (fileWrite (str cache "/build.lockd/holder") (str h.pid "\n")))))
+              (r (fr/runGuarded (list "/bin/sh" "-c" "( sleep 2; printf '%s\\n%s\\n\\n' \"$1\" \"$2\" > \"$3/build.lockd/holder.new\" && mv \"$3/build.lockd/holder.new\" \"$3/build.lockd/holder\" ) & exec /bin/sh \"$4\" --cold-probe \"$3\" 8" "sh" (stringFromInt64 h.pid) out cache (buildSh!)) "." (fr/childEnv (list)) (fr/limits 60 16)))
+              (_ (stopHolder! h.pid))
+              (gone (removeAll! cache))]
+          (do (assert made "fixture: the lock holds only the pid line")
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building unknown")) (str "the first announcement says unknown while line 2 is missing: " r.stderr))
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building " out)) (str "and the out dir is announced once line 2 appears: " r.stderr))
+              (assert (ok? gone) "the fixture dir is removed")
+              true)))))
+
 fn ! testDeadHolder -> Bool
   (let [(cache (fresh! "dead"))]
     (match (fr/spawnSep (list "/bin/sh" "-c" "true") "." (fr/childEnv (list)))
@@ -100,6 +119,7 @@ fn ! testDeadHolder -> Bool
 fn ! runTests -> Bool
   (do (assert (testProgressingHolder) "an alive, progressing holder is waited on past the window")
       (assert (testStalledHolder) "an alive holder with no progress makes the waiter give up")
+      (assert (testPartialHolder) "a holder whose line 2 arrives late is announced again with its out dir")
       (assert (testDeadHolder) "a gone holder is taken over")
       (assert (testBusyHolder) "an alive holder that only burns CPU is waited on past the window")
       (assert (testReusedPid) "a reused holder pid with another start time is taken over")
