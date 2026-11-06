@@ -21,7 +21,7 @@ fn ! killOwn! pid: Int64 expect: String -> Int64
 fn ! pidIn! path: String -> Int64
   (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString path) ""))) 0)
 
-fn ! spawn! secs: String -> Int64
+fn ! startDecoy! secs: String -> Int64
   (match (fr/spawnSep (list "sleep" secs) "." (fr/childEnv (list)))
     ((ok r) r.pid)
     ((err _) -1))
@@ -37,7 +37,7 @@ fn ! runTests -> Bool
         (sc (stringFromInt64 (+ 300 m)))
         (dir (str (optionOr (envGet "TMPDIR") "/tmp") "/boundedTest-" (stringFromInt64 (procSelf))))
         (_ (dirCreate dir))
-        (decoy (spawn! sa))
+        (decoy (startDecoy! sa))
         (tree (child! root (list "3" "--" "sh" "-c" (str "echo $$ > " dir "/w1; sleep " sa " & echo $! > " dir "/a; sh -c 'echo $$ > " dir "/w2; sleep " sb " & echo $! > " dir "/b; wait' & wait"))))
         (pa (pidIn! (str dir "/a")))
         (pb (pidIn! (str dir "/b")))
