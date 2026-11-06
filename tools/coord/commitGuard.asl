@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -379,14 +379,48 @@ fn ! exportStaged! cfg: Cfg paths: (List String) -> (Pair String String)
 fn ! exportStagedWith! cfg: Cfg paths: (List String) withCtx: Bool -> (Pair String String)
   (let [(base (exportBase! cfg))
         (swept (sweepStale! cfg base))
-        (dir (str base "/commitGuard-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (made (fr/runOneLimited (fr/job (list "mkdir" "-p" base) "." (fr/childEnv (list))) (fr/limits 20 16)))
+        (st (stableDir! cfg base))
+        (dir (if (stringEmpty? st) (str base "/commitGuard-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))) st))
         (mk (fr/runOneLimited (fr/job (list "mkdir" "-p" dir) "." (fr/childEnv (list))) (fr/limits 20 16)))]
     (cond
       ((!= mk.exit 0) (pair dir (str "cannot create the export dir: " mk.out)))
       ((listEmpty? paths) (pair dir ""))
       (else (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") paths)))]
               (if (!= x.exit 0) (pair dir (str "git checkout-index failed: " x.out))
-                (if withCtx (pair dir (exportContext! cfg dir paths)) (pair dir "")))))))
+                (if withCtx (pair dir (exportContext! cfg dir paths (not (stringEmpty? st)))) (pair dir "")))))))
+
+; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "the checker cache is keyed by the path of the checked module as well as its content, so a fresh export directory per run re-checks the whole import closure cold (measured 603 s for asl-agent main.asl in a new path against 11 s at a reused one); exports therefore go to one of four slot directories commitGuard-ws-0..3 under the export base, reused by every run and every worktree (an unchanged module keeps its path and content, so its cache entry hits), each guarded by a lock directory holding the owner pid, a dead owner's lock is taken over; a run that finds all four taken exports to a unique directory as before")
+fn exportSlots -> Int64
+  4
+
+fn ! tryLock! lock: String -> Bool
+  (let [(mk (fr/runOneLimited (fr/job (list "mkdir" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))]
+    (if (= mk.exit 0)
+      (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf))))
+      (let [(owner (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))
+            (alive (if (stringEmpty? owner) true (= (fr/runOneLimited (fr/job (list "kill" "-0" owner) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)))]
+        (if alive
+          false
+          (let [(rm (fr/runOneLimited (fr/job (list "rm" "-rf" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))
+                (again (fr/runOneLimited (fr/job (list "mkdir" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))]
+            (and (= again.exit 0) (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf))))))))))
+
+fn ! stableDir! cfg: Cfg base: String -> String
+  (stableFrom! base 0)
+
+fn ! stableFrom! base: String i: Int64 -> String
+  (if (>= i (exportSlots))
+    ""
+    (let [(dir (str base "/commitGuard-ws-" (stringFromInt64 i)))]
+      (if (tryLock! (str dir ".lock")) dir (stableFrom! base (+ i 1)))))
+
+; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "files of a reused export directory that the index no longer has (a deleted or renamed module) are removed, so a stale module never resolves an import")
+fn ! pruneExport! dir: String keep: (List String) -> Bool
+  (let [(found (fr/runOneLimited (fr/job (list "find" dir "-type" "f" "(" "-name" "*.asl" "-o" "-name" "*.asn" ")") "." (fr/childEnv (list))) (fr/limits 60 16)))
+        (rels (map (fn [(f String)] -> String (optionOr (stringSlice f (+ (stringLength dir) 1) (stringLength f)) f)) (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringLines found.out))))
+        (extra (filter (fn [(r String)] -> Bool (not (listContains? keep r))) rels))]
+    (fold (fn [(acc Bool) (r String)] -> Bool (and acc (ok? (pathRemove (str dir "/" r))))) true extra))
 
 ; (:m :ref COMMIT-GUARD-IN-PLACE :do "a nested .asl.config.asn (any but the root one) is not exported: with one on the way up from an exported file the checker resolves root-level imports such as tools/remote/form against that nested workspace only and reports them undeclared, measured on asl/packages/asl-agent/src/main.asl; without it the export resolves like the repo does")
 fn nestedConfig? p: String -> Bool
@@ -400,16 +434,22 @@ fn ! contextPaths! cfg: Cfg paths: (List String) -> (Result (List String) String
                   (stringLines ls.out)))))
 
 ; (:m :ref COMMIT-GUARD-PKG-RESOLVE :do "export the context paths in chunks of 400 into dir beside the changed files; the first failure is the message, empty on success")
-fn ! exportContext! cfg: Cfg dir: String paths: (List String) -> String
+fn ! exportContext! cfg: Cfg dir: String paths: (List String) prune: Bool -> String
   (match (contextPaths! cfg paths)
     ((err e) e)
-    ((ok ctx) (fold (fn [(acc String) (chunk (List String))] -> String
+    ((ok ctx) (let [(pr (if prune (pruneExport! dir (listAppend paths ctx)) true))] (fold (fn [(acc String) (chunk (List String))] -> String
                       (if (not (stringEmpty? acc)) acc
                         (let [(x (git! cfg (listAppend (list "checkout-index" "-f" (str "--prefix=" dir "/") "--") chunk)))]
                           (if (= x.exit 0) "" (str "git checkout-index of the package context failed: " x.out)))))
-                    "" (chunksOf ctx 400))))
+                    "" (chunksOf ctx 400)))))
 
 ; (:m :ref COMMIT-GUARD-IN-PLACE :do "a staged .asl whose working-tree file equals its index entry is checked where it lies: the exact workspace context, the warm cache of the repo, no export; git diff --quiet of that path against the index (the cfg index file when given) answers, and anything else (partly staged, deleted, unreadable) is exported and judged by its staged blob")
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "true when the working tree has an untracked or modified .asl or .asn file the index does not carry as committed (outside the paths being judged): an in-place check reads the working tree, so such a module could make an import resolve that the committed tree does not have; any such file sends every path to the export, which judges the index only")
+fn ! dirtyContext! cfg: Cfg paths: (List String) -> Bool
+  (let [(r (git! cfg (list "ls-files" "-m" "-o" "--exclude-standard" "--" "*.asl" "*.asn")))]
+    (or (!= r.exit 0)
+        (listAny? (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (not (listContains? paths f)))) (stringLines r.out))))
+
 fn ! sameRoot? a: String b: String -> Bool
   (= (resultOr (realPath a) a) (resultOr (realPath b) b))
 
@@ -431,15 +471,29 @@ fn ! inPlaceOk! cfg: Cfg p: String -> Bool
 fn exportHits msg: String -> (List Hit)
   (if (stringEmpty? msg) (list) (list (hit "git" "" (esc1 msg))))
 
+; (:m :ref COMMIT-GUARD-IN-PLACE :do "only inside a configured export dir, a unique export directory commitGuard-PID-NS older than an hour whose pid is dead is removed; a live owner's directory, the slot directories and their locks are never touched")
 fn ! sweepStale! cfg: Cfg base: String -> Bool
   (if (stringEmpty? (configStr (resultOr (fileReadString (str cfg.aslRoot "/.asl.config.asn")) "") ":commitGuardExportDir"))
     false
-    (= (fr/runOneLimited (fr/job (list "find" base "-maxdepth" "1" "-name" "commitGuard-*" "-mmin" "+60" "-exec" "rm" "-rf" "{}" "+") "." (fr/childEnv (list))) (fr/limits 60 16)).exit 0))
+    (let [(found (fr/runOneLimited (fr/job (list "find" base "-maxdepth" "1" "-name" "commitGuard-*" "-mmin" "+60") "." (fr/childEnv (list))) (fr/limits 60 16)))]
+      (fold (fn [(acc Bool) (p String)] -> Bool (and acc (sweepOne! p))) true (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines found.out)))))
+
+fn ! sweepOne! path: String -> Bool
+  (let [(name (optionOr (listLast (stringSplit path "/")) path))
+        (parts (stringSplit name "-"))
+        (pid (optionOr (listGet parts 1) ""))]
+    (match (stringToInt64 pid)
+      ((none) true)
+      ((some n)
+        (if (= (fr/runOneLimited (fr/job (list "kill" "-0" pid) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)
+          true
+          (= (fr/runOneLimited (fr/job (list "rm" "-rf" path) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)))))
 
 fn ! dropExport! dir: String -> Bool
-  (if (stringContains? dir "/commitGuard-")
-    (= (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)
-    false)
+  (cond
+    ((stringContains? dir "/commitGuard-ws-") (= (fr/runOneLimited (fr/job (list "rm" "-rf" (str dir ".lock")) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0))
+    ((stringContains? dir "/commitGuard-") (= (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0))
+    (else false))
 
 fn gitRow what: String d: fr/Done -> (List Hit)
   (if (= d.exit 0) (list) (list (hit "git" "" (esc1 (str what " failed (exit " (stringFromInt64 d.exit) "): " (stringTrim d.out))))))
@@ -450,7 +504,8 @@ fn ! gather! cfg: Cfg -> (Pair Int64 (List Hit))
         (ns (git! cfg (listAppend (list "diff" "--name-status" "--no-renames") (listAppend (diffBase cfg) (scopeArgs cfg)))))
         (changes (if (= ns.exit 0) (parseNameStatus ns.out) (list)))
         (paths (map (fn [(c Change)] -> String c.path) changes))
-        (inPl (filter (fn [(p String)] -> Bool (and (aslPath? p) (inPlaceOk! cfg p))) paths))
+        (dirty (dirtyContext! cfg paths))
+        (inPl (if dirty (list) (filter (fn [(p String)] -> Bool (and (aslPath? p) (inPlaceOk! cfg p))) paths)))
         (needCtx (listAny? (fn [(p String)] -> Bool (and (aslPath? p) (not (listContains? inPl p)))) paths))
         (ex (if (stringEmpty? cfg.range) (exportStagedWith! cfg paths needCtx) (pair cfg.repo "")))
         (src (pairFirst ex))
