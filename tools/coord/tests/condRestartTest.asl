@@ -94,6 +94,7 @@ fn ! testDeadline bin: String -> Bool
         (cli (fr/runOneLimited (fr/job (list (fr/nativeCli!) "run" "asl/tools/coord/conductor.asl" "restart" "--store" dir "--grace-sec" "600") "." (fr/childEnv (list))) (fr/limits 600 64)))
         (row (readOr dir "restart"))
         (until (cd/restartUntil! dir))
+        (graceMs (- until (/ (nowNs) 1000000)))
         (rearmed (cd/requestRestart! dir 1))
         (t0 (/ (nowNs) 1000000))
         (code (cd/runLoop! ctx (fn [] -> (List (Pair String Int64)) (list)) (fn [] -> Unit (let [(_ (cd/requestStop! dir))] ())) 0 0 1))
@@ -106,6 +107,7 @@ fn ! testDeadline bin: String -> Bool
         (_ (cleanup dir))]
     (do (assert (and (ok? putC) writing) "C is writing")
         (assert (and (= cli.exit 0) (stringContains? cli.out "(:restart :requested true)")) (str "conductor restart writes the file: " cli.out))
+        (assert (and (>= graceMs 590000) (<= graceMs 600000)) (str "the CLI --grace-sec 600 sets the deadline 590 to 600 s ahead: " (stringFromInt64 graceMs) " ms"))
         (assert (and (stringContains? row ":untilMs ") (> until 0)) (str "the file carries its deadline: " row))
         (assert (and rearmed (= code 0)) (str "the loop ends with exit 0: " (stringFromInt64 code)))
         (assert (stringContains? journal "(:restart :finished () :left (\"C\") ") (str "C is recorded as left at the deadline: " journal))
