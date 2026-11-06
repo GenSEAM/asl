@@ -24,7 +24,7 @@ fn ! repoAt dir: String -> Bool
         (_ (git dir (list "commit" "-q" "-m" "c0")))]
     (and (= mk.exit 0) (and (ok? a) (and (ok? b) (ok? c)))))
 
-fn ! runTests -> Bool
+fn ! testAdd -> Bool
   (let [(dir (scratch))
         (made (repoAt dir))
         (held (git dir (list "ls-tree" "-r" "--name-only" "HEAD")))
@@ -46,3 +46,26 @@ fn ! runTests -> Bool
         (assert (and (not tx2.ok) (stringContains? tx2.why "ignored")) (str "an untracked ignored path is still refused: " tx2.ok " " tx2.why))
         (assert tx3.ok (str "a normal file beside a tracked ignored one lands: " tx3.why))
         true))
+
+; (:m :ref VCS-COMMIT-IGNORED-DELETE :do "a path of HEAD that the shared index no longer holds (git rm --cached, the file stays on disk and is ignored) is committed as a deletion; an untracked ignored path beside it is still refused")
+fn ! testStagedDelete -> Bool
+  (let [(dir (str (scratch) "-del"))
+        (made (repoAt dir))
+        (_ (git dir (list "rm" "-q" "--cached" "cache/t.txt")))
+        (_ (fileWrite (str dir "/cache/u.txt") "new\n"))
+        (tx (gb/prepare! dir (list "cache/t.txt")))
+        (fin (if tx.ok (gb/finish! dir tx "untrack" (list "cache/t.txt")) (gb/Out :exit 1 :out tx.why)))
+        (held (git dir (list "ls-tree" "-r" "--name-only" "HEAD")))
+        (onDisk (fileExists? (str dir "/cache/t.txt")))
+        (bad (gb/prepare! dir (list "cache/u.txt")))
+        (_ (if tx.ok (gb/discard! tx) false))
+        (_ (gb/discard! bad))
+        (_ (sh "." (list "rm" "-rf" dir)))]
+    (do (assert made "fixture built")
+        (assert tx.ok (str "a staged deletion of an ignored path is accepted: " tx.why))
+        (assert (and (= fin.exit 0) (not (stringContains? held "cache/t.txt")) onDisk) (str "the commit deletes it from HEAD and the file stays on disk: " fin.out " " held))
+        (assert (and (not bad.ok) (stringContains? bad.why "ignored")) (str "an untracked ignored path is still refused: " bad.why))
+        true))
+
+fn ! runTests -> Bool
+  (do (testAdd) (testStagedDelete) true)
