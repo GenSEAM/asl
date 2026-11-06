@@ -83,7 +83,7 @@ fn patWordRunMods! -> r/Rex
 fn patFnHeader! -> r/Rex
   (r/rexCompileLead!
     (r/rxSeq (list (startNlMulti) (ws0!) (r/rxOpt (lit "(")) (ws0!) (r/rxAlt (list (lit "fn") (lit "defn"))) (ws1!)
-                   (r/rxGroup 1 (r/rxSeq (list (r/rxOpt (lit "!")) (ws0!) (idRun! "a-zA-Z0-9_?.-"))))
+                   (r/rxGroup 1 (r/rxSeq (list (r/rxOpt (lit "!")) (ws0!) (idRun! "a-zA-Z0-9_?!.-"))))
                    (ws0!) (r/rxGroup 2 (r/rxRep (r/clsNot! "\n") 0 true)) (ws0!) (lit "->") (ws0!)
                    (r/rxGroup 3 (r/rxRep (r/clsNot! "\n") 1 true))))
     3 (r/preLine) 0 (list "fn" "defn") true)
@@ -91,7 +91,8 @@ fn patFnHeader! -> r/Rex
 fn patOutlineFn! -> r/Rex
   (r/rexCompileLead!
     (r/rxSeq (list (startNl) (ws0!) (r/rxAlt (list (r/rxSeq (list (lit "(fn") (ws1!))) (r/rxSeq (list (lit "fn") (ws1!)))))
-                   (r/rxGroup 1 (r/rxSeq (list (r/rxOpt (lit "!")) (ws0!) (idRun! "a-zA-Z0-9_-"))))
+                   (r/rxOpt (lit "!")) (ws0!)
+                   (r/rxGroup 1 (idRun! "a-zA-Z0-9_?!-"))
                    (r/rxGroup 2 (r/rxRep (r/clsNot! "\n") 0 false))
                    (r/rxOpt (r/rxSeq (list (lit "->") (ws0!) (r/rxGroup 3 (r/rxRep (r/clsSetSpace! "a-zA-Z0-9_()-") 1 true)))))
                    (r/rxAlt (list (lit "\n") (lit ")")))))
