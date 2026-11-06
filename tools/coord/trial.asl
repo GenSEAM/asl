@@ -1,7 +1,7 @@
 (module asl-tools/coord/trial
-  :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! cellsOf cellId devBranchOf specProblems! headProblems! stageArgv recordText leonFacts runsPath trialDir
+  :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! stageArgv recordText leonFacts runsPath trialDir
       check! run! collect! main]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv)])
 
 ; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER: N pinned writer models on the same tasks through the real stage CLI (conductor.asl stage write|gates|review|merge), one attempt per (task, model) cell, no ladder and no tick; each merge lands on its own scratch branch <devPrefix><cell> in a devRepo that is never main, and the production heads named in the spec are compared before and after so the trial never moves them")
 
@@ -9,6 +9,7 @@
 (schema Model (:f tag String) (:f alias String))
 (schema TTask (:f id String) (:f owns (List String)) (:f gate String) (:f text String) (:f skipWrite Bool) (:f seed String) (:f known String))
 (schema Cell (:f id String) (:f task TTask) (:f model Model))
+(schema Scan (:f depth Int64) (:f inStr Bool) (:f esc Bool) (:f n Int64) (:f done Bool))
 (schema Spec
   (:f store String) (:f repo String) (:f toolRoot String) (:f devRepo String) (:f devPrefix String) (:f devBase String) (:f worktrees String)
   (:f home String) (:f lanes String) (:f keys String) (:f base String) (:f profile String) (:f leaseSec Int64) (:f writers Int64) (:f gates Int64)
@@ -115,14 +116,35 @@ fn parseSpec text: String -> Spec
 fn rooted root: String p: String -> String
   (if (or (stringStartsWith? p "/") (stringEmpty? root)) p (str root "/" p))
 
-; (:m :do "the spec plus the task rows of every (:corpus :path P) it names (P relative to the tool root); corpus files contribute (:task ...) rows only")
+fn scanStep acc: Scan c: String -> Scan
+  (cond
+    (acc.done acc)
+    (acc.esc (with acc :esc false :n (+ acc.n 1)))
+    (acc.inStr (with acc :esc (= c "\\") :inStr (!= c "\"") :n (+ acc.n 1)))
+    ((= c "\"") (with acc :inStr true :n (+ acc.n 1)))
+    ((= c "(") (with acc :depth (+ acc.depth 1) :n (+ acc.n 1)))
+    ((= c ")") (with acc :depth (- acc.depth 1) :n (+ acc.n 1) :done (<= acc.depth 1)))
+    (else (with acc :n (+ acc.n 1))))
+
+; (:m :do "the first balanced form at the start of s, string-aware; empty when it never closes")
+fn balancedHead s: String -> String
+  (let [(cs (stringChars s))
+        (r (fold scanStep (Scan :depth 0 :inStr false :esc false :n 0 :done false) cs))]
+    (if r.done (stringJoin (listTake cs r.n) "") ""))
+
+; (:m :do "every (:task ...) form of a corpus file joined onto one line, so a corpus written as one multi-line (:trialCorpus :tasks (...)) form yields its task rows")
+fn taskChunks text: String -> (List String)
+  (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
+    (map (fn [(p String)] -> String (stringJoin (map stringTrim (stringLines (balancedHead (str "(:task " p)))) " "))
+         (listDrop (stringSplit text "(:task ") 1)))
+
+; (:m :do "the spec plus the task forms of every (:corpus :path P) it names (P relative to the tool root); corpus files contribute their (:task ...) forms only, single- or multi-line")
 fn ! specLines! path: String -> (Result Spec String)
   (match (fileReadString path)
     ((err e) (err (str "spec unreadable: " e)))
     ((ok text)
       (let [(s0 (parseSpec text))
-            (extra (stringJoin (map (fn [(p String)] -> String
-                                      (stringJoin (filter (fn [(l String)] -> Bool (= (tagOf l) "task")) (rowLines (resultOr (fileReadString (rooted s0.toolRoot p)) ""))) "\n"))
+            (extra (stringJoin (map (fn [(p String)] -> String (stringJoin (taskChunks (resultOr (fileReadString (rooted s0.toolRoot p)) "")) "\n"))
                                     s0.corpus) "\n"))]
         (ok (parseSpec (str text "\n" extra))))))
 
@@ -193,6 +215,16 @@ fn ! headProblems! s: Spec -> (List String)
             (listAppend acc (listAppend moved (map (fn [(p String)] -> String (str "isProduction:" p)) clash)))))
         (list) s.heads)
 
+; (:m :ref DEVREPO-BUILD :do "the merge stage runs mergeCheck with <devRepo>/bin/asl, which needs the devRepo's own host build: bin/asl and asl/host/out/aslNativeBuild present and the builder answering its usage line within 30 s")
+fn ! devBuildProblems! dev: String -> (List String)
+  (let [(nb (str dev "/asl/host/out/aslNativeBuild"))]
+    (cond
+      ((stringEmpty? dev) (list))
+      ((not (fileExists? (str dev "/bin/asl"))) (list "devRepoBuild:noCli"))
+      ((not (fileExists? nb)) (list "devRepoBuild:noHostOut"))
+      (else (let [(d (fr/runOneLimited (fr/job (list nb) dev (fr/childEnv (list))) (fr/limits 30 4)))]
+              (if (stringContains? d.out "usage: nativeBuild") (list) (list (str "devRepoBuild:notRunnable:" (n d.exit))))))))
+
 fn ! specProblems! s: Spec -> (List String)
   (let [(missing (map (fn [(k String)] -> String (str "missing:" k))
                       (filter (fn [(k String)] -> Bool (stringEmpty? (cond ((= k "store") s.store) ((= k "repo") s.repo) ((= k "devRepo") s.devRepo) ((= k "worktrees") s.worktrees) ((= k "home") s.home) (else s.lanes))))
@@ -207,10 +239,12 @@ fn ! specProblems! s: Spec -> (List String)
         (tool (if (fileExists? (str s.toolRoot "/bin/asl")) (list) (list "toolRoot")))
         (gateway (readOr (str s.home "/.asl/gateway.asn")))
         (aliases (map (fn [(m Model)] -> String (str "aliasUnknown:" m.alias)) (filter (fn [(m Model)] -> Bool (not (aliasKnown? gateway m.alias))) s.models)))
-        (seeds (map (fn [(t TTask)] -> String (str "seedMissing:" t.id)) (filter (fn [(t TTask)] -> Bool (and t.skipWrite (not (fileExists? (rooted s.toolRoot t.seed))))) s.tasks)))
+        (seeds (map (fn [(t TTask)] -> String (str "seedMissing:" t.id)) (filter (fn [(t TTask)] -> Bool (and (or t.skipWrite (not (stringEmpty? t.seed))) (or (stringEmpty? t.seed) (not (fileExists? (rooted s.toolRoot t.seed)))))) s.tasks)))
+        (baseSeed (map (fn [(t TTask)] -> String (str "baseSeedUnsupported:" t.id)) (filter (fn [(t TTask)] -> Bool (and (not t.skipWrite) (not (stringEmpty? t.seed)))) s.tasks)))
+        (build (devBuildProblems! s.devRepo))
         (mem (if (<= s.minFreeMb 0) (list) (let [(m (memAvailableMb!))] (cond ((< m 0) (list "memUnknown")) ((< m s.minFreeMb) (list (str "memLow:" (n m)))) (else (list))))))
         (disk (if (<= s.minDiskMb 0) (list) (let [(d (diskFreeMb! (if (fileExists? s.store) s.store ".")))] (if (< d s.minDiskMb) (list (str "diskLow:" (n d))) (list)))))]
-    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool aliases seeds mem disk (headProblems! s))))
+    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build aliases seeds baseSeed mem disk (headProblems! s))))
 
 fn ! check! s: Spec -> Int64
   (let [(ps (specProblems! s))]
@@ -264,7 +298,20 @@ fn unitOf s: Spec c: Cell -> st/Task
 fn cuOf id: String stateName: String wt: String branch: String -> cd/CUnit
   (cd/CUnit :id id :st stateName :lane "trial" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch branch :wt wt :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await "")
 
-; (:m :do "a write cell gets its store row, task text and a writing cond row; a seeded cell gets branch sh/<id> from base with the corpus patch applied and committed, in its own worktree, and a gating cond row")
+; (:m :do "the paths a patch touches, from git apply --numstat rows (added, deleted, path)")
+fn patchPaths numstat: String -> (List String)
+  (filter (fn [(p String)] -> Bool (not (stringEmpty? p)))
+    (map (fn [(l String)] -> String (stringTrim (optionOr (listGet (stringSplit l "\t") 2) ""))) (stringLines numstat)))
+
+; (:m :do "the seed commit goes through the vcs layer: a private index holding exactly the patch paths, committed on the recorded HEAD")
+fn ! seedCommit! wt: String paths: (List String) msg: String -> gv/Out
+  (let [(tx (gv/prepare! wt paths))]
+    (if (not tx.ok) (gv/Out :exit 1 :out tx.why)
+      (let [(o (gv/finish! wt tx msg paths))
+            (_ (gv/discard! tx))]
+        o)))
+
+; (:m :do "a write cell gets its store row, task text and a writing cond row; a seeded cell gets branch sh/<id> from base with the corpus patch applied and committed through the vcs layer, in its own worktree, and a gating cond row")
 fn ! seedCell! s: Spec c: Cell -> (Result String String)
   (let [(_ (dirCreate (str s.store "/tasks")))
         (put (st/put! s.store (unitOf s c)))
@@ -276,9 +323,10 @@ fn ! seedCell! s: Spec c: Cell -> (Result String String)
           (match (cd/writeCUnit! s.store (cuOf c.id "writing" "" "")) ((ok _) (ok "")) ((err e) (err e)))
           (let [(wt (wtOf s c.id))
                 (add (git s.repo (list "worktree" "add" "-q" "-B" (str "sh/" c.id) wt s.base)))
-                (app (if (= add.exit 0) (git wt (list "apply" (rooted s.toolRoot c.task.seed))) add))
-                (stg (if (= app.exit 0) (git wt (list "add" "-A")) app))
-                (com (if (= stg.exit 0) (git wt (list "-c" "user.email=trial@example.invalid" "-c" "user.name=trial" "commit" "-q" "-m" (str "(:c :a trial :do \"seed " c.id "\")"))) stg))]
+                (patch (rooted s.toolRoot c.task.seed))
+                (app (if (= add.exit 0) (git wt (list "apply" patch)) add))
+                (paths (patchPaths (gitText wt (list "apply" "--numstat" patch))))
+                (com (if (= app.exit 0) (seedCommit! wt paths (str "(:c :a trial :do \"seed " c.id "\")")) (gv/Out :exit app.exit :out app.out)))]
             (if (!= com.exit 0) (err (str "seed: " (stringTrim com.out)))
               (match (cd/writeCUnit! s.store (cuOf c.id "gating" wt (str "sh/" c.id))) ((ok _) (ok wt)) ((err e) (err e)))))))))
 
@@ -411,7 +459,7 @@ fn okIn ps: (List (Pair String cd/Res)) stage: String cs: (List Cell) -> (List C
 
 ; (:m :do "merges run one at a time: devRepo checks out a fresh <devPrefix><id> from devBase, then the merge stage trains the cell branch onto it; the devRepo goes back to its own branch afterwards")
 fn ! mergeOne! s: Spec c: Cell -> (Pair String cd/Res)
-  (let [(co (git s.devRepo (list "checkout" "-q" "-B" (devBranchOf s c.id) s.devBase)))]
+  (let [(co (gv/switch! s.devRepo (devBranchOf s c.id) s.devBase))]
     (if (!= co.exit 0)
       (pair c.id (failRes (str "devCheckout: " (stringTrim co.out))))
       (let [(ds (stagePool! s "merge" (list c) 1))]
@@ -445,7 +493,7 @@ fn ! run! s: Spec only: String -> Int64
             (toMerge (okIn rr "review" toReview))
             (devHome (gitText s.devRepo (list "branch" "--show-current")))
             (mr (map (fn [(c Cell)] -> (Pair String cd/Res) (mergeOne! s c)) toMerge))
-            (_ (if (stringEmpty? devHome) (git s.devRepo (list "status")) (git s.devRepo (list "checkout" "-q" devHome))))
+            (_ (if (stringEmpty? devHome) (gv/Out :exit 0 :out "") (gv/switch! s.devRepo devHome devHome)))
             (now (nowMs))
             (records (map (fn [(c Cell)] -> String
                             (let [(seedErr (match (listFind (fn [(p (Pair String (Result String String)))] -> Bool (= (pairFirst p) c.id)) seeded) ((some p) (match (pairSecond p) ((err e) e) ((ok _) ""))) ((none) "notSeeded")))

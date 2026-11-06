@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeFf! log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -143,6 +143,15 @@ fn ! branchCreate! repo: String name: String base: String -> Out
       ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
       ((!= b.exit 0) (Out :exit 1 :out (str "unknown base " base)))
       (else (gitRun! repo (list "branch" name b.out) 20))))
+
+; (:m :ref VCS-DIRECT :do "check out branch name at base, creating it or resetting it there (checkout -q -B); the name must be a branch git accepts and the base is resolved to a sha first, so no ref text reaches git as an option; base = name re-checks out a branch where it is")
+fn ! switch! repo: String name: String base: String -> Out
+  (let [(ck (if (refOk? name) (gitRun! repo (list "check-ref-format" "--branch" name) 20) (Out :exit 1 :out "name not accepted")))
+        (b (resolve! repo base))]
+    (cond
+      ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
+      ((!= b.exit 0) (Out :exit 1 :out (str "unknown base " base)))
+      (else (gitRun! repo (list "checkout" "-q" "-B" name b.out) 120))))
 
 ; (:m :do "fast-forward only: the source is resolved to a sha first, so no ref text reaches git as an option; a non-ff source fails and no merge commit is made")
 fn ! mergeFf! repo: String source: String -> Out
