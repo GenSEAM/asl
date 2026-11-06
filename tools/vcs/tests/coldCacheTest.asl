@@ -4,7 +4,7 @@
 
 ; (:m :ref WORKTREE-COLD-CACHE :do "a cold native cache must not refuse a good commit: a stub asl binary that needs 4 s on its first call (a build) and is fast afterwards, with a 2 s per-file deadline, lands only through the warm-up check; the given tool tree's binary runs with the commit worktree as cwd, so a fresh worktree of this repo with no host build commits a new module and its importer")
 fn ! scratch -> String
-  (str (optionOr (envGet "TMPDIR") "/tmp") "/coldCacheTest-run")
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/coldCacheTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
 
 fn ! sh dir: String argv: (List String) -> fr/Done
   (fr/runOneLimited (fr/job argv dir (fr/childEnv (list))) (fr/limits 120 16))
@@ -79,8 +79,7 @@ fn ! realCase! root: String base: String -> Bool
         (r (v/commitWith! wt wt root (list "asl/tools/zzCold/zzLib.asl" "asl/tools/zzCold/zzUse.asl") (goodMsg) "commit"))
         (moved (!= (head wt) h0))
         (shown (stringTrim (git wt (list "show" "--name-only" "--format=" "HEAD")).out))
-        (rm (sh root (list "git" "worktree" "remove" "--force" wt)))
-        (_pr (sh root (list "git" "worktree" "prune")))]
+        (rm (sh root (list "git" "worktree" "remove" "--force" wt)))]
     (do (assert (= rm.exit 0) "fresh worktree removed")
         (assert (= mk.exit 0) (str "fresh worktree of this repo: " mk.out))
         (assert (= r.code 0) (str "a new module and its importer land in a fresh worktree with no host build: " r.text))
@@ -223,8 +222,7 @@ fn ! realMain! root: String base: String -> Bool
         (_c (put (str wb "/asl/tools/zzBadImp.asl") "(module asl-tools/zzBadImp\n  :x []\n  :i [(nope/missingModule :a m)])\n"))
         (r3 (v/commitWith! wb wb root (list "asl/tools/zzBadImp.asl") (goodMsg) "commit"))
         (rmA (sh root (list "git" "worktree" "remove" "--force" wa)))
-        (rmB (sh root (list "git" "worktree" "remove" "--force" wb)))
-        (_pr (sh root (list "git" "worktree" "prune")))]
+        (rmB (sh root (list "git" "worktree" "remove" "--force" wb)))]
     (do (assert (and (= rmA.exit 0) (= rmB.exit 0)) "worktrees removed")
         (assert (and (= mkA.exit 0) (= mkB.exit 0)) (str "fresh worktrees: " mkA.out mkB.out))
         (assert (= rA.code 0) (str "the warming commit lands under large deadlines: " rA.text))
@@ -266,11 +264,43 @@ fn ! lockCases! base: String -> Bool
         (assert (and mutexStale free) "a stale takeover mutex is cleared and the takeover succeeds, the mutex released after")
         true))
 
+; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "a test run removes only the private bases of dead runs (coldCacheTest-PID-NS, PID not alive) and the worktrees under them by explicit path; a live run's base is never touched and no global worktree prune runs")
+fn ! staleBases! root: String -> Bool
+  (let [(tmp (optionOr (envGet "TMPDIR") "/tmp"))
+        (found (sh "." (list "find" tmp "-maxdepth" "1" "-name" "coldCacheTest-*")))
+        (dirs (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines found.out)))]
+    (fold (fn [(acc Bool) (d String)] -> Bool (and acc (staleBase! root d))) true dirs))
+
+fn ! staleBase! root: String dir: String -> Bool
+  (let [(name (optionOr (listLast (stringSplit dir "/")) dir))
+        (pid (optionOr (listGet (stringSplit name "-") 1) ""))]
+    (match (stringToInt64 pid)
+      ((none) true)
+      ((some n)
+        (if (= (sh "." (list "kill" "-0" pid)).exit 0)
+          true
+          (let [(wts (map (fn [(w String)] -> Bool (or (not (fileExists? (str dir "/" w))) (= (sh root (list "git" "worktree" "remove" "--force" (str dir "/" w))).exit 0))) (list "freshWt" "mainWtA" "mainWtB")))]
+            (= (sh "." (list "rm" "-rf" dir)).exit 0))))))
+
+fn ! staleCases! root: String -> Bool
+  (let [(tmp (optionOr (envGet "TMPDIR") "/tmp"))
+        (dead (str tmp "/coldCacheTest-999999-1"))
+        (live (str tmp "/coldCacheTest-" (stringFromInt64 (procSelf)) "-1"))
+        (_a (sh "." (list "mkdir" "-p" dead live)))
+        (r (staleBases! root))
+        (deadGone (not (fileExists? dead)))
+        (liveKept (fileExists? live))
+        (_b (sh "." (list "rm" "-rf" live)))]
+    (do (assert r "the sweep of dead runs succeeds")
+        (assert deadGone "a dead run's base is removed")
+        (assert liveKept "a live run's base is never touched")
+        true))
+
 fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
-    (do (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "stale private base removed")
-        (assert (= (sh root (list "git" "worktree" "prune")).exit 0) "stale worktree records pruned")
+    (do (assert (staleBases! root) "bases of dead runs removed with their worktrees")
+        (assert (staleCases! root) "stale sweep only touches dead runs")
         (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (stubCase! base) "stub cold toolchain")
         (assert (deadCase! base) "a toolchain with no verdict")

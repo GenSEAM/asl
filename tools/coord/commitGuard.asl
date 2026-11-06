@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [lockRun! olderThanMin? sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [clearStaleMutex! lockRun! olderThanMin? sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -402,6 +402,17 @@ fn ! olderThanMin? path: String mins: Int64 -> Bool
   (let [(r (fr/runOneLimited (fr/job (list "find" path "-maxdepth" "0" "-mmin" (str "+" (stringFromInt64 mins))) "." (fr/childEnv (list))) (fr/limits 20 16)))]
     (not (stringEmpty? (stringTrim r.out))))
 
+; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "a mutex older than two minutes is a dead taker's: it is renamed away atomically to a unique name (one clearer wins), the moved dir is checked old again, and a fresh one taken by mistake is put back, then the moved dir is removed")
+fn ! clearStaleMutex! mutex: String -> Bool
+  (if (not (olderThanMin? mutex 2))
+    true
+    (let [(moved (str mutex ".stale-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))]
+      (if (not (ok? (lockRun! (list "mv" mutex moved))))
+        true
+        (if (olderThanMin? moved 2)
+          (ok? (lockRun! (list "rm" "-rf" moved)))
+          (do (lockRun! (list "mv" "-n" moved mutex)) false)))))
+
 ; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "a slot lock is a directory made atomically with its owner pid; a dead or ownerless (older than a minute) lock is taken over only while holding the short takeover mutex <lock>.take, after re-reading the owner inside it, so two guards never own one slot; a mutex older than two minutes is a dead taker's and is removed")
 fn ! tryLock! lock: String -> Bool
   (if (ok? (lockRun! (list "mkdir" lock)))
@@ -413,7 +424,7 @@ fn ! tryLock! lock: String -> Bool
       (if (not dead)
         false
         (let [(mutex (str lock ".take"))
-              (_stale (if (olderThanMin? mutex 2) (lockRun! (list "rm" "-rf" mutex)) (ok ())))]
+              (_stale (clearStaleMutex! mutex))]
           (if (not (ok? (lockRun! (list "mkdir" mutex))))
             false
             (let [(again (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))
