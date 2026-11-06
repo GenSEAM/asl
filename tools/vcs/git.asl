@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -176,6 +176,39 @@ fn ! log! repo: String range: String paths: (List String) fmt: String -> Out
     (Out :exit 1 :out "range or format not accepted")
     (let [(o (gitRun! repo (listAppend (list "log" (str "--format=" fmt) "--end-of-options" range) (if (listEmpty? paths) (list) (cons "--" paths))) 60))]
       (Out :exit o.exit :out (capOut o.out))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "a path or file argument that cannot be read as an option: not empty, not leading dash")
+fn argOk? p: String -> Bool
+  (and (not (stringEmpty? p)) (not (stringStartsWith? p "-")))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "restore the working tree (not the index) from a commit: the rev is resolved to a sha first, named paths must pass pathOk?, an empty list means the whole tree")
+fn ! restoreTree! repo: String rev: String paths: (List String) -> Out
+  (let [(r (resolve! repo rev))
+        (bad (filter (fn [(p String)] -> Bool (not (pathOk? p))) paths))]
+    (cond
+      ((!= r.exit 0) (Out :exit 1 :out (str "unknown rev " rev)))
+      ((not (listEmpty? bad)) (Out :exit 1 :out (str "path not accepted: " (stringJoin bad ","))))
+      (else (gitRun! repo (listAppend (list "restore" (str "--source=" r.out) "--worktree" "--") (if (listEmpty? paths) (list ".") paths)) 120))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "apply a patch file to the working tree, or reverse it: the file must not read as an option")
+fn ! applyPatch! repo: String patch: String reverse: Bool -> Out
+  (if (argOk? patch)
+    (gitRun! repo (listAppend (cons "apply" (if reverse (list "-R") (list))) (list "--" patch)) 120)
+    (Out :exit 1 :out "patch not accepted"))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "a detached worktree of a commit at path: the commit is resolved to a sha first and the path must not read as an option")
+fn ! worktreeAdd! repo: String path: String sha: String -> Out
+  (let [(r (resolve! repo sha))]
+    (cond
+      ((not (argOk? path)) (Out :exit 1 :out "path not accepted"))
+      ((!= r.exit 0) (Out :exit 1 :out (str "unknown commit " sha)))
+      (else (gitRun! repo (list "worktree" "add" "--detach" "--" path r.out) 300))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "remove a worktree even when it has changes (--force); the path must not read as an option")
+fn ! worktreeRemove! repo: String path: String -> Out
+  (if (argOk? path)
+    (gitRun! repo (list "worktree" "remove" "--force" "--" path) 300)
+    (Out :exit 1 :out "path not accepted"))
 
 ; (:m :do "ok true when a is an ancestor of b, ok false when not, err for an unknown commit, a missing repo or any other git failure")
 fn ! isAncestor! repo: String a: String b: String -> (Result Bool String)

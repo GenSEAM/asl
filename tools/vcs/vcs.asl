@@ -1,5 +1,5 @@
 (module asl-tools/vcs/vcs
-  :x [VcsReceipt head! status! diff! stage! commit! commitWith! branch! mergeFf! log! isAncestor! receiptOf]
+  :x [VcsReceipt head! status! diff! stage! commit! commitWith! branch! mergeFf! log! isAncestor! receiptOf restore! applyPatch! worktreeAdd! worktreeRemove!]
   :i [(asl-tools/vcs/git :a g) (asl-tools/coord/commitGuard :a cg)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the backend-neutral version-control API: every op takes a repo root and answers an ASN receipt line; the git backend is vcs/git.asl, the only file that spawns git, so a different backend replaces that one file; commit lands exactly the blobs the guard judged and refuses when commitGuard blocks or leaves a file unchecked")
@@ -78,6 +78,18 @@ fn ! branch! repo: String name: String base: String -> VcsReceipt
 
 fn ! mergeFf! repo: String source: String -> VcsReceipt
   (outReceipt "mergeFf" (g/mergeFf! repo source))
+
+fn ! restore! repo: String rev: String paths: (List String) -> VcsReceipt
+  (outReceipt "restore" (g/restoreTree! repo rev paths))
+
+fn ! applyPatch! repo: String patch: String reverse: Bool -> VcsReceipt
+  (outReceipt "applyPatch" (g/applyPatch! repo patch reverse))
+
+fn ! worktreeAdd! repo: String path: String sha: String -> VcsReceipt
+  (outReceipt "worktreeAdd" (g/worktreeAdd! repo path sha))
+
+fn ! worktreeRemove! repo: String path: String -> VcsReceipt
+  (outReceipt "worktreeRemove" (g/worktreeRemove! repo path))
 
 fn ! log! repo: String range: String paths: (List String) fmt: String -> VcsReceipt
   (let [(bad (badPaths! repo paths))]
