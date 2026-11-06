@@ -64,7 +64,14 @@ fn ! runTests -> Bool
         (okE (and (tree e true) (g e (list (v "bran" "ch") "-m" "dev"))))
         (re (ag/vcsDirectCheck! e true))
         (wa (ag/cmdConsistency! a (list "--no-cache")))
-        (wb (ag/cmdConsistency! b (list "--no-cache")))]
+        (wb (ag/cmdConsistency! b (list "--no-cache")))
+        (store (str base "/store"))
+        (warm (ag/cmdConsistency! b (list "--cache-dir" store)))
+        (text (resultOr (fileReadString (str store "/vcsDirectAudit.v1")) ""))
+        (forged (stringJoin (map (fn [(l String)] -> String (str (optionOr (listGet (stringSplit l "\t") 0) "") "\t")) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n"))) "\n"))
+        (okForge (ok? (fileWrite (str store "/vcsDirectAudit.v1") (stringToBytes forged))))
+        (hid (ag/cmdConsistency! b (list "--cache-dir" store)))
+        (shown (ag/cmdConsistency! b (list "--no-cache" "--cache-dir" store)))]
     (do
       (assert okA "clean fixture tree built")
       (assert okB "seeded fixture tree built")
@@ -92,5 +99,9 @@ fn ! runTests -> Bool
       (assert (= rc.status ":skipped") (str "a tree without the allowlist is skipped: " rc.status))
       (assert (stringContains? wb.receipt "ERR_VCS_DIRECT") (str "audit consistency on the seeded tree carries the vcsDirect failure: " wb.receipt))
       (assert (not (stringContains? wa.receipt "ERR_VCS_DIRECT")) "and the clean tree does not")
+      (assert (stringContains? warm.receipt "seeded.asl") (str "the warm run names the site: " warm.receipt))
+      (assert (and okForge (stringContains? text "commit f!") (not (stringContains? forged "commit"))) "the store holds a row for the site, forged empty")
+      (assert (not (stringContains? hid.receipt "ERR_VCS_DIRECT")) (str "with the store read, a forged row hides the site: " hid.receipt))
+      (assert (and (stringContains? shown.receipt "ERR_VCS_DIRECT") (stringContains? shown.receipt "seeded.asl")) (str "--no-cache ignores the planted store row and names the site: " shown.receipt))
       (assert (ok? (pathRemove base)) "fixture trees removed")
       true))

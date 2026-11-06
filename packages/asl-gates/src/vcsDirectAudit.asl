@@ -518,7 +518,7 @@ fn scanFilesC old: (Map String String) files: (List (Pair String String)) -> (Pa
 fn cacheText used: (Map String String) -> String
   (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) ""))) (listSort (mapKeys used))) "\n")
 
-; (:m :ref VCS-AUDIT-LOWS-F1 :do "the cache lives outside every worktree, in the runner-owned store HOME/.asl/run/vcsDirect/ID where ID is the first 16 hex of sha256 of the real git common dir, so a worktree cannot plant, empty or commit rows; mode off reads and writes nothing (merge-time runs), a dir argument replaces the store (tests)")
+; (:m :ref VCS-AUDIT-LOWS-F1 :do "the cache lives outside every worktree, in the runner-owned store HOME/.asl/run/vcsDirect/ID where ID is the first 16 hex of sha256 of the real git common dir, so a worktree cannot commit it, but any writer of the same user can alter it: the cache is a speed aid and is never trusted, merge-time runs use mode off (--no-cache); mode off reads and writes nothing (merge-time runs), a dir argument replaces the store (tests)")
 fn storeRoot -> String
   (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/vcsDirect")
 

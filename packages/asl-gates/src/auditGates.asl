@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [suiteGateChecks! vcsDirectCheck! vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -795,15 +795,22 @@ fn vcsErrCode e: String -> String
 
 ; (:m :ref VCS-AUDIT-WIRE :do "vcsDirectAudit as one consistency check: a git commit, add, push, update-ref or checkout site outside the allowlist (.asl/mem/vcsDirectAllow.asn, compared with the merge base with main) fails it and the evidence names the sites; a tree without the allowlist skips it, an audit error fails it")
 fn vcsDirectCheck! root: String noCache: Bool -> Check
+  (vcsDirectCheckIn! root (if noCache "off" ""))
+
+; (:m :do "mode is empty for the runner store, off for no cache, else a cache dir; audit consistency passes --no-cache or --cache-dir D")
+fn vcsDirectCheckIn! root: String mode: String -> Check
   (let [(allow (str root "/.asl/mem/vcsDirectAllow.asn"))]
     (if (not (isFile! allow))
       (allowAbsentCheck! root)
-      (match (vda/auditWith! root allow "" (if noCache "off" ""))
+      (match (vda/auditWith! root allow "" mode)
         ((err e) (failCheck "vcsDirect" (vcsErrCode e) e (none) (none)))
         ((ok receipt)
           (if (stringContains? receipt ":status :ok")
             (passCheck "vcsDirect" (none) (none))
             (failCheck "vcsDirect" "ERR_VCS_DIRECT" receipt (none) (none)))))))
+
+fn cacheMode argv: (List String) -> String
+  (if (listContains? argv "--no-cache") "off" (optionOr (listGet argv (+ 1 (optionOr (listIndexOf argv "--cache-dir") -2))) ""))
 
 fn cmdConsistency! root: String argv: (List String) -> AuditRun
   (let [(c1 (syntaxCheck! root "syntax"))
@@ -811,7 +818,7 @@ fn cmdConsistency! root: String argv: (List String) -> AuditRun
         (c3 (emojiCheck! root))
         (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
-        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheck! root (listContains? argv "--no-cache"))))
+        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheckIn! root (cacheMode argv))))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]
     (emit "consistency" checks "" "" false))
 
