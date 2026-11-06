@@ -1677,7 +1677,7 @@ fn ! testBlockedPolicy -> Bool
         (jl (fn [(id String) (stage String)] -> Bool (ok? (fileAppend (cd/journalPath dir) (str "(:t :unit \"" id "\" :from writing :to blocked :stage " stage " :model \"\" :tokens 0 :costUsd 0.000000 :verdict \"escalated: x\" :ms 0 :at 1)\n")))))
         (_ (jl "BH" "write")) (_ (jl "BF" "write")) (_ (jl "BN" "merge"))
         (stageLines (list "(:t :unit \"SX\" :from a :to blocked :stage write :at 1)" "(:t :unit \"SX\" :from a :to ready :stage claim :at 2)" "(:t :unit \"SX\" :from a :to blocked :stage merge :at 3)" "(:t :unit \"SY\" :from a :to blocked :stage write :at 4)"))
-        (_ (fileWrite (str dir "/retries.asn") (str "(:retry :unit \"BP\" :why \"reviewDiff\" :n 2 :at 1)\n(:retry :unit \"BM\" :why \"stall\" :n 2 :at 1)\n(:retry :unit \"BB\" :why \"stall\" :n 1 :at " (stringFromInt64 (/ (nowNs) 1000000)) ")\n")))
+        (_ (fileWrite (str dir "/retries.asn") (str "(:retry :unit \"BP\" :why \"reviewDiff\" :n 2 :at 1)\n(:retry :why \"stall\" :n 2 :at 1 :unit \"BM\")\n(:retry :unit \"BB\" :why \"stall\" :n 1 :at " (stringFromInt64 (/ (nowNs) 1000000)) ")\n")))
         (ctx (with (ctxOf dir "none" 0 0 30) :holder "conductorTest"))
         (t1 (cd/tick! ctx))
         (sBP (stOf dir "BP")) (sBS (stOf dir "BS")) (sBL (stOf dir "BL")) (sBX (stOf dir "BX")) (sBM (stOf dir "BM")) (sBB (stOf dir "BB")) (sBR (stOf dir "BR")) (sBG (stOf dir "BG")) (sBF (cuOf dir "BF")) (sBN (cuOf dir "BN"))

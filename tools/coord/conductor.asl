@@ -1033,9 +1033,14 @@ fn retriesPath dir: String -> String
 
 ; (:m :ref UNREADABLE-RETRY-SHARED-CAP :do "retries.asn rows count per cause: a reviewDiff row (unreadable review requeue) and a blocked-retry row of the same unit never share a count, each cause has its own cap per unit lifetime")
 fn ! retryLastBy! dir: String id: String review: Bool -> (Pair Int64 Int64)
-  (match (listLast (filter (fn [(l String)] -> Bool (and (stringStartsWith? l (str "(:retry :unit " (st/q id) " ")) (= review (stringContains? l " :why \"reviewDiff\" ")))) (stringLines (readOr (retriesPath dir)))))
-    ((none) (pair 0 0))
-    ((some l) (pair (optionOr (stringToInt64 (sp/tokAfter l ":n")) 0) (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0))))
+  (let [(hits (fold (fn [(acc (List (Pair Int64 Int64))) (l String)] -> (List (Pair Int64 Int64))
+                      (match (st/rowFields l "retry")
+                        ((err _) acc)
+                        ((ok fs) (if (and (= (st/textField fs "unit") id) (= review (= (st/textField fs "why") "reviewDiff")))
+                                   (listAppend acc (list (pair (st/intField fs "n") (st/intField fs "at"))))
+                                   acc))))
+                    (list) (stringLines (readOr (retriesPath dir)))))]
+    (match (listLast hits) ((none) (pair 0 0)) ((some p) p)))
 
 fn ! retryLast! dir: String id: String -> (Pair Int64 Int64)
   (retryLastBy! dir id false)
