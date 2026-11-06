@@ -3,7 +3,7 @@
   :i [(aslAgent/core :a c) (aslAgent/main :a m) (asl-json/json :a j)
       (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
-; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; the stale tree is a symlink clone of this checkout with bin/asl replaced; the good tree is a clone whose bin/asl logs and execs this checkout; the run carries :wallBudget 120 so a run rooted in it by mistake ends by its budget and fails the asserts")
+; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; the stale tree is a symlink clone of this checkout with bin/asl replaced; the good tree is a clone whose bin/asl logs and execs this checkout; the run carries :wallBudget 240 so a run rooted in it by mistake ends by its budget and fails the asserts")
 
 fn ! linkEntries! from: String to: String skip: (List String) -> Bool
   (listAll? (fn [n] (or (listAny? (fn [k] (= k n)) skip) (ok? (pathSymlink (str from "/" n) (str to "/" n)))))
@@ -23,7 +23,7 @@ fn ! runWith! tag: String stale: String tool: String -> String
         fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         d (dirCreate fixtureDir)
         f (fileWrite (str fixtureDir "/t" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "t" tag) (list "(:step :op \"check\" :file \"subject.txt\")" "(:step :op \"write\" :file \"new.txt\" :content \"made\")" "(:step :op \"edit\" :file \"subject.txt\" :old \"red\" :new \"green\")" "(:step :op \"write\" :file \"other.txt\" :content \"nope\")" "(:done)")))
-        form (str "(:agent :task \"check subject\" :backend \"script/t" tag "\" :root \"" (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\" \"new.txt\") :budget 8 :wallBudget 120 :contextTokens 8000"
+        form (str "(:agent :task \"check subject\" :backend \"script/t" tag "\" :root \"" (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\" \"new.txt\") :budget 8 :wallBudget 240 :contextTokens 8000"
                (if (stringEmpty? tool) "" (str " :toolRoot \"" (c/escapeAsn tool) "\"")) ")")
         res (m/mainWithRoots (list form) stale root)
         names (resultOr (dirList (str root "/.asl/run/agentLoop")) (list))
@@ -61,6 +61,23 @@ fn ! runTests -> Bool
                                :contextTokens none :note "" :result none :history (list) :turn 0 :reply "" :plan none)]
                       (m/resumed ra st).toolRoot)
         dryRoot (m/toolRootOr (m/runArgsOf (list (pair "toolRoot" (j/jstr "/x/tool"))) 0 0 false) "/repo")
+        dryTree (str base "/dry")
+        agentSrc "asl/packages/asl-agent/src"
+        dryMade (and (ok? (dirCreate (str dryTree "/bin")))
+                  (and (linkEntries! repo dryTree (list "bin" "asl" ".asl" ".git"))
+                    (and (ok? (dirCreate (str dryTree "/asl/packages/asl-agent/src")))
+                      (and (linkEntries! (str repo "/asl") (str dryTree "/asl") (list "packages"))
+                        (and (linkEntries! (str repo "/asl/packages") (str dryTree "/asl/packages") (list "asl-agent"))
+                          (and (linkEntries! (str repo "/asl/packages/asl-agent") (str dryTree "/asl/packages/asl-agent") (list "src"))
+                            (and (linkEntries! (str repo "/" agentSrc) (str dryTree "/" agentSrc) (list "effects.asn"))
+                              (and (ok? (fileWrite (str dryTree "/bin/asl") "#!/bin/sh\n"))
+                                (and (ok? (fileChmod (str dryTree "/bin/asl") 493))
+                                  (ok? (fileWrite (str dryTree "/" agentSrc "/effects.asn") "(:effects :id probe :entries ((:effect :op \"zzprobeop\" :class :outward :doc \"probe\")))")))))))))))
+        dryForm (fn [extra] (str "(:agent :task \"x\" :dryRun true :root \"" (c/escapeAsn repo) "\"" extra ")"))
+        runsBefore (resultOr (dirList (str repo "/.asl/run/agentLoop")) (list))
+        dryWith (m/mainWithRoots (list (dryForm (str " :toolRoot \"" (c/escapeAsn dryTree) "\""))) repo repo)
+        dryWithout (m/mainWithRoots (list (dryForm "")) repo repo)
+        runsAfter (resultOr (dirList (str repo "/.asl/run/agentLoop")) (list))
         cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (ok? (pathRemove withoutRoot))))]
     (do
       (assert (and a b) "the two tree clones were built")
@@ -68,6 +85,10 @@ fn ! runTests -> Bool
       (assert (not notExec) "a bin/asl that exists but is not executable makes the :toolRoot unusable")
       (assert (= resumedRoot "/x/tool") "a resumed run keeps its :toolRoot")
       (assert (= dryRoot "/x/tool") "toolRootOr gives the dry-run prompt the toolRoot tree, not the checkout")
+      (assert dryMade "the dry-run probe tree was built")
+      (assert (stringContains? dryWith.stdout "zzprobeop") "a dry run builds its system prompt from the :toolRoot tree")
+      (assert (not (stringContains? dryWithout.stdout "zzprobeop")) "a dry run without :toolRoot builds it from the checkout, which has no such op")
+      (assert (= runsBefore runsAfter) "the dry runs write nothing into the checkout the probe tree links to")
       (assert cleaned "the clones and both run roots were removed")
       (assert (and (= rootNew "made") (stringContains? rootSubject "green")) "with :toolRoot a written and an edited owned file land in the run root")
       (assert (not toolHas) "the :toolRoot tree gets none of the run's files, no journal and no write")
