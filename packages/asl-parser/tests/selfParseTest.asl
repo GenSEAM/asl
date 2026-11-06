@@ -2,53 +2,53 @@
   :x [runTests]
   :i [(asl-parser/ast :a a) (asl-parser/reader :a rd)])
 
-(schema ClosureModule (:f path String) (:f expected Int64))
-
-fn closureModules -> (List ClosureModule)
+; (:m :ref SELFPARSE-PIN-STALE :do "each closure module must parse to one top form per column-0 line that is neither blank nor a comment; the count comes from the source itself, so it cannot go stale the way pinned numbers did (check.asl 190 vs 200 since 585125e8c)")
+fn closureModules -> (List String)
   (list
-    (ClosureModule :path "asl/packages/asl-compiler/src/compiler.asl" :expected 22) ; (:m :ref RV1 :do "21 -> 22: compilePackageToLlvmFor! (asl1 build --target)")
-    (ClosureModule :path "asl/packages/asl-parser/src/ast.asl" :expected 294) ; (:m :ref SCRIPT-ENTRY :do "268 -> 294 measured: SCRIPT-ENTRY script statements, steps, printer inverse, duplicate and main param checks")
-    (ClosureModule :path "asl/packages/asl-checker/src/types.asl" :expected 57) ; (:m :ref INTEG13 :do "56 -> 57: ty/stringBuiltinNames (checker string builtin hint list)")
-    (ClosureModule :path "asl/packages/asl-checker/src/check.asl" :expected 190) ; (:m :ref INTEG13 :do "161 -> 186 measured: wave13 checker hint forms (unknown-symbol arm and builtin hints)") ; (:m :ref SCRIPT-ENTRY :do "136 -> 159 measured: SCRIPT-ENTRY scriptStep frame, elaboration of script and sugared mains") ; (:m :ref BASE-RED-4 :do "186 -> 190 measured: 183157623 adds u64LitBad? conversionName mixedWidthHint, 528142942 adds fmCallStepCore")
-    ; (:m :ref PERF-REALPATH-CACHE :do "279 -> 282: ImporterCtx, importerCtx! and loadModuleDepsIx! added")
-    ; (:m :ref BATCH8 :do "asl-checker/src/resolve.asl 286 -> 288 forms: PKGRESOLVE and QW-MAP helpers")
-    ; (:m :ref BINNOPERSIST-INTEG8b :do "asl-checker/src/resolve.asl 288 -> 289 forms measured on merge: INTEG8b helpers plus SCRIPT-ENTRY scriptStepResolve")
-    (ClosureModule :path "asl/packages/asl-checker/src/resolve.asl" :expected 289)
-    (ClosureModule :path "asl/packages/asl-codegen/src/c99Emit.asl" :expected 51)
-    (ClosureModule :path "asl/packages/asl-codegen/src/c99Mangle.asl" :expected 9)
-    (ClosureModule :path "asl/packages/asl-target-llvm/src/main.asl" :expected 32) ; (:m :ref RV1 :do "30 -> 31: emitLlvmProgramNativeFor!; 31 -> 32: routeForWith (LL-ROUTE-HUB cd5241d9d)")
-    ; (:m :ref UFIR :do "asl-ir/src/types.asl 67 -> 69 forms: ssaRecordDeclTyped and ssaRecordRaw? (unboxed record field kinds); asl-ir/src/verify.asl 87 -> 88: recordKindDiags")
-    ; (:m :ref LINUXFFI :do "asl-ir/src/types.asl 69 -> 70 forms: ssaExternNative (foreign C symbols are native externs)")
-    (ClosureModule :path "asl/packages/asl-ir/src/types.asl" :expected 70)
-    (ClosureModule :path "asl/packages/asl-parser/src/lexer.asl" :expected 34)
-    (ClosureModule :path "asl/packages/asl-parser/src/reader.asl" :expected 35)
-    (ClosureModule :path "asl/packages/asl-parser/src/indentParser.asl" :expected 127)
-    (ClosureModule :path "asl/packages/asl-checker/src/unify.asl" :expected 27)
-    (ClosureModule :path "asl/packages/asl-codegen/src/c99Type.asl" :expected 63)
-    (ClosureModule :path "asl/packages/asl-codegen/src/c99Expr.asl" :expected 72)
-    (ClosureModule :path "asl/packages/asl-target-llvm/src/types.asl" :expected 5)
-    (ClosureModule :path "asl/packages/asl-target-llvm/src/emit.asl" :expected 9)
-    (ClosureModule :path "asl/packages/asl-parser/src/indentLexer.asl" :expected 57) ; (:m :ref INTEG13 :do "55 -> 57 measured: wave13 indentLexer change")
-    (ClosureModule :path "asl/packages/asl-ir/src/verify.asl" :expected 88)
-    (ClosureModule :path "asl/packages/asl-ir/src/anf.asl" :expected 4))
+    "asl/packages/asl-compiler/src/compiler.asl"
+    "asl/packages/asl-parser/src/ast.asl"
+    "asl/packages/asl-checker/src/types.asl"
+    "asl/packages/asl-checker/src/check.asl"
+    "asl/packages/asl-checker/src/resolve.asl"
+    "asl/packages/asl-codegen/src/c99Emit.asl"
+    "asl/packages/asl-codegen/src/c99Mangle.asl"
+    "asl/packages/asl-target-llvm/src/main.asl"
+    "asl/packages/asl-ir/src/types.asl"
+    "asl/packages/asl-parser/src/lexer.asl"
+    "asl/packages/asl-parser/src/reader.asl"
+    "asl/packages/asl-parser/src/indentParser.asl"
+    "asl/packages/asl-checker/src/unify.asl"
+    "asl/packages/asl-codegen/src/c99Type.asl"
+    "asl/packages/asl-codegen/src/c99Expr.asl"
+    "asl/packages/asl-target-llvm/src/types.asl"
+    "asl/packages/asl-target-llvm/src/emit.asl"
+    "asl/packages/asl-parser/src/indentLexer.asl"
+    "asl/packages/asl-ir/src/verify.asl"
+    "asl/packages/asl-ir/src/anf.asl")
 
-fn testOneModule! m: ClosureModule -> Bool
-  (match (fileReadString m.path)
-    ((err e) (do (assert false (str "Failed to read " m.path ": " e)) false))
+fn columnZeroFormLines src: String -> Int64
+  (listLength (filter (fn [(l String)] -> Bool (and (> (stringLength l) 0) (not (or (stringStartsWith? l " ") (or (stringStartsWith? l "\t") (stringStartsWith? l ";")))))) (stringSplit src "\n")))
+
+fn testOneModule! path: String -> Bool
+  (match (fileReadString path)
+    ((err e) (do (assert false (str "Failed to read " path ": " e)) false))
     ((ok src)
       (match (a/parse src)
-        ((err pe) (do (assert false (str "Parse failed for " m.path ": " pe.msg " at " (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col))) false))
+        ((err pe) (do (assert false (str "Parse failed for " path ": " pe.msg " at " (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col))) false))
         ((ok forms)
           (do
-            (assert (= (listLength forms) m.expected) (str m.path " parsed " (stringFromInt64 (listLength forms)) " forms, pinned count is " (stringFromInt64 m.expected)))
+            (let [(want (columnZeroFormLines src))]
+              (do
+                (assert (> want 0) (str path " has column-0 forms"))
+                (assert (= (listLength forms) want) (str path " parsed " (stringFromInt64 (listLength forms)) " forms, its source has " (stringFromInt64 want) " column-0 form lines"))))
             true)))))
 
 fn testCompilerClosureModules! -> Bool
   (let [(mods (closureModules))
-        (results (map (fn [(m ClosureModule)] -> Bool (testOneModule! m)) mods))]
+        (results (map (fn [(p String)] -> Bool (testOneModule! p)) mods))]
     (do
       (assert (= (listLength mods) 20) "Compiler closure lists exactly 20 modules")
-      (assert (fold (fn [(acc Bool) (b Bool)] -> Bool (and acc b)) true results) "All 20 compiler closure modules parse with host form counts")
+      (assert (fold (fn [(acc Bool) (b Bool)] -> Bool (and acc b)) true results) "All 20 compiler closure modules parse to one form per column-0 line")
       true))
 
 fn getTopDefun forms: (List a/TopForm) idx: Int64 -> (Option a/DefunNode)
