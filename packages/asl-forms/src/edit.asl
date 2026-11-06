@@ -1,4 +1,4 @@
-(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
+(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! flushCheckedStep! flushCheckDeadlineMs flushLimit discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
 
 
 (schema SyntaxResult (:f status String) (:f message String) (:f before String) (:f host String))
@@ -696,6 +696,59 @@ fn flushStep! vs: v/Vfs held: (List String) id: Int64 kw: (Map String String) ar
                                         (if (listEmpty? inPlace) "true" (str "false :inPlace [" (stringJoin (map (fn [(x String)] -> String (quoted (k/relToRoot root x))) inPlace) " ") "]"))
                                         " :files [" (stringJoin (map (fn [(x (Pair String Bool))] -> String (quoted (k/relToRoot root (pairFirst x)))) flushed) " ") "]")))))))))
 
+; (:m :ref FLUSH-AFTER-CHECK :do "the deadline in milliseconds for the type check of one staged .asl at flush; the in-process checker cannot be preempted, so an overrun is measured after the call and refused as unchecked, never passed")
+fn flushCheckDeadlineMs -> Int64
+  30000
+
+; (:m :ref FLUSH-AFTER-CHECK :do "the limit of one check: a caller :checkMs may lower the default deadline but never raise it, and a missing, non-numeric or non-positive value is the default")
+fn flushLimit kw: (Map String String) -> Int64
+  (let [(asked (optionOr (stringToInt64 (k/kwOr kw "checkMs" "")) 0))]
+    (if (<= asked 0) (flushCheckDeadlineMs) (min asked (flushCheckDeadlineMs))))
+
+; (:m :ref FLUSH-AFTER-CHECK :do "the line and code of a checker message shaped path:line:col: CODE text, as receipt fields, empty when the message has another shape")
+fn checkLoc msg: String -> String
+  (let [(parts (stringSplit msg ":"))]
+    (match (listGet parts 1)
+      ((none) "")
+      ((some ln)
+        (match (stringToInt64 ln)
+          ((none) "")
+          ((some n) (str " :line " (stringFromInt64 n) " :checkCode " (quoted (stringTrim (optionOr (listHead (stringSplit (stringTrim (optionOr (listGet parts 3) "")) " ")) "")))))))))
+
+; (:m :ref FLUSH-AFTER-CHECK :do "one staged .asl about to be written: the checker runs on the exact text flushOne! will write; a check error that the disk file did not already have refuses (the comparison is by status only: when the disk file already errors, a different new error passes) with the file, line and code; a status other than ok or error, or an overrun of the deadline, refuses as unchecked; empty string means writable")
+fn ! flushCheckOne! vs: v/Vfs ch: Checkers limitMs: Int64 tp: String -> String
+  (if (not (stringEndsWith? tp ".asl"))
+    ""
+    (match (v/stagedContent! vs tp)
+      ((none) "")
+      ((some staged0)
+        (let [(rel (k/relToRoot vs.root tp))
+              (text (effectMarkOnWrite! tp staged0))
+              (before (match (v/readText! tp) ((ok b) (some b)) ((err _) none)))
+              (t0 (monotonicNs))
+              (r (ch.aslCheck tp text before))
+              (ms (/ (- (monotonicNs) t0) 1000000))]
+          (cond
+            ((> ms limitMs) (str " :file " (quoted rel) " :unchecked true :reason \"deadline\" :ms " (stringFromInt64 ms)))
+            ((= r.status "ok") "")
+            ((and (= r.status "error") (= r.before "error")) "")
+            ((= r.status "error") (str " :file " (quoted rel) (checkLoc r.message) " :checkMessage " (quoted r.message)))
+            (else (str " :file " (quoted rel) " :unchecked true :reason " (quoted (str "check " r.status)) " :checkMessage " (quoted r.message))))))))
+
+fn ! flushCheckAll! vs: v/Vfs ch: Checkers limitMs: Int64 targets: (List String) -> String
+  (fold (fn [(bad String) (tp String)] -> String (if (stringEmpty? bad) (flushCheckOne! vs ch limitMs tp) bad)) "" targets)
+
+; (:m :ref FLUSH-AFTER-CHECK :do "flush of staged files checks every .asl first: any ERR_CHECK refuses the whole flush and nothing is written; non-.asl files behave as before")
+fn ! flushCheckedStep! vs: v/Vfs ch: Checkers held: (List String) id: Int64 kw: (Map String String) args: (List String) -> k/EditOutcome
+  (let [(raw (targetArg kw args))
+        (res (if (stringEmpty? raw) (pair "" "") (k/resolveInRoot! vs.root raw)))
+        (targets (cond ((stringEmpty? raw) (v/stagedPaths! vs)) ((stringEmpty? (pairSecond res)) (list (pairFirst res))) (else (list))))
+        (limit (flushLimit kw))
+        (bad (flushCheckAll! vs ch limit targets))]
+    (if (stringEmpty? bad)
+      (flushStep! vs held id kw args)
+      (failStep id "flush" ":ERR_CHECK" (str " :flushedCount 0" bad))))
+
 fn flat r: (Result (Result T String) String) -> (Result T String)
   (match r ((err e) (err e)) ((ok inner) inner))
 
@@ -1030,7 +1083,7 @@ fn editOp! vs: v/Vfs ch: Checkers run: (fn [Int64 String (List String)] -> k/Edi
     ((= op "flush")
       (match (scopeFlushCheck! vs kw args)
         ((some refusal) (some (failStep id "flush" ":ERR_SCOPE_REFUSED" (str " :receipt " refusal))))
-        ((none) (some (flushStep! vs held id kw args)))))
+        ((none) (some (flushCheckedStep! vs ch held id kw args)))))
     ((= op "discard") (some (discardStep! vs held id kw args)))
     ((= op "txn") (some (txnStep! vs ch run held id kw args)))
     (else (none)))
