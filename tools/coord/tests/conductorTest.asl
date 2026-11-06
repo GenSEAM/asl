@@ -10,6 +10,19 @@ fn ! scratch name: String -> String
 fn ! scratchRoot -> String
   (str (resultOr (realPath ".") ".") "/.asl/cache/conductorTest-" (stringFromInt64 (procSelf)))
 
+; (:m :ref CONDTEST-ROOT-ON-FAIL :do "a failed assert ends the run before the final cleanup, so the next run first removes every conductorTest-PID root under the cache dir whose pid is no longer alive (own pid and live pids stay); returns how many were removed")
+fn ! sweepDeadRoots! cacheDir: String -> Int64
+  (match (dirList cacheDir)
+    ((err _) 0)
+    ((ok names)
+      (let [(dead (filter (fn [(name String)] -> Bool
+                            (and (stringStartsWith? name "conductorTest-")
+                                 (let [(pid (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice name 14 (stringLength name)) "") "-")) "")) 0))]
+                                   (and (> pid 0) (and (!= pid (procSelf)) (not (resultOr (procAlive? pid) false)))))))
+                          names))
+            (_ (map (fn [(name String)] -> Unit (cleanup (str cacheDir "/" name))) dead))]
+        (listLength dead))))
+
 fn ! cleanup dir: String -> Unit
   (let [(_ (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 60 4)))] ())
 
@@ -1925,9 +1938,23 @@ fn ! testAdmitTick bin: String -> Bool
         (assert (> claimsFreed 0) "token freed: the unit is claimed and starts writing")
         true))
 
+fn ! testSweep -> Bool
+  (let [(cache (scratch "sweepCache"))
+        (_ (cleanup cache))
+        (mk (fn [(name String)] -> Bool (ok? (dirCreate (str cache "/" name)))))
+        (_ (map mk (list "conductorTest-2147483646" "conductorTest-2147483646-old" "conductorTest-1" "conductorTest-abc" "keepMe")))
+        (removed (sweepDeadRoots! cache))
+        (left (resultOr (dirList cache) (list)))
+        (_ (cleanup cache))]
+    (do (assert (= removed 2) (str "the dead-pid roots of both name shapes are swept: " (stringFromInt64 removed)))
+        (assert (and (listContains? left "conductorTest-1") (and (listContains? left "conductorTest-abc") (and (listContains? left "keepMe") (not (listContains? left "conductorTest-2147483646"))))) (str "a live pid, a non-numeric name and other dirs stay: " (stringJoin left ",")))
+        true))
+
 fn ! runTests -> Bool
-  (let [(bin (fixtureBinary!))]
+  (let [(swept (sweepDeadRoots! (str (resultOr (realPath ".") ".") "/.asl/cache")))
+        (bin (fixtureBinary!))]
     (do (assert (not (stringEmpty? bin)) "the fixture stage binary is prepared")
+        (assert (testSweep) "dead-pid scratch roots left by a failed run are swept")
         (assert (testNoSchedFile) "the light pool equals the token count without sched.asn")
         (assert (testRotateProfiles) "writer profiles rotate per unit by weight")
         (assert (testDag bin) "dag order")
