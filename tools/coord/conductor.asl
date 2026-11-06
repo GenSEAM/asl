@@ -1713,10 +1713,10 @@ fn porcelainPaths lines: (List String) -> (List String)
                (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) lines))
 
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "the driver commit stages only the owned paths that changed; true when a commit landed")
-fn ! commitWrite! p: String owns: (List String) id: String model: String -> Bool
+fn ! commitWrite! p: String owns: (List String) id: String model: String toolRoot: String -> Bool
   (let [(changed (ownedChanges! p owns))]
     (if (listEmpty? changed) false
-      (fp/driverCommitRow! p (if (listEmpty? owns) (dirtyPaths! p) changed) id model)))
+      (fp/driverCommitRow! p (if (listEmpty? owns) (dirtyPaths! p) changed) id model toolRoot)))
 
 ; (:m :ref COORD-WIP-RESCUE :do "progress counts commits past the base except wip rescue commits, found by their ASN message head (:c :a wip :do; a rescued tree is kept work, not a finished write")
 fn pastArgs base: String -> (List String)
@@ -2180,7 +2180,7 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (vacuous (and (pairSecond pv) (not (commitsPast? p (baseRef u)))))
               (stop (stopOf d.out))
               (modelEsc (and (= stop "modelEscalated") (not vacuous)))
-              (_ (if vacuous false (commitWrite! p u.owns u.id model)))
+              (_ (if vacuous false (commitWrite! p u.owns u.id model rc.repo)))
               ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
               (noEdit (and (= d.exit 0) (not (commitsPast? p (baseRef u)))))]
           (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (and (not vacuous) (not modelEsc)))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
