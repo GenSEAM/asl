@@ -135,7 +135,7 @@
     (:op :agent
       :scope toolchain
       :brief "(:agent :task t [:root dir] [:owns (paths)] [:gates (commands)] [:intent i]) hands a task to Leon, the asl agent loop, which edits inside :root (default the calling repo), narrowed by :owns, and runs the gates"
-      :form "(:agent :task <str> ...)"
+      :form "(:agent :task <str> [:answer <str>] [:attractor <str>] [:backend <str>] [:base <str>] [:budget <int>] [:commit <bool>] [:contextFile <str>] [:contextTokens <int>] [:dryRun <bool>] [:gates <forms>] [:gateTimeout <int>] [:intent <sym>] [:model <str>] [:nativeTools <str>] [:prefix <str>] [:owns <forms>] [:plan <bool>] [:queueTimeout <int>] [:resume <str>] [:root <str>] [:toolRoot <str>] [:timeout <int>] [:wallBudget <int>])"
       :params (
         (:answer :type str :default "")
         (:attractor :type str :default "" :note "opt-in prompt attractor, e.g. asn")
