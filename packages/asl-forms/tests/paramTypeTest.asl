@@ -34,7 +34,21 @@ fn ! testDispatch -> Bool
         (assert (not (stringContains? root "ERR_PARAM_TYPE")) (str "a path for :toolRoot (declared str) is not a type error: " root))
         true))
 
+; (:m :ref FORMS-PARAM-TYPES :do "a step with a bad int and a bad bool is one ERR_PARAM_TYPE naming both, in the catalogue's key order whichever order the step wrote them (agent declares dryRun before timeout), so a check that stops at the first wrong key is red here")
+fn ! testMulti -> Bool
+  (let [(a (line! "(:agent :task x :timeout abc :dryRun maybe)"))
+        (b (line! "(:agent :task x :dryRun maybe :timeout abc)"))
+        (one (line! "(:agent :task x :timeout abc)"))
+        (pa (optionOr (stringIndexOf a "(:dryRun :type bool :got \"maybe\")") -1))
+        (ta (optionOr (stringIndexOf a "(:timeout :type int :got \"abc\")") -1))]
+    (do (assert (and (stringContains? a "(:dryRun :type bool :got \"maybe\")") (stringContains? a "(:timeout :type int :got \"abc\")")) (str "both wrong keys are named: " a))
+        (assert (and (>= pa 0) (< pa ta)) (str "in catalogue key order, dryRun before timeout: " a))
+        (assert (= a b) (str "the same receipt whichever order the step wrote the keys: " a " vs " b))
+        (assert (and (stringContains? one "ERR_PARAM_TYPE") (not (stringContains? one ":dryRun"))) (str "one wrong key names only it: " one))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testPure) "type predicate")
       (assert (testDispatch) "dispatch")
+      (assert (testMulti) "two wrong keys in one step")
       true)
