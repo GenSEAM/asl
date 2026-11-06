@@ -213,7 +213,8 @@ fn judgeDefault -> JudgeRules
   (:f name String)
   (:f calibration (Option String))
   (:f params GatewayParams)
-  (:f shown (List (Pair String String))))
+  (:f shown (List (Pair String String)))
+  (:f gone Bool))
 
 (schema GatewayProvider
   (:f id String)
@@ -1719,12 +1720,34 @@ fn applyOneModel acc: ModelAccumulator m: (Map String rd/SExpr) providers: (Map 
                 (finalParams (pairFirst (pairFirst (pairSecond calRes))))
                 (finalShown (pairSecond (pairFirst (pairSecond calRes))))
                 (finalWarns (pairSecond (pairSecond calRes)))
-                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params (providerPrefillDefault providers pid finalParams) :shown finalShown))]
+                (statusRes (modelStatusGone m mid))
+                (model (GatewayModel :id mid :provider pid :name name :calibration cal :params (providerPrefillDefault providers pid finalParams) :shown finalShown :gone (resultOr statusRes false)))]
             (ModelAccumulator
               :models (if providerKnown (mapSet acc.models mid model) acc.models)
               :order (if providerKnown (listAppendOne acc.order mid) acc.order)
-              :errs errs4
+              :errs (match statusRes ((err e) (listAppendOne errs4 e)) ((ok _) errs4))
               :warns finalWarns))))))
+
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a model row's :status: absent or active is live, gone marks a model the provider no longer serves; any other value is a config error")
+fn modelStatusGone m: (Map String rd/SExpr) mid: String -> (Result Bool String)
+  (match (mapGet m "status")
+    ((none) (ok false))
+    ((some e)
+      (let [(s (resultOr (asnName e (str "model " mid " :status")) ""))]
+        (if (= s "active") (ok false)
+          (if (= s "gone") (ok true)
+            (err (str "model " mid ": :status must be active or gone")))))))
+
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "the one predicate config check and the runtime share: an alias whose model row is :status gone")
+fn gone? models: (Map String GatewayModel) alias: String -> Bool
+  (match (mapGet models alias) ((some md) md.gone) ((none) false))
+
+fn goneTag -> String
+  "gone: "
+
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a skipped gone alias travels as a tagged note through the route errors; gatewayConfigV2Build! moves the notes out of the errors into one warning per alias, and config check turns those warnings back into errors")
+fn goneNote alias: String pid: String intent: String -> String
+  (str (goneTag) alias " " pid "/" intent)
 
 fn loopModels mForms: (List (Map String rd/SExpr)) acc: ModelAccumulator providers: (Map String GatewayProvider) registry: (Map String (Pair GatewayParams (List (Pair String String)))) regError: (Option String) -> ModelAccumulator
   (match (listHead mForms)
@@ -1804,7 +1827,9 @@ fn parseChainItem a: rd/SExpr models: (Map String GatewayModel) pid: String inte
         ((rd/sexprAtom rawA)
           (if (not (mapHas? models rawA))
             (pair (listAppendOne cList rawA) (listAppendOne cErrs (str "profile " pid " route " intent ": unknown alias " rawA)))
-            (pair (listAppendOne cList rawA) cErrs)))
+            (if (gone? models rawA)
+              (pair cList (listAppendOne cErrs (goneNote rawA pid intent)))
+              (pair (listAppendOne cList rawA) cErrs))))
         (_ (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry compound is neither an alias nor a model string")))))))
 
 fn parseRouteTemperature props: (Map String rd/SExpr) pid: String intent: String -> (Pair (Option Float64) (List String))
@@ -1834,12 +1859,14 @@ fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String 
           ((ok alias)
             (if (not (mapHas? models alias))
               (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread unknown alias " alias)))
-              (match (asnScalar wExpr)
-                ((scalarInt w)
-                  (if (<= w 0)
-                    (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))
-                    (pair (listAppendOne acc (pair alias w)) errs)))
-                (_ (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))))))))))
+              (if (gone? models alias)
+                (pair acc (listAppendOne errs (goneNote alias pid (str intent " :spread"))))
+                (match (asnScalar wExpr)
+                  ((scalarInt w)
+                    (if (<= w 0)
+                      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer")))
+                      (pair (listAppendOne acc (pair alias w)) errs)))
+                  (_ (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread weight for " alias " must be a positive integer"))))))))))))
 
 fn parseSpread expr: rd/SExpr models: (Map String GatewayModel) pid: String intent: String -> (Pair (List (Pair String Int64)) (List String))
   (let [(items (match expr ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
@@ -2187,7 +2214,9 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                                 acc))))
                         (list)
                         (providerOrder! (pairFirst provForms))))
-        (allWarns (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (listAppend (gatewayBucketWaitWarnings g) (gatewayQueueBudgetWarnings g)))))
+        (goneNotes (filter (fn [(e String)] -> Bool (stringStartsWith? e (goneTag))) allErrs2))
+        (errs (filter (fn [(e String)] -> Bool (not (stringStartsWith? e (goneTag)))) allErrs2))
+        (allWarns (listAppend (listAppend (listAppend warnings envWarns) (listAppend (gatewayLimitWarnings g) (listAppend (gatewayBucketWaitWarnings g) (gatewayQueueBudgetWarnings g)))) (goneWarnings goneNotes)))
         (table (GatewayTable
                  :version 2
                  :defaultProfile defaultProf
@@ -2208,8 +2237,19 @@ fn gatewayConfigV2Build! g: (Map String rd/SExpr) source: String registryPath: S
                  :limits (gatewayLimitsFromProps g)
                  :bucketWaitSec (gatewayBucketWaitSecFromProps g)
                  :queueBudgetSec (gatewayQueueBudgetSecFromProps g)))]
-    (pair table allErrs2))
+    (pair table errs))
 
+
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "one warning per gone alias, naming every route it was skipped in; each starts with goneTag so config check can raise them")
+fn goneNoteAlias n: String -> String
+  (optionOr (listHead (stringSplit (optionOr (stringSlice n (stringLength (goneTag)) (stringLength n)) "") " ")) "")
+
+fn goneWarnings notes: (List String) -> (List String)
+  (let [(aliases (orderedUnique (map goneNoteAlias notes)))]
+    (map (fn [(a String)] -> String
+           (str (goneTag) "model " a " is :status gone, skipped in "
+                (stringJoin (map (fn [(n String)] -> String (optionOr (stringSlice n (+ (stringLength (goneTag)) (+ (stringLength a) 1)) (stringLength n)) "")) (filter (fn [(n String)] -> Bool (= (goneNoteAlias n) a)) notes)) ", ")))
+         aliases))
 
 fn convertV1ToTable! v1: GatewayV1Config source: String keyFiles: (List String) -> GatewayTable
   (let [(profilesMap (fold (fn [(acc (Map String GatewayProfile)) (pairEntry (Pair String (List GatewayRoute)))] -> (Map String GatewayProfile)
@@ -3104,13 +3144,25 @@ fn routeCooldownSecForExactLoop table: GatewayTable cur: String line: (List Stri
 fn routeCooldownSecForExact table: GatewayTable name: String intent: String -> Int64
   (routeCooldownSecForExactLoop table name (gatewayIntentLine table intent) (list))
 
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a route whose every chain alias was skipped as gone has an empty chain (the parse refuses an empty one otherwise): asking for it is an error for that route only, never a silent fall to another route")
+fn goneRouteCheck table: GatewayTable name: String intent: String exact: Bool re: RouteEntries -> (Result RouteEntries String)
+  (if (not (listEmpty? re.entries)) (ok re)
+    (match (mapGet table.profiles name)
+      ((none) (ok re))
+      ((some prof)
+        (let [(line (gatewayIntentLine table intent))
+              (r (if exact (routeFindLine prof.routes line) (routeFindLineOrAny prof.routes line)))]
+          (match r
+            ((some x) (if (listEmpty? x.chain) (err (str "profile " name " route " x.intent ": every chain alias is :status gone")) (ok re)))
+            ((none) (ok re)))))))
+
 fn gatewayRouteEntries! table: GatewayTable headers: (List (Pair String String)) envProfile: (Option String) intent: String -> (Result RouteEntries String)
   (match (gatewayProfileName table headers envProfile)
     ((err e) (err e))
     ((ok name)
       (if (= table.version 2)
         (let [(noted (gatewayNoteIntent table (stringLower (lstripColons intent))))]
-          (ok (RouteEntries :name name :entries (gatewayV2Entries! noted name intent) :table noted :temperature (routeTemperatureFor noted name intent)
+          (goneRouteCheck noted name intent false (RouteEntries :name name :entries (gatewayV2Entries! noted name intent) :table noted :temperature (routeTemperatureFor noted name intent)
                 :spread (routeSpreadFor noted name intent) :cooldownSec (routeCooldownSecFor noted name intent))))
         (let [(routes (match (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
               (models (optionOr (gatewayProfileModels routes intent) (list)))]
@@ -3123,7 +3175,7 @@ fn gatewayRouteEntriesExact! table: GatewayTable headers: (List (Pair String Str
     ((ok name)
       (if (= table.version 2)
         (let [(noted (gatewayNoteIntent table (stringLower (lstripColons intent))))]
-          (ok (RouteEntries :name name :entries (gatewayV2EntriesExact! noted name intent) :table noted :temperature (routeTemperatureForExact noted name intent)
+          (goneRouteCheck noted name intent true (RouteEntries :name name :entries (gatewayV2EntriesExact! noted name intent) :table noted :temperature (routeTemperatureForExact noted name intent)
                 :spread (routeSpreadForExact noted name intent) :cooldownSec (routeCooldownSecForExact noted name intent))))
         (let [(routes (match (mapGet table.profiles name) ((some pr) pr.routes) ((none) (list))))
               (models (optionOr (routeModelsNamed routes (stringLower (lstripColons intent))) (list)))]
@@ -3205,7 +3257,7 @@ fn modelAsn m: GatewayModel -> String
                ((none) "")
                ((some c) (if (stringEmpty? c) "" (str " :calibration " (asnQuoted c))))))
         (params (stringJoin (map (fn [(p (Pair String String))] -> String (str " :" (pairFirst p) " " (pairSecond p))) m.shown) ""))]
-    (str "(:model :id " m.id " :provider " m.provider " :name " (asnQuoted m.name) cal params ")"))
+    (str "(:model :id " m.id " :provider " m.provider " :name " (asnQuoted m.name) cal params (if m.gone " :status gone" "") ")"))
 
 fn gatewayConfigAsn cfg: (Option ConfigHealth) -> String
   (match cfg
@@ -3265,9 +3317,11 @@ fn gatewayConfigCheckText! text: String source: String registry: String -> (Pair
                           0)))
                     (let [(built (gatewayConfigV2Build! g source registry))
                           (table (pairFirst built))
-                          (errors0 (pairSecond built))
+                          (goneErrs (filter (fn [(w String)] -> Bool (stringStartsWith? w (goneTag))) table.warnings))
+                          (liveWarns (filter (fn [(w String)] -> Bool (not (stringStartsWith? w (goneTag)))) table.warnings))
+                          (errors0 (listAppend (pairSecond built) goneErrs))
                           (errors (listAppend (if (listEmpty? errors0) (codeRouteErrors g table) errors0) (gatewayWaitErrors g)))
-                          (warnings (if (listEmpty? errors) (listAppend table.warnings (gatewayAnyOnlyIntents table)) table.warnings))
+                          (warnings (if (listEmpty? errors) (listAppend liveWarns (gatewayAnyOnlyIntents table)) liveWarns))
                           (extra (str " :profiles " (stringFromInt64 (listLength (mapKeys table.profiles)))
                                       " :models " (stringFromInt64 (listLength (mapKeys table.models)))
                                       " :uses " (stringFromInt64 (listLength (mapKeys table.uses)))))

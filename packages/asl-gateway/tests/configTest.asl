@@ -476,6 +476,65 @@ fn ! testContextCap -> Bool
       (assert (= (pairSecond ok1) 0) (str "config check accepts :contextCap 500000: " (pairFirst ok1)))
       true))
 
+fn goneCfg status: String routes: String -> String
+  (str "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY))"
+       " :models ((:model :id m1 :provider fp :name \"n1\") (:model :id m2 :provider fp :name \"n2\" :status " status "))"
+       " :intents ((:intent :id plan))"
+       " :profiles ((:profile :id default :routes (" routes ")))"
+       " :uses ((:use :for default :profile default)))\n")
+
+fn goneAliases re: cfg/RouteEntries -> (List String)
+  (map (fn [(e cfg/GatewayResolvedEntry)] -> String (match e ((cfg/entryResolved en) en.alias) ((cfg/entryUnresolved a) a))) re.entries)
+
+fn goneWarnCount tbl: cfg/GatewayTable alias: String -> Int64
+  (listLength (filter (fn [(w String)] -> Bool (stringContains? w (str "model " alias " is :status gone"))) tbl.warnings))
+
+fn checkOf text: String -> (Pair String Int64)
+  (cfg/gatewayConfigCheckText! text "gone" ".asl/mem/calibration/index.asn")
+
+; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a :status gone model named in a chain or a :spread is a config check error, while the runtime load skips it with one warning per alias; an unreferenced gone row is fine; a :status other than active or gone is an error; a route left empty by skipping errors for that route only")
+fn ! testGoneModels -> Bool
+  (let [(inBoth (goneCfg "gone" "(:intent any :chain (m1 m2) :spread ((m1 3) (m2 2)))"))
+        (inSpread (goneCfg "gone" "(:intent any :chain (m1) :spread ((m1 3) (m2 2)))"))
+        (unused (goneCfg "gone" "(:intent any :chain (m1))"))
+        (active (goneCfg "active" "(:intent any :chain (m1 m2))"))
+        (bogus (goneCfg "maybe" "(:intent any :chain (m1))"))
+        (emptied (goneCfg "gone" "(:intent plan :chain (m2)) (:intent any :chain (m1))"))
+        (cBoth (checkOf inBoth))
+        (cSpread (checkOf inSpread))
+        (cUnused (checkOf unused))
+        (cActive (checkOf active))
+        (cBogus (checkOf bogus))
+        (rBoth (cfg/gatewayConfigParse! inBoth "gone" ".asl/mem/calibration/index.asn"))
+        (rSpread (cfg/gatewayConfigParse! inSpread "gone" ".asl/mem/calibration/index.asn"))
+        (rEmptied (cfg/gatewayConfigParse! emptied "gone" ".asl/mem/calibration/index.asn"))]
+    (do
+      (assert (and (= (pairSecond cBoth) 1) (stringContains? (pairFirst cBoth) "model m2 is :status gone")) (str "config check refuses a gone alias in a chain: " (pairFirst cBoth)))
+      (assert (and (= (pairSecond cSpread) 1) (stringContains? (pairFirst cSpread) "default/any :spread")) (str "config check refuses a gone alias in a :spread, naming it: " (pairFirst cSpread)))
+      (assert (= (pairSecond cUnused) 0) (str "a gone row no route names passes config check: " (pairFirst cUnused)))
+      (assert (match (cfg/gatewayConfigParse! unused "gone" ".asl/mem/calibration/index.asn") ((ok tbl) (and (match (mapGet tbl.models "m2") ((some md) md.gone) ((none) false)) (match (mapGet tbl.models "m1") ((some md) (not md.gone)) ((none) false)))) ((err _) false)) "the parsed model row carries gone for m2 and not for m1")
+      (assert (= (pairSecond cActive) 0) (str ":status active is a live model: " (pairFirst cActive)))
+      (assert (and (= (pairSecond cBogus) 1) (stringContains? (pairFirst cBogus) "model m2: :status must be active or gone")) (str "a bogus :status is an error: " (pairFirst cBogus)))
+      (assert (match rBoth
+                ((err e) (do (println (str "runtime refused: " e)) false))
+                ((ok tbl) (match (cfg/gatewayRouteEntries! tbl (list) (none) "any")
+                            ((err _) false)
+                            ((ok re) (and (= (goneAliases re) (list "m1")) (and (= re.spread (list (pair "m1" 3))) (= (goneWarnCount tbl "m2") 1)))))))
+              "the runtime load skips the gone alias in chain and spread with exactly one warning for it")
+      (assert (match rSpread
+                ((err _) false)
+                ((ok tbl) (match (cfg/gatewayRouteEntries! tbl (list) (none) "any")
+                            ((err _) false)
+                            ((ok re) (and (= re.spread (list (pair "m1" 3))) (= (goneWarnCount tbl "m2") 1))))))
+              "the runtime load drops a gone :spread pair with a warning")
+      (assert (match rEmptied
+                ((err _) false)
+                ((ok tbl) (and (match (cfg/gatewayRouteEntries! tbl (list) (none) "plan") ((err e) (stringContains? e "every chain alias is :status gone")) ((ok _) false))
+                               (match (cfg/gatewayRouteEntriesExact! tbl (list) (none) "plan") ((err e) (stringContains? e "every chain alias is :status gone")) ((ok _) false))
+                               (match (cfg/gatewayRouteEntries! tbl (list) (none) "any") ((ok re) (= (goneAliases re) (list "m1"))) ((err _) false)))))
+              "a route emptied by skipping errors for that route only, the other route still resolves")
+      true))
+
 fn ! runTests -> Bool
   (let [(contentRes (fileReadString "asl/packages/asl-gateway/tests/configFixture.asn"))]
     (match contentRes
@@ -512,6 +571,7 @@ fn ! runTests -> Bool
                               (assert (testDailyTokenBudget) "DAILYBUDGET: top-level :dailyTokenBudgets override tested")
                               (assert (testBreakerCooldownSecOverride) "COOLDOWNCFG: top-level :breakerCooldownSec override tested")
                               (assert (testContextCap) "CTX-ROUTE: top-level :contextCap tested")
+                              (assert (testGoneModels) "GATEWAY-GONE-MODEL-ROWS: gone models are check errors and runtime skips")
                               (assert (testAnthropicKindParsesAndResolvesEntry) "ANTHROPICKIND: :kind anthropic provider parsing and entry resolution tested")
                               (assert (testGeminiKindParsesAndResolvesEntry) "GEMINIKIND: :kind gemini provider parsing and entry resolution tested")
                               (assert (testRoleCascadeIsConfigOnly) "GW-HARDCODED-CASCADES-20261017: a config-only role cascade edit changes the chosen model")
