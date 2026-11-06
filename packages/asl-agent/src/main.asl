@@ -2346,7 +2346,7 @@ fn ! executeLive ra0: RunArgs repoRoot: String rootDir: String env: pv/ProviderE
     ((prepared ls) (liveRun ls)))
 
 fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/ProviderEnv -> MainResult
-  (match (pv/buildDryRunInfo! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
+  (match (pv/buildDryRunPreview! ra.backend "auto" rootDir ra.model ra.timeout ra.queueTimeout env)
     ((err e) (rejectWith (str ":error ERR_BACKEND :message \"" (c/escapeAsn (pv/errorMessage e)) "\"") 1))
     ((ok info)
       (let [backend ra.backend

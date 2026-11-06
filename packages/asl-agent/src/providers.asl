@@ -3,7 +3,7 @@
       ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
       parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! buildDryRunPreview! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (aslAgent/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (aslAgent/nativeTools :a nt)])
 
 enum ProviderError
@@ -1728,11 +1728,18 @@ fn codexArgv instr: String last: String model: String -> j/Json
                 (if (stringEmpty? model) (list) (list "-m" model)))))
 
 fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+  (dryRunInfo! vendor mode rootDir model timeout queueTimeout env true)
+
+; (:m :ref LEON-DRYRUN-NO-WRITES :do "audit auditTmpleak TOOLROOT-LOWS: a dry run created .asl/run/agentLoop/agents/.agents/plugins/aslLoop/{plugin.json,agents/aslLoopAuto.md} in the repo root it was pointed at; the preview names those paths in the same receipt and creates nothing, while buildDryRunInfo! keeps writing them for the provider parity fixtures")
+fn ! buildDryRunPreview! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+  (dryRunInfo! vendor mode rootDir model timeout queueTimeout env false)
+
+fn ! dryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv write: Bool -> (Result j/Json ProviderError)
   (match (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env "auto")
     ((err e) (err e))
-    ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
+    ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env write)))
 
-fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv write: Bool -> (Result j/Json ProviderError)
   (let [(base (list (pair "vendor" (j/jstr vendor)) (pair "cwd" (j/jstr ""))))
         (t (j/jint (if (= timeout 0) 600 timeout)))
         (q (j/jint (if (= queueTimeout 0) 1200 queueTimeout)))]
@@ -1748,11 +1755,12 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
               (dirs (j/jarr (list (j/jstr agents))))
               (text (str "---\nname: " agent "\ndescription: ASL agent loop endpoint\nmainAgent: true\nsubagent: false\ntools: []\n"
                          "inheritMcp: false\ninheritCustomizations: false\nexcludeDefaultComponents: true\n---\n\n# " agent "\n\n"))
-              (written (match (makeDirs (str pluginDir "/agents"))
-                         ((err e) (err e))
-                         ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
-                                   ((err e) (err e))
-                                   ((ok _) (writeText agentFile text))))))]
+              (written (if (not write) (ok 0)
+                         (match (makeDirs (str pluginDir "/agents"))
+                           ((err e) (err e))
+                           ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
+                                     ((err e) (err e))
+                                     ((ok _) (writeText agentFile text)))))))]
           (match written
             ((err e) (err e))
             ((ok _)
@@ -1766,7 +1774,7 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
       ((= vendor "codex")
         (let [(dir (str rootDir "/.asl/run/agentLoop/codex"))
               (instr (str dir "/" mode ".md"))]
-          (match (makeDirs dir)
+          (match (if write (makeDirs dir) (ok 0))
             ((err e) (err e))
             ((ok _)
               (ok (j/jobj (listAppend base

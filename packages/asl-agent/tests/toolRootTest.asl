@@ -31,6 +31,14 @@ fn ! runWith! tag: String stale: String tool: String -> String
         text (if (stringEmpty? jn) "" (resultOr (fileReadString (str root "/.asl/run/agentLoop/" jn)) ""))]
     (str root "\n" res.stdout "\n" text))
 
+fn ! walk! dir: String -> (List String)
+  (listFlatMap (fn [n] (let [p (str dir "/" n)
+                         st (fileLstat p)]
+                     (cons p (match st
+                               ((ok x) (if (and x.isDir (not x.isSymlink)) (walk! p) (list)))
+                               ((err _) (list))))))
+    (resultOr (dirList dir) (list)))
+
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
         base (str (optionOr (envGet "TMPDIR") "/tmp") "/toolRootTest_" (stringFromInt64 (procSelf)) "_" (stringFromInt64 (nowNs)))
@@ -60,7 +68,7 @@ fn ! runTests -> Bool
                           st (m/ResumeState :session "s" :journal "j" :task "t" :modeHint none :intent none :owns (list) :gates (list) :base "main"
                                :contextTokens none :note "" :result none :history (list) :turn 0 :reply "" :plan none)]
                       (m/resumed ra st).toolRoot)
-        dryRoot (m/toolRootOr (m/runArgsOf (list (pair "toolRoot" (j/jstr "/x/tool"))) 0 0 false) "/repo")
+        promptRoot (m/toolRootOr (m/runArgsOf (list (pair "toolRoot" (j/jstr "/x/tool"))) 0 0 false) "/repo")
         dryTree (str base "/dry")
         agentSrc "asl/packages/asl-agent/src"
         dryMade (and (ok? (dirCreate (str dryTree "/bin")))
@@ -73,22 +81,25 @@ fn ! runTests -> Bool
                               (and (ok? (fileWrite (str dryTree "/bin/asl") "#!/bin/sh\n"))
                                 (and (ok? (fileChmod (str dryTree "/bin/asl") 493))
                                   (ok? (fileWrite (str dryTree "/" agentSrc "/effects.asn") "(:effects :id probe :entries ((:effect :op \"zzprobeop\" :class :outward :doc \"probe\")))")))))))))))
-        dryForm (fn [extra] (str "(:agent :task \"x\" :dryRun true :root \"" (c/escapeAsn repo) "\"" extra ")"))
-        runsBefore (resultOr (dirList (str repo "/.asl/run/agentLoop")) (list))
-        dryWith (m/mainWithRoots (list (dryForm (str " :toolRoot \"" (c/escapeAsn dryTree) "\""))) repo repo)
-        dryWithout (m/mainWithRoots (list (dryForm "")) repo repo)
-        runsAfter (resultOr (dirList (str repo "/.asl/run/agentLoop")) (list))
-        cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (ok? (pathRemove withoutRoot))))]
+        dryRoot (rk/freshRecorderRoot! "dry")
+        dryGit (gk/initGitRepo! dryRoot "dryRun" "dry-run@example.invalid")
+        dryForm (fn [extra] (str "(:agent :task \"x\" :dryRun true :root \"" (c/escapeAsn dryRoot) "\"" extra ")"))
+        watched (list (str repo "/.asl") dryTree dryRoot)
+        runsBefore (listFlatMap walk! watched)
+        dryWith (m/mainWithRoots (list (dryForm (str " :toolRoot \"" (c/escapeAsn dryTree) "\""))) repo dryRoot)
+        dryWithout (m/mainWithRoots (list (dryForm "")) repo dryRoot)
+        runsAfter (listFlatMap walk! watched)
+        cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (and (ok? (pathRemove withoutRoot)) (ok? (pathRemove dryRoot)))))]
     (do
       (assert (and a b) "the two tree clones were built")
       (assert (and (stringContains? badRoot.stdout "ERR_TOOLROOT") (not (= badRoot.exitCode 0))) "a :toolRoot without bin/asl is refused ERR_TOOLROOT")
       (assert (not notExec) "a bin/asl that exists but is not executable makes the :toolRoot unusable")
       (assert (= resumedRoot "/x/tool") "a resumed run keeps its :toolRoot")
-      (assert (= dryRoot "/x/tool") "toolRootOr gives the dry-run prompt the toolRoot tree, not the checkout")
+      (assert (= promptRoot "/x/tool") "toolRootOr gives the dry-run prompt the toolRoot tree, not the checkout")
       (assert dryMade "the dry-run probe tree was built")
       (assert (stringContains? dryWith.stdout "zzprobeop") "a dry run builds its system prompt from the :toolRoot tree")
       (assert (not (stringContains? dryWithout.stdout "zzprobeop")) "a dry run without :toolRoot builds it from the checkout, which has no such op")
-      (assert (= runsBefore runsAfter) "the dry runs write nothing into the checkout the probe tree links to")
+      (assert (= runsBefore runsAfter) "the dry runs write nothing into the checkout's .asl or the probe tree, by a recursive listing that does not follow links")
       (assert cleaned "the clones and both run roots were removed")
       (assert (and (= rootNew "made") (stringContains? rootSubject "green")) "with :toolRoot a written and an edited owned file land in the run root")
       (assert (not toolHas) "the :toolRoot tree gets none of the run's files, no journal and no write")
