@@ -284,7 +284,7 @@ fn ! testHeld base: String -> Bool
       (assert (not (j/procHeldN! (str pr "/e") heldD 5 4000 256)) "proc scan: a process with unrelated fds does not hold the dir")
       (assert (j/procHeldN! (str pr "/e") heldD 5 4000 1) "proc scan: more fds than maxFds counts as held")
       (assert (not (j/procHeldN! (str pr "/e") heldD 5 1 2)) "proc scan: exactly maxProcs processes and maxFds fds are scanned")
-      (assert (j/procHeldN! (str pr "/d") heldD 5 0 256) "proc scan: more processes than maxProcs counts as held")
+      (assert (j/procHeldN! (str pr "/a") heldD 5 0 256) "proc scan: more processes than maxProcs counts as held, on a fixture that holds nothing")
       (assert (j/procHeld! (str pr "/a") heldD 0) "proc scan: a deadline already hit counts as held")
       (assert (not (j/heldPath! (with c :lsofBin "/nonexistent/lsof" :procRoot (str pr "/a")) heldD)) "heldPath! reads the cfg: a missing lsof with an idle proc root is free")
       (assert (j/heldPath! (with c :lsofBin "/nonexistent/lsof" :procRoot (str pr "/b")) heldD) "heldPath! reads the cfg: a missing lsof with a holding proc root is held")
