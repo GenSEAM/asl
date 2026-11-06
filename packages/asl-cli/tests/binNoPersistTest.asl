@@ -23,11 +23,12 @@ fn ! entries! cache: String prefix: String n: Int64 ageHours: Int64 -> Int64
 fn ! oldFile! path: String bytes: Int64 ageHours: Int64 -> Bool
   (and (put! path bytes) (ok? (fileUtime path (- (nowNs) (* ageHours 3600000000000)))))
 
-fn inlineCode i: Int64 -> String
-  (str "(println (+ " (stringFromInt64 i) " 1000))")
+; (:m :ref INLINE-STAGE-FLAKE :do "the inline texts carry a tag of this run (pid and clock), so the staged file each one gets is named by a digest no other run can produce: before, the 101 texts were the same in every run of this test in a tree, and a staged file of a run beside this one, still on disk at the after snapshot, counted as a leak of this one")
+fn inlineCode tag: String i: Int64 -> String
+  (str "(let [(tag \"" tag "\")] (println (+ " (stringFromInt64 i) " 1000)))")
 
-fn ! inlineRun! asl: String cwd: String store: String i: Int64 -> Bool
-  (let [(r (run/runGuarded (list asl "-e" (inlineCode i)) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
+fn ! inlineRun! asl: String cwd: String store: String tag: String i: Int64 -> Bool
+  (let [(r (run/runGuarded (list asl "-e" (inlineCode tag i)) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
     (and (= r.exitCode 0) (= r.stdout (str (stringFromInt64 (+ i 1000)) "\n"))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the runs use a store of their own, so a suite running beside this one cannot add files to it; the staged text and entry wrappers stay in the workspace store, which is watched too")
@@ -43,10 +44,11 @@ fn ! watched! root: String store: String digests: (List String) -> (List String)
 fn ! testInlineLeavesNothing root: String work: String -> Bool
   (let [(asl (str root "/bin/asl"))
         (store (str work "/store"))
-        (digests (map (fn [(i Int64)] -> String (optionOr (stringSlice (bytesSha256 (stringToBytes (inlineCode i))) 0 16) "")) (range 0 101)))
-        (warm (inlineRun! asl root store 0))
+        (tag (str "inlineFlake-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (digests (map (fn [(i Int64)] -> String (optionOr (stringSlice (bytesSha256 (stringToBytes (inlineCode tag i))) 0 16) "")) (range 0 101)))
+        (warm (inlineRun! asl root store tag 0))
         (before (watched! root store digests))
-        (ran (listLength (filter (fn [(i Int64)] -> Bool (inlineRun! asl root store i)) (range 1 101))))
+        (ran (listLength (filter (fn [(i Int64)] -> Bool (inlineRun! asl root store tag i)) (range 1 101))))
         (after (watched! root store digests))
         (fresh (filter (fn [(p String)] -> Bool (not (listContains? before p))) after))]
     (do (assert warm "a first asl -e runs")
