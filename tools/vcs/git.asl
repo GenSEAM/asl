@@ -93,7 +93,7 @@ fn ! tmpIndexDir! -> String
 fn failedTx why: String dir: String -> Tx
   (Tx :ok false :why why :dir dir :index "" :old "")
 
-; (:m :ref VCS-LAYER-CORE :do "a private index for the commit: GIT_INDEX_FILE is set only on our children, filled from HEAD with read-tree, then the named paths are added into it (vanished ones removed; a path already in HEAD is added with -f so an ignored dir does not refuse it, an untracked ignored path still is refused; a path of HEAD that the shared index no longer holds, a staged deletion by rm --cached, is removed from the private index even if the file stays on disk); the shared index is never touched, so the guard can judge exactly these blobs and the commit lands exactly them")
+; (:m :ref VCS-LAYER-CORE :do "a private index for the commit: GIT_INDEX_FILE is set only on our children, filled from HEAD with read-tree, then the named paths are added into it (vanished ones removed; a path already in HEAD is added with -f so an ignored dir does not refuse it, an untracked ignored path still is refused; a path of HEAD that the shared index no longer holds, a staged deletion by rm --cached, is removed from the private index even if the file stays on disk, only when the path is ignored and the shared index is not empty, so a missing or emptied index never turns a modified file into a deletion; names are files, a directory is not expanded and a path only the index holds under an ignored dir is still refused); the shared index is never touched, so the guard can judge exactly these blobs and the commit lands exactly them")
 fn ! prepare! repo: String paths: (List String) -> Tx
   (let [(dir (tmpIndexDir!))
         (idx (str dir "/index"))
@@ -105,8 +105,11 @@ fn ! prepare! repo: String paths: (List String) -> Tx
         (inHead (if (and (= rt.exit 0) (not (listEmpty? present))) (stringLines (gitRun! repo (listAppend (list "ls-tree" "-r" "--name-only" "HEAD" "--") present) 20).out) (list)))
         (heldHere (filter (fn [(p String)] -> Bool (listContains? inHead p)) present))
         (inIdx (if (listEmpty? heldHere) (list) (stringLines (gitRun! repo (listAppend (list "ls-files" "--") heldHere) 20).out)))
-        (stagedDel (filter (fn [(p String)] -> Bool (not (listContains? inIdx p))) heldHere))
-        (tracked (filter (fn [(p String)] -> Bool (listContains? inIdx p)) heldHere))
+        (missing (filter (fn [(p String)] -> Bool (not (listContains? inIdx p))) heldHere))
+        (ignored (if (listEmpty? missing) (list) (stringLines (gitRun! repo (listAppend (list "ls-files" "-o" "-i" "--exclude-standard" "--") missing) 20).out)))
+        (indexFull (if (listEmpty? missing) false (not (stringEmpty? (stringTrim (gitRun! repo (list "ls-files") 60).out)))))
+        (stagedDel (if indexFull (filter (fn [(p String)] -> Bool (listContains? ignored p)) missing) (list)))
+        (tracked (filter (fn [(p String)] -> Bool (not (listContains? stagedDel p))) heldHere))
         (gone (listAppend goneDisk stagedDel))
         (fresh (filter (fn [(p String)] -> Bool (not (listContains? inHead p))) present))
         (af (if (and (= rt.exit 0) (not (listEmpty? tracked))) (gitRunIn! repo idx (listAppend (list "add" "-f" "-A" "--") tracked) 60) (Out :exit rt.exit :out rt.out)))

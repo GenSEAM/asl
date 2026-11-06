@@ -67,5 +67,24 @@ fn ! testStagedDelete -> Bool
         (assert (and (not bad.ok) (stringContains? bad.why "ignored")) (str "an untracked ignored path is still refused: " bad.why))
         true))
 
+; (:m :ref VCS-COMMIT-IGNORED-DELETE :do "a missing worktree index must not turn a modified tracked file into a deletion: with the index file removed, committing a modified non-ignored file and a modified tracked ignored file keeps both in HEAD with the new content")
+fn ! testNoIndex -> Bool
+  (let [(dir (str (scratch) "-noidx"))
+        (made (repoAt dir))
+        (_ (sh "." (list "rm" "-f" (str dir "/.git/index"))))
+        (_ (fileWrite (str dir "/n.txt") "2\n"))
+        (_ (fileWrite (str dir "/cache/t.txt") "2\n"))
+        (tx (gb/prepare! dir (list "n.txt" "cache/t.txt")))
+        (fin (if tx.ok (gb/finish! dir tx "noidx" (list "n.txt" "cache/t.txt")) (gb/Out :exit 1 :out tx.why)))
+        (held (git dir (list "ls-tree" "-r" "--name-only" "HEAD")))
+        (n (git dir (list "show" "HEAD:n.txt")))
+        (t (git dir (list "show" "HEAD:cache/t.txt")))
+        (_ (if tx.ok (gb/discard! tx) false))
+        (_ (sh "." (list "rm" "-rf" dir)))]
+    (do (assert (and made tx.ok (= fin.exit 0)) (str "the commit lands with no index file: " tx.why " " fin.out))
+        (assert (and (stringContains? held "n.txt") (stringContains? held "cache/t.txt")) (str "neither file is dropped from HEAD: " held))
+        (assert (and (= n "2") (= t "2")) (str "both carry the new content: " n " " t))
+        true))
+
 fn ! runTests -> Bool
-  (do (testAdd) (testStagedDelete) true)
+  (do (testAdd) (testStagedDelete) (testNoIndex) true)
