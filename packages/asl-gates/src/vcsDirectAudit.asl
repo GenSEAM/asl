@@ -546,7 +546,7 @@ fn cacheCap -> Int64
 fn ! writeAtomic! path: String text: String -> String
   (let [(tmp (str path ".tmp" (stringFromInt64 (procSelf))))]
     (match (fileWrite tmp text)
-      ((err e) (str "cache write: " e))
+      ((err e) (do (pathRemove tmp) (str "cache write: " e)))
       ((ok _) (match (pathRename tmp path)
                 ((err e) (do (pathRemove tmp) (str "cache rename: " e)))
                 ((ok _) "")))))
@@ -588,7 +588,7 @@ fn ! auditWith! root: String allowPath: String base: String cache: String -> (Re
       ((ok s) (ok (str (optionOr (stringSlice s 0 (- (stringLength s) 1)) s) " :ms " (stringFromInt64 ms) ")")))))
 
 fn ! trackedCache! root: String -> (Result (List String) String)
-  (match (sr/gitOut! root (list "ls-files" "--" ".asl/cache/vcsDirectAudit*"))
+  (match (sr/gitOut! root (list "ls-files" "--" ".asl/cache"))
     ((err e) (err e))
     ((ok out) (ok (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map stringTrim (stringLines out))))))
 
