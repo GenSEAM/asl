@@ -223,8 +223,13 @@ fn ! prodPathProblems! s: Spec out: String -> (List String)
         (laneFiles (map (fn [(h String)] -> String (str h "/.asl/conductor/lanes.asn")) homes))
         (paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (list s.store s.worktrees out)))
         (inStore (filter (fn [(p String)] -> Bool (listAny? (fn [(r String)] -> Bool (inside? p r)) stores)) paths))
-        (lanes (if (and (not (stringEmpty? s.lanes)) (listAny? (fn [(l String)] -> Bool (same? s.lanes l)) laneFiles)) (list (str "productionLanes:" s.lanes)) (list)))]
-    (listAppend (map (fn [(p String)] -> String (str "productionStore:" p)) (distinct inStore)) lanes))
+        (lanes (if (and (not (stringEmpty? s.lanes)) (listAny? (fn [(l String)] -> Bool (same? s.lanes l)) laneFiles)) (list (str "productionLanes:" s.lanes)) (list)))
+        (dots (filter dotDot? (list s.repo s.devRepo s.store s.worktrees s.lanes s.home out)))]
+    (listAppend (listAppend (map (fn [(p String)] -> String (str "productionStore:" p)) (distinct inStore)) lanes) (map (fn [(p String)] -> String (str "dotDot:" p)) dots)))
+
+; (:m :ref TRIAL-SETUP-LOWS :do "a .. segment is refused outright: canon! cannot resolve it in a tail that does not exist yet, so <home>/.asl/run/x/../conductor would slip past the production-store compare")
+fn dotDot? p: String -> Bool
+  (listContains? (stringSplit p "/") "..")
 
 
 fn ! memAvailableMb! -> Int64
