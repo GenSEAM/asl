@@ -32,7 +32,7 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 schema Final
   (:f turn Int64)
@@ -189,6 +189,15 @@ fn ! writeAtRun! run: rl/LoopRun rel: String text: String -> jr/Written
     ((err _) run.written)
     ((ok w) (do (fileWrite (str w.root "/" rel) text) w)))
 
+; (:m :ref LEON-COMMIT-VIA-VCS :do "the run commit goes through the tool tree of the env: a stub tree whose bin/asl logs every call and answers each checked file ok is the only checker that can pass, so the commit lands only when env.toolRoot reaches the guard, and the log shows the check ran with the commit root as cwd")
+fn ! toolTree! base: String -> String
+  (let [dir (str base "/toolTree")
+        _a (dirCreate dir)
+        _b (dirCreate (str dir "/bin"))
+        _c (fileWrite (str dir "/bin/asl") "#!/bin/sh\nD=\"$(dirname \"$0\")\"\necho \"cwd=$PWD args=$*\" >> \"$D/calls.log\"\nshift\nfor a in \"$@\"; do echo \"ok $a:\"; done\n")
+        _d (fileChmod (str dir "/bin/asl") 493)]
+    dir)
+
 fn ! journalText path: String -> String
   (resultOr (fileReadString path) "")
 
@@ -205,6 +214,12 @@ fn ! runTests -> Bool
         _stray (fileWrite (str good "/stray.txt") "not written by the run\n")
         rGood (rl/runLoopWith! (makeEnv "wireGood" "commit the note" good (str good "/loop.asn") 2 none (list) none)
                 (writeAt! "note.txt" "a note\n" (wrote 1 "ok" (list) (mapEmpty) (list "implement") (list "note.txt") true) (some msg)))
+        tool (repoAt! base "tool")
+        stubTree (toolTree! base)
+        rTool (rl/runLoopWith! (with (makeEnv "wireTool" "commit through the tool tree" tool (str tool "/loop.asn") 2 none (list) none) :toolRoot stubTree)
+                (writeAt! "tool.asl" "(module fx/tool\n  :x [f]\n  :i [])\n\nfn f -> Int64\n  1\n" (wrote 1 "ok" (list) (mapEmpty) (list "implement") (list "tool.asl") true) (some msg)))
+        tooled (viaFleet! (list "test" "-f" (str stubTree "/bin/calls.log")) ".")
+        toolLog (resultOr (fileReadString (str stubTree "/bin/calls.log")) "")
         shown (gitOut! good (list "show" "--name-only" "--format=" "HEAD"))
         status (gitOut! good (list "status" "--porcelain"))]
     (do
@@ -225,6 +240,8 @@ fn ! runTests -> Bool
           ((ok pr) (do (assert (= (pairSecond pr) (some "indexStale")) "an :indexStale landing is flagged in the commit pair")
                        (assert (some? (pairFirst pr)) "and still returns the sha")))
           ((err e) (assert false (str "commitLanded! failed: " e)))))
+      (assert (and (= tooled.exit 0) (some? rTool.commit)) (str "with env.toolRoot the commit lands through that tree: exit " (stringFromInt64 tooled.exit) " commit " (optionOr rTool.commit "none") " err " (optionOr rTool.commitError "")))
+      (assert (and (stringContains? toolLog (str "cwd=" tool)) (stringContains? toolLog "tool.asl")) (str "the stub tree's binary checked the file with the commit root as cwd: " toolLog))
       (assert (= (shRm base) 0) "private base removed")
       true))
 

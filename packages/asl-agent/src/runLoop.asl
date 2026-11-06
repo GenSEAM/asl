@@ -672,13 +672,13 @@ fn ! relativeTo path: String rootDir: String -> String
 fn distinct xs: (List String) -> (List String)
   (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
 
-; (:m :ref LEON-COMMIT-VIA-VCS :do "Leon's writes are committed through the vcs layer: vcs/commit! stages exactly the paths the run wrote, commitGuard judges the blobs that land, and a refusal ends the run commitError with the guard receipt (HEAD unchanged); the layer never uses warn here; :indexStale true lands the commit but leaves a journal row and a flag on the commit row so the stale shared index is visible")
+; (:m :ref LEON-COMMIT-VIA-VCS :do "the guard's checks run by env.toolRoot's bin/asl (the tool tree the run was given, the binary Leon itself runs; empty means the commit root), so a fresh worktree needs no host build of its own; Leon's writes are committed through the vcs layer: vcs/commit! stages exactly the paths the run wrote, commitGuard judges the blobs that land, and a refusal ends the run commitError with the guard receipt (HEAD unchanged); the layer never uses warn here; :indexStale true lands the commit but leaves a journal row and a flag on the commit row so the stale shared index is visible")
 fn ! commitWritten! env: s/LoopEnv run: LoopRun rootDir: String message: String -> (Result (Pair (Option String) (Option String)) String)
   (let [paths (distinct (map (fn [p] (relativeTo p rootDir))
     (listAppend run.state.writtenFiles (writtenPaths run.written))))]
     (if (listEmpty? paths)
       (commitFailed! env "the run wrote no path to commit")
-      (commitLanded! env rootDir (vcs/commit! rootDir rootDir paths message "commit"))))
+      (commitLanded! env rootDir (vcs/commitWith! rootDir rootDir env.toolRoot paths message "commit"))))
 
 ; (:m :ref LEON-COMMIT-VIA-VCS :do "a landed vcs receipt becomes the run commit pair; :indexStale true keeps the sha and puts indexStale in the second slot, which commitFields prints as :commitIndexStale true on the result line the conductor reads, and the journal row stays")
 fn ! commitLanded! env: s/LoopEnv rootDir: String r: vcs/VcsReceipt -> (Result (Pair (Option String) (Option String)) String)

@@ -2320,7 +2320,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                         :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
-                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit
+                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit :toolRoot repoRoot
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))

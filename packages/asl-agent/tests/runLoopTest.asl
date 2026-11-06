@@ -48,7 +48,7 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 ; (:m :ref COMMIT-REQUEST-EXPLICIT :do "a commit is requested only by the explicit :commit field, so the fixtures that exercise the commit path set it and every other fixture, whatever its task prose says, does not")
 fn makeEnvCommit id: String task: String root: String journal: String budget: Int64 wall: (Option Int64) gates: (List String) resume: (Option j/Json) -> s/LoopEnv
@@ -59,7 +59,7 @@ fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: Str
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens contextTokens :model (some model)
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 ; (:m :ref PREFETCH-WIRE)
 fn makeEnvOwns id: String task: String root: String journal: String owns: (List String) -> s/LoopEnv
@@ -67,7 +67,7 @@ fn makeEnvOwns id: String task: String root: String journal: String owns: (List 
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 ; (:m :ref FREEBENCH-TOKENBUDGET-20261017 :do "a dedicated fixture for the cumulative input-token cap, separate from makeEnv's unbounded default, so existing tests keep their original unconfigured-budget behaviour")
 fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: Int64 -> s/LoopEnv
@@ -75,7 +75,7 @@ fn makeEnvTokenBudget id: String root: String journal: String inputTokenBudget: 
     :rootDir root :budget 4 :inputTokenBudget inputTokenBudget :journalPath journal :maxRetries 0 :sessionId (some id)
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 schema Final
   (:f turn Int64)

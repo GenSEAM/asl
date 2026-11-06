@@ -22,6 +22,7 @@ schema LoopEnv
   (:f review (fn [String String] -> (Result (Option String) String)))
   (:f grade (fn [String String String] -> (Result (Option String) String)))
   (:f newId (fn [] -> String)) (:f now (fn [] -> Float64)) (:f sleep (fn [Int64] -> Bool))
+  (:f toolRoot String)
 
 schema LoopState
   (:f turn Int64) (:f contextTokens (Option Int64)) (:f core j/Json) (:f wallBudget (Option Int64))

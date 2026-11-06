@@ -34,7 +34,7 @@ fn envWith root: String journal: String model: String specCheck: Bool grade: (fn
     :rootDir root :budget 4 :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId (some "specCheckTest")
     :base (some "") :contextTokens (some 24000) :model (some model)
     :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck specCheck :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade grade :newId fakeId :now fakeNow :sleep fakeSleep)
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade grade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
 
 fn withWrittenFiles st: s/LoopState files: (List String) -> s/LoopState
   (with st :writtenFiles files)
