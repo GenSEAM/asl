@@ -1,5 +1,5 @@
 (module asl-tools/coord/commitGuard
-  :x [sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :x [lockRun! olderThanMin? sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
   :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
@@ -394,17 +394,35 @@ fn ! exportStagedWith! cfg: Cfg paths: (List String) withCtx: Bool -> (Pair Stri
 fn exportSlots -> Int64
   4
 
+fn ! lockRun! argv: (List String) -> (Result Unit String)
+  (let [(r (fr/runOneLimited (fr/job argv "." (fr/childEnv (list))) (fr/limits 20 16)))]
+    (if (= r.exit 0) (ok ()) (err r.out)))
+
+fn ! olderThanMin? path: String mins: Int64 -> Bool
+  (let [(r (fr/runOneLimited (fr/job (list "find" path "-maxdepth" "0" "-mmin" (str "+" (stringFromInt64 mins))) "." (fr/childEnv (list))) (fr/limits 20 16)))]
+    (not (stringEmpty? (stringTrim r.out))))
+
+; (:m :ref COMMIT-GUARD-STABLE-EXPORT :do "a slot lock is a directory made atomically with its owner pid; a dead or ownerless (older than a minute) lock is taken over only while holding the short takeover mutex <lock>.take, after re-reading the owner inside it, so two guards never own one slot; a mutex older than two minutes is a dead taker's and is removed")
 fn ! tryLock! lock: String -> Bool
-  (let [(mk (fr/runOneLimited (fr/job (list "mkdir" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))]
-    (if (= mk.exit 0)
-      (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf))))
-      (let [(owner (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))
-            (alive (if (stringEmpty? owner) true (= (fr/runOneLimited (fr/job (list "kill" "-0" owner) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)))]
-        (if alive
-          false
-          (let [(rm (fr/runOneLimited (fr/job (list "rm" "-rf" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))
-                (again (fr/runOneLimited (fr/job (list "mkdir" lock) "." (fr/childEnv (list))) (fr/limits 20 16)))]
-            (and (= again.exit 0) (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf))))))))))
+  (if (ok? (lockRun! (list "mkdir" lock)))
+    (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf))))
+    (let [(owner (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))
+          (dead (if (stringEmpty? owner)
+                  (olderThanMin? lock 1)
+                  (not (ok? (lockRun! (list "kill" "-0" owner))))))]
+      (if (not dead)
+        false
+        (let [(mutex (str lock ".take"))
+              (_stale (if (olderThanMin? mutex 2) (lockRun! (list "rm" "-rf" mutex)) (ok ())))]
+          (if (not (ok? (lockRun! (list "mkdir" mutex))))
+            false
+            (let [(again (stringTrim (resultOr (fileReadString (str lock "/pid")) "")))
+                  (still (and (= again owner) (or (not (stringEmpty? owner)) (olderThanMin? lock 1))))
+                  (won (if still
+                         (and (ok? (lockRun! (list "rm" "-rf" lock))) (ok? (lockRun! (list "mkdir" lock))) (ok? (fileWrite (str lock "/pid") (stringFromInt64 (procSelf)))))
+                         false))
+                  (_free (lockRun! (list "rm" "-rf" mutex)))]
+              won))))))
 
 fn ! stableDir! cfg: Cfg base: String -> String
   (stableFrom! base 0)
