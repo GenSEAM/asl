@@ -1745,6 +1745,11 @@ fn gone? models: (Map String GatewayModel) alias: String -> Bool
 fn goneTag -> String
   "gone: "
 
+; (:m :ref GONE-QUOTED-CHAIN :do "the gone model a quoted chain entry names: the entry read as an alias id or as provider/name; the model's alias id, none when no gone model matches")
+fn goneByString models: (Map String GatewayModel) s: String -> (Option String)
+  (let [(hits (filter (fn [(md GatewayModel)] -> Bool (and md.gone (or (= md.id s) (= (str md.provider "/" md.name) s)))) (map pairSecond (mapPairs models))))]
+    (match (listHead hits) ((some md) (some md.id)) ((none) (none))))
+
 ; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a skipped gone alias travels as a tagged note through the route errors; gatewayConfigV2Build! moves the notes out of the errors into one warning per alias, and config check turns those warnings back into errors")
 fn goneNote alias: String pid: String intent: String -> String
   (str (goneTag) alias " " pid "/" intent)
@@ -1822,7 +1827,9 @@ fn parseChainItem a: rd/SExpr models: (Map String GatewayModel) pid: String inte
       (let [(s (stripQuotesAndUnescape (sexprRawText a)))]
         (if (stringEmpty? s)
           (pair cList (listAppendOne cErrs (str "profile " pid " route " intent ": chain entry \"\" is neither an alias nor a model string")))
-          (pair (listAppendOne cList s) cErrs)))
+          (match (goneByString models s)
+            ((some gid) (pair cList (listAppendOne cErrs (goneNote gid pid intent))))
+            ((none) (pair (listAppendOne cList s) cErrs)))))
       (match a
         ((rd/sexprAtom rawA)
           (if (not (mapHas? models rawA))

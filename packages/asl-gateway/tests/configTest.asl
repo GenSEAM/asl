@@ -492,6 +492,30 @@ fn goneWarnCount tbl: cfg/GatewayTable alias: String -> Int64
 fn checkOf text: String -> (Pair String Int64)
   (cfg/gatewayConfigCheckText! text "gone" ".asl/mem/calibration/index.asn")
 
+; (:m :ref GONE-QUOTED-CHAIN :do "a quoted chain entry naming a gone model, as its alias id or as provider/name, is a config check error and the runtime load skips it with one warning; a quoted active model and a quoted unknown model string stay valid")
+fn ! testGoneQuoted -> Bool
+  (let [(byName (goneCfg "gone" "(:intent any :chain (m1 \"fp/n2\"))"))
+        (byId (goneCfg "gone" "(:intent any :chain (m1 \"m2\"))"))
+        (active (goneCfg "active" "(:intent any :chain (m1 \"fp/n2\"))"))
+        (unknown (goneCfg "gone" "(:intent any :chain (m1 \"fp/other\"))"))
+        (cName (checkOf byName))
+        (cId (checkOf byId))
+        (cActive (checkOf active))
+        (cUnknown (checkOf unknown))
+        (rName (cfg/gatewayConfigParse! byName "gone" ".asl/mem/calibration/index.asn"))]
+    (do
+      (assert (and (= (pairSecond cName) 1) (stringContains? (pairFirst cName) "model m2 is :status gone")) (str "config check refuses a quoted provider/name entry that names a gone model: " (pairFirst cName)))
+      (assert (and (= (pairSecond cId) 1) (stringContains? (pairFirst cId) "model m2 is :status gone")) (str "config check refuses a quoted alias id of a gone model: " (pairFirst cId)))
+      (assert (= (pairSecond cActive) 0) (str "a quoted entry naming an active model passes: " (pairFirst cActive)))
+      (assert (= (pairSecond cUnknown) 0) (str "a quoted model string naming no model row passes as before: " (pairFirst cUnknown)))
+      (assert (match rName
+                ((err _) false)
+                ((ok tbl) (match (cfg/gatewayRouteEntries! tbl (list) (none) "any")
+                            ((err _) false)
+                            ((ok re) (and (= (goneAliases re) (list "m1")) (= (goneWarnCount tbl "m2") 1))))))
+              "the runtime load skips the quoted gone entry with exactly one warning")
+      true))
+
 ; (:m :ref GATEWAY-GONE-MODEL-ROWS :do "a :status gone model named in a chain or a :spread is a config check error, while the runtime load skips it with one warning per alias; an unreferenced gone row is fine; a :status other than active or gone is an error; a route left empty by skipping errors for that route only")
 fn ! testGoneModels -> Bool
   (let [(inBoth (goneCfg "gone" "(:intent any :chain (m1 m2) :spread ((m1 3) (m2 2)))"))
@@ -571,7 +595,7 @@ fn ! runTests -> Bool
                               (assert (testDailyTokenBudget) "DAILYBUDGET: top-level :dailyTokenBudgets override tested")
                               (assert (testBreakerCooldownSecOverride) "COOLDOWNCFG: top-level :breakerCooldownSec override tested")
                               (assert (testContextCap) "CTX-ROUTE: top-level :contextCap tested")
-                              (assert (testGoneModels) "GATEWAY-GONE-MODEL-ROWS: gone models are check errors and runtime skips")
+                              (assert (testGoneQuoted) "GONE-QUOTED-CHAIN: a quoted gone entry is a check error") (assert (testGoneModels) "GATEWAY-GONE-MODEL-ROWS: gone models are check errors and runtime skips")
                               (assert (testAnthropicKindParsesAndResolvesEntry) "ANTHROPICKIND: :kind anthropic provider parsing and entry resolution tested")
                               (assert (testGeminiKindParsesAndResolvesEntry) "GEMINIKIND: :kind gemini provider parsing and entry resolution tested")
                               (assert (testRoleCascadeIsConfigOnly) "GW-HARDCODED-CASCADES-20261017: a config-only role cascade edit changes the chosen model")
