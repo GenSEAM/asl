@@ -86,6 +86,20 @@ fn ! testPure -> Bool
       (assert (= (listLength (j/plan c (lst "low" (list (sc "aslStubHost-1" old)) (list) (list)))) 0) "aslStubHost is never listed")
       (assert (= (listLength (j/plan c (lst "ok" (list (sc "trialDriver-5" old)) (list) (list)))) 0) "level ok keeps a leftover younger than a day")
       (assert (= (listLength (j/plan c (with (lst "low" (list (sc "trialDriver-5" old)) (list) (list)) :held (list "/t/trialDriver-5")))) 0) "a held leftover is kept")
+      (assert (j/heldFrom 124 "") "lsof timeout counts as held")
+      (assert (j/heldFrom 127 "") "lsof missing counts as held")
+      (assert (j/heldFrom 2 "") "lsof error counts as held")
+      (assert (j/heldFrom 1 "4242\n") "lsof output on exit 1 counts as held")
+      (assert (not (j/heldFrom 1 "")) "lsof exit 1 with no output is free")
+      (assert (j/freshFrom 0 "/t/x\n") "an entry newer than the window is fresh")
+      (assert (not (j/freshFrom 0 "")) "no entry newer than the window is stale")
+      (assert (j/freshFrom 124 "") "a find timeout keeps the dir")
+      (assert (j/freshFrom 2 "") "a find error keeps the dir")
+      (let [(many (listAppend (map (fn [(i Int64)] -> String (str "aslRun-" (stringFromInt64 (+ 100 i)) "-x")) (range 0 150)) (list "trialDriver-1")))
+            (capped (j/capNames many 100))]
+        (do (assert (listContains? capped "trialDriver-1") "a per-pattern cap keeps the other patterns in the scan")
+            (assert (= (listLength capped) 101) "aslRun-* is capped at 100")
+            true))
       (assert (stringContains? (j/renderRow (j/Row :class "a" :path "/t/x" :bytes 7 :why "w" :unit "")) "(:reclaim :path \"/t/x\" :bytes 7") "row rendering")
       true))
 
@@ -95,6 +109,11 @@ fn ! exists? p: String -> Bool
 fn ! mkOld! dir: String -> Bool
   (and (= (sh "." (list "mkdir" "-p" dir)).exit 0)
     (and (put (str dir "/f.txt") "x")
+      (= (sh "." (list "touch" "-t" "202001010000" dir (str dir "/f.txt"))).exit 0)))
+
+fn ! mkIdle! dir: String -> Bool
+  (and (mkOld! dir)
+    (and (put (str dir "/new.txt") "fresh")
       (= (sh "." (list "touch" "-t" "202001010000" dir)).exit 0)))
 
 fn ! testE2e base: String -> Bool
@@ -196,11 +215,19 @@ fn ! testHeld base: String -> Bool
         (oldD (str tmp "/aslRebuildKeepsPriorRtTest-111"))
         (freshD (str tmp "/trialDriver-222"))
         (heldD (str tmp "/conductorTest-333"))
-        (stubD (str tmp "/aslStubHost-444"))]
+        (stubD (str tmp "/aslStubHost-444"))
+        (idleD (str tmp "/trialDriver-666"))
+        (deep (str tmp "/sub/deep"))
+        (linkG (str tmp "/trialDriver-777"))
+        (linkT (str tmp "/trialDriver-778"))]
     (do
       (assert (= (sh "." (list "mkdir" "-p" tmp (str base "/store"))).exit 0) "held fixture base")
       (assert (and (mkOld! oldD) (and (mkOld! heldD) (mkOld! stubD))) "old leftovers")
       (assert (= (sh "." (list "mkdir" "-p" freshD)).exit 0) "fresh leftover")
+      (assert (mkIdle! idleD) "idle leftover: old top directory, fresh file inside")
+      (assert (mkOld! deep) "old grandchild of TMPDIR")
+      (assert (= (sh "." (list "ln" "-s" deep linkG)).exit 0) "symlink to a TMPDIR grandchild")
+      (assert (= (sh "." (list "ln" "-s" tmp linkT)).exit 0) "symlink to TMPDIR itself")
       (match (fr/guardStart! (list "sleep" "60") heldD (fr/childEnv (list)) (fr/limits 90 4))
         ((err _) (assert false "a live holder started"))
         ((ok g)
@@ -208,6 +235,7 @@ fn ! testHeld base: String -> Bool
                 (_ (put (str base "/mode.asn") "(:janitor :mode apply)\n"))
                 (_ (sleepMs 300))
                 (stale (j/apply! c (list (j/Row :class "a" :path heldD :bytes 1 :why "stale" :unit ""))))
+                (loose (j/apply! c (list (j/Row :class "a" :path linkG :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path linkT :bytes 1 :why "stale" :unit ""))))
                 (t2 (j/tick! c))
                 (_ (fr/killTree! g.run.pid))]
             (do
@@ -216,6 +244,9 @@ fn ! testHeld base: String -> Bool
               (assert (not (stringContains? t1 "trialDriver-222")) "the fresh leftover is not listed")
               (assert (not (stringContains? t1 "aslStubHost-444")) "aslStubHost is not listed")
               (assert (and (= stale 0) (fileExists? heldD)) "a stale plan row for a held dir is refused at removal")
+              (assert (and (= loose 0) (and (fileExists? linkG) (and (fileExists? linkT) (fileExists? (str deep "/f.txt"))))) "symlinks to a TMPDIR grandchild and to TMPDIR itself are refused")
+              (assert (not (stringContains? t1 "trialDriver-666")) "an idle leftover with fresh content inside is not listed")
+              (assert (fileExists? idleD) "the idle leftover survives apply")
               (assert (not (fileExists? oldD)) "apply removed the old leftover")
               (assert (and (fileExists? heldD) (and (fileExists? freshD) (fileExists? stubD))) "held, fresh and stub leftovers survive")
               true))))

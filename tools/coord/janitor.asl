@@ -1,5 +1,5 @@
 (module asl-tools/coord/janitor
-  :x [Cfg Scratch WtFact Listing Row defaultCfg digitsOnly? scratchPid levelOpen? heldName? foreignIgnored modeOf aliveFrom wtOk? planRows renderRow renderPlan plan applyAllowed? modeApply? gatherScratch! gatherWts! gather! apply! removedTotals leadReport! tick! main]
+  :x [Cfg Scratch WtFact Listing Row defaultCfg digitsOnly? scratchPid levelOpen? heldName? heldFrom capNames freshFrom foreignIgnored modeOf aliveFrom wtOk? planRows renderRow renderPlan plan applyAllowed? modeApply? gatherScratch! gatherWts! gather! apply! removedTotals leadReport! tick! main]
   :i [(asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (aslGateway/subPace :a sp) (tools/remote/form :a fm) (asl-tools/coord/leadStream :a ls)])
 
 ; (:m :ref RES-JANITOR :do "the node reclaims only its own leftovers: (a) test scratch dirs of a dead pid under TMPDIR and (b) worktrees of conductor units whose state is merged, clean and not ahead of main; plan is pure over a listing, dry-run is the default and writes ~/.asl/run/janitor.asn, deletion needs `:mode apply` in ~/.asl/conductor/janitor.asn; no caches, no nativeCli, no journals")
@@ -196,26 +196,53 @@ fn ! sizesOf! cfg: Cfg paths: (List String) -> (List (Pair String Int64))
 fn sizeFor sizes: (List (Pair String Int64)) path: String -> Int64
   (optionOr (listHead (map pairSecond (filter (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) path)) sizes))) 0)
 
-fn ! gatherScratch! cfg: Cfg nowS: Int64 -> (Pair (List Scratch) (List Int64))
+; (:m :ref JANITOR-TMP-PATTERNS :do "the candidate cap is per pattern, so hundreds of aslRun-* dirs cannot push the other patterns out of the scan")
+fn patternPrefixes -> (List String)
+  (listAppend (map pairFirst (scratchTable)) (heldPrefixes))
+
+fn capNames names: (List String) cap: Int64 -> (List String)
+  (fold (fn [(acc (List String)) (p String)] -> (List String)
+          (listAppend acc (listTake (filter (fn [(n String)] -> Bool (stringStartsWith? n p)) names) cap)))
+        (list) (patternPrefixes))
+
+fn ! gatherScratch! cfg: Cfg nowS: Int64 level: String -> (Pair (List Scratch) (List Int64))
   (match (dirList cfg.tmp)
     ((err _) (pair (list) (list)))
     ((ok names)
-      (let [(cands (listTake (filter (fn [(n String)] -> Bool (or (heldName? n) (> (scratchPid n) 1))) (listSort names)) 500))
+      (let [(cands (capNames (filter (fn [(n String)] -> Bool (or (heldName? n) (> (scratchPid n) 1))) (listSort names)) 100))
             (paths (map (fn [(n String)] -> String (str cfg.tmp "/" n)) cands))
             (dirs (filter (fn [(p String)] -> Bool (match (fileStat p) ((ok s) s.isDir) ((err _) false))) paths))
             (sizes (sizesOf! cfg dirs))
             (items (map (fn [(p String)] -> Scratch
                           (let [(name (optionOr (listLast (stringSplit p "/")) ""))]
-                            (Scratch :name name :path p :bytes (sizeFor sizes p) :mtimeS (match (fileStat p) ((ok s) s.mtime) ((err _) nowS)))))
+                            (Scratch :name name :path p :bytes (sizeFor sizes p) :mtimeS (newestOf! cfg nowS level name p))))
                         dirs))
             (pids (fold (fn [(a (List Int64)) (x Int64)] -> (List Int64) (if (listContains? a x) a (cons x a))) (list) (map (fn [(s Scratch)] -> Int64 (scratchPid s.name)) (filter (fn [(s Scratch)] -> Bool (not (heldName? s.name))) items))))
             (alive (filter (fn [(pid Int64)] -> Bool (aliveFrom (procAlive? pid))) pids))]
         (pair items alive))))
 
-; (:m :ref JANITOR-TMP-PATTERNS :do "held means lsof lists a process with a file open under the path; lsof exits 1 with no output when nothing is open, so any other outcome (timeout, lsof missing, error) counts as held and the leftover is kept")
+; (:m :ref JANITOR-TMP-PATTERNS :do "held means lsof lists a process with a file open under the path; lsof exits 1 with no output when nothing is open, so any other outcome (timeout 124, lsof missing 127, error 2, or output on exit 1) counts as held and the leftover is kept")
+fn heldFrom exit: Int64 out: String -> Bool
+  (not (and (= exit 1) (stringEmpty? (stringTrim out))))
+
 fn ! heldPath! cfg: Cfg path: String -> Bool
   (let [(r (run! (list "lsof" "-t" "+D" path) cfg.walkTimeoutS))]
-    (not (and (= r.exit 1) (stringEmpty? (stringTrim r.out)))))
+    (heldFrom r.exit r.out))
+
+; (:m :ref JANITOR-TMP-PATTERNS :do "a run that is idle holds no open file, so a pid-less leftover counts as fresh when anything inside it changed within the window: find lists entries newer than the window, exit 0 with output means fresh, exit 0 with no output means stale, any other outcome (timeout, error) means fresh and keeps the dir")
+fn freshFrom exit: Int64 out: String -> Bool
+  (not (and (= exit 0) (stringEmpty? (stringTrim out))))
+
+fn ! freshInside! cfg: Cfg path: String windowS: Int64 -> Bool
+  (let [(mins (/ (+ windowS 59) 60))
+        (r (run! (list "find" path "-mmin" (str "-" (stringFromInt64 mins))) cfg.walkTimeoutS))]
+    (freshFrom r.exit r.out))
+
+; (:m :ref JANITOR-TMP-PATTERNS :do "the age of a pid-less leftover is that of its newest content, never the top directory alone: the window is minAgeS at disk level low or stop and forceAgeS (24 h) at ok; pid-named scratch keeps its own mtime")
+fn ! newestOf! cfg: Cfg nowS: Int64 level: String name: String path: String -> Int64
+  (let [(top (match (fileStat path) ((ok s) s.mtime) ((err _) nowS)))
+        (win (if (levelOpen? level) cfg.minAgeS cfg.forceAgeS))]
+    (if (and (heldName? name) (> (- nowS top) cfg.minAgeS) (freshInside! cfg path win)) nowS top))
 
 fn ! heldOf! cfg: Cfg nowS: Int64 items: (List Scratch) -> (List String)
   (map (fn [(s Scratch)] -> String s.path)
@@ -249,7 +276,7 @@ fn ! gatherWts! cfg: Cfg -> (List WtFact)
              merged))))
 
 fn ! gather! cfg: Cfg nowS: Int64 level: String -> Listing
-  (let [(sa (gatherScratch! cfg nowS))]
+  (let [(sa (gatherScratch! cfg nowS level))]
     (Listing :nowS nowS :level level :scratch (pairFirst sa) :alive (pairSecond sa) :held (heldOf! cfg nowS (pairFirst sa))
              :wts (if (levelOpen? level) (gatherWts! cfg) (list))))
 
@@ -263,7 +290,8 @@ fn ! scratchStillOk! cfg: Cfg r: Row -> Bool
     (listAll? (fn [(b Bool)] -> Bool b)
       (list (or (heldName? name) (> pid 1)) (not (stringEmpty? tmpReal)) (= real (str tmpReal "/" name))
             (if (heldName? name) (not (heldPath! cfg r.path)) (not (aliveFrom (procAlive? pid))))
-            (> (- (/ (nowNs) 1000000000) mt) cfg.minAgeS))))
+            (> (- (/ (nowNs) 1000000000) mt) cfg.minAgeS)
+            (if (heldName? name) (not (freshInside! cfg r.path cfg.minAgeS)) true))))
 
 ; (:m :ref RES-JANITOR :do "right before a worktree removal, fresh facts: the conductor row is merged, no store lease is held, status is clean with no ignored file outside the allowlist, the head is on a branch and merged into main")
 fn ! wtStillOk! cfg: Cfg r: Row -> Bool
