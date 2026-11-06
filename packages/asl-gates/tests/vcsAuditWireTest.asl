@@ -106,7 +106,7 @@ fn ! runTests -> Bool
       (assert (not (stringContains? wa.receipt "ERR_VCS_DIRECT")) "and the clean tree does not")
       (assert (stringContains? warm.receipt "seeded.asl") (str "the warm run names the site: " warm.receipt))
       (assert (and okForge (stringContains? text "commit f!") (not (stringContains? forged "commit"))) "the store holds a row for the site, forged empty")
-      (assert (not (stringContains? hid.receipt "ERR_VCS_DIRECT")) (str "with the store read, a forged row hides the site: " hid.receipt))
+      (assert (and (stringContains? hid.receipt "ERR_VCS_DIRECT") (stringContains? hid.receipt "seeded.asl")) (str "with the store read, a forged row without the keyed digest is rescanned and the site named: " hid.receipt))
       (assert (and (stringContains? shown.receipt "ERR_VCS_DIRECT") (stringContains? shown.receipt "seeded.asl")) (str "--no-cache ignores the planted store row and names the site: " shown.receipt))
       (assert (ok? (pathRemove base)) "fixture trees removed")
       true))

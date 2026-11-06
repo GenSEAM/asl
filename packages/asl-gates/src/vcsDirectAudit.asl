@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText rowEnd writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -523,21 +523,36 @@ fn cacheText used: (Map String String) -> String
   (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) "") (rowEnd))) (listSort (mapKeys used))) "\n")
 
 ; (:m :ref VCS-AUDIT-LOWS-F1 :do "the cache lives outside every worktree, in the runner-owned store HOME/.asl/run/vcsDirect/ID where ID is the first 16 hex of sha256 of the real git common dir, so a worktree cannot commit it, but any writer of the same user can alter it: the cache is a speed aid and is never trusted, merge-time runs use mode off (--no-cache); mode off reads and writes nothing (merge-time runs), a dir argument replaces the store (tests)")
-fn storeRoot -> String
-  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/vcsDirect")
+; (:m :ref STOREROOT-NO-HOME :do "the runner store needs a HOME: unset or blank is ERR_VCS_STORE_NO_HOME, never a /tmp path that every user shares; --no-cache or --cache-dir still run")
+fn storeRootFrom home: (Option String) -> (Result String String)
+  (match home
+    ((none) (err (noHomeErr)))
+    ((some h) (if (stringEmpty? (stringTrim h)) (err (noHomeErr)) (ok (str h "/.asl/run/vcsDirect")))))
+
+fn noHomeErr -> String
+  "ERR_VCS_STORE_NO_HOME: HOME is unset or empty, so the runner store has no private place; pass --no-cache or --cache-dir DIR"
+
+fn ! storeRoot -> (Result String String)
+  (storeRootFrom (envGet "HOME"))
 
 fn ! cacheDirFor! root: String mode: String -> Result String String
+  (cacheDirWith! root mode (envGet "HOME"))
+
+fn ! cacheDirWith! root: String mode: String home: (Option String) -> Result String String
   (cond
     ((= mode "off") (ok ""))
     ((not (stringEmpty? mode)) (ok mode))
     (else
-      (match (sr/gitOut! root (list "rev-parse" "--git-common-dir"))
-        ((err e) (err (str "git common dir: " e)))
-        ((ok out)
-          (let [(raw (stringTrim out))
-                (abs (if (stringStartsWith? raw "/") raw (str root "/" raw)))
-                (real (resultOr (realPath abs) abs))]
-            (ok (str (storeRoot) "/" (optionOr (stringSlice (contentSha real) 0 16) "x"))))))))
+      (match (storeRootFrom home)
+        ((err e) (err e))
+        ((ok sroot)
+          (match (sr/gitOut! root (list "rev-parse" "--git-common-dir"))
+            ((err e) (err (str "git common dir: " e)))
+            ((ok out)
+              (let [(raw (stringTrim out))
+                    (abs (if (stringStartsWith? raw "/") raw (str root "/" raw)))
+                    (real (resultOr (realPath abs) abs))]
+                (ok (str sroot "/" (optionOr (stringSlice (contentSha real) 0 16) "x"))))))))))
 
 ; (:m :ref VCS-STORE-ATOMIC :do "the store keeps the rows of every worktree of the repo: a run writes the loaded rows plus its own, so worktrees do not evict each other, unless the store passed the cap, then only the rows this run used; the file is written to a temp name of this process and renamed over the store, so a reader sees the old or the new file, never a mix; a concurrent writer may still lose rows read before its rename, which costs a rescan only")
 fn cacheCap -> Int64
@@ -551,21 +566,73 @@ fn ! writeAtomic! path: String text: String -> String
                 ((err e) (do (pathRemove tmp) (str "cache rename: " e)))
                 ((ok _) "")))))
 
-; (:m :do "load the cache file of dir (absent or unreadable is an empty cache), scan, and write the rows used when they differ from the loaded ones; dir empty means no cache; the second value is empty or the reason the cache could not be written, reported in the receipt")
+; (:m :ref SCANCACHED-PLANTED :do "every stored row ends with a keyed digest sha256(secret|sha256(secret|key|row)) over the store's secret file vcsDirectAudit.key (32 bytes of /dev/urandom hashed, mode 600, made on first write); only a row whose digest matches is a hit, so a planted, edited or unkeyed row is a miss and the file is rescanned; a writer of the same user who reads or replaces the key can still forge, which is why merge-time runs use --no-cache")
+fn keyFile -> String
+  "vcsDirectAudit.key"
+
+fn rowMac secret: String key: String body: String -> String
+  (contentSha (str secret "\n" (contentSha (str secret "\n" key "\t" body))))
+
+fn signRows secret: String rows: (Map String String) -> (Map String String)
+  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
+          (let [(body (optionOr (mapGet rows k) ""))] (mapSet m k (str body "\t" (rowMac secret k body)))))
+        (mapEmpty) (mapKeys rows))
+
+fn verifiedRows secret: String rows: (Map String String) -> (Map String String)
+  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
+          (let [(parts (stringSplit (optionOr (mapGet rows k) "") "\t"))
+                (n (listLength parts))
+                (body (stringJoin (listTake parts (- n 1)) "\t"))
+                (mac (optionOr (listGet parts (- n 1)) ""))]
+            (if (and (>= n 3) (= mac (rowMac secret k body))) (mapSet m k body) m)))
+        (mapEmpty) (mapKeys rows))
+
+fn secretOk? s: String -> Bool
+  (and (= (stringLength s) 64) (listAll? (fn [(c String)] -> Bool (stringContains? "0123456789abcdef" c)) (stringChars s)))
+
+fn ! readSecret! dir: String -> (Option String)
+  (match (fileReadString (str dir "/" (keyFile)))
+    ((err _) (none))
+    ((ok t) (if (secretOk? (stringTrim t)) (some (stringTrim t)) (none))))
+
+; (:m :ref SCANCACHED-PLANTED :do "the key is made once and never clobbered: an exclusive create claims the path (an existing key, even an unusable one, is kept and read instead, so its rows stay misses), the placeholder and the temp file are mode 600 before the secret is written, and the temp is renamed over this run's own placeholder; the secret is never printed or put in a receipt")
+fn ! makeSecret! dir: String -> (Result String String)
+  (let [(path (str dir "/" (keyFile)))
+        (tmp (str path ".tmp" (stringFromInt64 (procSelf))))]
+    (match (fileCreateExclusive path "")
+      ((err _) (match (readSecret! dir) ((some s) (ok s)) ((none) (err "cache key: present but unusable, every row is a miss"))))
+      ((ok _)
+        (match (fileReadRange "/dev/urandom" 0 32)
+          ((err e) (do (pathRemove path) (err (str "cache key: " e))))
+          ((ok raw)
+            (if (< (bytesLength raw) 32) (do (pathRemove path) (err "cache key: /dev/urandom gave fewer than 32 bytes"))
+              (if (not (and (ok? (fileChmod path 384)) (and (ok? (fileWrite tmp "")) (and (ok? (fileChmod tmp 384)) (ok? (fileWrite tmp (bytesSha256 raw)))))))
+                (do (pathRemove tmp) (pathRemove path) (err "cache key: write or mode failed"))
+                (match (pathRename tmp path)
+                  ((err e) (do (pathRemove tmp) (pathRemove path) (err (str "cache key rename: " e))))
+                  ((ok _) (match (readSecret! dir) ((some s) (ok s)) ((none) (err "cache key: unreadable after write"))))))))))))
+
+; (:m :do "load the cache file of dir (absent or unreadable is an empty cache), keep only the rows whose digest verifies, scan, and write the rows used, signed, when one was a miss; dir empty means no cache; the second value is empty or the reason the cache could not be written, reported in the receipt")
 fn ! scanCached! dir: String files: (List (Pair String String)) -> (Pair (List Site) String)
   (if (stringEmpty? dir)
     (pair (scanFiles files) "")
     (let [(path (str dir "/vcsDirectAudit.v1"))
-          (old (parseCache (resultOr (fileReadString path) "")))
+          (raw (parseCache (resultOr (fileReadString path) "")))
+          (secret0 (readSecret! dir))
+          (old (match secret0 ((some s) (verifiedRows s raw)) ((none) (mapEmpty))))
           (r (scanFilesC old files))
           (used (pairSecond r))
-          (merged (if (> (mapSize old) (cacheCap)) used (mergeUsed old used)))
           (changed (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used)))]
       (pair (pairFirst r)
             (if (not changed) ""
               (match (dirCreate dir)
                 ((err e) (str "cache dir: " e))
-                ((ok _) (writeAtomic! path (cacheText merged))))))))
+                ((ok _)
+                  (match (match secret0 ((some s) (ok s)) ((none) (makeSecret! dir)))
+                    ((err e) e)
+                    ((ok s)
+                      (let [(merged (if (> (mapSize raw) (cacheCap)) used (mergeUsed old used)))]
+                        (writeAtomic! path (cacheText (signRows s merged))))))))))))
 
 fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (List String)) -> String
   (let [(allow (parseAllow text))
