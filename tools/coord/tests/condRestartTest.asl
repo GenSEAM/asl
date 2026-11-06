@@ -105,7 +105,7 @@ fn ! testDeadline bin: String -> Bool
         (journal (readOr dir "journal.asn"))
         (restartLeft (fileExists? (cd/restartPath dir)))
         (stopLeft (fileExists? (cd/stopPath dir)))
-        (diag (str " / restartFile " (if restartLeft "yes" "no") " stopFile " (if stopLeft "yes" "no") " code " (stringFromInt64 code) " ms " (stringFromInt64 ms) " cst " c.st " launched " (stringFromInt64 c.launched) " alive " (if alive "yes" "no") " cli " (stringFromInt64 cli.exit) " rows " (stringFromInt64 (listLength (stringLines journal)))))
+        (diag (str " / restartFile " (if restartLeft "yes" "no") " stopFile " (if stopLeft "yes" "no") " code " (stringFromInt64 code) " ms " (stringFromInt64 ms) " cst " c.st " launched " (stringFromInt64 c.launched) " alive " (if alive "yes" "no") " cli " (stringFromInt64 cli.exit) " rows " (stringFromInt64 (listLength (stringLines journal))) " starts [" (stringJoin (stringLines (readOr dir "starts.log")) ",") "] cRunRow " (match (cd/runRow dir "C" "write") ((some r) (str (stringFromInt64 (pairFirst r)) "/" (stringFromInt64 (pairSecond r)))) ((none) "none")) " bin " bin " binExists " (if (fileExists? bin) "yes" "no")))
         (stopped (cd/stopAll! ctx))
         (_ (cleanup dir))]
     (do (assert (and (ok? putC) writing) "C is writing")
