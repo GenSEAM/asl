@@ -708,8 +708,11 @@ fn ! check! ctx: sys/Context args: (List String) -> Int64
         (match (stagedViews! ctx outside)
           ((err e) (do (sys/sayErr! e) 1))
           ((ok views)
-            (let [(stagedRc (if (listEmpty? others) (verify/checkStaged! views) (verify/nativeCheckStaged! views)))
-                  (otherRc (if (listEmpty? others) 0 (cmd/dispatch! ctx "check" others)))]
+            (let [(inRootAsl (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) others))
+                  (nonAsl (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) others))
+                  (all (listAppend views (map (fn [(a String)] -> verify/Staged (verify/Staged :actual a :shown a :maps (list))) inRootAsl)))
+                  (stagedRc (verify/checkStaged! all))
+                  (otherRc (if (listEmpty? nonAsl) 0 (cmd/dispatch! ctx "check" nonAsl)))]
               (if (!= stagedRc 0) stagedRc otherRc)))))))
 
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
