@@ -12,6 +12,10 @@ fn ! sh! cmd: String -> Bool
 fn count d: fr/Done -> Int64
   (optionOr (fr/executedOf d.out) 0)
 
+fn ! removedClean -> Bool
+  (let [(_ (fr/stubRemove!))]
+    (and (listEmpty? (fr/stubDirsOwnedBy (procSelf))) (stringEmpty? (fr/stubHostPath))))
+
 fn ! runTests -> Bool
   (let [(three "asl/tools/fleet/tests/fixtures/threeAssertsSuite.asl")
         (noisy "asl/tools/fleet/tests/fixtures/noisySuite.asl")
@@ -29,9 +33,17 @@ fn ! runTests -> Bool
         (pureDupFail (fr/gateOut (str "./bin/asl test " three) (str "FAIL " three ": ERR_ASSERT: a (after 1 asserts)\nFAIL " three ": ERR_ASSERT: b (after 2 asserts)\n")))
         (pureRunVerb (fr/gateOut (str "./bin/asl run " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
         (pureEvilHost (fr/gateOut (str "/tmp/evil/bin/asl test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
+        (stubPath (fr/stubHost!))
         (pureStubProd (fr/gateOut (str (fr/stubHostPath) " test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
         (pureStubHost (fr/gateOutHost (fr/stubHostPath) (str (fr/stubHostPath) " test " three) (str three ": 3 assertion(s) executed (3 passed)\n")))
-        (stubPath (fr/stubHost!))
+        (oldDir (str "/tmp/aslStubHost-" (bytesSha256 (stringToBytes (fr/stubHostText)))))
+        (oldPath (fr/stubHostIn! oldDir))
+        (deadDir "/tmp/aslStubHost-999999-deadbeefdeadbeef")
+        (deadPath (fr/stubHostIn! deadDir))
+        (ownGate (gate (str stubPath " test green3.asl")))
+        (oldGate (gate (str oldPath " test green99.asl")))
+        (deadGate (gate (str deadPath " test green99.asl")))
+        (_ (sh! (str "rm -rf '" oldDir "' '" deadDir "'")))
         (probeRoot (str (resultOr (realPath ".") ".") "/.asl/cache/executedOfTest-" (stringFromInt64 (procSelf))))
         (_ (sh! (str "rm -rf '" probeRoot "' && mkdir -p '" probeRoot "' && mkdir '" probeRoot "/ro' && chmod 500 '" probeRoot "/ro' && mkdir '" probeRoot "/open' && chmod 777 '" probeRoot "/open' && mkdir '" probeRoot "/real' && ln -s '" probeRoot "/real' '" probeRoot "/link'")))
         (_ (sh! (str "mkdir '" probeRoot "/priv' && chmod 700 '" probeRoot "/priv' && ln -s '" probeRoot "/priv' '" probeRoot "/link700' && mkdir -p '" probeRoot "/filelink/bin' && chmod 700 '" probeRoot "/filelink' && mkdir -p '" probeRoot "/dirasl/bin/asl' && chmod 700 '" probeRoot "/dirasl'")))
@@ -75,4 +87,8 @@ fn ! runTests -> Bool
         (assert (stringEmpty? dirAsl) "an install whose bin/asl is a directory fails the post-write verification, never returns a path")
         (assert (listEmpty? foreignDirs) (str "a 0700 directory owned by another user is not private: " (stringJoin foreignDirs ",")))
         (assert (and (= stubPath (fr/stubHostPath)) (= (resultOr (fileReadString stubPath) "") (fr/stubHostText))) "the stand-in host sits at its content-hash path and holds exactly its text")
+        (assert (= (count ownGate) 3) (str "production runShell! runs the stand-in this process installed: " (stringFromInt64 (count ownGate))))
+        (assert (and (not (stringEmpty? oldPath)) (= (count oldGate) 0)) (str "a private exact-text stand-in at the old fixed name is refused by production: " oldPath " " (stringFromInt64 (count oldGate))))
+        (assert (and (not (stringEmpty? deadPath)) (= (count deadGate) 0)) (str "a private exact-text stand-in whose owner pid is dead is refused by production: " deadPath " " (stringFromInt64 (count deadGate))))
+        (assert (removedClean) "stubRemove! leaves no aslStubHost dir of this process and no stub path")
         true))
