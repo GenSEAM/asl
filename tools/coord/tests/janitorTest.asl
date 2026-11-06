@@ -17,7 +17,7 @@ fn ! git dir: String args: (List String) -> Bool
 
 fn cfg0 -> j/Cfg
   (j/Cfg :tmp "/t" :runDir "/r" :modePath "/m" :storeDir "/s" :repo "/repo" :wtBase "/wts"
-         :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30)
+         :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :lsofBin "lsof" :procRoot "/proc" :budgetS 30)
 
 fn sc name: String age: Int64 -> j/Scratch
   (j/Scratch :name name :path (str "/t/" name) :bytes 1000 :mtimeS (- 1000000 age))
@@ -95,11 +95,19 @@ fn ! testPure -> Bool
       (assert (not (j/freshFrom 0 "")) "no entry newer than the window is stale")
       (assert (j/freshFrom 124 "") "a find timeout keeps the dir")
       (assert (j/freshFrom 2 "") "a find error keeps the dir")
-      (let [(many (listAppend (map (fn [(i Int64)] -> String (str "aslRun-" (stringFromInt64 (+ 100 i)) "-x")) (range 0 150)) (list "trialDriver-1")))
+      (let [(many (listAppend (map (fn [(i Int64)] -> (Pair String Int64) (pair (str "aslRun-" (stringFromInt64 (+ 100 i)) "-x") (- 1000 i))) (range 0 150)) (list (pair "trialDriver-1" 5))))
             (capped (j/capNames many 100))]
         (do (assert (listContains? capped "trialDriver-1") "a per-pattern cap keeps the other patterns in the scan")
             (assert (= (listLength capped) 101) "aslRun-* is capped at 100")
+            (assert (listContains? capped "aslRun-249-x") "the cap keeps the oldest entries, which sort last alphabetically here")
+            (assert (not (listContains? capped "aslRun-100-x")) "the newest entries are the ones cut")
             true))
+      (assert (j/lsofAbsent? 127 "") "exit 127 is an absent lsof")
+      (assert (j/lsofAbsent? 1 "spawnFailed") "a failed spawn is an absent lsof")
+      (assert (not (j/lsofAbsent? 124 "timeout")) "a timeout is not an absent lsof")
+      (assert (j/underDir? "/t/d" "/t/d") "the dir itself is under the dir")
+      (assert (j/underDir? "/t/d/x/y" "/t/d") "a descendant is under the dir")
+      (assert (not (j/underDir? "/t/dx" "/t/d")) "a sibling with the same prefix is not under the dir")
       (assert (stringContains? (j/renderRow (j/Row :class "a" :path "/t/x" :bytes 7 :why "w" :unit "")) "(:reclaim :path \"/t/x\" :bytes 7") "row rendering")
       true))
 
@@ -122,7 +130,7 @@ fn ! testE2e base: String -> Bool
         (wts (str base "/wts"))
         (store (str base "/store"))
         (c (j/Cfg :tmp tmp :runDir (str base "/run") :modePath (str base "/mode.asn") :storeDir store :repo repo :wtBase wts
-                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30))
+                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :lsofBin "lsof" :procRoot "/proc" :budgetS 30))
         (dead (str tmp "/cmdTest-3999999"))
         (live (str tmp "/cmdTest-" (stringFromInt64 (procSelf))))
         (look (str tmp "/cmdTestX"))
@@ -208,10 +216,43 @@ fn ! testE2e base: String -> Bool
               (assert (exists? repo) "the repo survives")
               true))))))
 
+fn ! mkLink! root: String rel: String target: String -> Bool
+  (let [(parent (stringJoin (listTake (stringSplit rel "/") (- (listLength (stringSplit rel "/")) 1)) "/"))]
+    (and (= (sh "." (list "mkdir" "-p" (str root "/" parent))).exit 0)
+         (ok? (pathSymlink target (str root "/" rel)))))
+
+; (:m :ref JANITOR-TMP-LOWS :do "proc fixtures: a holds nothing (cwd elsewhere), b has an fd under the dir and no readable cwd, c has a cwd under the dir, d has a cwd elsewhere and an fd under the dir, empty has no process")
+fn ! procFixture! root: String dir: String -> Bool
+  (listAll? (fn [(b Bool)] -> Bool b)
+    (list (mkLink! root "a/100/cwd" "/elsewhere")
+          (mkLink! root "b/101/fd/3" (str dir "/f.txt"))
+          (mkLink! root "c/102/cwd" dir)
+          (mkLink! root "d/100/cwd" "/elsewhere")
+          (mkLink! root "d/100/fd/4" (str dir "/f.txt"))
+          (mkLink! root "e/100/cwd" "/elsewhere")
+          (mkLink! root "e/100/fd/3" "/elsewhere2/x")
+          (mkLink! root "e/100/fd/4" "/elsewhere2/y")
+          (= (sh "." (list "mkdir" "-p" (str root "/empty"))).exit 0)))
+
+; (:m :ref JANITOR-TMP-LOWS :do "the scan cap through the real gather: 105 dead-pid aslRun-* dirs whose mtime falls as the name rises, so the alphabetically last is the oldest; the scan keeps 100, the oldest included and the 5 newest cut")
+fn ! testCapGather! base: String -> Bool
+  (let [(tmp (str base "/tmp"))
+        (c (j/Cfg :tmp tmp :runDir (str base "/run") :modePath (str base "/mode.asn") :storeDir (str base "/store") :repo (str base "/none") :wtBase (str base "/wts")
+                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :lsofBin "lsof" :procRoot "/proc" :budgetS 30))
+        (script "mkdir -p \"$1\"; i=0; while [ $i -lt 105 ]; do d=\"$1/aslRun-$((4000000 + i))-x\"; mkdir \"$d\"; j=$((104 - i)); touch -t \"2020$(printf %02d $((j / 28 + 1)))$(printf %02d $((j % 28 + 1)))0000\" \"$d\"; i=$((i + 1)); done")
+        (made (sh "." (list "sh" "-c" script "sh" tmp)))
+        (got (j/gatherScratch! c (/ (nowNs) 1000000000) "low"))
+        (names (map (fn [(s j/Scratch)] -> String s.name) (pairFirst got)))]
+    (do (assert (= made.exit 0) "105 aged scratch dirs made")
+        (assert (= (listLength names) 100) (str "the scan is capped at 100: " (stringFromInt64 (listLength names))))
+        (assert (listContains? names "aslRun-4000104-x") "the oldest dir, last alphabetically, is in the scan")
+        (assert (not (listContains? names "aslRun-4000000-x")) "the newest dir is cut")
+        true))
+
 fn ! testHeld base: String -> Bool
   (let [(tmp (str base "/tmp"))
         (c (j/Cfg :tmp tmp :runDir (str base "/run") :modePath (str base "/mode.asn") :storeDir (str base "/store") :repo (str base "/none") :wtBase (str base "/wts")
-                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30))
+                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :lsofBin "lsof" :procRoot "/proc" :budgetS 30))
         (oldD (str tmp "/aslRebuildKeepsPriorRtTest-111"))
         (freshD (str tmp "/trialDriver-222"))
         (heldD (str tmp "/conductorTest-333"))
@@ -219,13 +260,37 @@ fn ! testHeld base: String -> Bool
         (idleD (str tmp "/trialDriver-666"))
         (deep (str tmp "/sub/deep"))
         (linkG (str tmp "/trialDriver-777"))
-        (linkT (str tmp "/trialDriver-778"))]
+        (linkT (str tmp "/trialDriver-778"))
+        (pidLinkG (str tmp "/cmdTest-3999996"))
+        (pidLinkD (str tmp "/cmdTest-3999995"))
+        (other (str tmp "/otherOld"))
+        (pr (str base "/proc"))]
     (do
       (assert (= (sh "." (list "mkdir" "-p" tmp (str base "/store"))).exit 0) "held fixture base")
       (assert (and (mkOld! oldD) (and (mkOld! heldD) (mkOld! stubD))) "old leftovers")
       (assert (= (sh "." (list "mkdir" "-p" freshD)).exit 0) "fresh leftover")
       (assert (mkIdle! idleD) "idle leftover: old top directory, fresh file inside")
       (assert (mkOld! deep) "old grandchild of TMPDIR")
+      (assert (mkOld! other) "old direct child of TMPDIR")
+      (assert (= (sh "." (list "ln" "-s" deep pidLinkG)).exit 0) "dead-pid-named symlink to a grandchild")
+      (assert (= (sh "." (list "ln" "-s" other pidLinkD)).exit 0) "dead-pid-named symlink to another direct child")
+      (assert (procFixture! pr heldD) "proc fixture")
+      (assert (not (j/procHeld! (str pr "/a") heldD 5)) "proc scan: a process elsewhere does not hold the dir")
+      (assert (j/procHeld! (str pr "/b") heldD 5) "proc scan: an fd link under the dir holds it")
+      (assert (j/procHeld! (str pr "/d") heldD 5) "proc scan: a readable cwd elsewhere does not hide an fd under the dir")
+      (assert (not (j/heldVia! c "/nonexistent/lsof" (str pr "/a") heldD)) "a missing lsof falls back to the proc scan: nothing holds the dir")
+      (assert (j/heldVia! c "/nonexistent/lsof" (str pr "/b") heldD) "a missing lsof falls back to the proc scan: an fd holds the dir")
+      (assert (= (j/findArgv "/t/d" 61) (list "find" "/t/d" "-mmin" "-61" "-print" "-quit")) "find stops at the first fresh entry")
+      (assert (not (j/procHeldN! (str pr "/e") heldD 5 4000 256)) "proc scan: a process with unrelated fds does not hold the dir")
+      (assert (j/procHeldN! (str pr "/e") heldD 5 4000 1) "proc scan: more fds than maxFds counts as held")
+      (assert (not (j/procHeldN! (str pr "/e") heldD 5 1 2)) "proc scan: exactly maxProcs processes and maxFds fds are scanned")
+      (assert (j/procHeldN! (str pr "/d") heldD 5 0 256) "proc scan: more processes than maxProcs counts as held")
+      (assert (j/procHeld! (str pr "/a") heldD 0) "proc scan: a deadline already hit counts as held")
+      (assert (not (j/heldPath! (with c :lsofBin "/nonexistent/lsof" :procRoot (str pr "/a")) heldD)) "heldPath! reads the cfg: a missing lsof with an idle proc root is free")
+      (assert (j/heldPath! (with c :lsofBin "/nonexistent/lsof" :procRoot (str pr "/b")) heldD) "heldPath! reads the cfg: a missing lsof with a holding proc root is held")
+      (assert (j/procHeld! (str pr "/c") heldD 5) "proc scan: a cwd under the dir holds it")
+      (assert (j/procHeld! (str pr "/none") heldD 5) "proc scan: an absent /proc counts as held")
+      (assert (j/procHeld! (str pr "/empty") heldD 5) "proc scan: no readable process counts as held")
       (assert (= (sh "." (list "ln" "-s" deep linkG)).exit 0) "symlink to a TMPDIR grandchild")
       (assert (= (sh "." (list "ln" "-s" tmp linkT)).exit 0) "symlink to TMPDIR itself")
       (match (fr/guardStart! (list "sleep" "60") heldD (fr/childEnv (list)) (fr/limits 90 4))
@@ -235,7 +300,7 @@ fn ! testHeld base: String -> Bool
                 (_ (put (str base "/mode.asn") "(:janitor :mode apply)\n"))
                 (_ (sleepMs 300))
                 (stale (j/apply! c (list (j/Row :class "a" :path heldD :bytes 1 :why "stale" :unit ""))))
-                (loose (j/apply! c (list (j/Row :class "a" :path linkG :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path linkT :bytes 1 :why "stale" :unit ""))))
+                (loose (j/apply! c (list (j/Row :class "a" :path pidLinkG :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path pidLinkD :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path idleD :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path linkG :bytes 1 :why "stale" :unit "") (j/Row :class "a" :path linkT :bytes 1 :why "stale" :unit ""))))
                 (t2 (j/tick! c))
                 (_ (fr/killTree! g.run.pid))]
             (do
@@ -244,7 +309,7 @@ fn ! testHeld base: String -> Bool
               (assert (not (stringContains? t1 "trialDriver-222")) "the fresh leftover is not listed")
               (assert (not (stringContains? t1 "aslStubHost-444")) "aslStubHost is not listed")
               (assert (and (= stale 0) (fileExists? heldD)) "a stale plan row for a held dir is refused at removal")
-              (assert (and (= loose 0) (and (fileExists? linkG) (and (fileExists? linkT) (fileExists? (str deep "/f.txt"))))) "symlinks to a TMPDIR grandchild and to TMPDIR itself are refused")
+              (assert (and (= loose 0) (and (fileExists? linkG) (and (fileExists? linkT) (and (fileExists? (str deep "/f.txt")) (and (fileExists? pidLinkG) (and (fileExists? pidLinkD) (and (fileExists? (str other "/f.txt")) (fileExists? idleD)))))))) "symlinks (held-named and dead-pid-named) and a stale row for an idle dir are refused at removal")
               (assert (not (stringContains? t1 "trialDriver-666")) "an idle leftover with fresh content inside is not listed")
               (assert (fileExists? idleD) "the idle leftover survives apply")
               (assert (not (fileExists? oldD)) "apply removed the old leftover")
@@ -257,5 +322,6 @@ fn ! runTests -> Bool
     (do (assert (testPure) "pure plan")
         (assert (testE2e base) "end to end")
         (assert (testHeld (str base "-held")) "leftover patterns with a live holder")
-        (assert (= (sh "." (list "rm" "-rf" base (str base "-held"))).exit 0) "private bases removed")
+        (assert (testCapGather! (str base "-cap")) "the scan cap keeps the oldest through gather")
+        (assert (= (sh "." (list "rm" "-rf" base (str base "-held") (str base "-cap"))).exit 0) "private bases removed")
         true))
