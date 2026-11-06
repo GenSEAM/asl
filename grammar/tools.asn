@@ -189,7 +189,7 @@
     (:op :read
       :scope any
       :public "Return a symbol or bounded slice of a file."
-      :form "(:read :file <path> [:symbol <sym>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
+      :form "(:read :file <path> [:symbol <str>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
       :params (
         (:file :type str :req true :note "path to file in repository")
         (:symbol :type str :default "" :note "symbol definition to extract")
