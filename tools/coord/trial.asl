@@ -277,12 +277,11 @@ fn ! specProblems! s: Spec -> (List String)
         (aliases (map (fn [(m Model)] -> String (str "aliasUnknown:" m.alias)) (filter (fn [(m Model)] -> Bool (not (aliasKnown? gateway m.alias))) s.models)))
         (dead (let [(nc (noCreditAliases (readOr s.lanes)))] (map (fn [(m Model)] -> String (str "aliasNoCredit:" m.alias)) (filter (fn [(m Model)] -> Bool (listContains? nc m.alias)) s.models))))
         (seeds (map (fn [(t TTask)] -> String (str "seedMissing:" t.id)) (filter (fn [(t TTask)] -> Bool (and (or t.skipWrite (not (stringEmpty? t.seed))) (or (stringEmpty? t.seed) (not (fileExists? (rooted s.toolRoot t.seed)))))) s.tasks)))
-        (baseSeed (map (fn [(t TTask)] -> String (str "baseSeedUnsupported:" t.id)) (filter (fn [(t TTask)] -> Bool (and (not t.skipWrite) (not (stringEmpty? t.seed)))) s.tasks)))
         (build (devBuildProblems! s.devRepo))
         (prodPaths (prodPathProblems! s ""))
         (mem (if (<= s.minFreeMb 0) (list) (let [(m (memAvailableMb!))] (cond ((< m 0) (list "memUnknown")) ((< m s.minFreeMb) (list (str "memLow:" (n m)))) (else (list))))))
         (disk (if (<= s.minDiskMb 0) (list) (let [(d (diskFreeMb! (if (fileExists? s.store) s.store ".")))] (if (< d s.minDiskMb) (list (str "diskLow:" (n d))) (list)))))]
-    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build prodPaths aliases dead seeds baseSeed mem disk (headProblems! s))))
+    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build prodPaths aliases dead seeds mem disk (headProblems! s))))
 
 ; (:m :ref TRIAL-SETUP :do "aliases the trial lanes file lists under :noCredit (written by setup)")
 fn noCreditAliases lanes: String -> (List String)
@@ -339,8 +338,12 @@ fn ! stagePool! s: Spec stage: String cs: (List Cell) slots: Int64 -> (List (Pai
            (range 0 (listLength cs)))))
 
 
+; (:m :ref TRIAL-BASE-SEED :do "a writer task with a :seed starts from trialSeed-<cell>, the spec base plus its seed commit, so the writer sees the bug it must fix; every other cell starts from the spec base")
+fn cellBase s: Spec c: Cell -> String
+  (if (and (not c.task.skipWrite) (not (stringEmpty? c.task.seed))) (str "trialSeed-" c.id) s.base)
+
 fn unitOf s: Spec c: Cell -> st/Task
-  (st/Task :id c.id :owns c.task.owns :reads (list) :gate c.task.gate :channel "trial" :model c.model.alias :base s.base :after (list) :st "queued" :epoch 0 :receipt "")
+  (st/Task :id c.id :owns c.task.owns :reads (list) :gate c.task.gate :channel "trial" :model c.model.alias :base (cellBase s c) :after (list) :st "queued" :epoch 0 :receipt "")
 
 fn cuOf id: String stateName: String wt: String branch: String -> cd/CUnit
   (cd/CUnit :id id :st stateName :lane "trial" :fails 0 :sig "" :waited 0 :parked 0 :epoch 0 :branch branch :wt wt :model "" :tokens 0 :costMicro 0 :esc 0 :launched 0 :await "")
@@ -358,22 +361,44 @@ fn ! seedCommit! wt: String paths: (List String) msg: String -> gv/Out
             (_ (gv/discard! tx))]
         o)))
 
+; (:m :do "apply the seed patch in worktree wt and commit it through the vcs layer")
+fn ! applySeed! s: Spec wt: String c: Cell -> gv/Out
+  (let [(patch (rooted s.toolRoot c.task.seed))
+        (app (git wt (list "apply" patch)))
+        (paths (patchPaths (gitText wt (list "apply" "--numstat" patch))))]
+    (if (= app.exit 0) (seedCommit! wt paths (str "(:c :a trial :do \"seed " c.id "\")")) (gv/Out :exit app.exit :out app.out)))
+
+; (:m :ref SEED-RETRY :do "a worktree left at path by an interrupted run is removed (and pruned) before the cell runs again")
+fn ! dropWorktree! s: Spec wt: String -> Bool
+  (if (not (fileExists? wt)) true
+    (let [(rm (git s.repo (list "worktree" "remove" "--force" wt)))
+          (_ (git s.repo (list "worktree" "prune")))]
+      (= rm.exit 0)))
+
+; (:m :ref TRIAL-BASE-SEED :do "branch trialSeed-<cell> = spec base + seed commit, made in a scratch worktree that is removed afterwards; rerun-safe (-B)")
+fn ! seedBase! s: Spec c: Cell -> (Result String String)
+  (let [(wt (str s.worktrees "/seed-" c.id))
+        (_ (dropWorktree! s wt))
+        (add (git s.repo (list "worktree" "add" "-q" "-B" (cellBase s c) wt s.base)))
+        (com (if (= add.exit 0) (applySeed! s wt c) (gv/Out :exit add.exit :out add.out)))
+        (_ (dropWorktree! s wt))]
+    (if (= com.exit 0) (ok (cellBase s c)) (err (str "baseSeed: " (stringTrim com.out)))))
+
 ; (:m :do "a write cell gets its store row, task text and a writing cond row; a seeded cell gets branch sh/<id> from base with the corpus patch applied and committed through the vcs layer, in its own worktree, and a gating cond row")
 fn ! seedCell! s: Spec c: Cell -> (Result String String)
   (let [(_ (dirCreate (str s.store "/tasks")))
-        (put (st/put! s.store (unitOf s c)))
+        (stale (dropWorktree! s (wtOf s c.id)))
+        (base (if (= (cellBase s c) s.base) (ok "") (seedBase! s c)))
+        (put (match base ((err e) (err e)) ((ok _) (if stale (st/put! s.store (unitOf s c)) (err (str "stale worktree " (wtOf s c.id)))))))
         (_ (fileWrite (str s.store "/tasks/" c.id ".txt") c.task.text))]
     (match put
-      ((err e) (err (str "store put: " e)))
+      ((err e) (err (if (stringStartsWith? e "baseSeed") e (str "store put: " e))))
       ((ok _)
         (if (not c.task.skipWrite)
           (match (cd/writeCUnit! s.store (cuOf c.id "writing" "" "")) ((ok _) (ok "")) ((err e) (err e)))
           (let [(wt (wtOf s c.id))
                 (add (git s.repo (list "worktree" "add" "-q" "-B" (str "sh/" c.id) wt s.base)))
-                (patch (rooted s.toolRoot c.task.seed))
-                (app (if (= add.exit 0) (git wt (list "apply" patch)) add))
-                (paths (patchPaths (gitText wt (list "apply" "--numstat" patch))))
-                (com (if (= app.exit 0) (seedCommit! wt paths (str "(:c :a trial :do \"seed " c.id "\")")) (gv/Out :exit app.exit :out app.out)))]
+                (com (if (= add.exit 0) (applySeed! s wt c) (gv/Out :exit add.exit :out add.out)))]
             (if (!= com.exit 0) (err (str "seed: " (stringTrim com.out)))
               (match (cd/writeCUnit! s.store (cuOf c.id "gating" wt (str "sh/" c.id))) ((ok _) (ok wt)) ((err e) (err e)))))))))
 
@@ -489,14 +514,36 @@ fn recordText s: Spec c: Cell stages: (List (Pair String cd/Res)) failedAt: Stri
   (let [(served (sp/quotedAfter leon ":served"))
         (pinBroken (and (not (stringEmpty? c.model.alias)) (and (not (stringEmpty? served)) (!= served c.model.alias))))]
     (str "(:trialRun :id " (st/q c.id) " :task " (st/q c.task.id) " :model " (st/q c.model.tag) " :alias " (st/q c.model.alias) " :served " (st/q served)
-         " :pinBroken " (tf pinBroken) " :known " (st/q c.task.known) " :seeded " (tf (and c.task.skipWrite (or (= c.task.known "reviewFail") (= c.task.known "refuse")))) " :skipWrite " (tf c.task.skipWrite) " :base " (st/q s.base)
+         " :pinBroken " (tf pinBroken) " :known " (st/q c.task.known) " :seeded " (tf (and c.task.skipWrite (or (= c.task.known "reviewFail") (= c.task.known "refuse")))) " :skipWrite " (tf c.task.skipWrite) " :base " (st/q (cellBase s c))
          " :stages (" (stringJoin (map (fn [(p (Pair String cd/Res))] -> String (stageText (pairFirst p) (pairSecond p) red reviewers)) stages) " ") ")"
          " :failedAt " (st/q failedAt) " :merged " (tf (stringEmpty? failedAt))
          " :devBranch " (st/q (if (stringEmpty? failedAt) (devBranchOf s c.id) "")) (if c.task.skipWrite "" (str " :leon " leon))
          " :evidence " (st/q (str (trialDir s) "/" c.id)) " :wallMs " (n wallMs) " :at " (n at) ")"))
 
+; (:m :ref SEED-RETRY :do "the last record of each cell decides: an infra failure (failedAt seed or incomplete) is retried on the next run, a task failure or a merge is final")
+fn infra? row: String -> Bool
+  (or (stringContains? row ":failedAt \"seed\"") (stringContains? row ":failedAt \"incomplete\""))
+
+fn latestRows text: String -> (List String)
+  (let [(rows (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trialRun :id ")) (stringLines text)))
+        (ids (distinct (map (fn [(l String)] -> String (sp/quotedAfter l ":id")) rows)))]
+    (map (fn [(id String)] -> String (optionOr (listHead (listReverse (filter (fn [(l String)] -> Bool (= (sp/quotedAfter l ":id") id)) rows))) "")) ids))
+
 fn ! doneIds! s: Spec -> (List String)
-  (map (fn [(l String)] -> String (sp/quotedAfter l ":id")) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trialRun :id ")) (stringLines (readOr (runsPath s)))))
+  (map (fn [(l String)] -> String (sp/quotedAfter l ":id")) (filter (fn [(l String)] -> Bool (not (infra? l))) (latestRows (readOr (runsPath s)))))
+
+fn ! retryIds! s: Spec -> (List String)
+  (map (fn [(l String)] -> String (sp/quotedAfter l ":id")) (filter infra? (latestRows (readOr (runsPath s)))))
+
+; (:m :ref SEED-RETRY :do "a retried cell starts clean: its stage results, TRIAL-PIN receipt, copied evidence, worktree and branch sh/<id> from the failed attempt are removed")
+fn ! forgetAttempt! s: Spec id: String -> Int64
+  (let [(dir (cd/runsDir s.store))
+        (mine (filter (fn [(f String)] -> Bool (stringStartsWith? f (str id "-"))) (resultOr (dirList dir) (list))))
+        (_ (map (fn [(f String)] -> Bool (ok? (pathRemove (str dir "/" f)))) mine))
+        (_ (fr/runOneLimited (fr/job (list "rm" "-rf" (str (trialDir s) "/" id)) "." (fr/childEnv (list))) (fr/limits 60 4)))
+        (_ (dropWorktree! s (wtOf s id)))
+        (_ (git s.repo (list "branch" "-D" (str "sh/" id))))]
+    (listLength mine))
 
 fn lookup ps: (List (Pair String cd/Res)) id: String -> (Option cd/Res)
   (match (listFind (fn [(p (Pair String cd/Res))] -> Bool (= (pairFirst p) id)) ps) ((some p) (some (pairSecond p))) ((none) (none)))
@@ -525,6 +572,8 @@ fn ! run! s: Spec only: String -> Int64
       (let [(t0 (nowMs))
             (_ (dirCreate (trialDir s)))
             (doneAlready (doneIds! s))
+            (retried (retryIds! s))
+            (_ (map (fn [(id String)] -> Int64 (forgetAttempt! s id)) retried))
             (cells (filter (fn [(c Cell)] -> Bool (and (not (listContains? doneAlready c.id)) (or (stringEmpty? only) (= c.id only)))) (cellsOf s)))
             (seeded (map (fn [(c Cell)] -> (Pair String (Result String String)) (pair c.id (seedCell! s c))) cells))
             (seedOk (filter (fn [(c Cell)] -> Bool (match (listFind (fn [(p (Pair String (Result String String)))] -> Bool (= (pairFirst p) c.id)) seeded) ((some p) (ok? (pairSecond p))) ((none) false))) cells))
@@ -569,7 +618,9 @@ fn ! run! s: Spec only: String -> Int64
 
 
 fn ! collect! s: Spec -> Int64
-  (let [(rows (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trialRun :id ")) (stringLines (readOr (runsPath s)))))
+  (let [(rows (latestRows (readOr (runsPath s))))
+        (latest (str (trialDir s) "/runsLatest.asn"))
+        (_ (fileWrite latest (stringJoin (map (fn [(r String)] -> String (str r "\n")) rows) "")))
         (merged (listLength (filter (fn [(r String)] -> Bool (stringContains? r " :merged true ")) rows)))
         (stages (list "seed" "write" "gates" "review" "merge" "incomplete"))
         (by (map (fn [(st0 String)] -> String (str "(:" st0 " " (n (listLength (filter (fn [(r String)] -> Bool (stringContains? r (str ":failedAt \"" st0 "\""))) rows))) ")")) stages))
@@ -578,7 +629,7 @@ fn ! collect! s: Spec -> Int64
                 (list (str s.toolRoot "/bin/asl") "run" (str s.toolRoot "/asl/tools/coord/trialAnalyze.asl"))
                 s.analyzer))
         (_ (pathRemove report))
-        (d (fr/runOneLimited (fr/job (listAppend argv (list "report" "--in" (runsPath s))) s.toolRoot (fr/childEnv (list))) (fr/limits 900 50)))
+        (d (fr/runOneLimited (fr/job (listAppend argv (list "report" "--in" latest)) s.toolRoot (fr/childEnv (list))) (fr/limits 900 50)))
         (_ (if (= d.exit 0) (fileWrite report d.out) (ok ())))
         (summary (str "(:trialCollect :runs " (n (listLength rows)) " :merged " (n merged) " :failedAt (" (stringJoin by " ") ")"
                       " :analyzer (:exit " (n d.exit) " :report " (st/q (if (fileExists? report) report "")) "))"))
