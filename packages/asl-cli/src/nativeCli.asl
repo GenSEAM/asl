@@ -668,12 +668,19 @@ fn ! sweepNativeCache! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
                         (_ (if taken (pathRemove (str cache "/lock")) (ok ())))]
                     removed)))
 
+; (:m :ref NATIVECLI-HEAD-LEAK :do "a head whose root is gone names nothing a build can use, yet the 6 hour floor kept every one a test made under /private/tmp; with the opt-in marker file deadHeadSweep in the store a dead head goes at the first sweep, and without it (every store until the principal adds it) the floor still holds")
+fn deadHeadMarker -> String
+  "deadHeadSweep"
+
+fn ! freshDeadHeads? cache: String -> Bool
+  (fileExists? (str cache "/" (deadHeadMarker)))
+
 fn ! sweepLocked! cache: String names: (List String) leased: (List String) capBytes: Int64 minAgeNs: Int64 -> Int64
   (let [(now (nowNs))
         (old? (fn [(n String)] -> Bool (> (- now (treeStamp! (str cache "/" n))) minAgeNs)))
         (heads (filter headFile? names))
         (live (filter (fn [(h String)] -> Bool (some? (headRoot! h))) heads))
-        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (old? h))) heads))
+        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (or (freshDeadHeads? cache) (old? h)))) heads))
         (deadGone (listLength (filter (fn [(h String)] -> Bool (ok? (pathRemove (str cache "/" h)))) dead)))
         (tmpGone (listLength (filter (fn [(n String)] -> Bool (and (and (tmpDead? n) (old? n)) (ok? (pathRemove (str cache "/" n))))) names)))
         (stored (filter storeName? names))
