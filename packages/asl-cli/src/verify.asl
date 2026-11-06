@@ -1,5 +1,5 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! Staged normalisePaths formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
+  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! checkStaged! Staged normalisePaths formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
@@ -94,6 +94,16 @@ fn ! nativeCheckStagedStep! staged: (List Staged) cache: cc/Cache rc: Int64 -> I
 
 fn ! nativeCheckStaged! staged: (List Staged) -> Int64
   (nativeCheckStagedStep! staged (cc/stampedCache!) 0)
+
+; (:m :ref MAIN-RED-FORMS3 :do "asl check of files outside the toolchain root checks their staged mirrors and ends with the same one-line (:audit :sub check) receipt checkAsl! prints for in-root files: balance of the mirrors (quiet) and the host verdict, so a caller reads one receipt shape whichever side of the root the file lies on")
+fn ! checkStaged! staged: (List Staged) -> Int64
+  (let [(bal (fold (fn [(w Int64) (s Staged)] -> Int64 (let [(r (pairFirst (dyck/reportFile! s.actual (fn [(p String)] -> String ""))))] (if (> r w) r w))) 0 staged))
+        (rc (nativeCheckStaged! staged))
+        (status (if (= rc 0) ":passed" ":failed"))]
+    (do (sys/say! (if (!= bal 0)
+                    (str "(:audit :sub check :status :failed (:check :id balance :status :failed :err " (balanceError bal) ") (:check :id hostCheck :status :skipped))")
+                    (str "(:audit :sub check :status " status " (:check :id balance :status :passed) (:check :id hostCheck :status " status " :exit " (stringFromInt64 rc) "))")))
+        rc))
 
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
   (match (listHead paths)
