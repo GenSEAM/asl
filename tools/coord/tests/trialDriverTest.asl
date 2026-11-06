@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/coord/trial :a tr) (asl-tools/coord/conductor :a cd) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
 
-; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER gate: trial.asl check, run and collect as children on a temp source repo (pipeFix e2eRepo!, the spec base is the pipeFix seedUnit! branch sh/BASE, main plus marker.txt that every cell gate needs), its dev clone (pipeFix devCloneFor!: branch dev, origin remote removed after the remote case, a stand-in host build added after the build cases), a temp store and a stand-in production repo; the write stage runs the real conductor stage child whose Leon is a scripted bin/asl in the temp repo (good: writes impl.txt; readloop: three read turns, a readStreak signal, and it moves the production head mid-run), gates run the real gate, review goes through the real provider to the hub stand-in, merge trains onto trialDev-<cell> with the recording train of the dev clone. The one stand-in for an interface not on main: the TRIAL-PIN receipt file <id>-leon.asn is pre-written for one cell; collect runs the real trialAnalyze report on the records")
+; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER gate: trial.asl check, run and collect as children on a temp source repo (pipeFix e2eRepo!, the spec base is the pipeFix seedUnit! branch sh/BASE, main plus marker.txt; a cell that does not start from it is caught by the merge asserts on trialDev-<cell>:marker.txt), its dev clone (pipeFix devCloneFor!: branch dev, origin remote removed after the remote case, a stand-in host build added after the build cases), a temp store and a stand-in production repo; the write stage runs the real conductor stage child whose Leon is a scripted bin/asl in the temp repo (good: writes impl.txt; readloop: three read turns, a readStreak signal, and it moves the production head mid-run), gates run the real gate on the stub-host suites check.asl and check3.asl (pipeFix gate1, gate3: green when impl.txt holds impl), the stand-in host dir is removed before the asserts, review goes through the real provider to the hub stand-in, merge trains onto trialDev-<cell> with the recording train of the dev clone. The one stand-in for an interface not on main: the TRIAL-PIN receipt file <id>-leon.asn is pre-written for one cell; collect runs the real trialAnalyze report on the records")
 
 fn ! gitIn dir: String args: String -> String
   (stringTrim (pf/sh (str "git -C " dir " " args)))
@@ -193,7 +193,9 @@ fn ! testCycle -> Bool
         (cMoved (trial! here "check" spec env 300))
         (rMoved (trial! here "run" spec env 300))
         (_ (pf/stopHub! hub))
-        (_ (pf/cleanup root))]
+        (_ (pf/cleanup root))
+        (stubGone (fr/stubRemove!))
+        (stubLeft (fr/stubDirsOwnedBy (procSelf)))]
     (do (assert (and fx (and (> hub 0) (and (ok? w1) (and (ok? w2) (and b1 (and b2 (not (stringEmpty? prodSha)))))))) "fixture: repo, scripted Leon, dev clone, production stand-in, hub stand-in, specs, stand-in builds")
         (assert (and (= cRemote.exit 1) (and (stringContains? cRemote.out "devRepoRemote") (stringContains? cRemote.out "devRepoBuild:noHostOut"))) (str "check refuses a dev clone with a remote and without a host build: " cRemote.out))
         (assert (and (= cBroken.exit 1) (and (stringContains? cBroken.out "devRepoBuild:notRunnable") (not (stringContains? cBroken.out "devRepoRemote")))) (str "check refuses a dev host build that does not run: " cBroken.out))
@@ -218,7 +220,7 @@ fn ! testCycle -> Bool
         (assert (and (= cMoved.exit 1) (stringContains? cMoved.out "headMoved:")) (str "check fails once a production head moved: " cMoved.out))
         (assert (and (ok? lock) (and (= rLocked.exit 1) (and (stringContains? rLocked.out ":cells 0 ") (stringContains? rLocked.out (str "devRestore:" dev "@dev"))))) (str "a devRepo that cannot go back to its branch fails the run with devRestore: " rLocked.out))
         (assert (and (= rMoved.exit 1) (stringContains? rMoved.out "(:refuse ")) (str "run refuses once a production head moved: " rMoved.out))
-        (fr/stubRemove!)
+        (assert (and stubGone (listEmpty? stubLeft)) (str "the stand-in host dir of this run is removed before any assert, so a red run leaves none: " (stringJoin stubLeft " ")))
         true))
 
 ; (:m :ref SEED-RETRY :do "forgetAttempt! direct: an empty, unknown or / or .. holding id (a spec model tag can carry them) is refused before any delete, so <store>/trial and runs.asn stay; run! never passes an empty id (distinct drops it), this pins the guard itself")
