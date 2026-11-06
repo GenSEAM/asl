@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText rowEnd writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -467,11 +467,15 @@ fn decodeRes file: String row: String -> (Pair (List String) (List Site))
                                            (Site :file file :verb (optionOr (stringSlice it 0 at) "") :symbol (optionOr (stringSlice it (+ at 1) (stringLength it)) ""))))
                (items 1))))
 
-; (:m :do "the rows of a cache text as a map key to the row text after the key; a malformed line is dropped, never a failure")
+; (:m :ref VCS-STORE-ATOMIC :do "the rows of a cache text as a map key to the row text after the key; a row counts only when its line ends with the end mark TAB and dot, so a torn write (a truncated last line, whatever the cut) is a miss and is rescanned, never read as a row with fewer sites; a malformed line is dropped, never a failure")
+fn rowEnd -> String
+  "\t."
+
 fn parseCache text: String -> (Map String String)
   (fold (fn [(m (Map String String)) (l String)] -> (Map String String)
           (let [(i (optionOr (listIndexOf (stringChars l) "\t") -1))]
-            (if (< i 1) m (mapSet m (optionOr (stringSlice l 0 i) "") (optionOr (stringSlice l (+ i 1) (stringLength l)) "")))))
+            (if (or (< i 1) (not (stringEndsWith? l (rowEnd)))) m
+              (mapSet m (optionOr (stringSlice l 0 i) "") (optionOr (stringSlice l (+ i 1) (- (stringLength l) (stringLength (rowEnd)))) "")))))
         (mapEmpty) (stringLines text))
 
 ; (:m :do "scan one file through the cache: a hit decodes the stored row, a miss tokenizes and scans; the row used is recorded in the used map")
@@ -516,7 +520,7 @@ fn scanFilesC old: (Map String String) files: (List (Pair String String)) -> (Pa
           (mergeUsed (pairSecond hl) (pairSecond all))))
 
 fn cacheText used: (Map String String) -> String
-  (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) ""))) (listSort (mapKeys used))) "\n")
+  (stringJoin (map (fn [(k String)] -> String (str k "\t" (optionOr (mapGet used k) "") (rowEnd))) (listSort (mapKeys used))) "\n")
 
 ; (:m :ref VCS-AUDIT-LOWS-F1 :do "the cache lives outside every worktree, in the runner-owned store HOME/.asl/run/vcsDirect/ID where ID is the first 16 hex of sha256 of the real git common dir, so a worktree cannot commit it, but any writer of the same user can alter it: the cache is a speed aid and is never trusted, merge-time runs use mode off (--no-cache); mode off reads and writes nothing (merge-time runs), a dir argument replaces the store (tests)")
 fn storeRoot -> String
@@ -535,6 +539,18 @@ fn ! cacheDirFor! root: String mode: String -> Result String String
                 (real (resultOr (realPath abs) abs))]
             (ok (str (storeRoot) "/" (optionOr (stringSlice (contentSha real) 0 16) "x"))))))))
 
+; (:m :ref VCS-STORE-ATOMIC :do "the store keeps the rows of every worktree of the repo: a run writes the loaded rows plus its own, so worktrees do not evict each other, unless the store passed the cap, then only the rows this run used; the file is written to a temp name of this process and renamed over the store, so a reader sees the old or the new file, never a mix; a concurrent writer may still lose rows read before its rename, which costs a rescan only")
+fn cacheCap -> Int64
+  20000
+
+fn ! writeAtomic! path: String text: String -> String
+  (let [(tmp (str path ".tmp" (stringFromInt64 (procSelf))))]
+    (match (fileWrite tmp text)
+      ((err e) (str "cache write: " e))
+      ((ok _) (match (pathRename tmp path)
+                ((err e) (do (pathRemove tmp) (str "cache rename: " e)))
+                ((ok _) "")))))
+
 ; (:m :do "load the cache file of dir (absent or unreadable is an empty cache), scan, and write the rows used when they differ from the loaded ones; dir empty means no cache; the second value is empty or the reason the cache could not be written, reported in the receipt")
 fn ! scanCached! dir: String files: (List (Pair String String)) -> (Pair (List Site) String)
   (if (stringEmpty? dir)
@@ -543,12 +559,13 @@ fn ! scanCached! dir: String files: (List (Pair String String)) -> (Pair (List S
           (old (parseCache (resultOr (fileReadString path) "")))
           (r (scanFilesC old files))
           (used (pairSecond r))
-          (changed (or (!= (mapSize used) (mapSize old)) (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used))))]
+          (merged (if (> (mapSize old) (cacheCap)) used (mergeUsed old used)))
+          (changed (listAny? (fn [(k String)] -> Bool (not (some? (mapGet old k)))) (mapKeys used)))]
       (pair (pairFirst r)
             (if (not changed) ""
               (match (dirCreate dir)
                 ((err e) (str "cache dir: " e))
-                ((ok _) (match (fileWrite path (cacheText used)) ((err e) (str "cache write: " e)) ((ok _) ""))))))))
+                ((ok _) (writeAtomic! path (cacheText merged))))))))
 
 fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (List String)) -> String
   (let [(allow (parseAllow text))

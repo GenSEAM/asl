@@ -68,7 +68,7 @@ fn ! runTests -> Bool
         (store (str base "/store"))
         (warm (ag/cmdConsistency! b (list "--cache-dir" store)))
         (text (resultOr (fileReadString (str store "/vcsDirectAudit.v1")) ""))
-        (forged (stringJoin (map (fn [(l String)] -> String (str (optionOr (listGet (stringSplit l "\t") 0) "") "\t")) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n"))) "\n"))
+        (forged (stringJoin (map (fn [(l String)] -> String (str (optionOr (listGet (stringSplit l "\t") 0) "") "\t\t.")) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n"))) "\n"))
         (okForge (ok? (fileWrite (str store "/vcsDirectAudit.v1") (stringToBytes forged))))
         (hid (ag/cmdConsistency! b (list "--cache-dir" store)))
         (shown (ag/cmdConsistency! b (list "--no-cache" "--cache-dir" store)))]

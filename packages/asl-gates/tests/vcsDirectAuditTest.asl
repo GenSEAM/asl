@@ -242,7 +242,7 @@ fn testCache -> Bool
         (assert (not (= shown plain)) "a planted cache row is used instead of a rescan")
         (assert (= editedWarm editedPlain) (str "an edited file misses and the result equals the plain scan: " (stringJoin editedWarm ",")))
         (assert (= helperChanged (siteKeys (va/scanFiles withLib))) (str "a changed helper set misses for the unchanged caller: " (stringJoin helperChanged ",")))
-        (assert (= (mapSize (va/parseCache "garbage line without tab\n\tno key\nk\trow\n")) 1) "malformed cache lines are dropped")
+        (assert (= (mapSize (va/parseCache "garbage line without tab\n\tno key\nk\trow\t.\nk2\trow2\n")) 1) "malformed and unterminated cache lines are dropped, a row ends with the end mark")
         true))
 
 ; (:m :ref VCS-AUDIT-LOWS-F1 :do "a temp repo on main with t/a.asl holding one allowlisted push site, committed; true when every step worked")
@@ -298,7 +298,7 @@ fn ! testForgery -> Bool
         (newSite (and (put! root "t/b.asl" (srcList "commit")) (stage! root)))
         (honest (receiptOr (va/auditWith! root allow "" store)))
         (rows (va/parseCache (resultOr (fileReadString (str store "/vcsDirectAudit.v1")) "")))
-        (forged (stringJoin (map (fn [(k String)] -> String (str k "\t" (emptySites (optionOr (mapGet rows k) "")))) (mapKeys rows)) "\n"))
+        (forged (stringJoin (map (fn [(k String)] -> String (str k "\t" (emptySites (optionOr (mapGet rows k) "")) (va/rowEnd))) (mapKeys rows)) "\n"))
         (_ (fileWrite (str store "/vcsDirectAudit.v1") forged))
         (hidden (receiptOr (va/auditWith! root allow "" store)))
         (off (receiptOr (va/auditWith! root allow "" "off")))
@@ -364,8 +364,40 @@ fn ! testStoreId -> Bool
         (assert (not (= dRoot dOther)) "another repo has another store dir")
         true))
 
+fn rowsOf store: String -> (Map String String)
+  (va/parseCache (resultOr (fileReadString (str store "/vcsDirectAudit.v1")) ""))
+
+; (:m :ref VCS-STORE-ATOMIC :do "the store keeps the rows of every root that shares it (two roots, both rows survive); a file torn at any byte is never read as a row with fewer sites, the site is still named; the write leaves no temp file; nothing is read back from a missing mark")
+fn ! testStoreAtomic -> Bool
+  (let [(store (str "/tmp/vcsDirectAuditAtomic-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove store))
+        (filesA (list (pairOf "t/a.asl" (srcList "push"))))
+        (filesB (list (pairOf "u/b.asl" (srcList "reset"))))
+        (a1 (va/scanCached! store filesA))
+        (rowsA (rowsOf store))
+        (b1 (va/scanCached! store filesB))
+        (rowsB (rowsOf store))
+        (a2 (va/scanCached! store filesA))
+        (names (resultOr (dirList store) (list)))
+        (full (resultOr (fileReadString (str store "/vcsDirectAudit.v1")) ""))
+        (plain (siteKeys (va/scanFiles filesA)))
+        (cuts (range 0 (stringLength full)))
+        (bad (filter (fn [(n Int64)] -> Bool
+                       (let [(_ (fileWrite (str store "/vcsDirectAudit.v1") (optionOr (stringSlice full 0 n) "")))
+                             (r (va/scanCached! store filesA))]
+                         (!= (siteKeys (pairFirst r)) plain)))
+                     cuts))
+        (_ (pathRemove store))]
+    (do (assert (= (mapSize rowsA) 1) "the first root wrote its row")
+        (assert (= (mapSize rowsB) 2) "the second root's run kept the first root's row and added its own")
+        (assert (= (mapSize (va/parseCache full)) 2) "a third run of the first root evicts nothing")
+        (assert (= names (list "vcsDirectAudit.v1")) (str "the write leaves no temp file: " (stringJoin names ",")))
+        (assert (= (siteKeys (pairFirst a1)) plain) "the audit names the site")
+        (assert (= (listLength bad) 0) (str "a file cut at these bytes changed the sites: " (stringJoin (map stringFromInt64 (listTake bad 5)) ",")))
+        true))
+
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))
