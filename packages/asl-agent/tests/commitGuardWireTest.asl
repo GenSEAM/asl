@@ -32,7 +32,7 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :rootDir root :budget budget :inputTokenBudget 0 :journalPath journal :maxRetries 0 :sessionId sid
     :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false :commit false
-    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep :toolRoot "")
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :grade fakeGrade :newId fakeId :now fakeNow :sleep fakeSleep)
 
 schema Final
   (:f turn Int64)
