@@ -612,7 +612,7 @@ fn ! run! s: Spec only: String -> Int64
             (toMerge (okIn rr "review" toReview))
             (devHome (gitText s.devRepo (list "branch" "--show-current")))
             (mr (map (fn [(c Cell)] -> (Pair String cd/Res) (mergeOne! s c)) toMerge))
-            (_ (if (stringEmpty? devHome) (gv/Out :exit 0 :out "") (gv/switch! s.devRepo devHome devHome)))
+            (restored (if (stringEmpty? devHome) (gv/Out :exit 0 :out "") (gv/switch! s.devRepo devHome devHome)))
             (now (nowMs))
             (records (map (fn [(c Cell)] -> String
                             (let [(seedErr (match (listFind (fn [(p (Pair String (Result String String)))] -> Bool (= (pairFirst p) c.id)) seeded) ((some p) (match (pairSecond p) ((err e) e) ((ok _) ""))) ((none) "notSeeded")))
@@ -634,7 +634,7 @@ fn ! run! s: Spec only: String -> Int64
                                   (row (recordText s c chain failed leon red (reviewersOf (readOr (cd/journalPath s.store)) c.id) (- now t0) now))]
                               (let [(_ (fileAppend (runsPath s) (str row "\n")))] row)))
                           cells))
-            (after (listAppend (headProblems! s) (trialMainMoved! s trialMain0)))
+            (after (listAppend (listAppend (headProblems! s) (trialMainMoved! s trialMain0)) (if (= restored.exit 0) (list) (list (str "devRestore:" s.devRepo "@" devHome)))))
             (merged (listLength (filter (fn [(r String)] -> Bool (stringContains? r " :merged true ")) records)))]
         (do (println (str "(:trialRun :cells " (n (listLength cells)) " :merged " (n merged) " :runs " (st/q (runsPath s)) " :headProblems " (st/qList after) ")"))
             (if (listEmpty? after) 0 1)))))
