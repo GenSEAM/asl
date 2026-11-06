@@ -53,6 +53,7 @@ fn ! runTests -> Bool
         wroteMid (recordedRun! "wmid" (listAppend (map readReply (range 0 3)) (cons (editReply) (map readReply (range 0 3)))) "" (cap4))
         mixed (recordedRun! "mixed" (listAppend (map readReply (range 0 3)) (cons "(:step :op \"read\" :file \"subject.txt\")\n(:step :op \"run\" :argv \"ls\")" (list (readReply 0)))) "" (cap4))
         refusedAlt (recordedRun! "refalt" (map (fn [i] (if (= (- i (* 2 (/ i 2))) 0) (readReply i) (refusedReply))) (range 0 12)) "" (cap4))
+        redAlt (recordedRun! "redalt" (cons "(:step :op \"gate\")" (map (fn [i] (if (= (- i (* 2 (/ i 2))) 0) (readReply i) (refusedReply))) (range 0 40))) "\"exit 1\"" "(:aslConfig :agentLoop (:specCheck false :readStreakNudge 3 :readStreakEscalate 6 :readOnlyTurnCap 100))")
         unnamed (recordedRun! "unnamed" (list "(:step :file \"subject.txt\")" "(:step :op 7 :file \"subject.txt\")") "" "(:aslConfig :agentLoop (:specCheck false))")
         shortCap (recordedRun! "cap" (map readReply (range 0 8)) "" "(:aslConfig :agentLoop (:specCheck false :readOnlyTurnCap 4))")]
     (do
@@ -67,6 +68,9 @@ fn ! runTests -> Bool
       (assert (not (stringContains? wroteMid.journal ":cause :readOnly")) "a persisted edit between reads resets the read-only count")
       (assert (not (stringContains? mixed.journal ":cause :readOnly")) "a turn that mixes a read with a run step is not read-only")
       (assert (stringContains? refusedAlt.journal ":cause :readOnly") "reads alternating with refused writes stop at the cap, a refused write is no progress")
+      (assert (stringContains? redAlt.journal ":signal :readStreak") "reads alternating with refused writes stop as readStreak while a gate is red")
+      (assert (not (stringContains? redAlt.journal ":cause :readOnly")) "the red-gate stop is the gate readStreak, not the readOnly cap")
+      (assert (not (stringContains? redAlt.journal "(:turn 20 :reply")) "the stop lands near the configured escalate, not at the run end")
       (assert (= (listLength (filter (fn [l] (stringContains? l ":name \"?\" ")) (opRows unnamed.journal))) 2) "a step without a usable :op still leaves a row named ?")
       (assert (and (listAny? (fn [l] (stringContains? l ":name \"?\" :file \"subject.txt\" :status err :error ERR_NO_OP")) (opRows unnamed.journal))
                 (listAny? (fn [l] (stringContains? l ":name \"?\" :file \"subject.txt\" :status err :error ERR_EFFECT_UNDECLARED")) (opRows unnamed.journal))) "the unnamed rows carry the error code")
