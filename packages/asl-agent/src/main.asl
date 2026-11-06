@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -2282,9 +2282,12 @@ enum LivePrep
 fn toolRootOr ra: RunArgs repoRoot: String -> String
   (if (stringEmpty? ra.toolRoot) repoRoot ra.toolRoot)
 
-; (:m :ref LEON-TOOLROOT :do "a :toolRoot naming a missing directory or one without bin/asl is refused ERR_TOOLROOT before any step runs, instead of every tool op failing on a path that does not exist")
+; (:m :ref LEON-TOOLROOT :do "a :toolRoot naming a missing directory or one without an executable bin/asl file is refused ERR_TOOLROOT before any step runs, instead of every tool op failing on a path that does not exist")
 fn ! toolRootUsable? ra: RunArgs -> Bool
-  (or (stringEmpty? ra.toolRoot) (fileExists? (str ra.toolRoot "/bin/asl")))
+  (or (stringEmpty? ra.toolRoot)
+    (match (fileStat (str ra.toolRoot "/bin/asl"))
+      ((err _) false)
+      ((ok st) (and st.isFile (= (- (/ st.mode 64) (* 2 (/ st.mode 128))) 1)))))
 
 fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderEnv -> LivePrep
   (let [repoRoot (toolRootOr ra0 repoRoot0)
@@ -2365,7 +2368,7 @@ fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResul
   (if (toolRootUsable? ra)
     (let [env (pv/providerEnv! rootDir)]
       (if dry (executeDryRun ra repoRoot rootDir env) (executeLive ra repoRoot rootDir env)))
-    (rejectWith (str ":error ERR_TOOLROOT :message \"toolRoot has no bin/asl: " (c/escapeAsn ra.toolRoot) "\"") 1))
+    (rejectWith (str ":error ERR_TOOLROOT :message \"toolRoot has no executable bin/asl: " (c/escapeAsn ra.toolRoot) "\"") 1))
 
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
   (RunArgs :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend

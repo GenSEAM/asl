@@ -1,6 +1,6 @@
 (module aslAgent/tests/toolRootTest
   :x [runTests]
-  :i [(aslAgent/core :a c) (aslAgent/main :a m)
+  :i [(aslAgent/core :a c) (aslAgent/main :a m) (asl-json/json :a j)
       (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
 ; (:m :ref LEON-TOOLROOT :do "a worktree whose native CLI is stale (its bin/asl answers ERR_NATIVE_STALE) with :toolRoot naming a good tree: the check op runs <toolRoot>/bin/asl with the run root as cwd and the stale tree's bin/asl is never run; without :toolRoot the op fails ERR_NATIVE_STALE as before; the stale tree is a symlink clone of this checkout with bin/asl replaced; the good tree is a clone whose bin/asl logs and execs this checkout; the run carries :wallBudget 120 so a run rooted in it by mistake ends by its budget and fails the asserts")
@@ -51,10 +51,23 @@ fn ! runTests -> Bool
         staleText (resultOr (fileReadString staleLog) "")
         withoutRoot (optionOr (listHead (stringLines withoutTool)) "?")
         badRoot (m/mainWithRoots (list (str "(:agent :task \"x\" :backend \"script/none\" :root \"" (c/escapeAsn repo) "\" :toolRoot \"" (c/escapeAsn base) "/missing\")")) repo repo)
+        notExec (let [p (str base "/noexec")
+                      w (dirCreate (str p "/bin"))
+                      f (fileWrite (str p "/bin/asl") "#!/bin/sh\n")
+                      r (m/runArgsOf (list (pair "toolRoot" (j/jstr p))) 0 0 false)]
+                  (m/toolRootUsable? r))
+        resumedRoot (let [ra (m/runArgsOf (list (pair "toolRoot" (j/jstr "/x/tool"))) 0 0 false)
+                          st (m/ResumeState :session "s" :journal "j" :task "t" :modeHint none :intent none :owns (list) :gates (list) :base "main"
+                               :contextTokens none :note "" :result none :history (list) :turn 0 :reply "" :plan none)]
+                      (m/resumed ra st).toolRoot)
+        dryRoot (m/toolRootOr (m/runArgsOf (list (pair "toolRoot" (j/jstr "/x/tool"))) 0 0 false) "/repo")
         cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (ok? (pathRemove withoutRoot))))]
     (do
       (assert (and a b) "the two tree clones were built")
       (assert (and (stringContains? badRoot.stdout "ERR_TOOLROOT") (not (= badRoot.exitCode 0))) "a :toolRoot without bin/asl is refused ERR_TOOLROOT")
+      (assert (not notExec) "a bin/asl that exists but is not executable makes the :toolRoot unusable")
+      (assert (= resumedRoot "/x/tool") "a resumed run keeps its :toolRoot")
+      (assert (= dryRoot "/x/tool") "toolRootOr gives the dry-run prompt the toolRoot tree, not the checkout")
       (assert cleaned "the clones and both run roots were removed")
       (assert (and (= rootNew "made") (stringContains? rootSubject "green")) "with :toolRoot a written and an edited owned file land in the run root")
       (assert (not toolHas) "the :toolRoot tree gets none of the run's files, no journal and no write")
