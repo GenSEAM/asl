@@ -189,13 +189,42 @@ fn ! gitText dir: String args: (List String) -> String
 fn ! readOr path: String -> String
   (resultOr (fileReadString path) "")
 
+; (:m :do "a path with symlinks resolved and empty or . segments dropped, also when its tail does not exist yet: the longest existing prefix is resolved and the rest appended, so two spellings of one place compare equal before it is created")
+fn ! canon! p: String -> String
+  (if (or (stringEmpty? p) (= p "/")) p
+    (match (realPath p)
+      ((ok r) r)
+      ((err _)
+        (let [(parts (stringSplit p "/"))
+              (k (listLength parts))
+              (last (optionOr (listGet parts (- k 1)) ""))
+              (parentText (stringJoin (listTake parts (- k 1)) "/"))
+              (parent (if (and (stringEmpty? parentText) (stringStartsWith? p "/")) "/" parentText))]
+          (cond
+            ((<= k 1) p)
+            ((or (stringEmpty? last) (= last ".")) (canon! parent))
+            (else (let [(cp (canon! parent))] (if (= cp "/") (str "/" last) (str cp "/" last)))))))))
+
 fn ! same? a: String b: String -> Bool
-  (and (not (stringEmpty? a)) (= (resultOr (realPath a) a) (resultOr (realPath b) b)))
+  (and (not (stringEmpty? a)) (= (canon! a) (canon! b)))
 
 fn ! inside? p: String root: String -> Bool
-  (let [(rp (resultOr (realPath p) p))
-        (rr (resultOr (realPath root) root))]
+  (let [(rp (canon! p))
+        (rr (canon! root))]
     (and (not (stringEmpty? rr)) (or (= rp rr) (stringStartsWith? rp (str rr "/")))))
+
+; (:m :ref TRIAL-SETUP :do "the production conductor store and lanes of a home: <home>/.asl/run/conductor (also the conductor's default under this process's HOME) and <home>/.asl/conductor/lanes.asn; a trial store, worktree dir or spec out equal to or inside that store, or a trial lanes file equal to that lanes file, is a problem")
+fn ! prodHomes! s: Spec -> (List String)
+  (distinct (filter (fn [(h String)] -> Bool (not (stringEmpty? h))) (list s.home (resultOr (getHomeDir) ""))))
+
+fn ! prodPathProblems! s: Spec out: String -> (List String)
+  (let [(homes (prodHomes! s))
+        (stores (map (fn [(h String)] -> String (str h "/.asl/run/conductor")) homes))
+        (laneFiles (map (fn [(h String)] -> String (str h "/.asl/conductor/lanes.asn")) homes))
+        (paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (list s.store s.worktrees out)))
+        (inStore (filter (fn [(p String)] -> Bool (listAny? (fn [(r String)] -> Bool (inside? p r)) stores)) paths))
+        (lanes (if (and (not (stringEmpty? s.lanes)) (listAny? (fn [(l String)] -> Bool (same? s.lanes l)) laneFiles)) (list (str "productionLanes:" s.lanes)) (list)))]
+    (listAppend (map (fn [(p String)] -> String (str "productionStore:" p)) (distinct inStore)) lanes))
 
 
 fn ! memAvailableMb! -> Int64
@@ -250,9 +279,10 @@ fn ! specProblems! s: Spec -> (List String)
         (seeds (map (fn [(t TTask)] -> String (str "seedMissing:" t.id)) (filter (fn [(t TTask)] -> Bool (and (or t.skipWrite (not (stringEmpty? t.seed))) (or (stringEmpty? t.seed) (not (fileExists? (rooted s.toolRoot t.seed)))))) s.tasks)))
         (baseSeed (map (fn [(t TTask)] -> String (str "baseSeedUnsupported:" t.id)) (filter (fn [(t TTask)] -> Bool (and (not t.skipWrite) (not (stringEmpty? t.seed)))) s.tasks)))
         (build (devBuildProblems! s.devRepo))
+        (prodPaths (prodPathProblems! s ""))
         (mem (if (<= s.minFreeMb 0) (list) (let [(m (memAvailableMb!))] (cond ((< m 0) (list "memUnknown")) ((< m s.minFreeMb) (list (str "memLow:" (n m)))) (else (list))))))
         (disk (if (<= s.minDiskMb 0) (list) (let [(d (diskFreeMb! (if (fileExists? s.store) s.store ".")))] (if (< d s.minDiskMb) (list (str "diskLow:" (n d))) (list)))))]
-    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build aliases dead seeds baseSeed mem disk (headProblems! s))))
+    (fold listAppend (list) (list missing cells prefix devMain devRemote repoRemote same tool build prodPaths aliases dead seeds baseSeed mem disk (headProblems! s))))
 
 ; (:m :ref TRIAL-SETUP :do "aliases the trial lanes file lists under :noCredit (written by setup)")
 fn noCreditAliases lanes: String -> (List String)
@@ -663,7 +693,10 @@ fn ! setupProblems! s: Spec u: Setup sha: String lanesSrc: String gateway: Strin
             (map (fn [(a String)] -> String (str "reviewerNoCredit:" a)) (filter (fn [(a String)] -> Bool (noCredit? u gateway a)) u.reviewers))
             (map (fn [(m Model)] -> String (str "writerNoCredit:" m.alias)) (filter (fn [(m Model)] -> Bool (noCredit? u gateway m.alias)) s.models))
             (if (and (not (stringEmpty? u.seed)) (not (fileExists? (rooted s.toolRoot u.seed)))) (list (str "seedMissing:" u.seed)) (list))
-            inProd)))
+            inProd
+            (prodPathProblems! s u.out)
+            (if (and (fileExists? s.repo) (not (stringEmpty? (gitText s.repo (list "remote"))))) (list "repoRemote") (list))
+            (if (and (fileExists? s.devRepo) (not (stringEmpty? (gitText s.devRepo (list "remote"))))) (list "devRepoRemote") (list)))))
 
 fn doneOf o: gv/Out -> fr/Done
   (fr/Done :idx 0 :exit o.exit :out o.out :ms 0 :verdict "")
