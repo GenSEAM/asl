@@ -368,7 +368,7 @@
     (:op :fix
       :scope asl
       :public "Propose or stage minimal delimiter repair."
-      :form "(:fix :file <path> [:apply <sym>])"
+      :form "(:fix :file <path> [:apply <sym>] [:by <sym>] [:scope <sym>])"
       :params (
         (:file :type str :req true :note "path to ASL or ASN file to balance")
         (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
