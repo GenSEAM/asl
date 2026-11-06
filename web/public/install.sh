@@ -78,8 +78,18 @@ elif [ -e /dev/tty ]; then
 fi
 INSTALLER="$PKG/packages/asl-target-sh/src/distrib.asl"
 if [ "$DRY" -eq 0 ] && [ -e "$TREE/.git" ] && git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
-  git -C "$TREE" config --local merge.asnRows.driver "\"$ASLBIN\" run \"$PKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
-  git -C "$TREE" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'
+  # a linked worktree shares .git/config with its main checkout: the driver names the main checkout's tools, never this worktree's
+  GD="$(cd "$TREE" && cd "$(git rev-parse --git-dir)" && pwd -P)" || GD=""
+  GC="$(cd "$TREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" || GC=""
+  DPKG="$PKG"; DBIN="$ASLBIN"
+  if [ -z "$GD" ] || [ -z "$GC" ]; then DBIN=""
+  elif [ "$GD" != "$GC" ]; then
+    if DPKG="$(pkg_of "$(dirname "$GC")")" && DBIN="$(asl_of "$DPKG")"; then :; else DBIN=""; fi
+  fi
+  if [ -n "$DBIN" ]; then
+    git -C "$TREE" config --local merge.asnRows.driver "\"$DBIN\" run \"$DPKG/tools/mergeRows/mergeRows.asl\" %O %A %B %P"
+    git -C "$TREE" config --local merge.asnRows.name 'ASN row-keyed merge (MRG1)'
+  fi
 fi
 if [ "$TTY" = devtty ]; then exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@" </dev/tty; fi
 exec "$ASLBIN" run "$INSTALLER" "$TREE" "$FROM" "$TTY" "$OS" "$ARCH" "$@"
