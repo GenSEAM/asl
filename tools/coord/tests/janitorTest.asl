@@ -26,7 +26,7 @@ fn wt unit: String dirty: Int64 merged: Bool st: String -> j/WtFact
   (j/WtFact :unit unit :path (str "/wts/asex-" unit) :bytes 5000 :dirty dirty :merged merged :detached false :foreign 0 :st st)
 
 fn lst level: String scratch: (List j/Scratch) alive: (List Int64) wts: (List j/WtFact) -> j/Listing
-  (j/Listing :nowS 1000000 :level level :scratch scratch :alive alive :wts wts)
+  (j/Listing :nowS 1000000 :level level :scratch scratch :alive alive :held (list) :wts wts)
 
 fn paths rows: (List j/Row) -> (List String)
   (map (fn [(r j/Row)] -> String r.path) rows)
@@ -75,6 +75,17 @@ fn ! testPure -> Bool
       (assert (j/aliveFrom (ok true)) "a live pid reads alive")
       (assert (= (listLength (j/plan c (lst "stop" (list) (list) (list (with (wt "u1" 0 true "merged") :foreign 1))))) 0) "a merged clean worktree with a foreign ignored file is kept")
       (assert (= (listLength (j/plan c (lst "stop" (list) (list) (list (with (wt "u1" 0 true "merged") :detached true))))) 0) "a detached worktree is kept")
+      (assert (j/heldName? "aslRebuildKeepsPriorRtTest-123") "rebuild test leftover name")
+      (assert (j/heldName? "conductorTest-9-x") "conductorTest leftover name")
+      (assert (j/heldName? "trialDriver-abc") "trialDriver leftover name")
+      (assert (not (j/heldName? "trialDriver-")) "a bare prefix is not a leftover")
+      (assert (not (j/heldName? "aslStubHost-1")) "aslStubHost is not in the table")
+      (assert (not (j/heldName? "xconductorTest-1")) "the prefix must start the name")
+      (assert (= (paths (j/plan c (lst "low" (list (sc "aslRebuildKeepsPriorRtTest-77" old) (sc "trialDriver-5" old) (sc "conductorTest-3-a" old)) (list) (list)))) (list "/t/aslRebuildKeepsPriorRtTest-77" "/t/trialDriver-5" "/t/conductorTest-3-a")) "old leftovers of the three patterns are listed")
+      (assert (= (listLength (j/plan c (lst "low" (list (sc "trialDriver-5" young)) (list) (list)))) 0) "a fresh leftover is within grace and kept")
+      (assert (= (listLength (j/plan c (lst "low" (list (sc "aslStubHost-1" old)) (list) (list)))) 0) "aslStubHost is never listed")
+      (assert (= (listLength (j/plan c (lst "ok" (list (sc "trialDriver-5" old)) (list) (list)))) 0) "level ok keeps a leftover younger than a day")
+      (assert (= (listLength (j/plan c (with (lst "low" (list (sc "trialDriver-5" old)) (list) (list)) :held (list "/t/trialDriver-5")))) 0) "a held leftover is kept")
       (assert (stringContains? (j/renderRow (j/Row :class "a" :path "/t/x" :bytes 7 :why "w" :unit "")) "(:reclaim :path \"/t/x\" :bytes 7") "row rendering")
       true))
 
@@ -178,9 +189,42 @@ fn ! testE2e base: String -> Bool
               (assert (exists? repo) "the repo survives")
               true))))))
 
+fn ! testHeld base: String -> Bool
+  (let [(tmp (str base "/tmp"))
+        (c (j/Cfg :tmp tmp :runDir (str base "/run") :modePath (str base "/mode.asn") :storeDir (str base "/store") :repo (str base "/none") :wtBase (str base "/wts")
+                  :minAgeS 3600 :forceAgeS 86400 :maxPaths 20 :walkTimeoutS 20 :budgetS 30))
+        (oldD (str tmp "/aslRebuildKeepsPriorRtTest-111"))
+        (freshD (str tmp "/trialDriver-222"))
+        (heldD (str tmp "/conductorTest-333"))
+        (stubD (str tmp "/aslStubHost-444"))]
+    (do
+      (assert (= (sh "." (list "mkdir" "-p" tmp (str base "/store"))).exit 0) "held fixture base")
+      (assert (and (mkOld! oldD) (and (mkOld! heldD) (mkOld! stubD))) "old leftovers")
+      (assert (= (sh "." (list "mkdir" "-p" freshD)).exit 0) "fresh leftover")
+      (match (fr/guardStart! (list "sleep" "60") heldD (fr/childEnv (list)) (fr/limits 90 4))
+        ((err _) (assert false "a live holder started"))
+        ((ok g)
+          (let [(t1 (j/tick! c))
+                (_ (put (str base "/mode.asn") "(:janitor :mode apply)\n"))
+                (_ (sleepMs 300))
+                (stale (j/apply! c (list (j/Row :class "a" :path heldD :bytes 1 :why "stale" :unit ""))))
+                (t2 (j/tick! c))
+                (_ (fr/killTree! g.run.pid))]
+            (do
+              (assert (stringContains? t1 "aslRebuildKeepsPriorRtTest-111") "dry plan lists the old leftover")
+              (assert (not (stringContains? t1 "conductorTest-333")) "the held leftover is not listed")
+              (assert (not (stringContains? t1 "trialDriver-222")) "the fresh leftover is not listed")
+              (assert (not (stringContains? t1 "aslStubHost-444")) "aslStubHost is not listed")
+              (assert (and (= stale 0) (fileExists? heldD)) "a stale plan row for a held dir is refused at removal")
+              (assert (not (fileExists? oldD)) "apply removed the old leftover")
+              (assert (and (fileExists? heldD) (and (fileExists? freshD) (fileExists? stubD))) "held, fresh and stub leftovers survive")
+              true))))
+      true))
+
 fn ! runTests -> Bool
   (let [(base (scratch))]
     (do (assert (testPure) "pure plan")
         (assert (testE2e base) "end to end")
-        (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
+        (assert (testHeld (str base "-held")) "leftover patterns with a live holder")
+        (assert (= (sh "." (list "rm" "-rf" base (str base "-held"))).exit 0) "private bases removed")
         true))
