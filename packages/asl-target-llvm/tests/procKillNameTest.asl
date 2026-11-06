@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/fleet/run :a fr)])
 
-; (:m :ref PROCKILL-SIGNAL-NAME :do "procKill takes a signal by its SIG name or by the bare name: four own sleepers (per-run unique seconds) are killed with KILL and SIGKILL, TERM and SIGTERM; a name in neither spelling, an empty one and a lower-case one are refused with io:22 and the sleeper lives; bindings run when first used, so each step takes the one before as dep, and a final SIGKILL of every sleeper runs before the first assert, so a red run leaves none")
+; (:m :ref PROCKILL-SIGNAL-NAME :do "procKill takes a signal by its SIG name or by the bare name: four own sleepers (per-run unique seconds) are killed with KILL and SIGKILL, TERM and SIGTERM; a name in neither spelling, an empty one and a lower-case one are refused with io:22 and the sleeper lives; bindings run in order, so the sleepers start first and a final SIGKILL of every sleeper runs before the first assert, so a red run leaves none")
 
 fn ! startSleeper! secs: String -> Int64
   (match (fr/spawnSep (list "sleep" secs) "." (fr/childEnv (list)))
