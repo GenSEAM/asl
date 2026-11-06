@@ -71,4 +71,4 @@ fn ! testUnreadable -> Bool
 fn ! runTests -> Bool
   (do (assert (testMain) "the real review stage on a stand-in hub")
       (assert (testUnreadable) "an unreadable or empty change never passes review")
-      true)
+      (fr/stubRemove!))

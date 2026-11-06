@@ -88,4 +88,4 @@ fn ! runTests -> Bool
         (assert (and (= mainHead1 mainHead0) (stringEmpty? trainArgsMain) (= devHead5 head4)) (str "a refused merge never starts the train and moves no HEAD: " trainArgsMain))
         (assert (not (stringEmpty? m4Branch)) "the refused unit's branch is still there")
         (assert (and (= rMain.ok 1) (!= (gitIn dev "rev-parse HEAD") head4)) "control: the same unit merges onto the configured dev branch")
-        true))
+        (fr/stubRemove!)))

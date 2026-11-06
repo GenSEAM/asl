@@ -782,7 +782,7 @@ fn ownerPidOf dir: String -> Int64
     0)
 
 fn ! parentOf pid: Int64 -> Int64
-  (let [(d (runOne (job (list "ps" "-o" "ppid=" "-p" (stringFromInt64 pid)) "." (childEnv (list)))))]
+  (let [(d (runOneLimited (job (list "ps" "-o" "ppid=" "-p" (stringFromInt64 pid)) "." (childEnv (list))) (limits 5 4)))]
     (if (= d.exit 0) (optionOr (stringToInt64 (stringTrim d.out)) 0) 0))
 
 fn ! ancestorFrom? at: Int64 pid: Int64 depth: Int64 -> Bool
@@ -793,7 +793,7 @@ fn ! ancestorOrSelf? pid: Int64 -> Bool
 
 fn ! stubOwnerLive? dir: String -> Bool
   (let [(pid (ownerPidOf dir))]
-    (and (> pid 1) (and (= (runOne (job (list "kill" "-0" (stringFromInt64 pid)) "." (childEnv (list)))).exit 0) (ancestorOrSelf? pid))))
+    (and (> pid 1) (and (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 pid)) "." (childEnv (list))) (limits 5 4)).exit 0) (ancestorOrSelf? pid))))
 
 fn ! stubTrustedIn! dir: String -> Bool
   (and (stubOwnerLive? dir) (stubVerifiedIn! dir))
@@ -830,7 +830,7 @@ fn ! stubSweepDead! -> Bool
   (match (dirList "/tmp")
     ((err _) false)
     ((ok names)
-      (let [(dead (filter (fn [(d String)] -> Bool (and (stringStartsWith? d (stubPrefix)) (and (privateDir? d) (or (<= (ownerPidOf d) 1) (not (= (runOne (job (list "kill" "-0" (stringFromInt64 (ownerPidOf d))) "." (childEnv (list)))).exit 0)))))) (map (fn [(n String)] -> String (str "/tmp/" n)) names)))]
+      (let [(dead (filter (fn [(d String)] -> Bool (and (stringStartsWith? d (stubPrefix)) (and (privateDir? d) (or (<= (ownerPidOf d) 1) (not (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 (ownerPidOf d))) "." (childEnv (list))) (limits 5 4)).exit 0)))))) (map (fn [(n String)] -> String (str "/tmp/" n)) names)))]
         (listAll? (fn [(d String)] -> Bool (= (runOne (job (list "rm" "-rf" d) "." (childEnv (list)))).exit 0)) dead))))
 
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "stubHost! installs this process's stand-in (one dir per process, a token from pid and clock) after sweeping dirs whose owner is gone, stubRemove! deletes it, tests call it on their way out")

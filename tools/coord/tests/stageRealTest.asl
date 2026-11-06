@@ -28,4 +28,4 @@ fn ! runTests -> Bool
         (assert (match rr ((ok r) (and (= r.exit 1) (and (= r.asserts 3) (stringContains? r.sig ":failed 1")))) ((err _) false)) (str "red gate: Res row with the gate's own exit 1 and its :failed 1 line: " (match rr ((ok r) (str (stringFromInt64 r.exit) "/" (stringFromInt64 r.asserts) " " r.sig)) ((err e) e))))
         (assert (stringEmpty? receiptRed) "red gate: no receipt, so the review cannot read a green one")
         (assert (and (= dn.exit 2) (not (ok? rn))) (str "an unknown unit exits 2 and writes no row: " (stringFromInt64 dn.exit)))
-        true))
+        (fr/stubRemove!)))

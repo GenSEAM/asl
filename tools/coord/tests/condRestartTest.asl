@@ -128,4 +128,4 @@ fn ! runTests -> Bool
         (assert (testDrain bin) "a restart drains in-flight stages and launches nothing")
         (assert (testDeadline bin) "a restart past its grace exits 0 and leaves the stage")
         (assert (testDeployRange) "deploy restarts only on coord changes")
-        true))
+        (fr/stubRemove!)))

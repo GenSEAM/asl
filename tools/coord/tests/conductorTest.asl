@@ -2018,4 +2018,4 @@ fn ! runTests -> Bool
         (assert (testTrainSig) "a merge signature names the train's own cause")
         (assert (testMergeSerial bin) "merge stages run one at a time and both reviewed units merge")
         (assert (testMergeVerdictOnce bin) "a merge verdict is escaped once in the journal")
-        (let [(_ (cleanup (scratchRoot)))] true)))
+        (let [(_ (cleanup (scratchRoot)))] (fr/stubRemove!))))

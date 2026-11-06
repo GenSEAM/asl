@@ -252,4 +252,4 @@ fn ! runTests -> Bool
       (assert (testPinnedCli) "a non-CLI mutant reuses the pinned CLI")
       (assert (testVerdictOf) "red needs a runner FAIL line")
       (assert (testDropHeadScope) "a head marker removes only under the cache dir")
-      true)
+      (fr/stubRemove!))

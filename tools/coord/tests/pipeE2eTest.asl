@@ -83,4 +83,4 @@ fn ! runTests -> Bool
         (assert (and (!= reviewFail.st "merged") (and (not (listContains? reviewFail.tos "merging")) (= reviewFail.devAfter reviewFail.devBefore))) (str "scenario reviewFail: a failing review does not merge and leaves dev alone: " (stringJoin reviewFail.tos " ")))
         (assert (= (listTake reviewFail.tos 6) (list "ready" "writing" "gating" "awaitReview" "reviewing" "ready")) (str "scenario reviewFail: the unit walks to review and back to ready: " (stringJoin reviewFail.tos " ")))
         (assert (stringContains? reviewFail.prior "scripted reviewer defect") (str "scenario reviewFail: the reviewers' defect is the prior note of the next write: " reviewFail.prior))
-        true))
+        (fr/stubRemove!)))

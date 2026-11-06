@@ -1384,4 +1384,4 @@ fn ! runTests -> Bool
       (assert (testAheadReviewFail) "a head whose review failed is not shortcut to review again")
       (assert (testWriterFromFailedWrite) "the writer comes from a failed write row too")
       (assert (testReviewDeferFix) "base resolves to the repo branch, counts need a top level, unknown writers wait, stale markers, two-lane wake")
-      true)
+      (fr/stubRemove!))
