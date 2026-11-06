@@ -25,7 +25,7 @@ fn ! testPure -> Bool
 fn ! testDispatch -> Bool
   (let [(bad (line! "(:eval :code \"(+ 1 2)\" :timeoutMs abc)"))
         (good (line! "(:eval :code \"(+ 1 2)\" :timeoutMs 5000)"))
-        (boolBad (line! "(:agent :task x :dryRun maybe)"))
+        (boolBad (line! "(:agent :task x :plan maybe :dryRun true)"))
         (root (line! (str "(:agent :task x :toolRoot " (root!) "/nowhere-toolroot :dryRun true)")))]
     (do (assert (stringContains? bad "ERR_PARAM_TYPE") (str "a wrong-typed int is refused: " bad))
         (assert (stringContains? bad ":timeoutMs :type int :got \"abc\"") (str "the receipt names key, type and value: " bad))
@@ -34,17 +34,17 @@ fn ! testDispatch -> Bool
         (assert (not (stringContains? root "ERR_PARAM_TYPE")) (str "a path for :toolRoot (declared str) is not a type error: " root))
         true))
 
-; (:m :ref FORMS-PARAM-TYPES :do "a step with a bad int and a bad bool is one ERR_PARAM_TYPE naming both, in the catalogue's key order whichever order the step wrote them (agent declares dryRun before timeout), so a check that stops at the first wrong key is red here")
+; (:m :ref FORMS-PARAM-TYPES :do "a step with a bad int and a bad bool is one ERR_PARAM_TYPE naming both, in the catalogue's key order whichever order the step wrote them (agent declares plan before timeout; every agent step also carries :dryRun true, so a removed check can only start a dry run, never a live agent), so a check that stops at the first wrong key is red here")
 fn ! testMulti -> Bool
-  (let [(a (line! "(:agent :task x :timeout abc :dryRun maybe)"))
-        (b (line! "(:agent :task x :dryRun maybe :timeout abc)"))
-        (one (line! "(:agent :task x :timeout abc)"))
-        (pa (optionOr (stringIndexOf a "(:dryRun :type bool :got \"maybe\")") -1))
+  (let [(a (line! "(:agent :task x :timeout abc :plan maybe :dryRun true)"))
+        (b (line! "(:agent :task x :dryRun true :plan maybe :timeout abc)"))
+        (one (line! "(:agent :task x :timeout abc :dryRun true)"))
+        (pa (optionOr (stringIndexOf a "(:plan :type bool :got \"maybe\")") -1))
         (ta (optionOr (stringIndexOf a "(:timeout :type int :got \"abc\")") -1))]
-    (do (assert (and (stringContains? a "(:dryRun :type bool :got \"maybe\")") (stringContains? a "(:timeout :type int :got \"abc\")")) (str "both wrong keys are named: " a))
-        (assert (and (>= pa 0) (< pa ta)) (str "in catalogue key order, dryRun before timeout: " a))
+    (do (assert (and (stringContains? a "(:plan :type bool :got \"maybe\")") (stringContains? a "(:timeout :type int :got \"abc\")")) (str "both wrong keys are named: " a))
+        (assert (and (>= pa 0) (< pa ta)) (str "in catalogue key order, plan before timeout: " a))
         (assert (= a b) (str "the same receipt whichever order the step wrote the keys: " a " vs " b))
-        (assert (and (stringContains? one "ERR_PARAM_TYPE") (not (stringContains? one ":dryRun"))) (str "one wrong key names only it: " one))
+        (assert (and (stringContains? one "ERR_PARAM_TYPE") (not (stringContains? one ":plan"))) (str "one wrong key names only it: " one))
         true))
 
 fn ! runTests -> Bool

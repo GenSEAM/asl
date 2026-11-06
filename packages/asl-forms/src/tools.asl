@@ -279,7 +279,7 @@ fn paramTypeOk? typ: String val: String -> Bool
     ((= typ "bool") (or (stringEmpty? val) (or (= val "true") (= val "false"))))
     (else true))
 
-; (:m :ref FORMS-PARAM-TYPES :do "the keys a step passes whose value does not fit the declared :type, as (key (type value)) sorted by key; an op or key the catalogue does not declare yields none, unknown keys are the other check")
+; (:m :ref FORMS-PARAM-TYPES :do "the keys a step passes whose value does not fit the declared :type, as (key (type value)) in the catalogue's declared key order, whatever order the step wrote them; an op or key the catalogue does not declare yields none, unknown keys are the other check")
 fn ! badTypes! ctx: s/KnowCtx op: String kw: (Map String String) -> (List (Pair String (Pair String String)))
   (match (loadRegistry! ctx)
     ((none) (list))
@@ -288,12 +288,11 @@ fn ! badTypes! ctx: s/KnowCtx op: String kw: (Map String String) -> (List (Pair 
         ((none) (list))
         ((some o)
           (let [(ps (paramItems o.paramsRaw (stringToBytes o.paramsRaw) (stringLength o.paramsRaw) 0 (list)))]
-            (listSortBy (fn [(b (Pair String (Pair String String)))] -> String (pairFirst b))
-              (fold (fn [(acc (List (Pair String (Pair String String)))) (p Param)] -> (List (Pair String (Pair String String)))
+            (fold (fn [(acc (List (Pair String (Pair String String)))) (p Param)] -> (List (Pair String (Pair String String)))
                       (match (mapGet kw p.name)
                         ((none) acc)
                         ((some v) (if (paramTypeOk? p.ptype v) acc (listAppend acc (list (pair p.name (pair p.ptype v))))))))
-                    (list) ps)))))))
+                    (list) ps))))))
 
 fn ! anyAslFile? dir: String -> Bool
   (match (dirList dir)
