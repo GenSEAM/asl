@@ -324,9 +324,14 @@ fn ! stubRoot! base: String name: String body: String -> String
         (assert (put (str dir "/.asl.config.asn") "(:aslConfig\n  :commitGuardPerFileS 1\n  :commitGuardWarmS 1\n  :commitGuardPerKbMs 2000\n)\n") (str name ": stub config"))
         dir))
 
+; (:m :ref COMMIT-GUARD-PARTIAL-BLOCK :do "an instant stub gets a 5 s deadline so load cannot make it miss; timing-out stubs keep 1 s")
+fn roomyCfg -> String
+  "(:aslConfig\n  :commitGuardPerFileS 5\n  :commitGuardWarmS 5\n  :commitGuardPerKbMs 2000\n)\n"
+
 fn ! partialGates root: String base: String -> Bool
   (let [(slow (stubRoot! base "slowRoot" "#!/bin/sh\nsleep 20\n"))
         (fast (stubRoot! base "fastRoot" "#!/bin/sh\nshift\nfor f in \"$@\"; do echo \"ok $f: (:checked 1)\"; done\nexit 0\n"))
+        (_kf (put (str fast "/.asl.config.asn") (roomyCfg)))
         (cold (stubRoot! base "coldRoot" "#!/bin/sh\nshift\ncase \"$1\" in *guardWarmProbe*) echo \"ok $1: (:checked 1)\"; exit 0;; esac\nm=\"$(dirname \"$0\")/../coldMarker\"\nif [ ! -e \"$m\" ]; then : > \"$m\"; sleep 20; exit 0; fi\nfor f in \"$@\"; do echo \"ok $f: (:checked 1)\"; done\nexit 0\n"))
         (_k (put (str cold "/.asl.config.asn") "(:aslConfig\n  :commitGuardPerFileS 1\n  :commitGuardWarmS 8\n  :commitGuardPerKbMs 2000\n)\n"))
         (stuck (stubRoot! base "stuckRoot" "#!/bin/sh\nshift\ncase \"$1\" in *guardWarmProbe*) echo \"ok $1: (:checked 1)\"; exit 0;; esac\nsleep 20\n"))
@@ -340,6 +345,7 @@ fn ! partialGates root: String base: String -> Bool
         (h7 (head c7))
         (r7 (cg/commit! c7 cold (list "good.asl") (goodMsg) false))
         (silent (stubRoot! base "silentRoot" "#!/bin/sh\nexit 0\n"))
+        (_ks (put (str silent "/.asl.config.asn") (roomyCfg)))
         (c6 (fixture base "pSilent" (list)))
         (_s (put (str c6 "/good.asl") (goodAsl)))
         (h6 (head c6))
