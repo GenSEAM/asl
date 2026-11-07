@@ -231,11 +231,16 @@ fn ! sweepDead! tmp: String -> Int64
                   n)))
             0 names)))
 
-; (:m :ref CGTMP-PREFIX-UNGATED :do "true when no commitGuardTest-PID dir of a dead pid is left in tmp; n is the count the sweep just removed and is only forced here so the sweep runs first")
-fn ! deadBasesLeft! tmp: String n: Int64 -> Bool
+; (:m :ref CGTMP-PREFIX-UNGATED :do "snapshot the commitGuardTest-PID dirs of dead pids in tmp, run the sweep, and require every snapshotted dir gone: a dir that appears or dies after the snapshot, or is planted unremovable later, cannot red the suite")
+fn ! deadBases tmp: String -> (List String)
   (match (dirList tmp)
-    ((err _) false)
-    ((ok names) (and (>= n 0) (listAll? (fn [(name String)] -> Bool (let [(pid (pidOfBase name))] (or (<= pid 1) (baseAlive? pid)))) names))))
+    ((err _) (list))
+    ((ok names) (filter (fn [(name String)] -> Bool (let [(pid (pidOfBase name))] (and (> pid 1) (not (baseAlive? pid))))) names)))
+
+fn ! sweepRemovesSnapshot! tmp: String -> Bool
+  (let [(before (deadBases tmp))
+        (_ (sweepDead! tmp))]
+    (listAll? (fn [(name String)] -> Bool (not (fileExists? (str tmp "/" name)))) before))
 
 fn ! sweepWorks? -> Bool
   (let [(tmp (str (scratch) "-sweep"))
@@ -268,7 +273,7 @@ fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
     (do (assert (sweepWorks?) "the leak sweep removes only a dead numeric commitGuardTest-PID base")
-        (assert (deadBasesLeft! (optionOr (envGet "TMPDIR") "/tmp") (sweepDead! (optionOr (envGet "TMPDIR") "/tmp"))) "after the sweep no commitGuardTest-PID base of a dead pid is left in TMPDIR")
+        (assert (sweepRemovesSnapshot! (optionOr (envGet "TMPDIR") "/tmp")) "every dead-pid commitGuardTest-PID base present before the sweep is gone after it")
         (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (pureRules) "pure rules")
         (assert (fixtures root base) "fixture repos")
