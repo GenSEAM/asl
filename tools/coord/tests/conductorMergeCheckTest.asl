@@ -139,8 +139,10 @@ fn ! runTests -> Bool
         (statusText (cd/status! (ctxFor root)))
         (wtKept (fileExists? (str wtGrow "/.git")))
         (_ (pf/cleanup root))
-        (_ (fr/stubRemove!))]
-    (do (assert (testBudgets) "the stage budgets hold")
+        (stubGone (fr/stubRemove!))
+        (stubLeft (fr/stubDirsOwnedBy (procSelf)))]
+    (do (assert (and stubGone (listEmpty? stubLeft)) (str "the stand-in host dir of this run is removed before any assert, so a red run leaves none: " (stringJoin stubLeft " ")))
+        (assert (testBudgets) "the stage budgets hold")
         (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? dev)) (and (not (stringEmpty? wtClean)) (and (not (stringEmpty? wtGrow)) (and (not (stringEmpty? wtHold)) (not (stringEmpty? wtStub))))))) "fixture: source repo, dev clone and four unit branches are up")
         (assert (and (= rGrow.ok 0) (= rGrow.verdict "block") (stringStartsWith? rGrow.sig "mergeCheck:") (stringContains? rGrow.sig "ledgerGrew")) (str "a branch that grows knownRed.asn is blocked with the ledger in the signature: " rGrow.verdict " " rGrow.sig))
         (assert (and (= headGrow head0) (stringEmpty? argsGrow)) (str "a blocked check leaves dev where it was and never starts the train: " argsGrow))

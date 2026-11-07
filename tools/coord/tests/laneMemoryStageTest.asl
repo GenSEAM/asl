@@ -75,8 +75,10 @@ fn ! runTests -> Bool
         (nC (calls root))
         (_ (pf/stopHub! hub))
         (_ (pf/cleanup root))
-        (_ (fr/stubRemove!))]
-    (do (assert (and (not (stringEmpty? repo)) (and prep (and (> hub 0) rcpts))) "fixture: repo, store, status hub up, three reviewing units")
+        (stubGone (fr/stubRemove!))
+        (stubLeft (fr/stubDirsOwnedBy (procSelf)))]
+    (do (assert (and stubGone (listEmpty? stubLeft)) (str "the stand-in host dir of this run is removed before any assert, so a red run leaves none: " (stringJoin stubLeft " ")))
+        (assert (and (not (stringEmpty? repo)) (and prep (and (> hub 0) rcpts))) "fixture: repo, store, status hub up, three reviewing units")
         (assert (and (= dA.exit 0) (> nA 1)) (str "review A: the stage child exits 0 and reaches the hub: " (stringFromInt64 dA.exit) " calls " (stringFromInt64 nA) " " dA.out))
         (assert (and (> (countOf deadA "(:laneDead ") 0) (stringContains? deadA ":cause credits") (not (stringContains? deadA ":cause permanent"))) (str "review A stores the dead lanes with cause credits, the JSON why kept whole: " deadA))
         (assert (stringContains? leadA "lane") (str "review A raised a lane warn in the lead stream: " leadA))
