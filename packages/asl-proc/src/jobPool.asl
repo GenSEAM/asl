@@ -1,5 +1,5 @@
 (module asl-proc/jobPool
-  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix secretName? executedOf errorLinesOf quoteArgv]
+  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix gitGuarded secretName? executedOf errorLinesOf quoteArgv]
   :i [])
 
 ; (:m :ref HL-FIXWAVE-M4 :do "the bounded-job, process-tree-killing engine asl/tools/fleet/run.asl carries (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL) moved here verbatim so the published asl/ subtree (asl-cli/nativeBuild.asl, asl-cli/native.asl) can build and run its own native CLI without importing tools/, which lives outside asl/ and is absent from a standalone checkout; asl/tools/fleet/run.asl keeps its own copy for its many existing callers (fleetRunTest.asl and the fleetCompareTest/fleetGuardTest/fleetWatchTest/fleetReceiptTest/fleetRedBeforeTest families, none of them under asl/), since re-exporting a schema type under a second module name is not available here")
@@ -103,14 +103,29 @@ fn inheritedOk? name: String -> Bool
   (or (not (stringStartsWith? name "GIT_"))
       (listContains? (list "GIT_AUTHOR_NAME" "GIT_AUTHOR_EMAIL" "GIT_AUTHOR_DATE" "GIT_COMMITTER_NAME" "GIT_COMMITTER_EMAIL" "GIT_COMMITTER_DATE" "GIT_SSH" "GIT_SSH_COMMAND" "GIT_ASKPASS" "GIT_TERMINAL_PROMPT" "GIT_EDITOR" "GIT_PAGER") name))
 
-; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "processSpawn hands the child this process's whole environment, so shellOut opens the command with an unset of every inherited name inheritedOk? drops (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* ...): a hook's or a fixture's repository variables never reach it; only plain shell names are listed, any other name is left for the child's shell to ignore")
+; (:m :ref GITCONFIG-GUARD-SHELLOUT :do "processSpawn hands the child this process's whole environment, so shellOut opens the command with an unset of every inherited name inheritedOk? drops (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_* ...): a hook's or a fixture's repository variables never reach it; a name the shell cannot unset (a - or . in it, NONPLAIN-GIT-NAME) is removed by env -u around the command instead; names with any other shell-special character stay unlisted for the child's shell to ignore")
+fn gitBadChars -> (List String)
+  (list " " ";" "&" "|" "$" "`" "'" "\"" "(" ")" "<" ">" "\\" "*" "?" "\n" "\t")
+
+fn gitNames -> (List String)
+  (filter (fn [(n String)] -> Bool (and (not (stringEmpty? n)) (not (inheritedOk? n)) (not (listAny? (fn [(c String)] -> Bool (stringContains? n c)) (gitBadChars)))))
+          (map (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)) (envList)))
+
+fn nonPlainName? n: String -> Bool
+  (or (stringContains? n "-") (stringContains? n "."))
+
 fn ! gitUnsetPrefix -> String
-  (let [(plain? (fn [(n String)] -> Bool (and (not (stringEmpty? n)) (not (listAny? (fn [(c String)] -> Bool (stringContains? n c)) (list " " ";" "&" "|" "$" "`" "'" "\"" "(" ")" "<" ">" "\\" "*" "?" "\n" "\t" "-" "."))))))
-        (names (filter (fn [(n String)] -> Bool (and (not (inheritedOk? n)) (plain? n))) (map (fn [(row String)] -> String (optionOr (listHead (stringSplit row "=")) row)) (envList))))]
+  (let [(names (filter (fn [(n String)] -> Bool (not (nonPlainName? n))) (gitNames)))]
     (if (listEmpty? names) "" (str "unset " (stringJoin names " ") "; ")))
 
+fn ! gitGuarded cmd: String -> String
+  (let [(odd (filter nonPlainName? (gitNames)))
+        (inner (str (gitUnsetPrefix) cmd))]
+    (if (listEmpty? odd) inner
+      (str "env " (stringJoin (map (fn [(n String)] -> String (str "-u '" n "'")) odd) " ") " /bin/sh -c '" (stringReplace inner "'" "'\\''") "'")))
+
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (match (processSpawn (str (gitUnsetPrefix) cmd))
+  (match (processSpawn (gitGuarded cmd))
     ((err e) (err (str "spawn failed: " e)))
     ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))

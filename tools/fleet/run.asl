@@ -187,7 +187,7 @@ fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (match (processSpawn (str (jp/gitUnsetPrefix) cmd))
+  (match (processSpawn (jp/gitGuarded cmd))
     ((err e) (err (str "spawn failed: " e)))
     ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))
