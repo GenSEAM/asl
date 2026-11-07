@@ -1,8 +1,12 @@
 (module asl-target-llvm/tests/nativeTestReportTest
   :x [runTests]
-  :i [(asl-tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): compareSuite used to run each sample suite on a live asl-host and parse its own 'N assertion(s) executed[, M refutation(s) executed]' verdict line (hostCounts) as the expected count. Every sample path is a fixed, already-committed suite whose own assertion/refutation count only changes if its source changes (the same assumption any golden-value test makes), so the live host run is replaced by a recordedCounts table captured once from the leftover asl-host binary before HL-DELETE removed it. The fourth sample, tests/conformance/loader/workspaceNameImportTest.asl, is dropped: it is not owned by this unit and its OWN test body shells out to the now-deleted 'asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl build/check ...' as part of what it tests, so it fails under both host and native compilation regardless of this file's own port (an asl1.asl-build pattern matching the one this unit already replaced elsewhere via asl-cli/asl1Cache nativeAsl1!, but out of :owns here); swapped for asl-target-llvm/tests/nativeRtGapsTest.asl, this unit's own already-ported, now fully host-free suite, confirmed to report the same (12, 0) count whether loaded by the leftover host or compiled natively")
+
+; (:m :ref NOSELFHOST-WRAPPED-BINASL :do "every start of a built probe binary or ./bin/asl in this test runs through fr/runGuarded (own process group, 900 s timeout, 64 descendants, tree kill) instead of the unbounded nativeTest runProc; the stdout/stderr/exitCode fields the asserts read are the same")
+fn ! runB! argv: (List String) envOpt: (Option (List String)) -> fr/ProcOut
+  (fr/runGuarded argv "." (optionOr envOpt (fr/childEnv (list))) (fr/limits 900 64))
 
 fn recordedCounts path: String -> (Option (Pair Int64 Int64))
   (cond
@@ -23,7 +27,7 @@ fn ! compareSuite cacheDir: String path: String -> Bool
       ((none) (do (assert (stringEmpty? built.reason) (str path " native build reason: " built.reason)) false))
       ((some bin)
        (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
-             (native (nt/runProc (list bin) (some env)))
+             (native (runB! (list bin) (some env)))
              (nativeCounts (nt/reportCounts native.stderr))
              (expected (recordedCounts path))]
          (do (assert (= native.exitCode 0) (str path " native exit is " native.exitCode))
@@ -47,10 +51,10 @@ fn ! testZeroSuite cacheDir: String -> Bool
           ((none) (do (assert (stringEmpty? built.reason) (str "the zero-assertion suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
-                 (native (nt/runProc (list bin) (some env)))
+                 (native (runB! (list bin) (some env)))
                  (counts (nt/reportCounts native.stderr))
                  (verdict (nt/verdictOf path native.exitCode native.stderr))
-                 (cli (nt/runProc (list "./bin/asl" "test" "--native" path) (none)))]
+                 (cli (runB! (list "./bin/asl" "test" "--native" path) (none)))]
              (do (assert (= verdict.exit 1) (str "the test path rejects zero assertions without runtime opt-in: " verdict.line))
                  (assert (= counts (some (pair 0 0))) (str "the zero-assertion native binary reports zero counts: " native.stderr))
                  (assert (= cli.exitCode 1) (str "asl test --native rejects the zero-assertion fixture: " cli.stdout " " cli.stderr))
@@ -71,7 +75,7 @@ fn ! testReportOrder cacheDir: String -> Bool
           ((none) (do (assert (stringEmpty? built.reason) (str "the report-order suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_ASSERT_FAIL_EMPTY=1" "ASL_PRELUDE=asl/host/out/prelude.asl")))
-                 (native (nt/runProc (list "/bin/sh" "-c" (str bin " 2>&1")) (some env)))
+                 (native (runB! (list "/bin/sh" "-c" (str bin " 2>&1")) (some env)))
                  (output native.stdout)
                  (marker (stringIndexOf output "stdout-marker"))
                  (report (stringIndexOf output " assertion(s) executed") )]
@@ -96,7 +100,7 @@ fn ! testMissingReport cacheDir: String -> Bool
           ((none) (do (assert (stringEmpty? built.reason) (str "the no-report suite builds natively: " built.reason)) false))
           ((some bin)
            (let [(env (nt/withEnvOverrides! (list "ASL_PRELUDE=asl/host/out/prelude.asl")))
-                 (native (nt/runProc (list bin) (some env)))
+                 (native (runB! (list bin) (some env)))
                  (counts (nt/reportCounts native.stderr))
                  (verdict (nt/verdictOf path native.exitCode native.stderr))]
              (do (assert (= native.exitCode 0) (str "the no-report native fixture itself runs: " native.stderr))
