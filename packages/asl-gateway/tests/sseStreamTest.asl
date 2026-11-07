@@ -19,9 +19,9 @@
 fn configText dir: String base: String -> String
   (str "(:gateway :v 2 :ledgerPath \"" dir "/calls.asn\" :sharedUsagePath \"" dir "/shared.asn\""
        " :providers ((:provider :id syn :kind openai :base \"" base "\" :keyEnv \"SYN_TEST_KEY\"))"
-       " :models ((:model :id s1 :provider syn :name \"syn-1017\" :stream true :timeoutSec 30) (:model :id p1 :provider syn :name \"plain-1\"))"
-       " :intents ((:intent :id solo) (:intent :id plain))"
-       " :profiles ((:profile :id default :routes ((:intent solo :chain (s1)) (:intent plain :chain (p1)))))"
+       " :models ((:model :id s1 :provider syn :name \"syn-1017\" :stream true :timeoutSec 30) (:model :id p1 :provider syn :name \"plain-1\") (:model :id e1 :provider syn :name \"syn-err\" :stream true))"
+       " :intents ((:intent :id solo) (:intent :id plain) (:intent :id errc))"
+       " :profiles ((:profile :id default :routes ((:intent solo :chain (s1)) (:intent plain :chain (p1)) (:intent errc :chain (e1 p1)))))"
        " :uses ((:use :for default :profile default)))")
 
 fn testEnv -> (Map String String)
@@ -35,6 +35,10 @@ fn sseText -> String
        "data: {\"id\":\"s1\",\"model\":\"syn-1017\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok)\"},\"finish_reason\":\"stop\"}]}\n\n"
        "data: {\"id\":\"s1\",\"model\":\"syn-1017\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}\n\n"
        "data: [DONE]\n\n")
+
+fn midStreamError -> String
+  (str "data: {\"id\":\"e\",\"model\":\"syn-err\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":null}]}\n\n"
+       "event: error\ndata: {\"error\":{\"message\":\"upstream overloaded\"}}\n\n")
 
 fn plainReply -> String
   "{\"id\":\"p\",\"object\":\"chat.completion\",\"model\":\"plain-1\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"(:step plain)\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}"
@@ -53,23 +57,26 @@ fn ! drive! srv: srv/GatewayLoop step: ch/ChatStep datas: (List String) fuel: In
       ((ch/stepEffect eff k)
        (match eff
          ((ch/effHttp _ model _ _ req _ _ _)
-          (let [(body (if (= model "syn-1017") (sseText) (plainReply)))
-                (reply (ch/httpOk 200 (list (pair "Content-Type" (if (= model "syn-1017") "text/event-stream" "application/json"))) body))]
+          (let [(body (cond ((= model "syn-1017") (sseText)) ((= model "syn-err") (midStreamError)) (else (plainReply))))
+                (reply (ch/httpOk 200 (list (pair "Content-Type" (if (stringStartsWith? model "syn-") "text/event-stream" "application/json"))) body))]
             (drive! srv (k (ch/outHttp reply)) (listAppend datas (list req.data)) (- fuel 1))))
          (_ (let [(r (srv/runEffect! srv eff))] (drive! (pairFirst r) (k (pairSecond r)) datas (- fuel 1))))))
       ((ch/stepDone resp) (Run :datas datas :status (statusOf resp.head) :body resp.body :end "done"))
       ((ch/stepRaised kind msg) (Run :datas datas :status 0 :body "" :end (str "raised " kind ": " msg)))))
 
+fn ! scratchBase -> String
+  (let [(t (optionOr (envGet "TMPDIR") "/tmp"))] (if (stringEndsWith? t "/") (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) t))
+
 fn ! home! tag: String base: String -> String
-  (let [(dir (str "/tmp/gwSseStream-" tag "-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+  (let [(dir (str (scratchBase) "/gwSseStream-" tag "-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (_ (dirCreate dir))
         (_2 (dirCreate (str dir "/.asl")))
         (_3 (fileWrite (str dir "/.asl/gateway.asn") (str (configText dir base) "\n")))]
     dir)
 
 fn ! drop! dir: String -> Bool
-  (if (stringStartsWith? dir "/tmp/gwSseStream-")
-    (= (processRun (str "/bin/rm -rf '" dir "'")).exitCode 0)
+  (if (stringStartsWith? dir (str (scratchBase) "/gwSseStream-"))
+    (removeTree! dir)
     false)
 
 fn ! once! tag: String intent: String -> Run
@@ -112,6 +119,7 @@ fn intAt body: String keys: (List String) -> Int64
 fn ! testCascade -> Bool
   (let [(s (once! "solo" "solo"))
         (p (once! "plain" "plain"))
+        (e (once! "errc" "errc"))
         (sData (compact (optionOr (listHead s.datas) "")))
         (pData (compact (optionOr (listHead p.datas) "")))]
     (do (assert (and (= s.end "done") (= s.status 200)) (str "the stream row answers 200 through the cascade: " s.end " " (stringFromInt64 s.status)))
@@ -122,6 +130,7 @@ fn ! testCascade -> Bool
         (assert (and (= (intAt s.body (list "usage" "completion_tokens")) 3) (= (intAt s.body (list "usage" "prompt_tokens")) 7)) (str "usage comes from the final chunk: " s.body))
         (assert (= (textAt s.body (list "choices" "0" "finish_reason")) "stop") (str "the last finish_reason is kept: " s.body))
         (assert (= (textAt p.body (list "choices" "0" "message" "content")) "(:step plain)") (str "a non-stream row still answers as before: " p.body))
+        (assert (and (= e.status 200) (= (textAt e.body (list "choices" "0" "message" "content")) "(:step plain)") (= (listLength e.datas) 2)) (str "a stream that errors mid-way is unreadable, so the cascade moves to the next member: " (stringFromInt64 e.status) " " e.body))
         true))
 
 fn ! testFold -> Bool
@@ -130,13 +139,21 @@ fn ! testFold -> Bool
                     "data: [DONE]\n\n"))
         (folded (optionOr (ch/sseToChat calls) ""))
         (broken (ch/sseToChat "data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\ndata: {not json\n\n"))
-        (empty (ch/sseToChat ": only a comment\n\ndata: [DONE]\n\n"))]
+        (empty (ch/sseToChat ": only a comment\n\ndata: [DONE]\n\n"))
+        (eventErr (ch/sseToChat (str "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"stop\"}]}\n\n" "event: error\ndata: {\"message\":\"overloaded\"}\n\n")))
+        (dataErr (ch/sseToChat (str "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"length\"}]}\n\n" "data: {\"error\":{\"message\":\"overloaded\"}}\n\n")))
+        (errOnly (ch/sseToChat "data: {\"error\":{\"message\":\"overloaded\"}}\n\n"))
+        (truncated (ch/sseToChat "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"half\"},\"finish_reason\":null}]}\n\n"))]
     (do (assert (and (= (textAt folded (list "choices" "0" "message" "tool_calls" "0" "function" "name")) "read")
                      (= (textAt folded (list "choices" "0" "message" "tool_calls" "0" "function" "arguments")) "{\"a\":1}")
                      (= (textAt folded (list "choices" "0" "message" "tool_calls" "0" "id")) "c1"))
                 (str "tool call deltas are joined per index: " folded))
         (assert (none? broken) "a data payload that is not JSON makes the whole stream unreadable, never a partial answer")
         (assert (none? empty) "a stream with no data event is unreadable")
+        (assert (none? eventErr) "partial content then an event: error (data without an error key) is unreadable, never a 200 with finish stop")
+        (assert (none? dataErr) "partial content with a finish_reason then a data object with an error key is unreadable")
+        (assert (none? errOnly) "an error-only stream is unreadable, never an empty completion")
+        (assert (none? truncated) "a stream with no finish_reason, no [DONE] and no usage is truncated: unreadable, finish_reason never defaults to stop")
         true))
 
 fn ! waitFile! p: String tries: Int64 -> String
@@ -174,6 +191,17 @@ fn ! testWire -> Bool
         (assert (= (intAt bodyAt (list "usage" "completion_tokens")) 3) (str "usage from the final chunk reaches the caller: " raw))
         (assert dropped "the scratch home is removed")
         true))
+
+; (:m :do "removes a scratch tree in process (no rm child, so noSelfHost counts no start)")
+fn ! removeTree! p: String -> Bool
+  (match (fileLstat p)
+    ((err _) true)
+    ((ok st)
+      (if (and st.isDir (not st.isSymlink))
+        (let [(kids (match (dirList p) ((ok names) (filter (fn [(n String)] -> Bool (and (!= n ".") (!= n ".."))) names)) ((err _) (list))))
+              (gone (fold (fn [(a Bool) (n String)] -> Bool (and (removeTree! (str p "/" n)) a)) true kids))]
+          (and gone (ok? (pathRemove p))))
+        (ok? (pathRemove p)))))
 
 fn ! runTests -> Bool
   (let [(a (testFold))

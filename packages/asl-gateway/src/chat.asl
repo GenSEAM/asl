@@ -2088,7 +2088,7 @@ fn sseStep acc: SseFold d: String -> SseFold
     (match (pt/jsonLoads d)
       ((err _) (with acc :ok false))
       ((ok chunk)
-       (if (not (isObj? chunk))
+       (if (or (not (isObj? chunk)) (has? chunk "error"))
          (with acc :ok false)
          (let [(choice (match (getOr chunk "choices" (j/jnull)) ((j/jarr xs) (optionOr (listHead xs) (j/jnull))) (_ (j/jnull))))
                (delta (getOr choice "delta" (j/jnull)))
@@ -2106,11 +2106,15 @@ fn sseStep acc: SseFold d: String -> SseFold
              :usage (if (isObj? use) use acc.usage)
              :calls (fold sseCall acc.calls tcs)))))))
 
-; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "folds an OpenAI SSE reply into one chat.completion: content and reasoning deltas concatenated in order, tool call deltas joined per index, the last finish_reason, usage from the chunk that carries it; none when no event parses or any data payload is not a JSON object, so a broken stream is never a partial answer")
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "an SSE reply that carries an event: error line, whatever its data")
+fn sseErrorEvent? body: String -> Bool
+  (some? (listFind (fn [(l String)] -> Bool (= (stringReplace (stringTrim l) " " "") "event:error")) (stringSplit (stringReplace body "\r\n" "\n") "\n")))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "folds an OpenAI SSE reply into one chat.completion: content and reasoning deltas concatenated in order, tool call deltas joined per index, the last finish_reason, usage from the chunk that carries it; none when no event parses, any data payload is not a JSON object or carries an error key, an event: error arrives, or no chunk gave a finish_reason (a truncated stream), so a broken stream is never a partial answer")
 fn sseToChat body: String -> (Option String)
   (let [(ds (sseData body))
         (f (fold sseStep (SseFold :ok true :id "" :model "" :content (list) :reasoning (list) :finish "" :usage (j/jnull) :calls (list)) ds))]
-    (if (or (not f.ok) (listEmpty? ds))
+    (if (or (not f.ok) (or (listEmpty? ds) (or (sseErrorEvent? body) (stringEmpty? f.finish))))
       none
       (let [(reasoning (stringJoin (listReverse f.reasoning) ""))
             (calls (map (fn [(p (Pair Int64 (List String)))] -> j/Json
