@@ -263,6 +263,10 @@ fn ! testMainUnread -> Bool
         (moved (tr/trialMainMoved! s (gitIn (str root "/r") "rev-parse HEAD")))
         (same (tr/trialMainMoved! s (gitIn (str root "/r") "rev-parse main")))
         (unreadBefore (tr/trialMainMoved! s ""))
+        (sha1 (gitIn (str root "/r") "rev-parse main"))
+        (_ (pf/sh (str "git -C " root "/r branch -q -D main")))
+        (unreadAfter (tr/trialMainMoved! s sha1))
+        (gotAfter (= unreadAfter (list (str "mainUnread:" root "/r@main"))))
         (gotUnread (= unreadBoth (list (str "mainUnread:" root "/r@main"))))
         (gotMoved (= moved (list (str "headMoved:" root "/r@main"))))
         (gotSame (listEmpty? same))
@@ -272,6 +276,7 @@ fn ! testMainUnread -> Bool
     (assert gotMoved "a readable moved main stays headMoved")
     (assert gotSame "an unmoved main is clean")
     (assert gotBefore "an unread start sha with a readable main names mainUnread")
+    (assert gotAfter "a readable start sha with main gone after names mainUnread, not headMoved")
     true)
 
 fn ! runTests -> Bool
