@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -209,6 +209,10 @@ fn ! worktreeRemove! repo: String path: String -> Out
   (if (argOk? path)
     (gitRun! repo (list "worktree" "remove" "--force" "--" path) 300)
     (Out :exit 1 :out "path not accepted"))
+
+; (:m :ref VCS-WORKTREE-PRUNE-VERB :do "drop the records of worktrees whose directory is gone; a worktree that still exists keeps its record")
+fn ! worktreePrune! repo: String -> Out
+  (gitRun! repo (list "worktree" "prune") 120)
 
 ; (:m :do "ok true when a is an ancestor of b, ok false when not, err for an unknown commit, a missing repo or any other git failure")
 fn ! isAncestor! repo: String a: String b: String -> (Result Bool String)

@@ -694,7 +694,7 @@ fn ! scratchCopy! root: String scratch: String -> (Result String String)
 
 fn ! scratchDrop! root: String scratch: String kind: String -> Bool
   (let [removed (if (= kind "worktree") (= (vg/worktreeRemove! root scratch).exit 0) true)
-        pruned (if (= kind "worktree") (gitOk! (list "git" "worktree" "prune") root) true)
+        pruned (if (= kind "worktree") (= (vg/worktreePrune! root).exit 0) true)
         _ (pathRemove scratch)
         _ (pathRemove (str scratch ".patch"))]
     true)

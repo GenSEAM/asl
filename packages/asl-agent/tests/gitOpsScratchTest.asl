@@ -33,7 +33,8 @@ fn ! runTests -> Bool
         (dropped (go/scratchDrop! fx sc kind))
         (gone (not (fileExists? sc)))
         (listedAfter (gitIn fx (list "worktree" "list" "--porcelain")))
-        (_ (pathRemove fx))]
+        (_ (pathRemove fx))
+        (_ (pathRemove sc))]
     (do (assert (and (= mk.exit 0) w1 w2) "fixture repo with a tracked edit and an untracked file")
         (assert (= kind "worktree") (str "scratchTree! made a worktree, not a copy: " kind))
         (assert (and (= a1 "2\n") (= u1 "untracked\n")) (str "the scratch carries the uncommitted tracked edit and the untracked file: " a1 u1))
