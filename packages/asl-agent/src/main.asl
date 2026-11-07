@@ -2304,7 +2304,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                 session (pairFirst sp)
                 path (pairSecond sp)
                 model (if (stringEmpty? ra.model) (defaultModel ra.backend) ra.model)
-                tokens (ctx/contextTokensFor (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
+                tokens (ctx/contextTokensFor! (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
                   (listContains? (supportedBackends) ra.backend))
                 prompt (jr/buildSystemPromptDrop repoRoot ra.task rootDir ra.base
                          ra.gates (some tokens) ra.plan (prefixDrop ra.prefix))]
@@ -2351,7 +2351,7 @@ fn ! executeDryRun ra: RunArgs repoRoot: String rootDir: String env: pv/Provider
     ((ok info)
       (let [backend ra.backend
             model (if (stringEmpty? ra.model) (defaultModel backend) ra.model)
-            tokens (ctx/contextTokensFor (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
+            tokens (ctx/contextTokensFor! (some model) (match ra.contextTokens ((some t) (j/jint t)) ((none) (j/jnull)))
                                          (listContains? (supportedBackends) backend))]
         (match (jr/buildSystemPrompt (toolRootOr ra repoRoot) ra.task rootDir ra.base ra.gates (some tokens) ra.plan)
           ((err e) (rejectWith (str ":error ERR_HARNESS :message \"" (c/escapeAsn e) "\"") 1))

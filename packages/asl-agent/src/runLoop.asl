@@ -481,7 +481,7 @@ fn ! setup! env: s/LoopEnv -> LoopSetup
 
 ; (:m :ref LEON-ORPHAN-RESIDUE :do "the calling CLI pid reaches the baseline gates, so a dead parent kills them like the per-turn gates")
 fn ! setupWatched! env: s/LoopEnv parent: (Option Int64) -> LoopSetup
-  (let [state (stateFor env)
+  (let [state (let [s0 (stateFor env)] (if (some? env.contextTokens) s0 (with s0 :contextTokens (some (ctx/contextTokensFor! env.model (j/jnull) false)))))
         sid (optionOr env.sessionId (env.newId))
         rootDir (absoluteRoot! env.rootDir)]
     (match (startHead! rootDir)

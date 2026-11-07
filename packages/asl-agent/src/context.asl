@@ -1,7 +1,7 @@
 (module aslAgent/context
   :x [ContextTooLong contextTooLong contextTooLongCode contextTooLongMessage
       Review reviewError reviewVerdict AdviceForm adviceOf AdvisorResult advisorSkipped advisorError advisorAdvice Cover coverOf
-      vendorBounds fitVendorCall contextTokensFor modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
+      vendorBounds fitVendorCall contextTokensFor contextTokensForIn contextTokensAt! contextTokensFor! gatewayConfigPathFrom aliasRowText modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
       renderTranscriptBounded renderTranscriptKept contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
@@ -439,6 +439,67 @@ fn contextTokensFor model: (Option String) contextTokens: j/Json split: Bool -> 
       (match (listHead (filter (fn [p] (stringContains? mid (pairFirst p))) fams))
         ((some p) (pairSecond p))
         (none (smallContextTokens)))))
+
+fn familyHit model: String split: Bool -> (Option Int64)
+  (let [mid (stringLower model)
+        fams (listAppend (if split (list (pair "gemini" 120000)) (list)) (familyTokens))]
+    (match (listHead (filter (fn [p] (stringContains? mid (pairFirst p))) fams))
+      ((some p) (some (pairSecond p)))
+      (none none)))
+
+; (:m :ref LEON-CTX-ALIAS :do "the (:model :id alias ...) row of a gateway.asn text, up to the next row; the id must end at a space or a closing quote, so an alias that is a prefix of another does not match")
+fn aliasRowText text: String alias: String -> String
+  (if (stringEmpty? alias)
+    ""
+    (let [plain (stringIndexOf text (str "(:model :id " alias " "))
+          quoted (stringIndexOf text (str "(:model :id \"" alias "\""))
+          at (if (some? plain) plain quoted)]
+      (match at
+        (none "")
+        ((some k)
+          (let [rest (sub text (+ k 1) (stringLength text))
+                e (match (stringIndexOf rest "(:model ") ((some j) (+ (+ k 1) j)) (none (stringLength text)))]
+            (sub text k e))))))
+
+fn rowName row: String -> String
+  (match (stringIndexOf row ":name \"")
+    (none "")
+    ((some k)
+      (let [a (+ k (stringLength ":name \""))]
+        (match (stringIndexOf (sub row a (stringLength row)) "\"")
+          ((some q) (sub row a (+ a q)))
+          (none "")))))
+
+fn rowContextTokens row: String -> (Option Int64)
+  (match (stringIndexOf row ":contextTokens ")
+    (none none)
+    ((some k)
+      (let [a (skipWhile row (+ k (stringLength ":contextTokens")) pySpace)
+            e (digitsAt row a)]
+        (if (> e a) (stringToInt64 (sub row a e)) none))))
+
+; (:m :ref LEON-CTX-ALIAS :tags (budget) :do "an explicit contextTokens wins; else the alias row's :contextTokens; else the family words matched against the alias, then against the row's :name (synDs41Flash -> hf:deepseek-ai/DeepSeek-V4.1-Flash-1017 -> deepseek); else smallContextTokens")
+fn contextTokensForIn model: (Option String) contextTokens: j/Json split: Bool gatewayText: String -> Int64
+  (if (pyTruthy contextTokens)
+    (jint contextTokens)
+    (let [alias (optionOr model "")
+          row (aliasRowText gatewayText alias)]
+      (match (rowContextTokens row)
+        ((some n) n)
+        (none (match (familyHit alias split)
+                ((some n) n)
+                (none (optionOr (familyHit (rowName row) split) (smallContextTokens))))))))
+
+fn gatewayConfigPathFrom configured: (Option String) home: (Option String) -> String
+  (let [c (optionOr configured "")]
+    (if (stringEmpty? c) (str (optionOr home "") "/.asl/gateway.asn") c))
+
+fn ! contextTokensAt! model: (Option String) contextTokens: j/Json split: Bool path: String -> Int64
+  (contextTokensForIn model contextTokens split (if (pyTruthy contextTokens) "" (resultOr (fileReadString path) "")))
+
+; (:m :ref LEON-CTX-ALIAS :do "contextTokensFor with the alias resolved through the gateway config the in-process gateway reads (ASL_GATEWAY_CONFIG, else HOME/.asl/gateway.asn, as providers.asl); an unreadable config leaves the family match on the alias alone")
+fn ! contextTokensFor! model: (Option String) contextTokens: j/Json split: Bool -> Int64
+  (contextTokensAt! model contextTokens split (gatewayConfigPathFrom (envGet "ASL_GATEWAY_CONFIG") (envGet "HOME")))
 
 fn vendorPrefixes -> (List String)
   (list "agy" "codex" "claude" "ollama" "groq" "openrouter")
