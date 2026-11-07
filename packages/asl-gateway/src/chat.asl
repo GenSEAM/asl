@@ -1,5 +1,7 @@
 (module aslGateway/chat
   :x [ChatRequest upstreamTools
+      sseToChat
+      streamBody
       gatewayOriginHeader
       ChatWorld
       ChatEffect
@@ -1369,7 +1371,7 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (sent (if truthy (if ollama (some (pairSecond effApplied)) (match (pairSecond effApplied) ((some s) (some (some s))) ((none) none))) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
         (upBody0 (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
-        (upBody (cacheHints respApi prov cx.table out3 upBody0))
+        (upBody (streamBody (rowStream v2) respApi (cacheHints respApi prov cx.table out3 upBody0)))
         (data (if truthy (pt/jsonDumps upBody -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :providerPool providerPool :sentEffort sent
       :poolConfig (match v2 ((some e) e.pool) ((none) none)) :data data :api respApi
@@ -2023,6 +2025,107 @@ fn responsesToChat body: String -> (Option String)
          (some (pt/jsonDumps chat -1)))
        none)))
 
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "true when the attempt's model row carries :stream true; a row without it, or a legacy attempt with no row, is not a stream route")
+fn rowStream v2: (Option c/GatewayEntry) -> Bool
+  (match v2 ((some e) (optionOr e.params.stream false)) ((none) false))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "the chat body a stream row sends: stream true and stream_options include_usage so the final chunk carries usage; other APIs and non-stream rows go unchanged")
+fn streamBody on: Bool api: String body: j/Json -> j/Json
+  (if (and on (and (= api "chat") (isObj? body)))
+    (pt/jset (pt/jset body "stream" (j/jbool true)) "stream_options" (j/jobj (list (pair "include_usage" (j/jbool true)))))
+    body)
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a reply is SSE when its first non-blank line is a data:, event: or : comment line")
+fn sseBody? body: String -> Bool
+  (match (listFind (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit (stringReplace body "\r\n" "\n") "\n"))
+    ((some l) (let [(t (stringTrim l))] (or (stringStartsWith? t "data:") (or (stringStartsWith? t "event:") (stringStartsWith? t ":")))))
+    ((none) false))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "the data payload of each SSE event in order: data: lines of one event joined by newlines, events split on blank lines, the [DONE] sentinel and data-less events dropped")
+fn sseData body: String -> (List String)
+  (let [(events (stringSplit (stringReplace body "\r\n" "\n") "\n\n"))
+        (payload (fn [(ev String)] -> String
+                   (stringJoin (map (fn [(l String)] -> String (stringTrim (optionOr (stringSlice l 5 (stringLength l)) "")))
+                                    (filter (fn [(l String)] -> Bool (stringStartsWith? l "data:")) (stringSplit ev "\n")))
+                               "\n")))]
+    (filter (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (!= d "[DONE]"))) (map payload events)))
+
+(schema SseFold
+  (:f ok Bool)
+  (:f id String)
+  (:f model String)
+  (:f content (List String))
+  (:f reasoning (List String))
+  (:f finish String)
+  (:f usage j/Json)
+  (:f calls (List (Pair Int64 (List String)))))
+
+fn jText v: j/Json -> String
+  (match v ((j/jstr s) s) (_ ""))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a tool call delta at index i: the first delta brings id and function name, later ones append argument text; kept as (i (id name args))")
+fn sseCall calls: (List (Pair Int64 (List String))) tc: j/Json -> (List (Pair Int64 (List String)))
+  (let [(i (match (getOr tc "index" (j/jnull)) ((j/jint n) n) (_ 0)))
+        (fnv (getOr tc "function" (j/jnull)))
+        (id (jText (getOr tc "id" (j/jnull))))
+        (name (jText (getOr fnv "name" (j/jnull))))
+        (args (jText (getOr fnv "arguments" (j/jnull))))]
+    (match (listFind (fn [(p (Pair Int64 (List String)))] -> Bool (= (pairFirst p) i)) calls)
+      ((none) (listAppend calls (list (pair i (list id name args)))))
+      ((some p)
+       (map (fn [(q (Pair Int64 (List String)))] -> (Pair Int64 (List String))
+              (if (= (pairFirst q) i)
+                (let [(cur (pairSecond q))]
+                  (pair i (list (let [(c0 (optionOr (listGet cur 0) ""))] (if (stringEmpty? c0) id c0))
+                                (let [(c1 (optionOr (listGet cur 1) ""))] (if (stringEmpty? c1) name c1))
+                                (str (optionOr (listGet cur 2) "") args))))
+                q))
+            calls))))
+
+fn sseStep acc: SseFold d: String -> SseFold
+  (if (not acc.ok)
+    acc
+    (match (pt/jsonLoads d)
+      ((err _) (with acc :ok false))
+      ((ok chunk)
+       (if (not (isObj? chunk))
+         (with acc :ok false)
+         (let [(choice (match (getOr chunk "choices" (j/jnull)) ((j/jarr xs) (optionOr (listHead xs) (j/jnull))) (_ (j/jnull))))
+               (delta (getOr choice "delta" (j/jnull)))
+               (c (jText (getOr delta "content" (j/jnull))))
+               (r (let [(rc (jText (getOr delta "reasoning_content" (j/jnull))))] (if (stringEmpty? rc) (jText (getOr delta "reasoning" (j/jnull))) rc)))
+               (fin (jText (getOr choice "finish_reason" (j/jnull))))
+               (use (getOr chunk "usage" (j/jnull)))
+               (tcs (match (getOr delta "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
+           (with acc
+             :id (if (stringEmpty? acc.id) (jText (getOr chunk "id" (j/jnull))) acc.id)
+             :model (if (stringEmpty? acc.model) (jText (getOr chunk "model" (j/jnull))) acc.model)
+             :content (if (stringEmpty? c) acc.content (cons c acc.content))
+             :reasoning (if (stringEmpty? r) acc.reasoning (cons r acc.reasoning))
+             :finish (if (stringEmpty? fin) acc.finish fin)
+             :usage (if (isObj? use) use acc.usage)
+             :calls (fold sseCall acc.calls tcs)))))))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "folds an OpenAI SSE reply into one chat.completion: content and reasoning deltas concatenated in order, tool call deltas joined per index, the last finish_reason, usage from the chunk that carries it; none when no event parses or any data payload is not a JSON object, so a broken stream is never a partial answer")
+fn sseToChat body: String -> (Option String)
+  (let [(ds (sseData body))
+        (f (fold sseStep (SseFold :ok true :id "" :model "" :content (list) :reasoning (list) :finish "" :usage (j/jnull) :calls (list)) ds))]
+    (if (or (not f.ok) (listEmpty? ds))
+      none
+      (let [(reasoning (stringJoin (listReverse f.reasoning) ""))
+            (calls (map (fn [(p (Pair Int64 (List String)))] -> j/Json
+                          (let [(v (pairSecond p))]
+                            (j/jobj (list (pair "id" (j/jstr (optionOr (listGet v 0) ""))) (pair "type" (j/jstr "function"))
+                                          (pair "function" (j/jobj (list (pair "name" (j/jstr (optionOr (listGet v 1) ""))) (pair "arguments" (j/jstr (optionOr (listGet v 2) ""))))))))))
+                        f.calls))
+            (msg (j/jobj (listAppend (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr (stringJoin (listReverse f.content) ""))))
+                                     (listAppend (if (stringEmpty? reasoning) (list) (list (pair "reasoning_content" (j/jstr reasoning))))
+                                                 (if (listEmpty? calls) (list) (list (pair "tool_calls" (j/jarr calls))))))))
+            (choice (j/jobj (list (pair "index" (j/jint 0)) (pair "message" msg) (pair "finish_reason" (j/jstr (if (stringEmpty? f.finish) "stop" f.finish))))))
+            (chat (j/jobj (listAppend (list (pair "id" (j/jstr f.id)) (pair "object" (j/jstr "chat.completion")) (pair "model" (j/jstr f.model)) (pair "choices" (j/jarr (list choice))))
+                                      (if (isObj? f.usage) (list (pair "usage" f.usage)) (list)))))]
+        (some (pt/jsonDumps chat -1)))))
+
 (schema AnthropicFold
   (:f texts (List String))
   (:f calls (List j/Json))
@@ -2138,6 +2241,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
         (chatBody (cond ((= a.api "responses") (optionOr (responsesToChat body) body))
                          ((= a.api "anthropic") (optionOr (anthropicToChat body) body))
                          ((= a.api "gemini") (optionOr (geminiToChat body) body))
+                         ((and (rowStream a.v2) (sseBody? body)) (optionOr (sseToChat body) body))
                          (else body)))
         (proj (project chatBody))]
     (match proj

@@ -142,7 +142,9 @@ fn scalarToString sc: AsnScalar -> String
   (:f retry (Option RetryPolicy))
   (:f nativeTools (Option Bool) :default none)
   ; (:m :ref KIMI-TEMP-FIXED :do "a model that accepts one sampling temperature only (Kimi: 1): the gateway sends this value whatever the request or the route says; exclusive with :temperature on the same row")
-  (:f temperatureFixed (Option Float64) :default none))
+  (:f temperatureFixed (Option Float64) :default none)
+  ; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a model row :stream true is a route that answers only with stream true (Synthetic infinite mode): the gateway sends stream and stream_options include_usage and folds the SSE reply into one chat completion")
+  (:f stream (Option Bool) :default none))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -174,7 +176,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :prefill (if (some? override.prefill) override.prefill base.prefill)
     :retry (if (some? override.retry) override.retry base.retry)
     :nativeTools (if (some? override.nativeTools) override.nativeTools base.nativeTools)
-    :temperatureFixed (if (some? override.temperatureFixed) override.temperatureFixed base.temperatureFixed))
+    :temperatureFixed (if (some? override.temperatureFixed) override.temperatureFixed base.temperatureFixed)
+    :stream (if (some? override.stream) override.stream base.stream))
 
 (schema GatewayRoute
   (:f intent String)
@@ -1048,6 +1051,14 @@ fn checkNativeTools props: (Map String rd/SExpr) what: String cur: GatewayParams
         ((scalarBool b) (pair (with cur :nativeTools (some b)) errs))
         (_ (pair cur (cons (str what ": :nativeTools must be true or false") errs))))))
 
+fn checkStream props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "stream")
+    ((none) (pair cur errs))
+    ((some expr)
+      (match (asnFigure expr)
+        ((scalarBool b) (pair (with cur :stream (some b)) errs))
+        (_ (pair cur (cons (str what ": :stream must be true or false") errs))))))
+
 fn checkReasoning props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "reasoning")
     ((none) (pair cur errs))
@@ -1088,8 +1099,9 @@ fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParam
         (s8c (checkPrefill props what (pairFirst s8b) (pairSecond s8b)))
         (s9 (checkRetry props what (pairFirst s8c) (pairSecond s8c)))
         (s9b (checkNativeTools props what (pairFirst s9) (pairSecond s9)))
-        (s9c (checkTemperatureFixed props what (pairFirst s9b) (pairSecond s9b)))]
-    (pair (pairFirst s9c) (listReverse (pairSecond s9c))))
+        (s9c (checkTemperatureFixed props what (pairFirst s9b) (pairSecond s9b)))
+        (s9d (checkStream props what (pairFirst s9c) (pairSecond s9c)))]
+    (pair (pairFirst s9d) (listReverse (pairSecond s9d))))
 
 fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "api")
@@ -1135,6 +1147,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "prefill") (some? params.prefill))
     ((= k "nativeTools") (some? params.nativeTools))
     ((= k "temperatureFixed") (some? params.temperatureFixed))
+    ((= k "stream") (some? params.stream))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -1153,7 +1166,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asnFigure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed"))
+        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
