@@ -231,6 +231,12 @@ fn ! sweepDead! tmp: String -> Int64
                   n)))
             0 names)))
 
+; (:m :ref CGTMP-PREFIX-UNGATED :do "true when no commitGuardTest-PID dir of a dead pid is left in tmp; n is the count the sweep just removed and is only forced here so the sweep runs first")
+fn ! deadBasesLeft! tmp: String n: Int64 -> Bool
+  (match (dirList tmp)
+    ((err _) false)
+    ((ok names) (and (>= n 0) (listAll? (fn [(name String)] -> Bool (let [(pid (pidOfBase name))] (or (<= pid 1) (baseAlive? pid)))) names))))
+
 fn ! sweepWorks? -> Bool
   (let [(tmp (str (scratch) "-sweep"))
         (dead (optionOr (stringToInt64 (stringTrim (sh "." (list "sh" "-c" "echo $$")).out)) -1))
@@ -262,7 +268,7 @@ fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
     (do (assert (sweepWorks?) "the leak sweep removes only a dead numeric commitGuardTest-PID base")
-        (assert (>= (sweepDead! (optionOr (envGet "TMPDIR") "/tmp")) 0) "sweep of the shared TMPDIR ran")
+        (assert (deadBasesLeft! (optionOr (envGet "TMPDIR") "/tmp") (sweepDead! (optionOr (envGet "TMPDIR") "/tmp"))) "after the sweep no commitGuardTest-PID base of a dead pid is left in TMPDIR")
         (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (pureRules) "pure rules")
         (assert (fixtures root base) "fixture repos")
@@ -380,6 +386,7 @@ fn ! fix2 root: String base: String -> Bool
       (assert (stringEmpty? (pairSecond good)) (str "an export of an indexed path succeeds: " (pairSecond good)))
       (assert (listEmpty? (cg/exportHits (pairSecond good))) "with no row")
       (assert (= (sh "." (list "rm" "-rf" (pairFirst ex) (pairFirst good) (str (pairFirst ex) ".lock") (str (pairFirst good) ".lock"))).exit 0) "export dirs and their slot locks removed")
+      (assert (and (not (fileExists? (str (pairFirst ex) ".lock"))) (not (fileExists? (str (pairFirst good) ".lock")))) "the slot locks of both exports are gone")
       (assert (not (listEmpty? (cg/messageHits "Merge x\n\nCo-authored-by: a <a@example.invalid>\n"))) "a Merge first line with a Co-authored-by trailer blocks")
       (assert (not (listEmpty? (cg/messageHits "Revert \"x\"\n\nSigned-off-by: a\n"))) "a Revert first line with a sign-off blocks")
       (assert (listEmpty? (cg/messageHits "Merge x\n\nplain body\n")) "a Merge message with a plain body still passes")
