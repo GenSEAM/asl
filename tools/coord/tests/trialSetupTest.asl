@@ -22,6 +22,26 @@ fn lanesText -> String
 fn seedPatch -> String
   "diff --git a/seed.txt b/seed.txt\nnew file mode 100644\n--- /dev/null\n+++ b/seed.txt\n@@ -0,0 +1 @@\n+seeded\n"
 
+; (:m :ref TRIAL-DOTS-ASSERTS :do "every spec and setup path gets its own .. spelling; each must come back as its own exact quoted dotDot entry, so dropping one path from the check is red even when another entry shares its prefix")
+fn dotPairs root: String here: String -> (List (Pair String String))
+  (list (pair (str ":store \"" root "/store\"") (str ":store \"" root "/home/.asl/run/x/../conductor\""))
+        (pair (str ":toolRoot \"" here "\"") (str ":toolRoot \"" here "/asl/..\""))
+        (pair (str ":repo \"" root "/trialSrc\"") (str ":repo \"" root "/d/../trialSrc\""))
+        (pair (str ":devRepo \"" root "/asexTrial\"") (str ":devRepo \"" root "/d/../asexTrial\""))
+        (pair (str ":worktrees \"" root "/wts\"") (str ":worktrees \"" root "/d/../wts\""))
+        (pair (str ":home \"" root "/home\"") (str ":home \"" root "/d/../home\""))
+        (pair (str ":lanes \"" root "/trialLanes.asn\"") (str ":lanes \"" root "/d/../trialLanes.asn\""))
+        (pair ":base \"main\"" (str ":base \"main\" :keys \"" root "/d/../keys.asn\""))
+        (pair (str ":lanesFrom \"" root "/prodLanes.asn\"") (str ":lanesFrom \"" root "/d/../prodLanes.asn\"")))
+
+fn dotted text: String ps: (List (Pair String String)) -> String
+  (fold (fn [(t String) (p (Pair String String))] -> String (stringReplace t (pairFirst p) (pairSecond p))) text ps)
+
+fn dotWants root: String here: String -> (List String)
+  (map (fn [(p String)] -> String (str "\"dotDot:" p "\""))
+       (list (str root "/home/.asl/run/x/../conductor") (str here "/asl/..") (str root "/d/../trialSrc") (str root "/d/../asexTrial") (str root "/d/../wts")
+             (str root "/d/../home") (str root "/d/../trialLanes.asn") (str root "/d/../keys.asn") (str root "/d/../prodLanes.asn")))
+
 fn specText root: String here: String repo: String writer: String -> String
   (str "(:trialSpec :store \"" root "/store\" :repo \"" repo "\" :toolRoot \"" here "\" :devRepo \"" root "/asexTrial\" :devBase \"trialBase\" :worktrees \"" root "/wts\""
        " :home \"" root "/home\" :lanes \"" root "/trialLanes.asn\" :base \"main\" :minFreeMb 0 :minDiskMb 1)\n"
@@ -83,7 +103,7 @@ fn ! runTests -> Bool
         (w5 (fileWrite pl (stringReplace good (str ":lanes \"" root "/trialLanes.asn\"") (str ":lanes \"" root "/home/.asl/./conductor//lanes.asn\""))))
         (rLanes (trial! here (list "setup" "--spec" pl "--dry-run") 300))
         (pd (str root "/setupDots.asn"))
-        (w7 (fileWrite pd (stringReplace (stringReplace good (str ":store \"" root "/store\"") (str ":store \"" root "/home/.asl/run/x/../conductor\"")) (str ":toolRoot \"" here "\"") (str ":toolRoot \"" here "/asl/..\""))))
+        (w7 (fileWrite pd (dotted good (dotPairs root here))))
         (rDots (trial! here (list "setup" "--spec" pd "--dry-run") 300))
         (po (str root "/setupOverwrite.asn"))
         (w8 (fileWrite po (stringReplace good (str ":lanes \"" root "/trialLanes.asn\"") (str ":lanes \"" root "/./prodLanes.asn\""))))
@@ -129,7 +149,7 @@ fn ! runTests -> Bool
         (assert (and (= refused.exit 1) (and (stringContains? refused.out (str "isProduction:" root "/pm/repo/trialSrc")) (and (stringContains? refused.out "writerNoCredit:ccLing") (not badLeft)))) (str "a setup inside production or with a noCredit writer is refused before any command: " refused.out))
         (assert (and (ok? w4) (and (= rP1.exit 1) (and (stringContains? rP1.out (str "productionStore:" root "/home/.asl/run/conductor")) (and (stringContains? rP1.out "/home/.asl/run/conductor/wts") (and (not (stringContains? rP1.out "(:cmd ")) (not p1Left)))))) (str "a store or worktree dir in the production conductor store is refused before any command: " rP1.out))
         (assert (and (= cP1.exit 1) (stringContains? cP1.out (str "productionStore:" root "/home/.asl/run/conductor"))) (str "check refuses a run spec whose store is the production store: " cP1.out))
-        (assert (and (ok? w7) (and (= rDots.exit 1) (and (stringContains? rDots.out (str "dotDot:" root "/home/.asl/run/x/../conductor")) (and (stringContains? rDots.out (str "dotDot:" here "/asl/..")) (not (stringContains? rDots.out "(:cmd ")))))) (str "a spec path with a .. segment, toolRoot included, is refused: " rDots.out))
+        (assert (and (ok? w7) (and (= rDots.exit 1) (and (listAll? (fn [(w String)] -> Bool (stringContains? rDots.out w)) (dotWants root here)) (not (stringContains? rDots.out "(:cmd "))))) (str "every spec and setup path with a .. segment is refused by its own entry: " (stringJoin (filter (fn [(w String)] -> Bool (not (stringContains? rDots.out w))) (dotWants root here)) " ") " / " rDots.out))
         (assert (and (ok? w8) (and (= rOver.exit 1) (and (stringContains? rOver.out "lanesOverwrite") (not (stringContains? rOver.out "(:cmd "))))) (str "trial lanes that are the :lanesFrom file are refused: " rOver.out))
         (assert (and (ok? w9) (and (not (stringEmpty? realHome)) (and (= rHome.exit 1) (and (stringContains? rHome.out "productionStore:") (not (stringContains? rHome.out "(:cmd ")))))) (str "a store in the conductor default store of this process HOME is refused although :home differs: " rHome.out))
         (assert (and (ok? w5) (and (= rLanes.exit 1) (stringContains? rLanes.out "productionLanes:"))) (str "another spelling of the production lanes.asn is refused: " rLanes.out))
