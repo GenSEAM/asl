@@ -36,6 +36,37 @@ fn ! build! root: String -> Bool
        (put! (str root "/asl/packages/q/src/z.asl") "(module q/z :x [] :i [])\n")
        (put! (str root "/tests/node_modules/x.asl") (ignoredText)))
 
+; (:m :ref COVERAGE-RATCHET-UNNAMED-GROWTH :do "a package that has exports and no baseline row is a violation that names it and its counts, the run prints a delta line for it, a --update adds the row (and does not refuse), and the next run is green")
+fn ! testUnrowed! -> Bool
+  (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/coverageRatchetUnrowed-" (stringFromInt64 (monotonicNs))))
+        (made (build! base))
+        (baselinePath (str base "/baseline.asn"))
+        (first (cr/main (list "--root" base "--baseline" baselinePath "--update" "--date" "2026-11-07")))
+        (rDirs (and (ok? (dirCreate (str base "/asl/packages/r"))) (ok? (dirCreate (str base "/asl/packages/r/src")))
+                    (put! (str base "/asl/packages/r/src/m.asl") "(module r/m :x [rfn] :i [])\nfn rfn x: Int64 -> Int64 x\n")))
+        (current (cr/packageCounts! base))
+        (baseline (cr/parseBaseline (optionOr (match (fileReadString baselinePath) ((ok t) (some t)) ((err _) (none))) "")))
+        (vRed (cr/verdict! base baselinePath))
+        (red (cr/main (list "--root" base "--baseline" baselinePath)))
+        (added (cr/main (list "--root" base "--baseline" baselinePath "--update" "--date" "2026-11-07")))
+        (vGreen (cr/verdict! base baselinePath))
+        (green (cr/main (list "--root" base "--baseline" baselinePath)))
+        (rows (cr/parseBaseline (optionOr (match (fileReadString baselinePath) ((ok t) (some t)) ((err _) (none))) "")))
+        (cleaned (pathRemove base))]
+    (do
+      (assert (and made (= first (ok 0)) rDirs) "a baseline exists for package p, then package r appears without a row")
+      (assert (= (listLength (cr/unrowed baseline current)) 1) "exactly one package has no row")
+      (assert (stringContains? (optionOr (listHead (cr/unrowed baseline current)) "") "r: no baseline row (exports 1 covered 0)") "the violation names the package and its counts")
+      (assert (= (listLength vRed.violations) 1) "the verdict is red for the unrowed package")
+      (assert (= red (ok 1)) "main exits 1 for a package without a row")
+      (assert (= (cr/deltas baseline current) (list "(:delta :pkg r :row :none :exports 1 :covered 0)")) "the delta line names the package that moved the total")
+      (assert (= added (ok 0)) "update adds the missing row and is not refused by it")
+      (assert (= (listLength rows) 2) "the baseline now has both rows")
+      (assert (and (listEmpty? vGreen.violations) (listEmpty? vGreen.deltas)) "with its row the verdict is green and has no delta")
+      (assert (= green (ok 0)) "main exits 0 once the row exists")
+      (assert (ok? cleaned) "the unrowed fixture tree is removed")
+      true))
+
 fn ! runTests -> Bool
   (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/coverageRatchetTest-" (stringFromInt64 (monotonicNs))))
         (made (build! base))
@@ -102,4 +133,4 @@ fn ! runTests -> Bool
       (assert (= (cr/raised high low) high) "raising never lowers a count")
       (assert (= (listLength (cr/raised (list) high)) 1) "a new package gets a row")
       (assert (ok? cleaned) "the fixture tree is removed")
-      true))
+      (testUnrowed!)))

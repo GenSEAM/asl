@@ -1,5 +1,5 @@
 (module asl-tools/coverageRatchet
-  :x [Count commentFree readTokens! Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
+  :x [Count unrowed deltas lowered commentFree readTokens! Verdict verdict! isDelim atomEnd afterLastSeparator tokenSet exportedFns countPackage parseRow parseBaseline renderBaseline violations raised walk! testFiles! packageCounts! main]
   :i [])
 
 (schema Count
@@ -124,11 +124,30 @@ fn violation base: Count current: (List Count) -> (Option String)
                 (some (str base.pkg ": covered " c.covered " of " c.exports " is below the baseline " base.covered))
                 (none))))
 
-fn violations baseline: (List Count) current: (List Count) -> (List String)
+fn lowered baseline: (List Count) current: (List Count) -> (List String)
   (fold (fn [(acc (List String)) (b Count)] -> (List String)
           (match (violation b current) ((none) acc) ((some v) (listAppend acc (list v)))))
         (list)
         baseline)
+
+; (:m :ref COVERAGE-RATCHET-UNNAMED-GROWTH :do "a package with exports and no baseline row was invisible to the ratchet: its growth moved the total with no name attached; it is now a violation naming the package and its counts, cleared by --update, which adds the row")
+fn unrowed baseline: (List Count) current: (List Count) -> (List String)
+  (map (fn [(c Count)] -> String (str (str c.pkg ": no baseline row (exports ") c.exports " covered " c.covered "); add it with --update"))
+       (filter (fn [(c Count)] -> Bool (none? (findRow baseline c.pkg))) current))
+
+fn violations baseline: (List Count) current: (List Count) -> (List String)
+  (listAppend (lowered baseline current) (unrowed baseline current))
+
+; (:m :ref COVERAGE-RATCHET-UNNAMED-GROWTH :do "one (:delta ...) line per package whose counts differ from its baseline row, or that has no row, so a moved total always comes with the packages that moved it")
+fn deltas baseline: (List Count) current: (List Count) -> (List String)
+  (fold (fn [(acc (List String)) (c Count)] -> (List String)
+          (match (findRow baseline c.pkg)
+            ((none) (listAppend acc (list (str "(:delta :pkg " c.pkg " :row :none :exports " c.exports " :covered " c.covered ")"))))
+            ((some b) (if (and (= b.exports c.exports) (= b.covered c.covered))
+                        acc
+                        (listAppend acc (list (str "(:delta :pkg " c.pkg " :exports " b.exports "->" c.exports " :covered " b.covered "->" c.covered ")")))))))
+        (list)
+        current)
 
 fn raisedRow c: Count baseline: (List Count) -> Count
   (match (findRow baseline c.pkg)
@@ -188,6 +207,9 @@ fn argValue args: (List String) flag: String fallback: String -> String
 fn ! show! v: String -> Unit
   (println (str "(:violation " v ")"))
 
+fn ! say! line: String -> Unit
+  (println line)
+
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(root (argValue args "--root" "."))
         (path (argValue args "--baseline" (str root "/tools/coverageBaseline.asn")))
@@ -195,22 +217,25 @@ fn ! main args: (List String) -> (Result Int64 String)
         (exports (fold (fn [(a Int64) (c Count)] -> Int64 (+ a c.exports)) 0 current))
         (covered (fold (fn [(a Int64) (c Count)] -> Int64 (+ a c.covered)) 0 current))
         (baseline (match (fileReadString path) ((err _) (list)) ((ok text) (parseBaseline text))))
-        (bad (violations baseline current))]
+        (bad (violations baseline current))
+        (below (lowered baseline current))]
     (cond
       ((listContains? args "--update")
-        (if (not (listEmpty? bad))
-          (do (map show! bad) (err "baseline not raised: a package is below it"))
+        (if (not (listEmpty? below))
+          (do (map show! below) (err "baseline not raised: a package is below it"))
           (match (fileWrite path (renderBaseline (argValue args "--date" "") (raised baseline current)))
             ((err e) (err e))
             ((ok _) (do (println (str "(:coverageRatchet :updated " (listLength current) " :exports " exports " :covered " covered ")")) (ok 0))))))
       ((listEmpty? baseline) (err (str "no baseline at " path "; run with --update")))
       (else
         (do (map show! bad)
+            (map say! (deltas baseline current))
             (println (str "(:coverageRatchet :packages " (listLength current) " :exports " exports " :covered " covered " :violations " (listLength bad) ")"))
             (ok (if (listEmpty? bad) 0 1))))))
 
 (schema Verdict
   (:f violations (List String))
+  (:f deltas (List String))
   (:f packages Int64)
   (:f covered Int64))
 
@@ -219,5 +244,6 @@ fn ! verdict! root: String path: String -> Verdict
         (covered (fold (fn [(a Int64) (c Count)] -> Int64 (+ a c.covered)) 0 current))
         (baseline (match (fileReadString path) ((err _) (list)) ((ok text) (parseBaseline text))))]
     (Verdict :violations (cond ((listEmpty? current) (list)) ((listEmpty? baseline) (list (str "no baseline at " path))) (else (violations baseline current)))
+             :deltas (deltas baseline current)
              :packages (listLength current)
              :covered covered))
