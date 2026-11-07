@@ -473,6 +473,24 @@ fn checkFreePoolProfilePin root: String -> Bool
               (check "FREEBULK-ROUTED-DEEPSEEK: that resolved profile reaches the gateway as X-ASL-Profile" "true"
                 (if (stringContains? headers "x-asl-profile: freeBulk") "true" "false"))))))))
 
+; (:m :ref DRYRUN-PREVIEW-CODEX-TEST :do "a codex dry run names the codex dir and its modelInstructionsFile and writes only that directory: no instruction file, no last-message file, no agy agents tree; dry_codex pins the printed text, this pins the files")
+fn ! checkDryCodexFiles root: String -> Bool
+  (let [(sub (str root "/dryCodex"))
+        (made (ok? (dirCreate sub)))
+        (env (envFor! sub (str sub "/stub/dry") "stub" "http://127.0.0.1:8765/v1/chat/completions" "" ""))
+        (dir (str sub "/.asl/run/agentLoop/codex"))
+        (r (pv/buildDryRunInfo! "codex" "plan" sub "" 600 1200 env))]
+    (match r
+      ((err e) (checkTrue (str "codex dry run built: " (pv/errorMessage e)) false))
+      ((ok info)
+        (let [(text (pv/pyJsonDumps info))
+              (names (resultOr (dirList dir) (list "dirMissing")))
+              (agents (fileExists? (str sub "/.asl/run/agentLoop/agents")))]
+          (and (checkTrue "dry codex scratch root made" made)
+            (and (checkTrue "dry codex names its dir in modelInstructionsFile" (stringContains? text ".asl/run/agentLoop/codex/plan.md"))
+              (and (check "dry codex creates its dir and nothing in it" "0" (stringFromInt64 (listLength names)))
+                (checkTrue "dry codex creates no agy agents tree" (not agents)))))))))
+
 ; (:m :ref GW-EMPTY-TOOLS-20261019 :do "ifmK2Horizon intermittently 400s on 'tools must not be an empty array'; callProfile!/callAgy! always sent one. toolsField is the one place deciding whether the key appears at all, so this checks both halves of its contract directly rather than only by absence in the fixture-pinned bodies above (providersFixture.asn's 39 gateway cases all had their own pinned 'tools': [] fragment dropped by this same unit, which is thorough regression coverage but does not, on its own, prove a non-empty list still keeps the key)")
 fn checkToolsFieldOmitsWhenEmpty -> Bool
   (let [(empty (pv/toolsField (list)))
@@ -541,9 +559,10 @@ fn ! runTests -> Bool
            (sessionHeaderEmpty (checkSessionHeaderEmpty root))
            (freePoolProfilePin (checkFreePoolProfilePin root))
            (toolsFieldOk (checkToolsFieldOmitsWhenEmpty))
+           (dryCodexFiles (checkDryCodexFiles root))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
            (and (checkTrue "every case passed"
-                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (and toolsFieldOk (listAll? (fn [r] r) results))))))))))
+                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (and toolsFieldOk (and dryCodexFiles (listAll? (fn [r] r) results)))))))))))
              (checkTrue "scratch root removed" removed)))))))
