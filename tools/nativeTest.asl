@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -435,6 +435,15 @@ fn wrapperVersion -> String
 
 fn slotKey path: String suiteDigest: String -> String
   (bytesSha256 (stringToBytes (str (format) "\n" (wrapperVersion) "\n" path "\n" suiteDigest)))
+
+fn suiteSlotKeyIn tree: String mode: String rc: String logicalPath: String digest: String -> String
+  (slotKey (str mode rc ":" (importPathOf logicalPath) "@" tree) digest)
+
+fn ! treeOf root: String -> String
+  (resultOr (realPath root) root)
+
+fn ! suiteSlotKey mode: String logicalPath: String actualPath: String -> String
+  (suiteSlotKeyIn (treeOf (toolRoot)) mode (rcTag (rcModeFor! logicalPath)) logicalPath (fileDigest actualPath))
 
 fn relativeTo root: String path: String -> String
   (if (stringStartsWith? path (str root "/")) (optionOr (stringSlice path (+ (stringLength root) 1) (stringLength path)) path) path)
@@ -1815,7 +1824,7 @@ fn ! compile path: String src: String slot: String key: String fp: String -> Bui
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
   (match (fileReadString path)
     ((err _) (Built :binary (none) :reason (str "cannot read " path) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-    ((ok src) (let [(key (slotKey (str mode (rcTag (rcModeFor! path)) ":" (importPathOf path)) (fileDigest path)))
+    ((ok src) (let [(key (suiteSlotKey mode path path))
                     (slot (str cDir "/" fp "/" key))]
                 (match (lookup slot mode)
                   ((some b) b)
@@ -1828,7 +1837,7 @@ fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
 fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: String mode: String -> Built
   (match (fileReadString actualPath)
     ((err _) (Built :binary (none) :reason (str "cannot read " actualPath) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-    ((ok src) (let [(key (slotKey (str mode (rcTag (rcModeFor! logicalPath)) ":" (importPathOf logicalPath)) (fileDigest actualPath)))
+    ((ok src) (let [(key (suiteSlotKey mode logicalPath actualPath))
                     (slot (str cDir "/" fp "/" key))]
                 (match (lookup slot mode)
                   ((some b) b)
@@ -2045,7 +2054,7 @@ fn ! keptRun root: String rel: String fp: String -> (Option String)
     (none)
     (match (fileReadString (str root "/" rel))
       ((err _) (none))
-      ((ok _) (let [(key (slotKey (str "run" (rcTag (rcModeFor! rel)) ":" (importPathOf rel)) (fileDigest (str root "/" rel))))]
+      ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
                 (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
                   ((some b) b.binary)
                   ((none) (none)))))))
