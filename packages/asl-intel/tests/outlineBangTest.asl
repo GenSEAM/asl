@@ -39,7 +39,7 @@ fn testOutlineOfRunAsl! -> Bool
         (assert (not (stringContains? o.out ":name \"! ")) "outline of run.asl has no marker-prefixed names")
         true))
 
-; (:m :ref INTEL-GLUED-BANG-NAME :do "one fixture with fn !report (glued: the symbol is named !report) and fn ! spaced (lone marker token: the symbol is named spaced): outline, query, stubs, graph and vacuity report the same names, !report and spaced, never report or ! spaced")
+; (:m :ref INTEL-GLUED-BANG-NAME :do "one fixture with fn !report (glued: the symbol is named !report) and fn ! spaced (lone marker token: the symbol is named spaced): outline, query, stubs, graph, trace and vacuity report the same names, !report and spaced, never report or ! spaced")
 fn fixtureText -> String
   "(module fx/bang :x [report spaced runTests])\n\nfn !report x: Int64 -> Int64\n  0\n\nfn ! sepOne a: Int64 -> Int64\n  (+ a 1)\n\nfn ! spaced y: Int64 -> Int64\n  0\n\nfn ! sepTwo a: Int64 -> Int64\n  (+ a 1)\n\nfn ! runTests -> Bool\n  true\n"
 
@@ -62,6 +62,7 @@ fn ! testOpsAgree -> Bool
         (queryB (agreeOn! "query" (list "spaced")))
         (stubs (agreeOn! "stubs" (list "--asn")))
         (graph (agreeOn! "graph" (list "--json")))
+        (trace (agreeOn! "trace" (list "--target" "asl/packages/fx")))
         (vac (agreeOn! "vacuity" (list "--asn")))]
     (do (assert (stringContains? outline ":name \"!report\"") (str "outline: !report: " outline))
         (assert (stringContains? outline ":name \"spaced\"") (str "outline: spaced: " outline))
@@ -73,6 +74,11 @@ fn ! testOpsAgree -> Bool
         (assert (not (stringContains? stubs "! spaced")) "stubs: no spaced marker in the name")
         (assert (stringContains? graph "\"symbol\": \"!report\"") (str "graph: !report: " graph))
         (assert (stringContains? graph "\"symbol\": \"spaced\"") (str "graph: spaced: " graph))
+        (assert (stringContains? graph "\"symbol\": \"!report\",\n      \"kind\": \"fn\",\n      \"isPure\": true") "graph: a glued !report is a pure fn named !report")
+        (assert (stringContains? graph "\"symbol\": \"spaced\",\n      \"kind\": \"fn\",\n      \"isPure\": false") "graph: the lone marker of fn ! spaced makes it impure")
+        (assert (stringContains? trace "fx/bang:!report [") (str "trace: !report: " trace))
+        (assert (stringContains? trace "fx/bang:spaced [") (str "trace: spaced: " trace))
+        (assert (not (stringContains? trace "fx/bang:! spaced")) "trace: no spaced marker in the name")
         (assert (stringContains? vac "runTests") (str "vacuity: runTests: " vac))
         (assert (not (stringContains? vac "! runTests")) "vacuity: no marker in the name")
         true))
