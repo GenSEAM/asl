@@ -39,13 +39,19 @@ fn ! walk! dir: String -> (List String)
                                ((err _) (list))))))
     (resultOr (dirList dir) (list)))
 
-; (:m :ref TOOLROOT-59-FLAKE :do "the checkout .asl is listed whole except the dirs and files other runs write while this test runs (cache holds the native CLI builds and test caches, ratchet.lock the gate lock), so a suite running beside this one cannot turn the listing red; a dry run that wrote anywhere else under .asl still does")
+; (:m :ref TOOLROOT-59-FLAKE :do "the checkout .asl is listed afresh before and after (so a top-level entry the dry run creates is seen) except the dirs and files other runs write while this test runs (cache holds the native CLI builds and test caches, ratchet.lock the gate lock), so a suite running beside this one cannot turn the listing red; a dry run that wrote anywhere else under .asl still does")
 fn sharedAsl -> (List String)
   (list "cache" "ratchet.lock")
 
-fn ! aslWatch! repo: String -> (List String)
-  (map (fn [n] (str repo "/.asl/" n))
+fn ! aslListing! repo: String -> (List String)
+  (listFlatMap (fn [n] (let [p (str repo "/.asl/" n)]
+                         (cons p (match (fileLstat p)
+                                   ((ok x) (if (and x.isDir (not x.isSymlink)) (walk! p) (list)))
+                                   ((err _) (list))))))
     (filter (fn [n] (not (listContains? (sharedAsl) n))) (resultOr (dirList (str repo "/.asl")) (list))))
+
+fn ! listings! repo: String dirs: (List String) -> (List String)
+  (listAppend (aslListing! repo) (listFlatMap walk! dirs))
 
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
@@ -92,11 +98,10 @@ fn ! runTests -> Bool
         dryRoot (rk/freshRecorderRoot! "dry")
         dryGit (gk/initGitRepo! dryRoot "dryRun" "dry-run@example.invalid")
         dryForm (fn [extra] (str "(:agent :task \"x\" :dryRun true :root \"" (c/escapeAsn dryRoot) "\"" extra ")"))
-        watched (listAppend (aslWatch! repo) (list dryTree dryRoot))
-        runsBefore (listFlatMap walk! watched)
+        runsBefore (listings! repo (list dryTree dryRoot))
         dryWith (m/mainWithRoots (list (dryForm (str " :toolRoot \"" (c/escapeAsn dryTree) "\""))) repo dryRoot)
         dryWithout (m/mainWithRoots (list (dryForm "")) repo dryRoot)
-        runsAfter (listFlatMap walk! watched)
+        runsAfter (listings! repo (list dryTree dryRoot))
         cleaned (and (ok? (pathRemove base)) (and (ok? (pathRemove runRoot)) (and (ok? (pathRemove withoutRoot)) (ok? (pathRemove dryRoot)))))]
     (do
       (assert (and a b) "the two tree clones were built")
