@@ -1,4 +1,4 @@
-(module asl-forms/delegate :x [DelegateCtx Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
+(module asl-forms/delegate :x [withSearchKeys! DelegateCtx Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
 
 
 (schema DelegateCtx (:f rootDir String) (:f binDir String) (:f wsDir String))
@@ -231,6 +231,20 @@ fn envMapFromList! -> (Map String String)
             ((none) (mapSet m row ""))))
         (mapEmpty) (envList))
 
+; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see TAVILY/BRAVE/SERPER without exporting them")
+fn searchKeyNames -> (List String)
+  (list "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
+
+fn ! withSearchKeys! env: (Map String String) paths: (List String) -> (Map String String)
+  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
+          (if (stringEmpty? (optionOr (mapGet m k) ""))
+            (match (cfg/keyFileLookup! paths k) ((some v) (mapSet m k v)) ((none) m))
+            m))
+        env (searchKeyNames))
+
+fn ! searchEnv! -> (Map String String)
+  (withSearchKeys! (envMapFromList!) (list "~/.asl/keys.env"))
+
 fn listOf v: j/Json -> (List j/Json)
   (match v ((j/jarr xs) xs) (_ (list)))
 
@@ -259,7 +273,7 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
         (eng (k/kwOr kw "engine" "auto"))]
     (if (stringEmpty? q)
       (rejectedLine id "search" "ERR_MISSING_ARG" (msgTail "Missing query argument"))
-      (let [(env (envMapFromList!))
+      (let [(env (searchEnv!))
             (now (monotonicNs))
             (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
             (step (srch/executeSearchHub! st q eng lim))]
@@ -463,7 +477,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
         (match (researchGatewayEntry! model ctx.rootDir)
           ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
           ((ok routes)
-            (let [(env (envMapFromList!))
+            (let [(env (searchEnv!))
                   (now (monotonicNs))
                   (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
                   (entries (pairFirst (pairSecond routes)))
