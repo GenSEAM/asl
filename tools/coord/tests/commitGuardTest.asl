@@ -190,6 +190,27 @@ fn ! commitGates root: String base: String -> Bool
       (assert (stringContains? log4 ":rule :balance") (str "the rows are recorded in .asl/log/commitGuard.asn: " log4))
       true))
 
+; (:m :ref COMMITGUARD-FLAKE-UNREPRODUCED :do "deterministic stand-in for load: a stub that answers every file check only after 2 s (the warm probe stays instant), as the instant stub did at load 53-67; under the old 1 s per-file and warm deadline both the check and its one rerun time out and the commit is refused, under roomyCfg (5 s) it commits")
+fn delayedStub -> String
+  "#!/bin/sh\nshift\ncase \"$1\" in *guardWarmProbe*) echo \"ok $1: (:checked 1)\"; exit 0;; esac\nsleep 2\nfor f in \"$@\"; do echo \"ok $f: (:checked 1)\"; done\nexit 0\n"
+
+fn ! delayGates root: String base: String -> Bool
+  (let [(tight (stubRoot! base "delayTightRoot" (delayedStub)))
+        (roomy (stubRoot! base "delayRoomyRoot" (delayedStub)))
+        (_k (put (str roomy "/.asl.config.asn") (roomyCfg)))
+        (c1 (fixture base "pDelayTight" (list)))
+        (_a (put (str c1 "/good.asl") (goodAsl)))
+        (h1 (head c1))
+        (r1 (cg/commit! c1 tight (list "good.asl") (goodMsg) false))
+        (c2 (fixture base "pDelayRoomy" (list)))
+        (_b (put (str c2 "/good.asl") (goodAsl)))
+        (h2 (head c2))
+        (r2 (cg/commit! c2 roomy (list "good.asl") (goodMsg) false))]
+    (do
+      (assert (and (= r1.code 1) (and (stringContains? r1.text ":unchecked (\"good.asl\")") (= (head c1) h1))) (str "a 2 s check under the old 1 s deadline is refused unchecked, the 2/5 flake: " r1.text))
+      (assert (and (= r2.code 0) (!= (head c2) h2)) (str "the same 2 s check under the 5 s deadline commits: " r2.text))
+      true))
+
 fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
@@ -198,6 +219,7 @@ fn ! runTests -> Bool
         (assert (fixtures root base) "fixture repos")
         (assert (commitGates root base) "commit entry")
         (assert (partialGates root base) "partial check blocks the commit")
+        (assert (delayGates root base) "an injected 2 s check delay: 1 s deadline red, 5 s green")
         (assert (fixPure) "fix-round pure gates")
         (assert (fixFixtures root base) "fix-round fixtures")
         (assert (fix2 root base) "fix2")
