@@ -91,7 +91,7 @@ fn patFnHeader! -> r/Rex
 fn patOutlineFn! -> r/Rex
   (r/rexCompileLead!
     (r/rxSeq (list (startNl) (ws0!) (r/rxAlt (list (r/rxSeq (list (lit "(fn") (ws1!))) (r/rxSeq (list (lit "fn") (ws1!)))))
-                   (r/rxOpt (lit "!")) (ws0!)
+                   (r/rxOpt (r/rxSeq (list (lit "!") (ws1!))))
                    (r/rxGroup 1 (idRun! "a-zA-Z0-9_?!-"))
                    (r/rxGroup 2 (r/rxRep (r/clsNot! "\n") 0 false))
                    (r/rxOpt (r/rxSeq (list (lit "->") (ws0!) (r/rxGroup 3 (r/rxRep (r/clsSetSpace! "a-zA-Z0-9_()-") 1 true)))))

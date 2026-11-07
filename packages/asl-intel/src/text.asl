@@ -1,7 +1,7 @@
 (module asl-intel/text
   :x [byteAt spaceLen isSpaceByte utf8Len cpAt cpStartBefore isWordCp wordBefore? wordAt? isWordByteAscii
       cpLength cpPrefix concatAll joinWith padRight padLeft lowerAscii upperAscii
-      pyStrip stripSet lstripSet bareName pySplit splitLinesPy sliceStr charStr
+      pyStrip stripSet lstripSet bareName effectMarked? pySplit splitLinesPy sliceStr charStr
       pyReprStr pyReprList intStr floatStr pyRound fmtFixed pow10
       normPath joinPath baseName dirName relPath splitExtRoot absPath
       bytesIndexOf containsAt? hasSub? countSub takeN dropN foldIndexOf wordHits wordHas? skipSpace trimSpaceBack cpOffset]
@@ -221,9 +221,14 @@ fn lstripSet s: String chars: String -> String
   (let [(b (stringToBytes s)) (n (bytesLength b)) (cs (stringToBytes chars)) (k (bytesLength cs))]
     (sliceStr s (stripFwd b n cs k 0) n))
 
-; (:m :ref INTEL-BANG-NAME-SPLIT :do "the one symbol name every intel op reports: the effect marker of fn ! name or fn !name is not part of the name, whether glued or spaced; callers that need the purity signal keep the raw header text")
+; (:m :ref INTEL-GLUED-BANG-NAME :do "the effect marker is the lone token ! of fn ! name; a glued !name is the symbol's own name (fn !glued defines !glued, (glued 1) is unknown, (!glued 1) runs), so bareName strips only a ! followed by space and every intel op reports that name")
+fn effectMarked? raw: String -> Bool
+  (let [(r (pyStrip raw))]
+    (and (stringStartsWith? r "!") (or (stringStartsWith? r "! ") (stringStartsWith? r "!\t"))))
+
 fn bareName raw: String -> String
-  (pyStrip (lstripSet raw "!"))
+  (let [(r (pyStrip raw))]
+    (if (effectMarked? r) (pyStrip (optionOr (stringSlice r 1 (stringLength r)) "")) r))
 
 fn stripFwd b: Bytes n: Int64 cs: Bytes k: Int64 i: Int64 -> Int64
   (if (and (< i n) (inSet? (bytesGet b i) cs k 0)) (stripFwd b n cs k (+ i 1)) i)
