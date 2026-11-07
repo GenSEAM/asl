@@ -21,15 +21,15 @@ fn greenGate -> String
 fn task id: String owns: (List String) -> st/Task
   (st/Task :id id :owns owns :reads (list) :gate (greenGate) :channel "leon" :model "fake" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
 
-; (:m :do "write of A sleeps 2.5 s (finishes inside the grace), write of C sleeps 30 s (outlives it)")
+; (:m :do "write of A sleeps 2.5 s (finishes inside the grace), write of C sleeps 300 s (outlives the grace and the cold start of the restart CLI, which the test waits for with C already writing, and the conductor stageSec of 900 outlives both)")
 fn sleepFor stage: String id: String -> (List String)
   (cond
     ((and (= stage "write") (= id "A")) (list "--sleep" "2500"))
-    ((and (= stage "write") (= id "C")) (list "--sleep" "30000"))
+    ((and (= stage "write") (= id "C")) (list "--sleep" "300000"))
     (else (list)))
 
 fn ! ctxOf dir: String bin: String -> cd/Ctx
-  (cd/Ctx :dir dir :holder "condRestartTest" :ttlMs 600000 :maxWait 400 :maxSame 3 :stageSec 90 :maxDesc 50
+  (cd/Ctx :dir dir :holder "condRestartTest" :ttlMs 600000 :maxWait 400 :maxSame 3 :stageSec 900 :maxDesc 50
           :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (listAppend (list bin "stage" stage u.id "--store" dir) (sleepFor stage u.id)))
           :pace (cd/fixedPace 4 4))
 
@@ -88,6 +88,8 @@ fn ! testDrain bin: String -> Bool
 fn ! testDeadline bin: String -> Bool
   (let [(dir (scratch "deadline"))
         (_ (cleanup dir))
+        (warm (fr/runOneLimited (fr/job (list (fr/nativeCli!) "run" "asl/tools/coord/conductor.asl" "restart" "--store" (scratch "deadlineWarm") "--grace-sec" "1") "." (fr/childEnv (list))) (fr/limits 600 64)))
+        (_ (cleanup (scratch "deadlineWarm")))
         (putC (st/put! dir (task "C" (list "p/c"))))
         (ctx (ctxOf dir bin))
         (writing (tickUntil! ctx dir "C" "writing" 40))
