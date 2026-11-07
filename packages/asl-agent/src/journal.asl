@@ -3,7 +3,7 @@
       harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields editReceiptsOf
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
-  :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr)])
+  :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr) (asl-tools/vcs/git :a vg)])
 
 (schema Snapshot
   (:f bytes (Option String))
@@ -433,16 +433,14 @@ fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: 
             (match (snapshotAll w (someOf (map patchPath (stringLines text))))
               ((err e) (err e))
               ((ok w2)
-                (match (git! rootDir (list "apply" "--whitespace=nowarn" (pathAbs! patch)))
-                  ((err e) (err e))
-                  ((ok o)
-                    (if (not (= o.exitCode 0))
-                      (let [msg (cut300 (pyStrip (if (stringEmpty? o.stderr) o.stdout o.stderr)))]
-                        (ok (pair w2 (pair none (some (str "git apply " (pathBasename patch) ": " msg))))))
-                      (let [applied (pathRel patch rootDir)]
-                        (match (pathRemove patch)
-                          ((ok _) (ok (pair w2 (pair (some applied) none))))
-                          ((err e) (err (osError (errKind e) patch)))))))))))))))
+                (let [o (vg/applyPatch! rootDir (pathAbs! patch) false)]
+                  (if (!= o.exit 0)
+                    (let [msg (cut300 (pyStrip o.out))]
+                      (ok (pair w2 (pair none (some (str "git apply " (pathBasename patch) ": " msg))))))
+                    (let [applied (pathRel patch rootDir)]
+                      (match (pathRemove patch)
+                        ((ok _) (ok (pair w2 (pair (some applied) none))))
+                        ((err e) (err (osError (errKind e) patch))))))))))))))
 
 fn ! currentBytes full: String -> (Option String)
   (if (isFile? full) (resultToOption (fileReadString full)) none)

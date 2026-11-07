@@ -3,7 +3,7 @@
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
       runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr)])
+  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg)])
 
 enum RVal
   (rStr text: String)
@@ -693,7 +693,7 @@ fn ! scratchCopy! root: String scratch: String -> (Result String String)
     ((err e) (err e)))
 
 fn ! scratchDrop! root: String scratch: String kind: String -> Bool
-  (let [removed (if (= kind "worktree") (gitOk! (list "git" "worktree" "remove" "--force" scratch) root) true)
+  (let [removed (if (= kind "worktree") (= (vg/worktreeRemove! root scratch).exit 0) true)
         pruned (if (= kind "worktree") (gitOk! (list "git" "worktree" "prune") root) true)
         _ (pathRemove scratch)
         _ (pathRemove (str scratch ".patch"))]
@@ -702,12 +702,12 @@ fn ! scratchDrop! root: String scratch: String kind: String -> Bool
 fn ! scratchTree! root: String scratch: String -> (Result String String)
   (let [top (gitText! (list "git" "rev-parse" "--show-toplevel") root)
         isTop (match top ((some t) (= (resultOr (realPath (stringTrim t)) (stringTrim t)) (resultOr (realPath root) root))) ((none) false))]
-    (if (and isTop (gitOk! (list "git" "worktree" "add" "--detach" scratch "HEAD") root))
+    (if (and isTop (= (vg/worktreeAdd! root scratch "HEAD").exit 0))
       (let [patch (str scratch ".patch")
             diff (gitText! (list "git" "diff" "--binary" "HEAD") root)
             patched (match diff
                       ((some d) (if (stringEmpty? d) true
-                                  (and (ok? (fileWrite patch d)) (gitOk! (list "git" "apply" "--whitespace=nowarn" patch) scratch))))
+                                  (and (ok? (fileWrite patch d)) (= (vg/applyPatch! scratch patch false).exit 0))))
                       ((none) false))
             untracked (gitText! (list "git" "ls-files" "--others" "--exclude-standard") root)
             copied (match untracked
