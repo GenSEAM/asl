@@ -149,10 +149,11 @@ fn deltas baseline: (List Count) current: (List Count) -> (List String)
         (list)
         current)
 
+; (:m :ref RATCHET-PERMANENT-DELTA :do "a row takes the measured exports and keeps the higher covered count, so --update converges the exports of a package whose covered count did not move (a row kept whole left the delta line printed forever); covered is never lowered")
 fn raisedRow c: Count baseline: (List Count) -> Count
   (match (findRow baseline c.pkg)
     ((none) c)
-    ((some b) (if (> c.covered b.covered) c b)))
+    ((some b) (Count :pkg c.pkg :exports c.exports :covered (max c.covered b.covered))))
 
 fn raised baseline: (List Count) current: (List Count) -> (List Count)
   (map (fn [(c Count)] -> Count (raisedRow c baseline)) current)

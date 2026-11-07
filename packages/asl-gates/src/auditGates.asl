@@ -951,5 +951,5 @@ fn cmdGates! root: String argv: (List String) -> AuditRun
 fn ! coverageCheck! root: String -> Check
   (let [(v (cov/verdict! root (str root "/tools/coverageBaseline.asn")))]
     (if (listEmpty? v.violations)
-      (passCheck "gate9CoverageRatchet" (some v.covered) (none))
-      (failCheck "gate9CoverageRatchet" "ERR_COVERAGE_RATCHET" (stringJoin v.violations "; ") (none) (none))))
+      (Check :id "gate9CoverageRatchet" :status ":passed" :err "" :ev (stringJoin v.deltas " ") :n (some v.covered) :trust (none))
+      (failCheck "gate9CoverageRatchet" "ERR_COVERAGE_RATCHET" (stringJoin (listAppend v.violations v.deltas) "; ") (none) (none))))
