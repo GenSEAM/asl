@@ -514,7 +514,7 @@ fn testRoot! tmp: String -> Bool
       (assert (and (ok? result) (= (resultOr result -1) run.exitCode)) "--root selects the fixture toolchain root")
       (assert (stringContains? run.receipt "ERR_PLACEHOLDER_DIGEST") "fixture root's placeholder is the observed receipt")
       (assert (stringContains? envOutput "ERR_PLACEHOLDER_DIGEST") (str "ROOT_DIR selects fixture root without --root " envOutput))
-      (assert (and (stringContains? cliOutput ":scope :static") (not (stringContains? cliOutput "ERR_USAGE"))) "--root is stripped before gates rejects extra arguments")
+      (assert (and (stringContains? cliOutput ":scope :static") (not (stringContains? cliOutput "ERR_USAGE"))) (str "--root is stripped before gates rejects extra arguments: " cliOutput))
       (assert (ok? cleaned) "root fixture removed")
       true))
 
