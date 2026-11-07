@@ -137,7 +137,9 @@ fn ! runTests -> Bool
         (prodBranch (gitIn (str root "/pm/repo") "branch --show-current"))
         (prodDirty (gitIn (str root "/pm/repo") "status --porcelain"))
         (devSha1 (gitIn (str root "/pm/dev") "rev-parse HEAD"))
-        (_ (pf/cleanup root))]
+        (_ (pf/cleanup root))
+        (stubGone (fr/stubRemove!))
+        (stubLeft (fr/stubDirsOwnedBy (procSelf)))]
     (do (assert (and fx (and (ok? w1) (and (ok? w2) (and (not (stringEmpty? sha)) (not (stringEmpty? devSha)))))) "fixture: production stand-ins, lanes, gateway, seed, specs")
         (assert (and (= dry.exit 0) (and (stringContains? dry.out ":dryRun true") (and (stringContains? dry.out (buildCmd (str root "/trialSrc") (str root "/fakeBuild.sh"))) (stringContains? dry.out (str "\"fetch\" \"-q\" \"--no-tags\" \"" root "/pm/repo\" \"" sha "\""))))) (str "dry run prints the command list with the pinned source sha: " dry.out))
         (assert (and (stringContains? dry.out (str "(:vcs :op switch :repo \"" root "/trialSrc\" :args (\"main\" \"" sha "\"))")) (and (stringContains? dry.out (str "(:vcs :op switch :repo \"" root "/asexTrial\" :args (\"trialBase\" \"FETCH_HEAD\"))")) (stringContains? dry.out (str "(:vcs :op seedCommit :repo \"" root "/trialSrc\"")))) (str "branch switches and the seed commit go through the vcs layer: " dry.out))
@@ -164,4 +166,5 @@ fn ! runTests -> Bool
         (assert (and (= ccCheck.exit 1) (stringContains? ccCheck.out "aliasNoCredit:ccLing")) (str "check refuses a writer pinned on a noCredit lane: " ccCheck.out))
         (assert (and (= again.exit 0) (= srcBase2 sha)) (str "setup runs again on the existing trees: " again.out))
         (assert (and (= sha1 sha) (and (= prodBranch "main") (and (stringEmpty? prodDirty) (= devSha1 devSha)))) (str "production heads, branch and tree unchanged: " prodDirty))
+        (assert (and stubGone (listEmpty? stubLeft)) (str "the stand-in host dir of this run is removed before any assert, so a red run leaves none: " (stringJoin stubLeft " ")))
         true))
