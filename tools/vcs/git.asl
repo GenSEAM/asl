@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -26,12 +26,22 @@ fn capOut s: String -> String
     (str (optionOr (stringSlice s 0 (maxOut)) "") "\n(:truncated :at " (stringFromInt64 (maxOut)) ")")
     s)
 
-fn ! gitRunIn! repo: String idx: String args: (List String) secs: Int64 -> Out
+fn ! gitDoneIn! repo: String idx: String args: (List String) secs: Int64 -> fr/Done
   (let [(argv (listAppend (listAppend (list "env" "-u" "GIT_DIR" "-u" "GIT_WORK_TREE" "-u" "GIT_INDEX_FILE" "-u" "GIT_COMMON_DIR" "-u" "GIT_OBJECT_DIRECTORY" "-u" "GIT_NAMESPACE")
                                       (if (stringEmpty? idx) (list) (list (str "GIT_INDEX_FILE=" idx))))
                           (listAppend (list "git" "--literal-pathspecs" "-C" repo "-c" "core.quotepath=off" "-c" "core.hooksPath=/dev/null" "-c" "core.fsmonitor=") args)))
         (d (fr/runOneLimited (fr/job argv "." (fr/childEnv (list))) (fr/limits secs 16)))]
+    d)
+
+fn ! gitRunIn! repo: String idx: String args: (List String) secs: Int64 -> Out
+  (let [(d (gitDoneIn! repo idx args secs))]
     (Out :exit d.exit :out d.out))
+
+; (:m :ref APPLYPATCH-SOFT-ERR :do "a finished git child as a result: a run git finished has the verdict exit and is ok; one that did not start, timed out, ran away or waited for a token is err with its exit, even a non-zero one")
+fn outcomeOf d: fr/Done -> (Result Out String)
+  (if (= d.verdict "exit")
+    (ok (Out :exit d.exit :out d.out))
+    (err (str "git " d.verdict " exit " (stringFromInt64 d.exit) ": " (capOut d.out))))
 
 fn ! gitRun! repo: String args: (List String) secs: Int64 -> Out
   (gitRunIn! repo "" args secs)
@@ -195,6 +205,12 @@ fn ! applyPatch! repo: String patch: String reverse: Bool -> Out
   (if (argOk? patch)
     (gitRun! repo (listAppend (cons "apply" (if reverse (list "-R") (list))) (list "--" patch)) 120)
     (Out :exit 1 :out "patch not accepted"))
+
+; (:m :ref APPLYPATCH-SOFT-ERR :do "applyPatch! as a result: a patch git refuses is ok with a non-zero exit, a git that did not run to its end is err; quiet passes --whitespace=nowarn")
+fn ! applyPatchChecked! repo: String patch: String reverse: Bool quiet: Bool -> (Result Out String)
+  (if (argOk? patch)
+    (outcomeOf (gitDoneIn! repo "" (listAppend (cons "apply" (listAppend (if reverse (list "-R") (list)) (if quiet (list "--whitespace=nowarn") (list)))) (list "--" patch)) 120))
+    (ok (Out :exit 1 :out "patch not accepted")))
 
 ; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "a detached worktree of a commit at path: the commit is resolved to a sha first and the path must not read as an option")
 fn ! worktreeAdd! repo: String path: String sha: String -> Out

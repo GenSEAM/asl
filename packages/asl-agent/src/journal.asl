@@ -1,7 +1,7 @@
 (module aslAgent/journal
   :x [Snapshot Written AsnNode Layer
       harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
-      applyResumePatch handBack writtenField handBackFields editReceiptsOf
+      applyResumePatch resumeApplied handBack writtenField handBackFields editReceiptsOf
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr) (asl-tools/vcs/git :a vg)])
 
@@ -421,6 +421,19 @@ fn ! journalSaysOk journalPath: String -> Bool
     (match (listLast (someOf (map resultStatus (stringLines (resultOr (fileReadString journalPath) ""))))) ((some m) (= m "ok")) ((none) false))
     false)
 
+; (:m :ref APPLYPATCH-SOFT-ERR :do "the outcome of applying a resume patch: a git that did not run to its end is err, a patch git refuses is ok with the label and git message, an applied patch is removed and named")
+fn ! resumeApplied w2: Written rootDir: String patch: String label: String r: (Result vg/Out String) -> (Result (Pair Written (Pair (Option String) (Option String))) String)
+  (match r
+    ((err e) (err e))
+    ((ok o)
+      (if (!= o.exit 0)
+        (let [msg (cut300 (pyStrip o.out))]
+          (ok (pair w2 (pair none (some (str label ": " msg))))))
+        (let [applied (pathRel patch rootDir)]
+          (match (pathRemove patch)
+            ((ok _) (ok (pair w2 (pair (some applied) none))))
+            ((err e) (err (osError (errKind e) patch))))))))
+
 fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: String -> (Result (Pair Written (Pair (Option String) (Option String))) String)
   (let [patch (str (splitExt journalPath) ".patch")]
     (cond
@@ -433,14 +446,7 @@ fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: 
             (match (snapshotAll w (someOf (map patchPath (stringLines text))))
               ((err e) (err e))
               ((ok w2)
-                (let [o (vg/applyPatch! rootDir (pathAbs! patch) false)]
-                  (if (!= o.exit 0)
-                    (let [msg (cut300 (pyStrip o.out))]
-                      (ok (pair w2 (pair none (some (str "git apply " (pathBasename patch) ": " msg))))))
-                    (let [applied (pathRel patch rootDir)]
-                      (match (pathRemove patch)
-                        ((ok _) (ok (pair w2 (pair (some applied) none))))
-                        ((err e) (err (osError (errKind e) patch))))))))))))))
+                (resumeApplied w2 rootDir patch (str "git apply " (pathBasename patch)) (vg/applyPatchChecked! rootDir (pathAbs! patch) false true)))))))))
 
 fn ! currentBytes full: String -> (Option String)
   (if (isFile? full) (resultToOption (fileReadString full)) none)
