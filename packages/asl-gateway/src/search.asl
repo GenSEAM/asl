@@ -2,7 +2,8 @@
   :x [Bucket HubState newHubState mkHub hubWithNow hubSleep! hubNote hubCliCall hubStderr hubWithBreaker hubWithBuckets
       HttpReq HttpResult httpResp httpFail curlConfig curlChildEnv parseCurlOutput runCurlBatch! runOne! httpError httpOk? validateReq headerNameOk charsetNameOk runTool! iconvDecode! decodeBody! contentCharset urlTypeCheck repl
       jobj3 engineError respJson jreq
-      tavilyReq tavilyParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      engineOrder enginePlan selectEngine tier1Search!
       doTavilySearch! doSerperSearch! doWikiSearch! doSearxngSearch! doDdgSearch! parallelTier1Search! executeSearchHub!
       escapeAsnStr formatSearchAsn]
   :i [(asl-json/json :a j)
@@ -664,16 +665,93 @@ fn mergeLoop items: (List j/Json) seen: (List String) merged: (List j/Json) limi
               (mergeLoop (optionOr (listTail items) (list)) (cons key seen) (listAppend merged (list (pt/jset r "url" u))) limit)
               (mergeLoop (optionOr (listTail items) (list)) seen merged limit)))))))
 
+fn engineOrder -> (List String)
+  (list "tavily" "brave" "wiki" "serper")
+
+fn braveReq query: String limit: Int64 key: String -> HttpReq
+  (HttpReq :url (str "https://api.search.brave.com/res/v1/web/search?q=" (pt/urlQuote query "/") "&count=" (stringFromInt64 limit))
+           :headers (list (pair "Accept" "application/json") (pair "X-Subscription-Token" key) (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 10))
+
+fn braveRows items: (List j/Json) acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
+  (match (listHead items)
+    ((none) (ok (listReverse acc)))
+    ((some it)
+      (match (pt/jgetOr it "title" (j/jstr ""))
+        ((err e) (err e))
+        ((ok title)
+          (braveRows (optionOr (listTail items) (list))
+                     (cons (resultItem title (pt/cleanUrl (optionOr (pt/jget it "url") (j/jstr ""))) (optionOr (pt/jget it "description") (j/jstr "")) "brave" (j/jfloat 0.88)) acc))))))
+
+fn braveParse r: HttpResult -> j/Json
+  (orErr
+    (match (jsonBody r)
+      ((err e) (err e))
+      ((ok data)
+        (match (pt/jgetOr data "web" (j/jobj (list)))
+          ((err e) (err e))
+          ((ok web)
+            (match (pt/jgetOr web "results" (j/jarr (list)))
+              ((err e) (err e))
+              ((ok rs)
+                (match rs
+                  ((j/jarr xs) (match (braveRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
+                  (_ (ok (respJson (j/jstr "") (list))))))))))))
+
+fn engineReq st: HubState name: String query: String limit: Int64 -> (Option HttpReq)
+  (cond
+    ((= name "tavily") (let [(k (envGetNonEmpty st "TAVILY_API_KEY"))] (if (stringEmpty? k) (none) (some (tavilyReq query limit k)))))
+    ((= name "brave") (let [(k (envGetNonEmpty st "BRAVE_API_KEY"))] (if (stringEmpty? k) (none) (some (braveReq query limit k)))))
+    ((= name "wiki") (some (wikiReq query limit)))
+    ((= name "serper") (let [(k (envGetNonEmpty st "SERPER_API_KEY"))] (if (stringEmpty? k) (none) (some (serperReq query limit k)))))
+    (else (none)))
+
+fn enginePlan st: HubState query: String limit: Int64 -> (List (Pair String HttpReq))
+  (fold (fn [(acc (List (Pair String HttpReq))) (name String)] -> (List (Pair String HttpReq))
+          (match (engineReq st name query limit)
+            ((some r) (listAppend acc (list (pair name r))))
+            ((none) acc)))
+        (list) (engineOrder))
+
+fn parseEngine name: String r: HttpResult limit: Int64 -> j/Json
+  (cond ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) (else (j/jnull)))
+
+fn engineGood? d: j/Json -> Bool
+  (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))
+
+fn selectEngine datas: (List (Pair String j/Json)) -> (Pair (Option (Pair String j/Json)) (List j/Json))
+  (let [(errs (fold (fn [(acc (List j/Json)) (p (Pair String j/Json))] -> (List j/Json)
+                      (let [(d (pairSecond p))]
+                        (if (and (pt/pyTruthy d) (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull))))
+                          (listAppend acc (list (engErr (pairFirst p) (optionOr (pt/jget d "error") (j/jnull)))))
+                          acc)))
+                    (list) datas))
+        (chosen (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (engineGood? (pairSecond p))) datas)))]
+    (pair chosen errs))
+
+fn ! tier1Search! st: HubState query: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
+  (let [(plan (enginePlan st query limit))
+        (outs (runCurlBatch! (map (fn [(e (Pair String HttpReq))] -> HttpReq (pairSecond e)) plan) (curlChildEnv st.env)))
+        (datas (map (fn [(p (Pair (Pair String HttpReq) HttpResult))] -> (Pair String j/Json)
+                      (let [(name (pairFirst (pairFirst p))) (r (pairSecond p))]
+                        (pair name (parseEngine name r limit))))
+                    (zip plan outs)))
+        (sel (selectEngine datas))
+        (chosen (pairFirst sel))
+        (errs (pairSecond sel))
+        (answer (match chosen ((some w) (let [(a (optionOr (pt/jget (pairSecond w) "answer") (j/jnull)))] (if (pt/pyTruthy a) a (j/jstr "")))) ((none) (j/jstr ""))))
+        (results (match chosen ((some w) (match (optionOr (pt/jget (pairSecond w) "results") (j/jarr (list))) ((j/jarr xs) xs) (_ (list)))) ((none) (list))))]
+    (match (mergeLoop results (list) (list) limit)
+      ((err e) (pair (err e) st))
+      ((ok m) (pair (ok (j/jobj (list (pair "answer" answer) (pair "results" (j/jarr (pairSecond m))) (pair "errors" (j/jarr errs))))) st))))
+
 fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
-  (let [(tav (envGetNonEmpty st "TAVILY_API_KEY"))
-        (ser (envGetNonEmpty st "SERPER_API_KEY"))
-        (mid (cond ((not (stringEmpty? tav)) (some (pair "tavily" (tavilyReq query limit tav)))) ((not (stringEmpty? ser)) (some (pair "serper" (serperReq query limit ser)))) (else (none))))
-        (st1 (ddgThrottle! st))
-        (engines (listAppend (list (pair "wiki" (wikiReq query limit))) (listAppend (match mid ((some m) (list m)) ((none) (list))) (list (pair "ddg" (ddgReq query))))))
+  (let [(st1 (ddgThrottle! st))
+        (engines (enginePlan st query limit))
         (outs (runCurlBatch! (map (fn [(e (Pair String HttpReq))] -> HttpReq (pairSecond e)) engines) (curlChildEnv st1.env)))
         (datas (map (fn [(p (Pair (Pair String HttpReq) HttpResult))] -> (Pair String j/Json)
                       (let [(name (pairFirst (pairFirst p))) (r (pairSecond p))]
-                        (pair name (cond ((= name "wiki") (wikiParse r)) ((= name "tavily") (tavilyParse r)) ((= name "serper") (serperParse r)) (else (ddgParse r limit))))))
+                        (pair name (parseEngine name r limit))))
                     (zip engines outs)))
         (errors (fold (fn [(acc (List j/Json)) (p (Pair String j/Json))] -> (List j/Json)
                         (let [(d (pairSecond p))]
@@ -688,7 +766,7 @@ fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Resu
         (answer (match (byName "tavily") ((some d) (let [(a (optionOr (pt/jget d "answer") (j/jnull)))] (if (pt/pyTruthy a) a (j/jstr "")))) ((none) (j/jstr ""))))
         (ordered (fold (fn [(acc (List j/Json)) (name String)] -> (List j/Json)
                          (match (byName name) ((some d) (listAppend acc (match (optionOr (pt/jget d "results") (j/jarr (list))) ((j/jarr xs) xs) (_ (list))))) ((none) acc)))
-                       (list) (list "wiki" "tavily" "serper" "ddg")))]
+                       (list) (engineOrder)))]
     (match (mergeLoop ordered (list) (list) limit)
       ((err e) (pair (err e) st1))
       ((ok m) (pair (ok (j/jobj (list (pair "answer" answer) (pair "results" (j/jarr (pairSecond m))) (pair "errors" (j/jarr errors))))) st1))))
@@ -731,17 +809,10 @@ fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 ->
                   (pair (ok res2) st2)))))))))
 
 fn ! autoSearch! st: HubState query: String limit: Int64 -> (Pair (Result (Pair j/Json (List j/Json)) pt/PyErr) HubState)
-  (match (if (stringEmpty? (envGetNonEmpty st "SEARXNG_URL")) (ok (j/jnull)) (doSearxngSearch! st query limit))
-    ((err e) (pair (err e) st))
-    ((ok sx)
-      (let [(sxErr (and (pt/pyTruthy sx) (pt/pyTruthy (optionOr (pt/jget sx "error") (j/jnull)))))
-            (errs (if sxErr (list (engErr "searxng" (optionOr (pt/jget sx "error") (j/jnull)))) (list)))]
-        (if (or (not (pt/pyTruthy sx)) (not (pt/pyTruthy (optionOr (pt/jget sx "results") (j/jnull)))))
-          (let [(t (parallelTier1Search! st query limit))]
-            (match (pairFirst t)
-              ((err e) (pair (err e) (pairSecond t)))
-              ((ok v) (pair (ok (pair v errs)) (pairSecond t)))))
-          (pair (ok (pair sx errs)) st)))))
+  (let [(t (tier1Search! st query limit))]
+    (match (pairFirst t)
+      ((err e) (pair (err e) (pairSecond t)))
+      ((ok v) (pair (ok (pair v (errorsOf v))) (pairSecond t)))))
 
 fn escapeAsnStr v: j/Json -> String
   (match v
