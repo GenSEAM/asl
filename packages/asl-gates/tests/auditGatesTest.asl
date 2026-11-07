@@ -485,6 +485,14 @@ fn testPlaceholderDigest -> Bool
             "zeros followed by another hex digit are not a placeholder")
     true)
 
+; (:m :ref AUDITGATES-ROOTDIR-FLAKE :do "a failed p/exec! names its own error in the assert message, never an empty output")
+fn execErrText e: p/ProcessError -> String
+  (match e
+    ((p/notFound b) (str "notFound " b))
+    ((p/permissionDenied b) (str "permissionDenied " b))
+    ((p/timeout ms) (str "timeout after " (stringFromInt64 ms) " ms"))
+    ((p/executionFailed code msg) (str "executionFailed " (stringFromInt64 code) " " msg)))
+
 fn testRoot! tmp: String -> Bool
   (let [(root (str tmp "/rootOption"))
         (made (dirCreate root))
@@ -497,9 +505,9 @@ fn testRoot! tmp: String -> Bool
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
         (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
-        (envOutput (match envRun ((err e) "") ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
+        (envOutput (match envRun ((err e) (str "execError " (execErrText e))) ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
         (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
-        (cliOutput (match cliRoot ((err _) "") ((ok o) o.stdout)))
+        (cliOutput (match cliRoot ((err e) (str "execError " (execErrText e))) ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
     (do
       (assert (and (ok? made) (and (ok? init) (and (ok? tasks) (and (ok? task) (and (ok? added) (ok? committed)))))) "explicit root is a committed fixture tree")
