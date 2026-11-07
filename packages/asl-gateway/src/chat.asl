@@ -2238,6 +2238,22 @@ fn geminiToChat body: String -> (Option String)
              (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
          (some (pt/jsonDumps chat -1))))))
 
+; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty reply whose finish_reason is length spent its max_tokens before any content (a reasoning model thinking past the cap): it is its own outcome emptyLength with a message naming the cap, never the blind same-model retry an empty reply gets; a cascade moves to the next member, a single member answers 502 ERR_EMPTY_LENGTH")
+fn lengthStopped cx: Ctx l: Loop a: Attempt p: Projection -> ChatStep
+  (let [(chars (stringLength (optionOr (reasoningFallbackText (firstMessage p.resp)) "")))
+        (why (str "ERR_EMPTY_LENGTH: model " a.model " stopped at its max_tokens (finish_reason length) after " (stringFromInt64 chars) " reasoning chars and no content; raise :maxTokens or lower :effort on its row"))]
+    (tell (usageNote a.upstream.provider a.alias "emptyLength")
+      (fn [] -> ChatStep
+        (if (> cx.cascadeLen 1)
+          (tellAll (list (effUsageFallback a.upstream.provider a.alias) (effLog (str "[Gateway Cascade] " why ". Cascading to next...\n")))
+            (fn [] -> ChatStep (loopStep cx (advance l l.body))))
+          (sendError cx l.head 502 why true)))))
+
+; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty chat 200 (choices present) whose usage is absent or zero was cut upstream before any token was counted (Synthetic ends non-stream calls near 220 s this way); its ledger outcome upstreamCut and the row :ms say so, the retry stays")
+fn zeroUsage? resp: j/Json -> Bool
+  (let [(use (getOr resp "usage" (j/jnull)))]
+    (and (has? resp "choices") (and (= (usageInt use "prompt_tokens") 0) (= (usageInt use "completion_tokens") 0))))
+
 fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
@@ -2251,7 +2267,9 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
     (match proj
       ((some p)
        (if (and (emptyContent? p.content) (not (toolCalls? (firstMessage p.resp))))
-         (tell (usageNote prov alias "empty")
+         (if (= (finishReason p.resp) "length")
+           (lengthStopped cx l a p)
+         (tell (usageNote prov alias (if (zeroUsage? p.resp) "upstreamCut" "empty"))
            (fn [] -> ChatStep
              (let [(action (u/emptyContentAction cx.cascadeLen l.emptyRetries))]
                (cond
@@ -2264,7 +2282,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                     (fn [] -> ChatStep
                       (loopStep cx (with l :models (listAppend l.models (list a.entry)) :idx (+ l.idx 1) :emptyRetries (+ l.emptyRetries 1))))))
                  (else (sendError cx l.head 502 (str "ERR_EMPTY_CONTENT: model " m " returned empty content after "
-                                                         (stringFromInt64 l.emptyRetries) " retry") true))))))
+                                                         (stringFromInt64 l.emptyRetries) " retry") true)))))))
          (if (not (stringEmpty? (judgeFailure cx p chatBody)))
            (judged cx l a p (judgeFailure cx p chatBody))
          (let [(content p.content)
