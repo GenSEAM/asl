@@ -16,7 +16,7 @@ fn lib -> String
   "asl/host/out/libaslrt.a"
 
 fn ! sh cmd: String -> run/Done
-  (run/runShell! cmd "." (run/childEnv (list)) (run/limits 120 64))
+  (run/runOneLimited (run/job (list "sh" "-c" cmd) "." (run/childEnv (list))) (run/limits 120 64))
 
 fn ! shellText cmd: String -> String
   (stringReplace (resultOr (run/shellOut cmd 10000) "") "\n" "")
