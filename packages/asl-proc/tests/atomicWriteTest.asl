@@ -2,7 +2,6 @@
   :x [runTests]
   :i [(asl-proc/atomicWrite :a aw) (asl-tools/fleet/run :a fr)])
 
-; (:m :ref FILEWRITE-ATOMIC :do "a forked writer rewrites one big file 400 times while this process polls it: with fileWriteAtomic! every read is the whole content (0 partial reads), with plain fileWrite the poller sees a truncated or short file (the race is real); the fork is bounded by forkLimited! 60 s in its own group; the rename contract is also asserted: no tmp sibling is left and a failed write leaves the target untouched")
 fn ! base -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/atomicWriteTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
 
@@ -33,14 +32,41 @@ fn ! race! dir: String atomic: Bool -> (Pair Int64 Int64)
       ((ok f) (poll! path want f 0 0 (not atomic)))
       ((err _) (pair -1 0))))
 
+fn ! atomicRounds! dir: String left: Int64 partial: Int64 best: Int64 rounds: Int64 -> (List Int64)
+  (if (or (<= left 0) (> best 5))
+    (list partial best rounds)
+    (let [(r (race! dir true))
+          (p (if (< (pairFirst r) 0) (+ partial 1000000) (+ partial (pairFirst r))))]
+      (atomicRounds! dir (- left 1) p (if (> (pairSecond r) best) (pairSecond r) best) (+ rounds 1))))
+
+fn ! plainRounds! dir: String left: Int64 rounds: Int64 -> (Pair Int64 Int64)
+  (let [(r (race! dir false))]
+    (if (or (> (pairFirst r) 0) (<= left 1))
+      (pair (pairFirst r) (+ rounds 1))
+      (plainRounds! dir (- left 1) (+ rounds 1))))
+
+fn ! linkAfter! dir: String atomic: Bool -> String
+  (let [(path (str dir (if atomic "/la.txt" "/lp.txt")))
+        (link (str path ".link"))
+        (_ (fileWrite path "old"))
+        (ln (fr/runOneLimited (fr/job (list "ln" path link) dir (fr/childEnv (list))) (fr/limits 30 4)))
+        (_ (if atomic (aw/fileWriteAtomic! path "new") (fileWrite path "new")))]
+    (if (= ln.exit 0) (resultOr (fileReadString link) "<unreadable>") (str "<ln failed " (stringFromInt64 ln.exit) ">")))
+
 fn ! tmpLeft? dir: String -> Bool
   (match (dirList dir) ((ok names) (> (listLength (filter (fn [(n String)] -> Bool (stringContains? n ".tmp-")) names)) 0)) ((err _) true))
 
 fn ! runTests -> Bool
   (let [(dir (base))
         (mk (dirCreate dir))
-        (atomicRace (race! dir true))
-        (plainRace (race! dir false))
+        (atomicLink (linkAfter! dir true))
+        (atomicNow (resultOr (fileReadString (str dir "/la.txt")) "<absent>"))
+        (plainLink (linkAfter! dir false))
+        (atomicRace (atomicRounds! dir 3 0 0 0))
+        (aPartial (optionOr (listGet atomicRace 0) -1))
+        (aBest (optionOr (listGet atomicRace 1) 0))
+        (aRounds (optionOr (listGet atomicRace 2) 0))
+        (plainRace (plainRounds! dir 5 0))
         (left (tmpLeft? dir))
         (okPath (str dir "/ok.txt"))
         (_ (fileWrite okPath "old"))
@@ -51,9 +77,11 @@ fn ! runTests -> Bool
         (name (aw/tmpNameFor "/p/f" 7 9))
         (_ (pathRemove dir))]
     (do (assert (ok? mk) "scratch dir created")
-        (assert (= (pairFirst atomicRace) 0) (str "fileWriteAtomic!: the poller never reads partial content, reads " (pairSecond atomicRace)))
-        (assert (> (pairSecond atomicRace) 5) "the atomic poll really overlapped the writer (reads counted)")
-        (assert (> (pairFirst plainRace) 0) (str "plain fileWrite exposes partial content to the poller (the race is real): " (pairFirst plainRace)))
+        (assert (and (= atomicLink "old") (= atomicNow "new")) (str "fileWriteAtomic! replaces the target inode, never writes it in place: a hard link taken before keeps " atomicLink ", the path reads " atomicNow))
+        (assert (= plainLink "new") (str "plain fileWrite writes the target inode in place, so the same hard link reads the new bytes (the control): " plainLink))
+        (assert (= aPartial 0) (str "fileWriteAtomic!: the poller never reads partial content: partials " (stringFromInt64 aPartial) " over " (stringFromInt64 aRounds) " rounds, best overlap " (stringFromInt64 aBest) " reads"))
+        (assert (> aBest 5) (str "the atomic poll overlapped the writer by more than 5 reads in one of at most 3 rounds (overlap is scheduler-bound, hence the rounds): best " (stringFromInt64 aBest) " over " (stringFromInt64 aRounds) " rounds"))
+        (assert (> (pairFirst plainRace) 0) (str "plain fileWrite exposes partial content to the poller in one of at most 5 rounds (the race is real): partials " (stringFromInt64 (pairFirst plainRace)) " in round " (stringFromInt64 (pairSecond plainRace))))
         (assert (not left) "no tmp sibling is left after the writers end")
         (assert (and (ok? w) (= after "new")) "fileWriteAtomic! replaces an existing file")
         (assert (err? bw) "a write into a missing directory is an error")
