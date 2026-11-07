@@ -21,6 +21,9 @@ fn staleOf files: (List (Pair String String)) allow: (List String) -> (List Stri
 fn srcList verb: String -> String
   (str "(module m\n  :x [f]\n  :i [])\n\nfn ! f! dir: String -> Bool\n  (ok? (run (list \"" (g) "\" \"" verb "\" \"-A\")))\n")
 
+fn allowHdr -> String
+  (str "(:vcsDirectAllow :v 2 :verbs \"" (stringJoin (va/coveredVerbs) " ") "\")")
+
 fn srcHelper -> String
   (str "(module m\n  :x [f]\n  :i [])\n\nfn ! f! dir: String -> Bool\n  (ok? (" (g) "Run! dir (list \"-C\" dir \"commit\" \"-m\" \"x\")))\n")
 
@@ -160,7 +163,7 @@ fn ! testRatchet -> Bool
   (let [(root (str "/tmp/vcsDirectAuditTest-" (stringFromInt64 (procSelf))))
         (_ (pathRemove root))
         (made (and (ok? (dirCreate root)) (and (ok? (dirCreate (str root "/.asl"))) (and (ok? (dirCreate (str root "/.asl/mem"))) (and (ok? (dirCreate (str root "/t"))) (ok? (dirCreate (str root "/tests"))))))))
-        (allow0 (str "(:vcsDirectAllow :v 1)\n" (allowRow "t/a.asl#f!" "push")))
+        (allow0 (str (allowHdr) "\n" (allowRow "t/a.asl#f!" "push")))
         (based (and made (and (vcs! root (list "init" "-q" "-b" "main"))
                    (and (put! root "t/a.asl" (srcList "push")) (and (put! root ".asl/mem/vcsDirectAllow.asn" allow0)
                      (and (stage! root) (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base"))))))))
@@ -252,7 +255,7 @@ fn testCache -> Bool
 fn ! repoWith! root: String -> Bool
   (let [(made (and (ok? (dirCreate root)) (and (ok? (dirCreate (str root "/.asl"))) (and (ok? (dirCreate (str root "/.asl/mem"))) (ok? (dirCreate (str root "/t")))))))]
     (and made (and (vcs! root (list "init" "-q" "-b" "main"))
-               (and (put! root "t/a.asl" (srcList "push")) (and (put! root ".asl/mem/vcsDirectAllow.asn" (str "(:vcsDirectAllow :v 1)\n" (allowRow "t/a.asl#f!" "push")))
+               (and (put! root "t/a.asl" (srcList "push")) (and (put! root ".asl/mem/vcsDirectAllow.asn" (str (allowHdr) "\n" (allowRow "t/a.asl#f!" "push")))
                  (and (stage! root) (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base"))))))))
 
 fn ! stripMs r: String -> String
@@ -323,11 +326,47 @@ fn ! testForgery -> Bool
         (assert (and trackedStaged (stringContains? tracked "ERR_VCS_CACHE_TRACKED")) (str "a tracked path under .asl/cache is refused: " tracked))
         true))
 
+; (:m :ref VCSDIRECT-READ-VERBS :do "the header of the current allowlist must declare exactly the verbs the scanner covers: a header that drops push, adds a verb the scanner does not cover, or declares none fails the audit naming the verb; the full header is clean")
+fn ! driftCase! tag: String hdr: String -> String
+  (let [(root (str "/tmp/vcsDirectAuditDrift-" tag "-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove root))
+        (allow0 (str hdr "\n" (allowRow "t/a.asl#f!" "push")))
+        (d1 (ok? (dirCreate root)))
+        (d2 (ok? (dirCreate (str root "/.asl"))))
+        (d3 (ok? (dirCreate (str root "/.asl/mem"))))
+        (d4 (ok? (dirCreate (str root "/t"))))
+        (i1 (vcs! root (list "init" "-q" "-b" "main")))
+        (p1 (put! root "t/a.asl" (srcList "push")))
+        (p2 (put! root ".asl/mem/vcsDirectAllow.asn" allow0))
+        (s1 (stage! root))
+        (c1 (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base")))
+        (r (receiptOr (va/auditWith! root (str root "/.asl/mem/vcsDirectAllow.asn") "HEAD" "off")))
+        (_ (pathRemove root))]
+    (if (and d1 (and d2 (and d3 (and d4 (and i1 (and p1 (and p2 (and s1 c1))))))))
+      r
+      "fixture failed"))
+
+fn ! testHeaderDrift -> Bool
+  (let [(full (allowHdr))
+        (noPush (str "(:vcsDirectAllow :v 2 :verbs \"" (stringJoin (filter (fn [(v String)] -> Bool (!= v "push")) (va/coveredVerbs)) " ") "\")"))
+        (extra (str "(:vcsDirectAllow :v 2 :verbs \"" (stringJoin (listAppend (va/coveredVerbs) (list "fetch")) " ") "\")"))
+        (none "(:vcsDirectAllow :v 2)")
+        (rFull (driftCase! "f" full))
+        (rNoPush (driftCase! "p" noPush))
+        (rExtra (driftCase! "e" extra))
+        (rNone (driftCase! "n" none))]
+    (do (assert (and (stringContains? rFull ":status :ok") (stringContains? rFull ":verbsDrift ()")) (str "the full header is clean: " rFull))
+        (assert (and (stringContains? rNoPush ":status :violation") (stringContains? rNoPush ":verbsDrift (\"missing:push\")")) (str "a header dropping push is named and fails: " rNoPush))
+        (assert (and (stringContains? rExtra ":status :violation") (stringContains? rExtra ":verbsDrift (\"extra:fetch\")")) (str "a header adding a verb the scanner does not cover is named and fails: " rExtra))
+        (assert (and (stringContains? rNone ":status :violation") (stringContains? rNone "header:absent")) (str "a header declaring no verbs fails: " rNone))
+        true))
+
 ; (:m :ref VCSDIRECT-READ-VERBS :do "widening the verb list is not growth: against a base written before it (no :verbs in its header) a new row of a widened verb is not :grown, a new row of a covered verb still is, and once the base declares the verb the same row is :grown; the verbs digest follows both the list and the worktree sub-verbs")
 fn ! growCase! tag: String baseHead: String rowFile: String verb: String -> String
   (let [(root (str "/tmp/vcsDirectAuditGrow-" tag "-" (stringFromInt64 (procSelf))))
         (_ (pathRemove root))
         (allow0 (str baseHead "\n" (allowRow "t/a.asl#f!" "push")))
+        (cur0 (str (allowHdr) "\n" (allowRow "t/a.asl#f!" "push")))
         (d1 (ok? (dirCreate root)))
         (d2 (ok? (dirCreate (str root "/.asl"))))
         (d3 (ok? (dirCreate (str root "/.asl/mem"))))
@@ -338,7 +377,7 @@ fn ! growCase! tag: String baseHead: String rowFile: String verb: String -> Stri
         (s1 (stage! root))
         (c1 (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base")))
         (p3 (put! root rowFile (srcList verb)))
-        (p4 (put! root ".asl/mem/vcsDirectAllow.asn" (str allow0 (allowRow (str rowFile "#f!") verb))))
+        (p4 (put! root ".asl/mem/vcsDirectAllow.asn" (str cur0 (allowRow (str rowFile "#f!") verb))))
         (s2 (stage! root))
         (r (receiptOr (va/auditWith! root (str root "/.asl/mem/vcsDirectAllow.asn") "HEAD" "off")))
         (_ (pathRemove root))]
@@ -653,6 +692,6 @@ fn testMutatingVerbs -> Bool
 
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testCacheKeyVerbs) (testWidenedGrown) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testCacheKeyVerbs) (testWidenedGrown) (testHeaderDrift) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))

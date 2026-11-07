@@ -10,7 +10,7 @@ fn ! g root: String args: (List String) -> Bool
   (ok? (gf/gitWrite! root (listAppend (list "-c" "user.name=t" "-c" "user.email=t@example.invalid" "-c" "commit.gpgsign=false") args) (none)))
 
 fn allowText -> String
-  "(:vcsDirectAllow :v 2 :src \"VCS-AUDIT-WIRE\" :date \"2026-11-05\" :rule \"fixture\")\n"
+  "(:vcsDirectAllow :v 2 :src \"VCS-AUDIT-WIRE\" :date \"2026-11-05\" :verbs \"commit add update-ref commit-tree push reset checkout restore apply clean stash rm worktree\" :rule \"fixture\")\n"
 
 fn cleanSrc -> String
   "(module fx/clean\n  :x [f]\n  :i [])\n\nfn f -> Int64\n  1\n"

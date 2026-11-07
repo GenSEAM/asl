@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey verbsTag verbsTagOf vcsVerbs worktreeVerbs headerVerbs namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey verbsTag verbsTagOf vcsVerbs worktreeVerbs headerVerbs verbsDrift coveredVerbs declaredVerbs namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -43,16 +43,32 @@ fn worktreeVerbs -> (List String)
 fn legacyVerbs -> (List String)
   (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout")
 
-; (:m :ref VCSDIRECT-READ-VERBS :do "the verbs an allowlist text declares in its header as :verbs \"a b c\"; the legacy verbs when it declares none, so a base written before the widening exempts rows of the new verbs")
-fn headerVerbs text: String -> (List String)
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verbs an allowlist text declares in its header as :verbs \"a b c\"; none when it declares none")
+fn declaredVerbs text: String -> (Option (List String))
   (let [(head (optionOr (listHead (stringLines text)) ""))
         (mark ":verbs \"")]
     (match (stringIndexOf head mark)
-      ((none) (legacyVerbs))
+      ((none) none)
       ((some i)
         (let [(rest (optionOr (stringSlice head (+ i (stringLength mark)) (stringLength head)) ""))
               (j (optionOr (stringIndexOf rest "\"") (stringLength rest)))]
-          (filter (fn [(v String)] -> Bool (not (stringEmpty? v))) (stringSplit (optionOr (stringSlice rest 0 j) "") " "))))))
+          (some (filter (fn [(v String)] -> Bool (not (stringEmpty? v))) (stringSplit (optionOr (stringSlice rest 0 j) "") " ")))))))
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verb set of a base allowlist: its declared :verbs, the legacy verbs when it declares none, so a base written before the widening exempts rows of the new verbs")
+fn headerVerbs text: String -> (List String)
+  (optionOr (declaredVerbs text) (legacyVerbs))
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verbs the scanner covers, as the allowlist header must declare them: the vcs verbs plus worktree")
+fn coveredVerbs -> (List String)
+  (listAppend (vcsVerbs) (list "worktree"))
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "the header of the current allowlist must declare exactly the verbs the scanner covers: header:absent when it declares none, missing:V for a covered verb it drops, extra:V for one it adds; a self-declared list that nothing checks would let one edit exempt every later row of a verb from the ratchet")
+fn verbsDrift text: String -> (List String)
+  (match (declaredVerbs text)
+    ((none) (list "header:absent"))
+    ((some d)
+      (listAppend (map (fn [(v String)] -> String (str "missing:" v)) (filter (fn [(v String)] -> Bool (not (listContains? d v))) (coveredVerbs)))
+                  (map (fn [(v String)] -> String (str "extra:" v)) (filter (fn [(v String)] -> Bool (not (listContains? (coveredVerbs) v))) d)))))
 
 fn valueOptions -> (List String)
   (list "-C" "-c" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env")
@@ -668,8 +684,9 @@ fn verdictReceipt sites: (List Site) note: String text: String sha: String head:
   (let [(allow (parseAllow text))
         (v (verdictOf sites allow))
         (grown (grownFor allow baseKeys))
-        (extra (str " :base " (if (= sha head) ":self" (q sha)) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown)) (if (stringEmpty? note) "" (str " :cache " (q note)))))]
-    (receiptWith v (listLength allow) (pairFirst grown) extra))
+        (drift (verbsDrift text))
+        (extra (str " :verbsDrift " (qs drift) " :base " (if (= sha head) ":self" (q sha)) " :baseRows " (baseRowsText baseKeys) " :grown " (qs (pairFirst grown)) " :grownFixtures " (qs (pairSecond grown)) (if (stringEmpty? note) "" (str " :cache " (q note)))))]
+    (receiptWith v (listLength allow) (listAppend (pairFirst grown) drift) extra))
 
 ; (:m :do "the receipt with the base (:self when the base is HEAD itself, as on main, so the ratchet compares against the committed allowlist) and the run time :ms")
 fn ! auditAt! root: String allowPath: String base: String -> (Result String String)
