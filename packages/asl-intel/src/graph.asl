@@ -87,7 +87,7 @@ fn scanFile! sc: Scan fi: Int64 rel: String code: String -> Scan
         (hs (st/headersOf! code b n))]
     (fold (fn [(acc Scan) (hd st/Header)] -> Scan
             (let [(raw hd.rawName)
-                  (clean (t/pyStrip (t/lstripSet raw "!")))
+                  (clean (t/bareName raw))
                   (sq (tb/internStr! acc.syms clean))
                   (buf acc.keyBuf)
                   (_k (do (tb/ivSet! buf 0 (pairSecond mq)) (tb/ivSet! buf 1 (pairSecond sq))))

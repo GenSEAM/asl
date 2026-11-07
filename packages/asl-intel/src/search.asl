@@ -118,7 +118,7 @@ fn lineMatches code: String b: Bytes lines: (List (Pair Int64 Int64)) qb: Bytes 
           (match (r/rexSearch dRex b e s)
             ((none) (lineMatches code b rest qb dRex rel acc))
             ((some caps)
-              (let [(sym (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))
+              (let [(sym (t/bareName (optionOr (r/rexGroup code caps 1) "")))
                     (acc2 (cons (str "(:symbol \"" sym "\" :file \"" rel "\")") acc))]
                 (if (>= (listLength acc2) 20) acc2 (lineMatches code b rest qb dRex rel acc2)))))))))
 

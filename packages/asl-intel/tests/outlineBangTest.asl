@@ -3,7 +3,8 @@
   :i [(asl-intel :a intel)
       (asl-intel/text :a t)
       (asl-intel/rx :a r)
-      (asl-intel/pats :a p)])
+      (asl-intel/pats :a p)
+      (asl-intel/host :a h)])
 
 fn headerCaps rex: r/Rex s: String -> (List Int64)
   (let [(b (stringToBytes s))] (optionOr (r/rexSearch rex b (bytesLength b) 0) (list)))
@@ -36,5 +37,42 @@ fn testOutlineOfRunAsl! -> Bool
         (assert (not (stringContains? o.out ":name \"! ")) "outline of run.asl has no marker-prefixed names")
         true))
 
+; (:m :ref INTEL-BANG-NAME-SPLIT :do "one fixture with fn !report (glued marker) and fn ! spaced (spaced marker): outline, query, stubs, graph, trace and vacuity report the same bare names report and spaced, never !report or ! spaced")
+fn fixtureText -> String
+  "(module fx/bang :x [report spaced runTests])\n\nfn !report x: Int64 -> Int64\n  0\n\nfn ! spaced y: Int64 -> Int64\n  0\n\nfn ! runTests -> Bool\n  true\n"
+
+fn ! boundedMkdir path: String -> Bool
+  (ok? (dirCreate path))
+
+fn ! agreeOn! sub: String args: (List String) -> String
+  (let [(dir (str (resultOr (realPath "/tmp") "/tmp") "/aslBangSplit." (stringFromInt64 (procSelf))))
+        (src (str dir "/asl/packages/fx/src"))
+        (_m (boundedMkdir src))
+        (_w (fileWrite (str src "/bang.asl") (fixtureText)))
+        (ctx (h/Ctx :home dir :cwd dir :aslRoot "" :env (none)))
+        (o (intel/runIntel! ctx (cons sub args)))
+        (_r (pathRemove dir))]
+    (str o.out o.err))
+
+fn ! testOpsAgree -> Bool
+  (let [(outline (agreeOn! "outline" (list "asl/packages/fx/src/bang.asl")))
+        (query (agreeOn! "query" (list "report")))
+        (queryB (agreeOn! "query" (list "spaced")))
+        (stubs (agreeOn! "stubs" (list "--asn")))
+        (graph (agreeOn! "graph" (list "--json")))
+        (vac (agreeOn! "vacuity" (list "--asn")))]
+    (do (assert (stringContains? outline ":name \"report\"") (str "outline: report: " outline))
+        (assert (stringContains? query ":symbol \"report\"") (str "query: report: " query))
+        (assert (stringContains? queryB ":symbol \"spaced\"") (str "query: spaced: " queryB))
+        (assert (not (stringContains? query "\"!report\"")) "query: no marker in the name")
+        (assert (not (stringContains? queryB "\"! spaced\"")) "query: no spaced marker in the name")
+        (assert (stringContains? stubs "\"report\"") (str "stubs: report: " stubs))
+        (assert (not (stringContains? stubs "!report")) "stubs: no marker in the name")
+        (assert (not (stringContains? stubs "! spaced")) "stubs: no spaced marker in the name")
+        (assert (stringContains? graph "\"symbol\": \"report\"") (str "graph: report: " graph))
+        (assert (stringContains? vac "runTests") (str "vacuity: runTests: " vac))
+        (assert (not (stringContains? vac "! runTests")) "vacuity: no marker in the name")
+        true))
+
 fn ! runTests -> Bool
-  (and (testOutlineNames) (and (testHeaderParams) (testOutlineOfRunAsl!)))
+  (and (testOutlineNames) (and (testHeaderParams) (and (testOutlineOfRunAsl!) (testOpsAgree))))

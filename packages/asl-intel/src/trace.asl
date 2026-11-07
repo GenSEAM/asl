@@ -110,7 +110,7 @@ fn analyzeTrace! ctx: h/Ctx target: String -> (Result TraceSummary String)
                                  (fold (fn [(a2 Acc) (hd st/Header)] -> Acc
                                          (let [(s hd.bodyStart) (e hd.bodyEnd)
                                                (br (wordCount brT b s e s 0)) (asr (wordCount asT b s e s 0))
-                                               (hq (hitOf hd.rawName modName rel isTest br asr (cpSpan b s e 0)))
+                                               (hq (hitOf (t/bareName hd.rawName) modName rel isTest br asr (cpSpan b s e 0)))
                                                (hit (pairFirst hq))]
                                            (Acc :hits (cons hit a2.hits) :taken (+ a2.taken (pairSecond hq))
                                                 :branches (+ a2.branches br) :asserts (+ a2.asserts asr)

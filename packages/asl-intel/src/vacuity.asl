@@ -32,7 +32,7 @@ fn trivReason -> String
 fn vacuousIn! code: String rel: String -> (List Vac)
   (let [(b (stringToBytes code))]
     (fold (fn [(acc (List Vac)) (caps (List Int64))] -> (List Vac)
-            (let [(name (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))
+            (let [(name (t/bareName (optionOr (r/rexGroup code caps 1) "")))
                   (body (optionOr (r/rexGroup code caps 2) ""))]
               (if (and (not (stringContains? body "assert")) (and (not (stringContains? body "refute"))
                        (listContains? (list "true" "nil" "()" "0") (t/pyStrip body))))
@@ -43,7 +43,7 @@ fn vacuousIn! code: String rel: String -> (List Vac)
 fn trivialIn! code: String rel: String -> (List Triv)
   (let [(b (stringToBytes code))]
     (fold (fn [(acc (List Triv)) (caps (List Int64))] -> (List Triv)
-            (let [(name (t/pyStrip (optionOr (r/rexGroup code caps 1) "")))
+            (let [(name (t/bareName (optionOr (r/rexGroup code caps 1) "")))
                   (ret (t/pyStrip (optionOr (r/rexGroup code caps 2) "")))
                   (body (t/pyStrip (optionOr (r/rexGroup code caps 3) "")))]
               (if (and (stringStartsWith? (t/lowerAscii name) "runtest") (listContains? (list "true" "nil" "(ok true)") body))

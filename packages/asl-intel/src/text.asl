@@ -1,7 +1,7 @@
 (module asl-intel/text
   :x [byteAt spaceLen isSpaceByte utf8Len cpAt cpStartBefore isWordCp wordBefore? wordAt? isWordByteAscii
       cpLength cpPrefix concatAll joinWith padRight padLeft lowerAscii upperAscii
-      pyStrip stripSet lstripSet pySplit splitLinesPy sliceStr charStr
+      pyStrip stripSet lstripSet bareName pySplit splitLinesPy sliceStr charStr
       pyReprStr pyReprList intStr floatStr pyRound fmtFixed pow10
       normPath joinPath baseName dirName relPath splitExtRoot absPath
       bytesIndexOf containsAt? hasSub? countSub takeN dropN foldIndexOf wordHits wordHas? skipSpace trimSpaceBack cpOffset]
@@ -220,6 +220,10 @@ fn stripSet s: String chars: String -> String
 fn lstripSet s: String chars: String -> String
   (let [(b (stringToBytes s)) (n (bytesLength b)) (cs (stringToBytes chars)) (k (bytesLength cs))]
     (sliceStr s (stripFwd b n cs k 0) n))
+
+; (:m :ref INTEL-BANG-NAME-SPLIT :do "the one symbol name every intel op reports: the effect marker of fn ! name or fn !name is not part of the name, whether glued or spaced; callers that need the purity signal keep the raw header text")
+fn bareName raw: String -> String
+  (pyStrip (lstripSet raw "!"))
 
 fn stripFwd b: Bytes n: Int64 cs: Bytes k: Int64 i: Int64 -> Int64
   (if (and (< i n) (inSet? (bytesGet b i) cs k 0)) (stripFwd b n cs k (+ i 1)) i)
