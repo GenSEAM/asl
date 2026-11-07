@@ -569,7 +569,7 @@ fn lookup ps: (List (Pair String cd/Res)) id: String -> (Option cd/Res)
 fn okIn ps: (List (Pair String cd/Res)) stage: String cs: (List Cell) -> (List Cell)
   (filter (fn [(c Cell)] -> Bool (match (lookup ps c.id) ((some r) (passed? stage r)) ((none) false))) cs)
 
-; (:m :do "merges run one at a time: devRepo checks out a fresh <devPrefix><id> from devBase, then the merge stage trains the cell branch onto it; the devRepo goes back to its own branch afterwards")
+; (:m :do "merges run one at a time: devRepo checks out a fresh <devPrefix><id> from devBase, then the merge stage trains the cell branch onto it; the devRepo goes back to its own branch afterwards; a failed return is devRestore, and a devRepo found detached when the merges start has no branch to go back to, reported as devRestoreSkipped")
 fn ! mergeOne! s: Spec c: Cell -> (Pair String cd/Res)
   (let [(co (gv/switch! s.devRepo (devBranchOf s c.id) s.devBase))]
     (if (!= co.exit 0)
@@ -634,7 +634,7 @@ fn ! run! s: Spec only: String -> Int64
                                   (row (recordText s c chain failed leon red (reviewersOf (readOr (cd/journalPath s.store)) c.id) (- now t0) now))]
                               (let [(_ (fileAppend (runsPath s) (str row "\n")))] row)))
                           cells))
-            (after (listAppend (listAppend (headProblems! s) (trialMainMoved! s trialMain0)) (if (= restored.exit 0) (list) (list (str "devRestore:" s.devRepo "@" devHome)))))
+            (after (listAppend (listAppend (headProblems! s) (trialMainMoved! s trialMain0)) (cond ((stringEmpty? devHome) (list (str "devRestoreSkipped:" s.devRepo "@detached"))) ((= restored.exit 0) (list)) (else (list (str "devRestore:" s.devRepo "@" devHome))))))
             (merged (listLength (filter (fn [(r String)] -> Bool (stringContains? r " :merged true ")) records)))]
         (do (println (str "(:trialRun :cells " (n (listLength cells)) " :merged " (n merged) " :runs " (st/q (runsPath s)) " :headProblems " (st/qList after) ")"))
             (if (listEmpty? after) 0 1)))))

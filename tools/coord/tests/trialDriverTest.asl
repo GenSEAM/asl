@@ -1,6 +1,6 @@
 (module asl-tools/coord/tests/trialDriverTest
   :x [runTests]
-  :i [(asl-tools/coord/trial :a tr) (asl-tools/coord/conductor :a cd) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
+  :i [(asl-tools/coord/trial :a tr) (asl-tools/coord/conductor :a cd) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf) (asl-tools/vcs/git :a gv)])
 
 ; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER gate: trial.asl check, run and collect as children on a temp source repo (pipeFix e2eRepo!, the spec base is the pipeFix seedUnit! branch sh/BASE, main plus marker.txt; a cell that does not start from it is caught by the merge asserts on trialDev-<cell>:marker.txt), its dev clone (pipeFix devCloneFor!: branch dev, origin remote removed after the remote case, a stand-in host build added after the build cases), a temp store and a stand-in production repo; the write stage runs the real conductor stage child whose Leon is a scripted bin/asl in the temp repo (good: writes impl.txt; readloop: three read turns, a readStreak signal, and it moves the production head mid-run), gates run the real gate on the stub-host suites check.asl and check3.asl (pipeFix gate1, gate3: green when impl.txt holds impl), the stand-in host dir is removed before the asserts, review goes through the real provider to the hub stand-in, merge trains onto trialDev-<cell> with the recording train of the dev clone. The one stand-in for an interface not on main: the TRIAL-PIN receipt file <id>-leon.asn is pre-written for one cell; collect runs the real trialAnalyze report on the records")
 
@@ -23,6 +23,7 @@ fn leonScript here: String repo: String prod: String -> String
        "  echo \"(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :servedAlias \\\"flashLow\\\" :turns 3))\"\n"
        "  exit 1\nfi\n"
        "[ -f seeded.txt ] && cp seeded.txt " repo "/.git/seen-$id\n"
+       "if [ -f " repo "/.git/detachDev ]; then d=$(dirname " repo ")/dev; git -C $d rev-parse HEAD > $d/.git/HEAD.new && mv $d/.git/HEAD.new $d/.git/HEAD; fi\n"
        "printf impl > impl.txt\necho \"(:turn 1 :reply \\\"(:step :op edit :file impl.txt)\\\")\" >> $j\necho \"(:result :status :ok :stop done :turns 1)\" >> $j\n"
        "echo \"(:agent :status :ok :receipt (:agentReceipt :status :ok :stop done :servedAlias \\\"flashLow\\\" :turns 1))\"\nexit 0\n")
 
@@ -168,7 +169,11 @@ fn ! testCycle -> Bool
         (sRun (fileWrite (str root "/store/runs/T1-A-stale.asn") "(:stale)\n"))
         (sEv (fileWrite (str root "/store/trial/T1-A/stale.txt") "stale\n"))
         (sOther (fileWrite (str root "/store/runs/T1-A-B-write.asn") "(:other)\n"))
+        (dMark (fileWrite (str root "/repo/.git/detachDev") ""))
         (rAgain (trial! here "run" spec env 600))
+        (_ (pathRemove (str root "/repo/.git/detachDev")))
+        (devAgain (gitIn dev "branch --show-current"))
+        (back (gv/switch! dev "dev" "dev"))
         (runs2 (readOr (str root "/store/trial/runs.asn")))
         (t1rows (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trialRun :id \"T1-A\"")) (stringLines runs2)))
         (t2rows (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trialRun :id \"T2-A\"")) (stringLines runs2)))
@@ -213,7 +218,8 @@ fn ! testCycle -> Bool
         (assert (stringContains? t3 ":merged true ") "seeded T3 ran although an interrupted run left its worktree behind")
         (assert (and (= devCur "dev") (and (= devBase1 devBase0) (and (!= repoMain1 repoMain0) (and (= repoMain1 baseSha) (and (not (stringEmpty? prodSha1)) (!= prodSha1 prodSha)))))) (str "devRepo back on dev, dev unmoved, the production stand-in and the trial main moved by the stage: " devCur " dev " devBase0 "->" devBase1 " main " repoMain0 "->" repoMain1 " base " baseSha))
         (assert (and (stringContains? trainArgs "train sh/T1-A --onto HEAD") (not (stringContains? trainArgs "sh/T2-A"))) (str "the train ran for merged cells only: " trainArgs))
-        (assert (and (ok? wInfra) (and (= rAgain.exit 0) (and (stringContains? rAgain.out ":cells 1 :merged 1 ") (and (= (listLength t1rows) 3) (and (stringContains? t1last ":merged true ") (= (listLength t2rows) 1)))))) (str "the next run retries only the cell whose last record is an infra failure (T1-A incomplete), not the task-failed T2-A: " rAgain.out))
+        (assert (and (ok? wInfra) (and (= rAgain.exit 1) (and (stringContains? rAgain.out ":cells 1 :merged 1 ") (and (= (listLength t1rows) 3) (and (stringContains? t1last ":merged true ") (= (listLength t2rows) 1)))))) (str "the next run retries only the cell whose last record is an infra failure (T1-A incomplete), not the task-failed T2-A: " rAgain.out))
+        (assert (and (ok? dMark) (and (stringContains? rAgain.out (str "devRestoreSkipped:" dev "@detached")) (and (= devAgain "trialDev-T1-A") (= back.exit 0)))) (str "a devRepo detached mid-run has no branch to go back to: the run names devRestoreSkipped and exits 1: " devAgain " " rAgain.out))
         (assert (and (ok? sRun) (and (ok? sEv) (and (ok? sOther) (and (not staleRun) (and (not staleEv) (and newEv (and otherKept (and (not (stringEmpty? oldT1)) (and (not (stringEmpty? newT1)) (!= newT1 oldT1)))))))))) (str "a retried cell starts clean: its old runs/T1-A-* and trial/T1-A evidence are gone, T1-A-B files kept, sh/T1-A is a new branch: " oldT1 " -> " newT1))
         (assert (and (= rCollect.exit 0) (and (and (stringContains? report "(:class wReadLoop :n 1 :insert hint") (stringContains? report "(:class merged :n 2 ")) (stringContains? summary ":runs 4 :merged 3 :failedAt ((:seed 0) (:write 1)"))) (str "collect runs the real trialAnalyze report and summarises: " summary " " report))
         (assert (and (ok? emptyRow) (and (= rEmpty.exit 0) (and (stringContains? rEmpty.out ":cells 0 ") (and (= runsAfter runsBefore) (and (stringContains? runsAfter "\n(:trialRun :id \"\" ") trialKept))))) (str "an infra row with an empty id is never forgotten: runs.asn and the trial dir stay: " rEmpty.out))
