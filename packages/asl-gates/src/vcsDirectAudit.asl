@@ -1,5 +1,5 @@
 (module asl-gates/vcsDirectAudit
-  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey verbsTag namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
+  :x [cacheText rowEnd storeRootFrom cacheDirWith! rowMac signRows verifiedRows keyFile writeAtomic! cacheCap mergeUsed scanFilesC parseCache scanCached! auditWith! cacheDirFor! storeRoot viewKey verbsTag verbsTagOf vcsVerbs worktreeVerbs headerVerbs namesDigest cap Site Verdict Helpers scanSource scanFiles helpersOf verdictOf allowKeys parseAllow siteKey receiptOf receiptWith grownOf audit! auditAt! trackedAsl! emitRows main vcsVerbs excluded? decodeString segmentsOf verbState]
   :i [(asl-parser/lexer :a lex) (asl-gates/suiteRunner :a sr)])
 
 ; (:m :ref VCS-DIRECT-GIT-AUDIT :do "finds literal git argv outside asl/tools/vcs: a (list, (cons or (listAppend (list form that starts with the string git, a (str form or a string whose shell segment starts with git, and a call of a git helper, whose first non-option word is commit, add, update-ref, commit-tree, push, reset or checkout; a git helper is named git*! (or gitIn gitOut gitRun gitCmd) or, by data, is a fn whose body builds a git argv or git string whose verb is a value, or passes values on to another helper, iterated to a fixpoint; each site is keyed path#symbol plus the verb, never a line, and counts its occurrences; the allowlist .asl/mem/vcsDirectAllow.asn only shrinks: a new or extra site is a violation, a row without its sites is a violation, and a product row grown since the base (default the merge base with main) is a violation; comments and strings that merely contain git text are not sites; asl run asl/packages/asl-gates/src/vcsDirectAudit.asl [--root DIR] [--allow FILE] [--base REF] [--emit] [--helpers] prints one ASN receipt, exit 0 clean, 1 violation, 2 error")
@@ -38,6 +38,21 @@ fn vcsVerbs -> (List String)
 
 fn worktreeVerbs -> (List String)
   (list "add" "remove" "prune" "move")
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verbs the audit covered before the list was widened: the verb set of a base allowlist whose header carries no :verbs")
+fn legacyVerbs -> (List String)
+  (list "commit" "add" "update-ref" "commit-tree" "push" "reset" "checkout")
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "the verbs an allowlist text declares in its header as :verbs \"a b c\"; the legacy verbs when it declares none, so a base written before the widening exempts rows of the new verbs")
+fn headerVerbs text: String -> (List String)
+  (let [(head (optionOr (listHead (stringLines text)) ""))
+        (mark ":verbs \"")]
+    (match (stringIndexOf head mark)
+      ((none) (legacyVerbs))
+      ((some i)
+        (let [(rest (optionOr (stringSlice head (+ i (stringLength mark)) (stringLength head)) ""))
+              (j (optionOr (stringIndexOf rest "\"") (stringLength rest)))]
+          (filter (fn [(v String)] -> Bool (not (stringEmpty? v))) (stringSplit (optionOr (stringSlice rest 0 j) "") " "))))))
 
 fn valueOptions -> (List String)
   (list "-C" "-c" "--git-dir" "--work-tree" "--namespace" "--super-prefix" "--config-env")
@@ -379,8 +394,12 @@ fn fixture? key: String -> Bool
     (or (stringStartsWith? path "tests/") (stringContains? path "/tests/")))
 
 ; (:m :do "allowlist keys present now beyond their count at the base: product keys (first) are a violation, keys under a tests directory (second) are reported only, since fixtures need real repos")
-fn grownOf allow: (List String) baseAllow: (List String) -> (Pair (List String) (List String))
-  (let [(grown (excess allow baseAllow))]
+fn keyVerb key: String -> String
+  (optionOr (listGet (stringSplit key "|git ") 1) "")
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "a key whose verb the base audit did not cover is not growth: widening the verb list finds old sites, it adds none; a new site of a covered verb still is")
+fn grownOf allow: (List String) baseAllow: (List String) baseVerbs: (List String) -> (Pair (List String) (List String))
+  (let [(grown (filter (fn [(k String)] -> Bool (listContains? baseVerbs (keyVerb k))) (excess allow baseAllow)))]
     (pair (filter (fn [(k String)] -> Bool (not (fixture? k))) grown) (filter fixture? grown)))
 
 fn q s: String -> String
@@ -429,7 +448,7 @@ fn ! baseCommit! root: String base: String -> (Result String String)
     (resultMap (sr/gitOut! root (list "rev-parse" "--verify" (str base "^{commit}"))) stringTrim))
 
 ; (:m :do "the allowlist keys at the base commit; none when the allowlist did not exist there yet, an error when git fails")
-fn ! baseAllow! root: String sha: String -> (Result (Option (List String)) String)
+fn ! baseAllow! root: String sha: String -> (Result (Option (Pair (List String) (List String))) String)
   (match (sr/gitOut! root (list "ls-tree" "--name-only" sha "--" (allowRel)))
     ((err e) (err e))
     ((ok listed)
@@ -437,13 +456,13 @@ fn ! baseAllow! root: String sha: String -> (Result (Option (List String)) Strin
         (ok none)
         (match (sr/gitOut! root (list "show" (str sha ":" (allowRel))))
           ((err e) (err e))
-          ((ok text) (ok (some (parseAllow text))))))))
+          ((ok text) (ok (some (pair (parseAllow text) (headerVerbs text)))))))))
 
-fn baseRowsText baseKeys: (Option (List String)) -> String
-  (match baseKeys ((some b) (stringFromInt64 (listLength b))) ((none) ":absent"))
+fn baseRowsText baseKeys: (Option (Pair (List String) (List String))) -> String
+  (match baseKeys ((some b) (stringFromInt64 (listLength (pairFirst b)))) ((none) ":absent"))
 
-fn grownFor allow: (List String) baseKeys: (Option (List String)) -> (Pair (List String) (List String))
-  (match baseKeys ((some b) (grownOf allow b)) ((none) (pair (list) (list))))
+fn grownFor allow: (List String) baseKeys: (Option (Pair (List String) (List String))) -> (Pair (List String) (List String))
+  (match baseKeys ((some b) (grownOf allow (pairFirst b) (pairSecond b))) ((none) (pair (list) (list))))
 
 ; (:m :ref VCS-AUDIT-SPEED :do "per-file scan cache: the result of scanning one file (its helper keys and its sites) depends only on its content and on the helper view it is scanned with, so the row key is sha256(content) | digest(all helper names) | the file's own helper names; an unchanged file in an unchanged helper set is never tokenized again; the cache lives in .asl/cache (ignored by git) and holds only the rows this run used")
 fn itemSep -> String
@@ -456,8 +475,11 @@ fn namesDigest h: Helpers -> String
   (contentSha (stringJoin (listSort h.names) " "))
 
 ; (:m :do "the verbs a scan reports are part of every cache key, so widening the verb list never serves rows scanned with the old list")
+fn verbsTagOf verbs: (List String) wverbs: (List String) -> String
+  (optionOr (stringSlice (contentSha (stringJoin (listAppend verbs (map (fn [(w String)] -> String (str "worktree " w)) wverbs)) " ")) 0 12) "")
+
 fn verbsTag -> String
-  (optionOr (stringSlice (contentSha (stringJoin (listAppend (vcsVerbs) (map (fn [(w String)] -> String (str "worktree " w)) (worktreeVerbs))) " ")) 0 12) "")
+  (verbsTagOf (vcsVerbs) (worktreeVerbs))
 
 fn viewKey sha: String hd: String h: Helpers file: String -> String
   (str sha "|" hd "|" (verbsTag) "|" (if (excluded? file) "x" "n") "|" (stringJoin (listSort (map keyName (filter (fn [(k String)] -> Bool (stringStartsWith? k (str file "|"))) h.local))) " "))
@@ -642,7 +664,7 @@ fn ! scanCached! dir: String files: (List (Pair String String)) -> (Pair (List S
                       (let [(merged (if (> (mapSize raw) (cacheCap)) used (mergeUsed old used)))]
                         (writeAtomic! path (cacheText (signRows s merged))))))))))))
 
-fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (List String)) -> String
+fn verdictReceipt sites: (List Site) note: String text: String sha: String head: String baseKeys: (Option (Pair (List String) (List String))) -> String
   (let [(allow (parseAllow text))
         (v (verdictOf sites allow))
         (grown (grownFor allow baseKeys))

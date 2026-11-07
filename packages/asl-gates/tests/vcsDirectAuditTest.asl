@@ -189,7 +189,10 @@ fn ! testRatchet -> Bool
         true))
 
 fn testRealTree -> Bool
-  (match (va/audit! "." ".asl/mem/vcsDirectAllow.asn")
+  (match (let [(store (str "/tmp/vcsDirectAuditReal-" (stringFromInt64 (procSelf)) "-store"))
+               (r (va/auditWith! "." ".asl/mem/vcsDirectAllow.asn" "" store))
+               (_ (pathRemove store))]
+           r)
     ((err e) (do (assert false (str "audit failed to run: " e)) false))
     ((ok r) (do (assert (stringStartsWith? r "(:vcsDirectAudit :v 1 :status :ok ") (str "the real tree matches its allowlist exactly: " r))
                 (assert (stringContains? r ":new () :stale ()") "no new site and no stale row on the real tree")
@@ -318,6 +321,42 @@ fn ! testForgery -> Bool
         (assert (stringEmpty? dirOff) "mode off has no store dir")
         (assert (and (= (va/cap (list "--no-cache")) "off") (= (va/cap (list "--cache-dir" "d")) "d") (= (va/cap (list)) "")) "the command line picks off, a dir or the runner store")
         (assert (and trackedStaged (stringContains? tracked "ERR_VCS_CACHE_TRACKED")) (str "a tracked path under .asl/cache is refused: " tracked))
+        true))
+
+; (:m :ref VCSDIRECT-READ-VERBS :do "widening the verb list is not growth: against a base written before it (no :verbs in its header) a new row of a widened verb is not :grown, a new row of a covered verb still is, and once the base declares the verb the same row is :grown; the verbs digest follows both the list and the worktree sub-verbs")
+fn ! growCase! tag: String baseHead: String rowFile: String verb: String -> String
+  (let [(root (str "/tmp/vcsDirectAuditGrow-" tag "-" (stringFromInt64 (procSelf))))
+        (_ (pathRemove root))
+        (allow0 (str baseHead "\n" (allowRow "t/a.asl#f!" "push")))
+        (d1 (ok? (dirCreate root)))
+        (d2 (ok? (dirCreate (str root "/.asl"))))
+        (d3 (ok? (dirCreate (str root "/.asl/mem"))))
+        (d4 (ok? (dirCreate (str root "/t"))))
+        (i1 (vcs! root (list "init" "-q" "-b" "main")))
+        (p1 (put! root "t/a.asl" (srcList "push")))
+        (p2 (put! root ".asl/mem/vcsDirectAllow.asn" allow0))
+        (s1 (stage! root))
+        (c1 (vcs! root (list "-c" "user.name=t" "-c" "user.email=t@t" "-c" "commit.gpgsign=false" "commit" "-q" "-m" "base")))
+        (p3 (put! root rowFile (srcList verb)))
+        (p4 (put! root ".asl/mem/vcsDirectAllow.asn" (str allow0 (allowRow (str rowFile "#f!") verb))))
+        (s2 (stage! root))
+        (r (receiptOr (va/auditWith! root (str root "/.asl/mem/vcsDirectAllow.asn") "HEAD" "off")))
+        (_ (pathRemove root))]
+    (if (and d1 (and d2 (and d3 (and d4 (and i1 (and p1 (and p2 (and s1 (and c1 (and p3 (and p4 s2)))))))))))
+      r
+      "fixture failed"))
+
+fn ! testWidenedGrown -> Bool
+  (let [(legacy "(:vcsDirectAllow :v 2)")
+        (declared "(:vcsDirectAllow :v 2 :verbs \"commit add update-ref commit-tree push reset checkout restore\")")
+        (widened (growCase! "w" legacy "t/r.asl" "restore"))
+        (oldVerb (growCase! "o" legacy "t/c.asl" "commit"))
+        (declaredRestore (growCase! "d" declared "t/r.asl" "restore"))]
+    (do (assert (and (stringContains? widened ":status :ok") (stringContains? widened ":grown ()")) (str "a row of a verb the base did not cover is not growth: " widened))
+        (assert (stringContains? oldVerb ":grown (\"t/c.asl#f!|git commit\")") (str "a new site of a covered verb is still growth: " oldVerb))
+        (assert (stringContains? declaredRestore ":grown (\"t/r.asl#f!|git restore\")") (str "once the base declares the verb the same row is growth: " declaredRestore))
+        (assert (and (not (= (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)) (va/verbsTagOf (va/vcsVerbs) (list "add")))) (= (va/verbsTag) (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)))) "the verbs digest changes with the worktree sub-verbs and verbsTag is that digest")
+        (assert (not (= (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)) (va/verbsTagOf (list "commit") (va/worktreeVerbs)))) "and with the verb list")
         true))
 
 ; (:m :ref VCSDIRECT-READ-VERBS :do "the verb list is part of the cache key: a store whose rows carry a valid mac but were written under the key without the verb digest (as before the list was widened), with sites emptied, does not hide a restore site; the real audit rescans and names it")
@@ -614,6 +653,6 @@ fn testMutatingVerbs -> Bool
 
 fn ! runTests -> Bool
   (let [(before (storeNames))]
-    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testCacheKeyVerbs) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
+    (do (testNewSite) (testAllowed) (testStale) (testPatterns) (testParse) (testHelpersByData) (testShellShapes) (testMutatingVerbs) (testEnvOptions) (testCache) (testCacheFile) (testForgery) (testCacheKeyVerbs) (testWidenedGrown) (testKeys) (testCounts) (testRatchet) (testStoreId) (testStoreAtomic) (testStoreCapAndRename) (testNoHome) (testPlanted) (testKeyNoClobber) (testKeyBound) (testPlantedUnused) (testKeysDiffer) (testRealTree)
         (assert (= (listLength (storeNames)) (listLength before)) (str "the audits of temp repos left the real store unchanged: " (stringFromInt64 (listLength before)) " dirs before, " (stringFromInt64 (listLength (storeNames))) " after"))
         true))
