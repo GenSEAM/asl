@@ -127,8 +127,26 @@ fn ! checkAsl! paths: (List String) otherRc: Int64 -> Int64
         (do (sys/say! (str "(:audit :sub check :status " status " (:check :id balance :status :passed) (:check :id hostCheck :status " status " :exit " (stringFromInt64 checkRc) "))"))
             (if (!= checkRc 0) checkRc otherRc)))))
 
-fn ! checkFiles! ctx: sys/Context args: (List String) -> Int64
-  (let [(aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
+; (:m :ref ASL-CHECK-DOT-DIR :do "a directory argument stands for the tracked .asl files under it (git ls-files, the set the sweep checks), dot for the whole tree, the same in a worktree and in the main checkout; before it was read as a file and answered Is a directory, exit 1; a directory git cannot list is left as given")
+fn ! dirFiles! dir: String -> (Option (List String))
+  (let [(base (if (stringEndsWith? dir "/") (optionOr (stringSlice dir 0 (- (stringLength dir) 1)) dir) dir))
+        (pat (if (or (= base ".") (stringEmpty? base)) "*.asl" (str base "/*.asl")))]
+    (match (sys/capture! (list "git" "ls-files" "--" pat) (none))
+      ((err _) (none))
+      ((ok c) (if (= c.exitCode 0)
+                (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines c.stdout))))
+                (none)))))
+
+fn ! expandDirs! args: (List String) -> (List String)
+  (fold (fn [(acc (List String)) (a String)] -> (List String)
+          (if (sys/isDir? a)
+            (match (dirFiles! a) ((some fs) (listAppend acc fs)) ((none) (listAppend acc (list a))))
+            (listAppend acc (list a))))
+        (list) args)
+
+fn ! checkFiles! ctx: sys/Context given: (List String) -> Int64
+  (let [(args (expandDirs! given))
+        (aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
         (otherArgs (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) args))
         (otherRc (checkOther! otherArgs))]
     (if (listEmpty? aslArgs) otherRc (checkAsl! aslArgs otherRc)))
