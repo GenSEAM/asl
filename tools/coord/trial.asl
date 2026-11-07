@@ -1,5 +1,5 @@
 (module asl-tools/coord/trial
-  :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! stageArgv recordText leonFacts runsPath trialDir
+  :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! trialMainMoved! stageArgv recordText leonFacts runsPath trialDir
       check! run! collect! forgetAttempt! Setup Step setupOf setupSteps trialLanesText runSpecText setup! main]
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv)])
 
@@ -585,7 +585,10 @@ fn ! condAfterWrite! s: Spec id: String r: cd/Res -> Bool
 
 ; (:m :ref DEV-PROMOTE :do "the merge stage merges the trial repo main into every trialDev-<cell> before its train, so cells compare only while that main stays put: run records it before the first stage and reports headMoved:<repo>@main when it differs after the last")
 fn ! trialMainMoved! s: Spec sha0: String -> (List String)
-  (if (= (gitText s.repo (list "rev-parse" "main")) sha0) (list) (list (str "headMoved:" s.repo "@main")))
+  (let [(now (gitText s.repo (list "rev-parse" "main")))]
+    (cond ((or (stringEmpty? sha0) (stringEmpty? now)) (list (str "mainUnread:" s.repo "@main")))
+          ((= now sha0) (list))
+          (else (list (str "headMoved:" s.repo "@main")))))
 
 fn ! run! s: Spec only: String -> Int64
   (let [(ps (specProblems! s))]

@@ -253,9 +253,31 @@ fn ! testForgetGuard -> Bool
         (assert (and (listContains? load2 "badId:a/b") (and (listContains? load2 "badId:..") (and (listContains? load3 "badId:") (not (stringContains? (stringJoin load2 " ") "badId:T1 "))))) (str "check refuses an empty task id or model tag, or one holding / or .., at load: " (stringJoin load2 " ") " / " (stringJoin load3 " ")))
         true))
 
+; (:m :ref DEV-PROMOTE :do "a main that cannot be read before or after the run is an error entry mainUnread, not a silent equal; a readable main that moved stays headMoved")
+fn ! testMainUnread -> Bool
+  (let [(root (pf/scratch "trialDriver" "mainUnread"))
+        (_ (pf/sh (str "git init -q -b other " root "/r && git -C " root "/r -c user.name=t -c user.email=t@t commit -q --allow-empty -m c0 && git -C " root "/r -c user.name=t -c user.email=t@t commit -q --allow-empty -m c1")))
+        (s (with (tr/emptySpec) :repo (str root "/r")))
+        (unreadBoth (tr/trialMainMoved! s ""))
+        (_ (pf/sh (str "git -C " root "/r branch main HEAD~1")))
+        (moved (tr/trialMainMoved! s (gitIn (str root "/r") "rev-parse HEAD")))
+        (same (tr/trialMainMoved! s (gitIn (str root "/r") "rev-parse main")))
+        (unreadBefore (tr/trialMainMoved! s ""))
+        (gotUnread (= unreadBoth (list (str "mainUnread:" root "/r@main"))))
+        (gotMoved (= moved (list (str "headMoved:" root "/r@main"))))
+        (gotSame (listEmpty? same))
+        (gotBefore (= unreadBefore (list (str "mainUnread:" root "/r@main"))))
+        (_ (pf/sh (str "rm -rf " root)))]
+    (assert gotUnread "no main before and after names mainUnread")
+    (assert gotMoved "a readable moved main stays headMoved")
+    (assert gotSame "an unmoved main is clean")
+    (assert gotBefore "an unread start sha with a readable main names mainUnread")
+    true)
+
 fn ! runTests -> Bool
   (do (assert (testPure) "spec, cells and stage argv")
       (assert (testForgetGuard) "forget guard")
+      (assert (testMainUnread) "unread main is an error")
       (assert (testCorpus) "the corpus on main through specLines!")
       (assert (testCycle) "check, run and collect through the real stages")
       true)
