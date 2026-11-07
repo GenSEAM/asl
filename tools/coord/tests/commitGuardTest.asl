@@ -211,8 +211,54 @@ fn ! delayGates root: String base: String -> Bool
       (assert (and (= r2.code 0) (!= (head c2) h2)) (str "the same 2 s check under the 5 s deadline commits: " r2.text))
       true))
 
+; (:m :ref COMMITGUARD-RED-LEAKS-TMP :do "a run that dies on a failed assert cannot remove its pid-named base, so the next run sweeps TMPDIR/commitGuardTest-<pid> whose pid is numeric and dead; a live pid, a non-numeric suffix and any other name stay; a procAlive? error counts as alive")
+fn ! pidOfBase name: String -> Int64
+  (let [(tail (optionOr (stringSlice name 16 (stringLength name)) ""))
+        (pid (optionOr (stringToInt64 tail) -1))]
+    (if (and (stringStartsWith? name "commitGuardTest-") (= (stringFromInt64 pid) tail)) pid -1))
+
+fn ! baseAlive? pid: Int64 -> Bool
+  (match (procAlive? pid) ((ok a) a) ((err _) true))
+
+fn ! sweepDead! tmp: String -> Int64
+  (match (dirList tmp)
+    ((err _) 0)
+    ((ok names)
+      (fold (fn [(n Int64) (name String)]
+              (let [(pid (pidOfBase name))]
+                (if (and (> pid 1) (not (baseAlive? pid)))
+                  (match (pathRemove (str tmp "/" name)) ((ok _) (+ n 1)) ((err _) n))
+                  n)))
+            0 names)))
+
+fn ! sweepWorks? -> Bool
+  (let [(tmp (str (scratch) "-sweep"))
+        (dead (optionOr (stringToInt64 (stringTrim (sh "." (list "sh" "-c" "echo $$")).out)) -1))
+        (deadDir (str tmp "/commitGuardTest-" (stringFromInt64 dead)))
+        (liveDir (str tmp "/commitGuardTest-" (stringFromInt64 (procSelf))))
+        (oddDir (str tmp "/commitGuardTest-abc"))
+        (otherDir (str tmp "/other-1"))
+        (planted (sh "." (list "mkdir" "-p" deadDir liveDir oddDir otherDir)))
+        (deadBefore (baseAlive? dead))
+        (n (sweepDead! tmp))
+        (deadGone (not (fileExists? deadDir)))
+        (liveKept (fileExists? liveDir))
+        (oddKept (fileExists? oddDir))
+        (otherKept (fileExists? otherDir))
+        (_ (sh "." (list "rm" "-rf" tmp)))]
+    (do (assert (and (> dead 1) (= planted.exit 0)) "a dead pid was obtained and the sweep fixture planted")
+        (assert (not deadBefore) "the planted pid is dead before the sweep")
+        (assert (= n 1) (str "the sweep removed exactly the dead base: " (stringFromInt64 n)))
+        (assert deadGone "the dead-pid base is removed")
+        (assert liveKept "the live-pid base is kept")
+        (assert oddKept "a non-numeric suffix is kept")
+        (assert otherKept "a foreign name is kept")
+        true))
+
 fn ! runTests -> Bool
-  (let [(base (scratch))
+  (let [(sweptOk (sweepWorks?))
+        (swept (sweepDead! (optionOr (envGet "TMPDIR") "/tmp")))
+        (base (scratch))
         (root (resultOr (realPath ".") "."))]
     (do (assert (= (sh "." (list "mkdir" "-p" base)).exit 0) "private base")
         (assert (pureRules) "pure rules")
