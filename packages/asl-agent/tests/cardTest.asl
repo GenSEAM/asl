@@ -1,6 +1,6 @@
 (module aslAgent/tests/cardTest
   :x [runTests]
-  :i [(aslAgent/card :a card)])
+  :i [(aslAgent/card :a card) (aslAgent/grounding :a g)])
 
 fn writeFixture! path: String content: String -> Bool
   (match (fileWrite path content)
@@ -105,4 +105,5 @@ fn ! runTests -> Bool
       (assert (match cardDataResult
         ((ok cardData) (and (= cardData.name "Leon") (and (listContains? cardData.deliverables "patch") (and (listContains? cardData.deliverables "findings") (and (listContains? cardData.allowlist "read") (and (listContains? cardData.allowlist "manage") (and (listContains? cardData.receiptFields "status") (listContains? cardData.receiptFields "journal"))))))))
         ((err _) false)) "card core fields derive from loaded sources")
+      (assert (match (g/aslCard! root) ((ok s) (and (listAll? (fn [n] (stringContains? s (str "\"" n " "))) (list "optionOr" "listGet" "fold" "pair" "stringSplit" "mapGet" "resultOr")) (and (stringContains? s ":lookup") (and (<= (stringLength s) 8000) (>= (listLength (stringSplit s " -> ")) 61))))) ((err _) false)) "asl card carries at least 60 builtin signatures including the core Option, list and map ones, the lookup row, and stays within 8000 characters")
       true))

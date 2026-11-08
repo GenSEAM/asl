@@ -6,6 +6,7 @@
 ; (:m :ref LEON-ASL-GROUNDING :do "a model with no ASL priors gets the language from the workspace's own sources: rule sentences cut by anchor from the tools.asn language topic and code cut by symbol from the canonical examples, shown as the write steps Leon parses; nothing here restates the language in its own words")
 
 ; (:m :ref LEON-CARD-TUNE :do "CAL ensemble-20261028: free writers fail by using an Option as a String, so the card leads with the type sentences, the checker's own signatures of the Option- and Result-returning builtins, and one checked expression per type rule; shape rules and the record example (schema construction naming every field, with) follow")
+; (:m :ref LEON-TOOL-CARD :do "the card's :sigs row carries the builtins this repo calls most (counted over asl/packages/*/src, kept only when ty/builtinSig returns some) so a model stops guessing names, and a :lookup row says ASL is not on the web: a repo name comes from (:step :op query :in code), a builtin from (:step :op help) or types.asl#builtinSig")
 fn cardSources -> (List String)
   (list "asl/grammar/tools.asn" "asl/grammar/examples/record.asl" "asl/packages/asl-checker/src/types.asl#builtinSig")
 
@@ -16,7 +17,7 @@ fn cardRuleAnchors -> (List String)
   (list "An ASL file is a module header" "A function is a bare line" "(let [(a 1)" "(with x :k v)" "A test exports runTests")
 
 fn cardSigNames -> (List String)
-  (list "mapEmpty" "mapSet" "pair" "pairFirst" "pairSecond" "stringSplit" "stringSlice" "stringUpper" "listGet" "mapGet" "stringToInt64" "optionOr" "fold")
+  (list "optionOr" "pair" "listAppend" "pairFirst" "cons" "pairSecond" "map" "stringLength" "listHead" "stringEmpty?" "listLength" "stringFromInt64" "listEmpty?" "fold" "stringStartsWith?" "filter" "bytesGet" "stringSlice" "listTail" "listGet" "stringJoin" "stringContains?" "listReverse" "listContains?" "stringReplace" "stringTrim" "mapGet" "stringSplit" "mapSet" "mapEmpty" "stringIndexOf" "stringToBytes" "bytesLength" "some?" "stringEndsWith?" "listAny?" "stringToInt64" "mod" "fileReadString" "resultOr" "max" "mapHas?" "envGet" "bytesSet" "min" "int64ToFloat64" "listDrop" "listTake" "stringLower" "listSlice" "fdClose" "pathRemove" "ok?" "stringChars" "fileExists?" "fileWrite" "bytesAlloc" "listAll?" "monotonicNs" "mapKeys" "none?" "realPath" "println" "fileStat" "dirCreate" "listLast" "procSelf" "eprintln" "nowNs" "stringConcat" "listFlatMap" "stringLines" "charCode" "dirList" "listSort" "stringFromFloat64" "listSortBy" "float64ToInt64" "assert" "stringToFloat64" "pathRename" "bytesSha256" "chars" "mapValues" "listIndexOf" "enumerate" "fileReadBytes" "optionMap" "drop" "procWaitPid")
 
 fn cardExamples -> (List (Pair String String))
   (list (pair "(match (listGet xs 0) ((some v) v) ((none) 0))" "Int64")
@@ -130,7 +131,7 @@ fn ! aslCard! repoRoot: String -> (Result String String)
           ((err e) (err e))
           ((ok lib)
             (ok (str "(:aslCard :types (" (quotedList (typeRules lang)) ")\n :sigs (" (quotedList (map sigLine (cardSigNames))) ")\n :examples ("
-                 (quotedList (map pairFirst (cardExamples))) ")\n :rules (" (quotedList (languageRules lang)) ")\n"
+                 (quotedList (map pairFirst (cardExamples))) ")\n :rules (" (quotedList (languageRules lang)) ")\n :lookup \"ASL is not on the web: a name in this repo -> (:step :op query :query name :in code); a builtin -> (:step :op help :name builtinName) or read asl/packages/asl-checker/src/types.asl#builtinSig; search is web only\"\n"
                  " :reply \"a write step ends its line; the file follows unescaped in a ``` fence\")\n"
                  (rawStep libPath (libExample lib (cardItems))))))))))
 
