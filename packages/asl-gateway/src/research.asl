@@ -396,12 +396,12 @@ fn notCrawled url: String fallback: j/Json note: String -> j/Json
 
 fn fetchResult url: String fallback: j/Json r: srch/HttpResult decoded: (Result String pt/PyErr) -> j/Json
   (match r
-    ((srch/httpFail _ _) (notCrawled url fallback "fetchTimeoutOrError"))
+    ((srch/httpFail e _) (notCrawled url fallback (str "fetchTimeoutOrError: " e.msg)))
     ((srch/httpResp code _ hs body)
       (if (not (srch/httpOk? code))
         (notCrawled url fallback "fetchTimeoutOrError")
         (match decoded
-          ((err _) (notCrawled url fallback "fetchTimeoutOrError"))
+          ((err e) (notCrawled url fallback (str "fetchTimeoutOrError: " e.msg)))
           ((ok html)
             (if (isWafChallenge code html)
               (notCrawled url fallback "wafChallenge")
