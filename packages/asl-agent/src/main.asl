@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps readOnlyEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1186,7 +1186,7 @@ fn ! ownedChanged! owns: (List String) rootDir: String startHead: (Option String
 
 ; (:m :ref PER-TURN-GATE :do "a turn whose ops all only read, or only write and edit without persisting a change (an edit whose :old is not in the file), changes nothing the gates see, so it reuses the last verdict instead of rerunning the task gates (a suite gate cost minutes per read turn; one calibration run repeated a failing edit 24 times and gated each); a turn that wrote, any other op, an unnamed form or (:done) still runs them")
 fn readOnlyOps -> (List String)
-  (list "read" "query" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe")
+  (list "read" "query" "q" "check" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe" "search" "research" "crawl" "intent" "intel")
 
 fn unchangedTurn? names: (List String) wrote: Bool -> Bool
   (and (not wrote) (and (not (listEmpty? names)) (listAll? (fn [n] (listContains? (listAppend (readOnlyOps) (list "write" "edit")) n)) names)))
