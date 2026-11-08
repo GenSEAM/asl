@@ -277,9 +277,9 @@ fn envMapFromList! -> (Map String String)
             ((none) (mapSet m row ""))))
         (mapEmpty) (envList))
 
-; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see TAVILY/BRAVE/SERPER without exporting them")
+; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see SYNTHETIC/TAVILY/BRAVE/SERPER without exporting them")
 fn searchKeyNames -> (List String)
-  (list "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
+  (list "SYNTHETIC_API_KEY" "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
 
 fn ! withSearchKeys! env: (Map String String) paths: (List String) -> (Map String String)
   (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
