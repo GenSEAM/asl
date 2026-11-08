@@ -3,5 +3,6 @@
 useDefault = true
 
 [allowlist]
-description = "reviewed false positives: raw primitive names in asl-ir/doc.asn prose after the word access, and the alphabet-run fake token egressTest seeds"
+description = "reviewed false positives: raw primitive names in asl-ir/doc.asn prose after the word access, the alphabet-run fake token egressTest seeds, and the stub PEM markers (10-char bodies) egressTest feeds the scrubber"
 regexes = ['''^rawAddI64/rawSubI64/rawMulI64$''', '''^abcdefghijklmnop1234$''']
+paths = ['''(^|/)tools/coord/tests/egressTest\.asl$''']
