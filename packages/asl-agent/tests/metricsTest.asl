@@ -122,46 +122,42 @@ fn testEditMetricsParity! -> Bool
       (assert (= res.acceptedAttempts 8) "accepted_attempts")
       (assert (= res.failedAttempts 22) "failed_attempts")
       
-      (let [j0cOpt (findJournalSummary res.byJournal "0c7910c37e984c14.journal")]
+      (let [j0cOpt (findJournalSummary res.byJournal "0c7910c37e984c14.journal")
+            j0cTotal (match j0cOpt ((some j) j.totalSequences) ((none) -1))
+            j0cAccepted (match j0cOpt ((some j) j.acceptedSequences) ((none) -1))
+            j0cFirst (match j0cOpt ((some j) j.firstPassSequences) ((none) -1))]
         (do
           (assert (some? j0cOpt) "0c summary found")
-          (match j0cOpt
-            ((some j0c)
-              (do
-                (assert (= j0c.totalSequences 4) "D3 total_sequences == 4")
-                (assert (= j0c.acceptedSequences 2) "D3 accepted_sequences == 2")
-                (assert (= j0c.firstPassSequences 0) "D3 first_pass_sequences == 0")
-                true))
-            ((none) false))))
+          (assert (= j0cTotal 4) "D3 total_sequences == 4")
+          (assert (= j0cAccepted 2) "D3 accepted_sequences == 2")
+          (assert (= j0cFirst 0) "D3 first_pass_sequences == 0")
+          true))
       
-      (let [j1aOpt (findJournalSummary res.byJournal "1a4ee5dab7014e08.journal")]
+      (let [j1aOpt (findJournalSummary res.byJournal "1a4ee5dab7014e08.journal")
+            j1aTotal (match j1aOpt ((some j) j.totalSequences) ((none) -1))
+            j1aAccepted (match j1aOpt ((some j) j.acceptedSequences) ((none) -1))
+            j1aSeqs (match j1aOpt ((some j) (filter (fn [s] (stringEndsWith? s.file "types.asl")) j.sequences)) ((none) (list)))
+            j1aRetries (match (listGet j1aSeqs 0) ((some s) s.retries) ((none) -1))]
         (do
           (assert (some? j1aOpt) "1a summary found")
-          (match j1aOpt
-            ((some j1a)
-              (do
-                (assert (= j1a.totalSequences 1) "D4 total_sequences == 1")
-                (assert (= j1a.acceptedSequences 0) "D4 accepted_sequences == 0")
-                (let [seqs (filter (fn [s] (stringEndsWith? s.file "types.asl")) j1a.sequences)]
-                  (do
-                    (assert (= (listLength seqs) 1) "types.asl seq found")
-                    (assert (= (c/firstOf seqs).retries 10) "D4 types.asl retries == 10")
-                    true))))
-            ((none) false))))
+          (assert (= j1aTotal 1) "D4 total_sequences == 1")
+          (assert (= j1aAccepted 0) "D4 accepted_sequences == 0")
+          (assert (= (listLength j1aSeqs) 1) "types.asl seq found")
+          (assert (= j1aRetries 10) "D4 types.asl retries == 10")
+          true))
       
-      (let [j2fOpt (findJournalSummary res.byJournal "2f4ebb27296640bd.journal")]
+      (let [j2fOpt (findJournalSummary res.byJournal "2f4ebb27296640bd.journal")
+            j2fTotal (match j2fOpt ((some j) j.totalSequences) ((none) -1))
+            j2fSeqs (match j2fOpt ((some j) j.sequences) ((none) (list)))
+            j2fFile (match (listGet j2fSeqs 0) ((some s) s.file) ((none) ""))
+            j2fRetries (match (listGet j2fSeqs 0) ((some s) s.retries) ((none) -1))]
         (do
           (assert (some? j2fOpt) "2f summary found")
-          (match j2fOpt
-            ((some j2f)
-              (do
-                (assert (= j2f.totalSequences 1) "D5 total_sequences == 1")
-                (let [s0 (c/firstOf j2f.sequences)]
-                  (do
-                    (assert (stringEndsWith? s0.file "layoutCorpusLib.asl") "D5 file layoutCorpusLib.asl")
-                    (assert (= s0.retries 3) "D5 retries == 3")
-                    true))))
-            ((none) false))))
+          (assert (= j2fTotal 1) "D5 total_sequences == 1")
+          (assert (= (listLength j2fSeqs) 1) "D5 one sequence")
+          (assert (stringEndsWith? j2fFile "layoutCorpusLib.asl") "D5 file layoutCorpusLib.asl")
+          (assert (= j2fRetries 3) "D5 retries == 3")
+          true))
       
       (let [metricStr (m/formatEditMetric res "2026-09-26" "tests/acceptance/agentLoop/fixtures/editMetrics")]
         (do
@@ -171,9 +167,11 @@ fn testEditMetricsParity! -> Bool
 
 fn testUnreadableJournal! -> Bool
   (let [result (m/analyzeJournals! (list "asl/packages/asl-agent/tests/no-such-metrics-journal-LX5"))]
-    (match result
-      ((ok _) (do (assert false "unreadable journals must not produce empty metrics") false))
-      ((err message) (do (assert (stringContains? message "no-such-metrics-journal-LX5") "read error identifies unreadable path") true))))
+    (let [message (match result ((ok _) "") ((err e) e))]
+      (do
+        (assert (not (= message "")) "unreadable journals must not produce empty metrics")
+        (assert (stringContains? message "no-such-metrics-journal-LX5") "read error identifies unreadable path")
+        true)))
     (let [defects (m/analyzeDefectFiles! (list "asl/packages/asl-agent/tests/no-such-metrics-journal-LX5"))]
       (do
         (assert (= defects.unreadable 1) "unreadable defect journals are counted")
