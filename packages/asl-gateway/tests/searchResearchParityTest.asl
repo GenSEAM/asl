@@ -1,5 +1,5 @@
 (module ws/searchResearchParityTest
-  :x [runTests]
+  :x [runTests replay! caseOf fixturePath Case Run Verdict]
   :i [(asl-json/json :a j)
       (pyText :a pt)
       (search :a srch)
