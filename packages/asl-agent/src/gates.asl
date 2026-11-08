@@ -7,7 +7,8 @@
       hitFile hitLine hitText placeholderHit
       parseCmdTokens isPathLike candidateGatePaths! missingGatePaths! missingGateFiles!
       vacuousOutsideOwns!
-      gateRunScripts gatePartitionFiles gateVacuousMessage gateRevertOutcome gateRevertVerdict]
+      gateRunScripts gatePartitionFiles gateVacuousMessage gateRevertOutcome gateRevertVerdict
+      gateTimesPath readGateTimes! gateTimeoutFit gateTimeoutFit! gateSuiteOf]
   :i [(aslAgent/core :a c) (aslAgent/diff :a d)])
 
 enum GateResult
@@ -493,3 +494,67 @@ fn gateRevertVerdict reverted: (List GateResult) verdicts: (List String) impl: (
       (let [keptStr (if (listEmpty? newFiles) "" (str " (kept " (c/joinSep newFiles ", ") ")"))]
         (pair true (str "revertCheck" keptStr ": " detail)))
       (pair false (str "no gate reports a failed assertion with " (c/joinSep impl ", ") " reverted to HEAD: " detail))))
+
+fn gateTimesPath -> String
+  (str (optionOr (envGet "HOME") "") "/.asl/run/gateTimes.asn")
+
+fn gateRowPrefix -> String
+  "(:suiteTime :suite \""
+
+fn gateQuoted chars: (List String) acc: (List String) -> (Option (Pair String (List String)))
+  (match (listHead chars)
+    ((none) (none))
+    ((some ch)
+     (let [(rest (optionOr (listTail chars) (list)))]
+       (cond
+         ((= ch "\"") (some (pair (stringJoin (listReverse acc) "") rest)))
+         ((= ch "\\")
+          (match (listHead rest)
+            ((some nxt) (if (or (= nxt "\\") (= nxt "\"")) (gateQuoted (optionOr (listTail rest) (list)) (cons nxt acc)) (none)))
+            ((none) (none))))
+         (else (gateQuoted rest (cons ch acc)))))))
+
+fn gateParseRow line: String -> (Option (Pair String Int64))
+  (if (not (stringStartsWith? line (gateRowPrefix)))
+    (none)
+    (match (gateQuoted (stringChars (optionOr (stringSlice line (stringLength (gateRowPrefix)) (stringLength line)) "")) (list))
+      ((none) (none))
+      ((some p)
+       (let [(suite (pairFirst p))
+             (tail (stringJoin (pairSecond p) ""))
+             (digits (if (and (stringStartsWith? tail " :ms ") (stringEndsWith? tail ")"))
+                       (optionOr (stringSlice tail 5 (- (stringLength tail) 1)) "")
+                       ""))]
+         (match (stringToInt64 digits)
+           ((none) (none))
+           ((some ms) (some (pair suite ms))))))))
+
+fn ! readGateTimes! path: String -> (Map String Int64)
+  (if (not (fileExists? path))
+    (mapEmpty)
+    (match (fileReadString path)
+      ((err _) (mapEmpty))
+      ((ok text)
+       (fold (fn [(acc (Map String Int64)) (line String)] -> (Map String Int64)
+               (match (gateParseRow line)
+                 ((none) acc)
+                 ((some p) (mapSet acc (pairFirst p) (pairSecond p)))))
+             (mapEmpty)
+             (stringLines text)))))
+
+fn gateSuiteOf cmd: String -> (Option String)
+  (let [toks (filter (fn [(w String)] -> Bool (not (stringEmpty? w)))
+                     (stringSplit (stringReplace (stringReplace (stringReplace cmd "\t" " ") "\r" " ") "\n" " ") " "))
+        suites (filter (fn [(w String)] -> Bool (or (stringEndsWith? w ".asl") (stringEndsWith? w ".sh"))) toks)]
+    (listLast suites))
+
+fn gateTimeoutFit recordedMs: Int64 timeoutSec: Int64 -> Bool
+  (> (* recordedMs 3) (* timeoutSec 2000))
+
+fn ! gateTimeoutFit! timesPath: String cmd: String timeoutSec: Int64 -> (Option Int64)
+  (match (gateSuiteOf cmd)
+    ((none) (none))
+    ((some suite)
+     (match (mapGet (readGateTimes! timesPath) suite)
+       ((none) (none))
+       ((some ms) (if (gateTimeoutFit ms timeoutSec) (some ms) (none))))))

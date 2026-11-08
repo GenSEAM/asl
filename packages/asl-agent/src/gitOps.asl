@@ -1,9 +1,9 @@
 (module aslAgent/gitOps
   :x [RVal rStr rInt rBool rNull rPair LineArg laNone laBad laNum Bounded GitCtx
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
-      runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
+      runGates! runGatesIn! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg)])
+  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg) (aslAgent/gates :a gd)])
 
 enum RVal
   (rStr text: String)
@@ -598,10 +598,17 @@ fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: 
   (runGates! gates root timeoutSec env watch)
 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
+  (runGatesIn! gates root timeoutSec env watch (gd/gateTimesPath))
+
+fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
   (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")]
     (map (fn [g]
            (let [rid (pairFirst g)
                  cmd (pairSecond g)]
+             (match (gd/gateTimeoutFit! timesPath cmd timeoutSec)
+               ((some ms) (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
+                            (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout")))
+               ((none)
              (match (runGate! cmd root timeoutSec childEnv watch)
                ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
                ((ok b)
@@ -609,7 +616,7 @@ fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 e
                    (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
                      (rs "stdout" b.out) (rs "stderr" b.errText))
                    (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
-                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))
+                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))))
       gates))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))
