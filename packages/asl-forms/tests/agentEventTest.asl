@@ -1,0 +1,37 @@
+(module asl-forms/tests/agentEventTest
+  :x [runTests]
+  :i [(asl-forms/delegate :a d) (asl-syntax/asl/asn :a asn)])
+
+fn ! runTests -> Bool
+  (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/agentEventTest-" (stringFromInt64 (procSelf))))
+        (mk (dirCreate dir))
+        (events (str dir "/bus/events.asn"))
+        (line1 "(:event :at \"2026-11-08T00:00:00Z\" :unit \"SIGNAL-LEON-DONE\" :root \"/work/root\" :stop \"done\" :head \"abc123\" :turns 3 :receipt \".asl/run/agentLoop/s1.journal\")")
+        (line2 "(:event :at \"2026-11-08T00:00:01Z\" :unit \"session-2\" :root \"/work/root\" :stop \"turnBudget\" :head \"\" :turns 7 :receipt \".asl/run/agentLoop/s2.journal\")")
+        (r1 (d/appendAgentEvent! events "2026-11-08T00:00:00Z" "SIGNAL-LEON-DONE" "/work/root" "done" "abc123" 3 ".asl/run/agentLoop/s1.journal"))
+        (after1 (resultOr (fileReadString events) ""))
+        (rows1 (stringLines (stringTrim after1)))
+        (r2 (d/appendAgentEvent! events "2026-11-08T00:00:01Z" "session-2" "/work/root" "turnBudget" "" 7 ".asl/run/agentLoop/s2.journal"))
+        (after2 (resultOr (fileReadString events) ""))
+        (rows2 (stringLines (stringTrim after2)))
+        (notDir (str dir "/not-a-directory"))
+        (badFixture (fileWrite notDir "file blocks directory creation"))
+        (bad (d/appendAgentEvent! (str notDir "/events.asn") "2026-11-08T00:00:02Z" "u" "r" "error" "" 1 "j"))
+        (receipt "(:agentReceipt :status :ok :stop done :session \"s9\" :journal \".asl/run/agentLoop/s9.journal\" :turns 4)")
+        (removed (pathRemove dir))]
+    (do
+      (assert (ok? mk) "fixture root created")
+      (assert (ok? r1) "first event append succeeds and creates its parent directory")
+      (assert (= rows1 (list line1)) "one call appends exactly one event row with every field")
+      (assert (ok? (asn/asnRead (optionOr (listGet rows1 0) ""))) "the appended event row is parseable ASN")
+      (assert (ok? r2) "second event append succeeds")
+      (assert (= rows2 (list line1 line2)) "two calls append two rows in call order")
+      (assert (ok? (asn/asnRead (optionOr (listGet rows2 1) ""))) "the second appended event row is parseable ASN")
+      (assert (ok? badFixture) "bad-directory fixture created")
+      (assert (err? bad) "an events path beneath a non-directory reports err")
+      (assert (= (d/receiptToken receipt ":stop") "done") "a bare receipt token is read up to the next space")
+      (assert (= (d/receiptToken receipt ":journal") ".asl/run/agentLoop/s9.journal") "a quoted receipt value is unquoted")
+      (assert (= (d/receiptToken receipt ":turns") "4") "a token before the closing paren ends there")
+      (assert (= (d/receiptToken receipt ":head") "") "an absent key gives empty")
+      (assert (ok? removed) "fixture removed")
+      true))
