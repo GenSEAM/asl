@@ -647,6 +647,9 @@ fn ! unleasedBuild? cache: String names: (List String) -> Bool
 fn sharedFloorNs -> Int64
   21600000000000
 
+fn staleAgeNs -> Int64
+  1209600000000000
+
 fn keepNewest -> Int64
   4
 
@@ -688,6 +691,12 @@ fn ! sweepLocked! cache: String names: (List String) leased: (List String) capBy
         (deadGone (listLength (filter (fn [(h String)] -> Bool (ok? (pathRemove (str cache "/" h)))) dead)))
         (stored (filter storeName? names))
         (stamps (fold (fn [(m (Map String Int64)) (n String)] -> (Map String Int64) (mapSet m n (treeStamp! (str cache "/" n)))) (mapEmpty) stored))
-        (targets (listAppend (listAppend leased (newestOfKinds stored stamps)) (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live)))
-        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) stored))]
-    (+ deadGone (pairSecond (sweepEntries! entries capBytes minAgeNs))))
+        (named (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live))
+        (held (listAppend leased named))
+        (stale? (fn [(n String)] -> Bool (and (> (- now (treeStamp! (str cache "/" n))) (staleAgeNs)) (not (listContains? held (stringReplace n ".failed" ""))))))
+        (stale (filter stale? stored))
+        (kept (filter (fn [(n String)] -> Bool (not (listContains? stale n))) stored))
+        (staleGone (listLength (filter (fn [(n String)] -> Bool (ok? (pathRemove (str cache "/" n)))) stale)))
+        (targets (listAppend (listAppend leased (newestOfKinds kept stamps)) named))
+        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) kept))]
+    (+ deadGone staleGone (pairSecond (sweepEntries! entries capBytes minAgeNs))))
