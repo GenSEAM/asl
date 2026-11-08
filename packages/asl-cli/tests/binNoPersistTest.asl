@@ -164,6 +164,27 @@ fn ! testInFlight work: String -> Bool
                   (refute (fileExists? (str cache "/lock")) "the sweep releases the lock it took")
                   true))))
 
+; (:m :ref U6-NATIVECLI-REAP :do "a dead pid's tmp dir is private to that pid, so it goes even while another entry is leased and however fresh it is; a live pid's tmp dir stays")
+fn ! testDeadTmpLeased work: String -> Bool
+  (let [(cache (str work "/reap"))
+        (me (procSelf))
+        (dead (str cache "/tmp.999999"))
+        (live (str cache "/tmp." (stringFromInt64 me)))
+        (_a (dirCreate cache))
+        (_b (dirCreate dead))
+        (_c (dirCreate live))
+        (_d (entry! (str cache "/rt-held") 1000 300))
+        (_e (dirCreate (str cache "/leases")))
+        (_f (fileWrite (str cache "/leases/rt-held@" (stringFromInt64 me)) (str (stringFromInt64 me) " 0\n")))
+        (removed (nc/sweepNativeCache! cache 0 600000000000))
+        (names (resultOr (dirList cache) (list)))]
+    (do (refute (listContains? names "tmp.999999") "a dead pid's fresh tmp dir goes though an entry is leased")
+        (refute (fileExists? dead) "the dead pid's tmp dir is gone from disk")
+        (assert (listContains? names (str "tmp." (stringFromInt64 me))) "a live pid's tmp dir stays")
+        (assert (listContains? names "rt-held") "the leased entry stays")
+        (assert (= removed 1) (str "one removed: " (stringFromInt64 removed)))
+        true))
+
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "an entry used after the sweep scanned the store is re-stamped right before deletion and kept")
 fn ! testRecheck work: String -> Bool
   (let [(mods (str work "/recheck"))
@@ -279,6 +300,7 @@ fn ! runTests -> Bool
         (cap (if (ok? made) (testCap work) false))
         (pinned (if (ok? made) (testPinnedHead work) false))
         (flight (if (ok? made) (testInFlight work) false))
+        (reap (if (ok? made) (testDeadTmpLeased work) false))
         (floors (if (ok? made) (testFloors work) false))
         (recheck (if (ok? made) (testRecheck work) false))
         (inner (if (ok? made) (testInnerStamp work) false))
@@ -293,6 +315,7 @@ fn ! runTests -> Bool
         (assert cap "a store stays under its cap after 50 synthetic entries")
         (assert pinned "a live head's entry survives the sweep")
         (assert flight "an entry a build in flight uses survives the sweep")
+        (assert reap "a dead pid's tmp dir goes while an entry is leased, a live pid's stays")
         (assert floors "the 6 hour and newest-4 floors hold at cap 0")
         (assert recheck "an entry used during the sweep is kept")
         (assert inner "an entry is stamped by its newest inner file")
