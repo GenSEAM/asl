@@ -2,8 +2,9 @@
   :x [Bucket HubState newHubState mkHub hubWithNow hubSleep! hubNote hubCliCall hubStderr hubWithBreaker hubWithBuckets
       HttpReq HttpResult httpResp httpFail curlConfig curlChildEnv parseCurlOutput runCurlBatch! runOne! httpError httpOk? validateReq headerNameOk charsetNameOk runTool! iconvDecode! decodeBody! contentCharset urlTypeCheck repl
       jobj3 engineError respJson jreq
-      syntheticReq syntheticParse tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
-      engineOrder tier2Order enginePlan selectEngine tier1Select tier2Select tier1Search!
+      syntheticReq syntheticParse arxivReq arxivParse waybackReq waybackParse cdxReq cdxParse iasearchReq iasearchParse
+      tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      engineOrder tier2Order engineReq parseEngine enginePlan selectEngine tier1Select tier2Select tier1Search!
       doTavilySearch! doSerperSearch! doWikiSearch! doSearxngSearch! doDdgSearch! parallelTier1Search! executeSearchHub!
       escapeAsnStr formatSearchAsn]
   :i [(asl-json/json :a j)
@@ -402,6 +403,129 @@ fn syntheticParse r: HttpResult -> j/Json
               ((j/jarr xs) (match (syntheticRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
               (_ (ok (respJson (j/jstr "") (list))))))))))
 
+fn archiveText v: j/Json -> String
+  (match v ((j/jstr s) s) ((j/jnull) "") (_ (pt/pyStr v)))
+
+fn archiveXmlText s: String tag: String -> String
+  (match (listGet (stringSplit s (str "<" tag ">")) 1)
+    ((some rest) (pt/pyStrip (optionOr (listHead (stringSplit rest (str "</" tag ">"))) "")))
+    ((none) ""))
+
+fn archiveXmlClean s: String -> String
+  (repl (repl (repl s "&amp;" "&") "&lt;" "<") "&gt;" ">")
+
+fn arxivRows entries: (List String) acc: (List j/Json) -> (List j/Json)
+  (match (listHead entries)
+    ((none) (listReverse acc))
+    ((some entry)
+      (let [(title (archiveXmlClean (archiveXmlText entry "title")))
+            (url (archiveXmlClean (archiveXmlText entry "id")))
+            (summary (archiveXmlClean (archiveXmlText entry "summary")))]
+        (arxivRows (optionOr (listTail entries) (list))
+                   (cons (resultItem (j/jstr title) (pt/cleanUrl (j/jstr url)) (j/jstr summary) "arxiv" (j/jfloat 0.8)) acc)))))
+
+fn arxivReq query: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://export.arxiv.org/api/query?search_query=all:" (pt/urlQuote query "") "&max_results=" (stringFromInt64 limit))
+           :headers (list (pair "Accept" "application/atom+xml") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn arxivParse r: HttpResult -> j/Json
+  (match r
+    ((httpFail e _) (engineError e))
+    ((httpResp code reason _ body)
+      (if (not (httpOk? code))
+        (engineError (httpError code reason))
+        (let [(entries (optionOr (listTail (stringSplit body "<entry>")) (list)))]
+          (respJson (j/jstr "") (arxivRows entries (list)))))))
+
+fn waybackReq url: String -> HttpReq
+  (HttpReq :url (str "https://archive.org/wayback/available?url=" (pt/urlQuote url ""))
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 10))
+
+fn waybackOriginal snapshot: String stamp: String -> String
+  (let [(marker (str "/web/" stamp "/"))]
+    (match (stringIndexOf snapshot marker)
+      ((some i) (pt/sliceB snapshot (+ i (stringLength marker)) (stringLength snapshot)))
+      ((none) "")))
+
+fn waybackParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (let [(snapshots (optionOr (pt/jget data "archived_snapshots") (j/jobj (list))))
+            (closest (optionOr (pt/jget snapshots "closest") (j/jobj (list))))
+            (stamp (archiveText (optionOr (pt/jget closest "timestamp") (j/jstr ""))))
+            (snapshot (archiveText (optionOr (pt/jget closest "url") (j/jstr ""))))
+            (given (archiveText (optionOr (pt/jget data "url") (j/jstr ""))))
+            (original (if (stringEmpty? given) (waybackOriginal snapshot stamp) given))
+            (raw (str "https://web.archive.org/web/" stamp "id_/" original))
+            (rows (if (or (stringEmpty? stamp) (stringEmpty? original))
+                    (list)
+                    (list (resultItem (j/jstr original) (pt/cleanUrl (j/jstr raw))
+                                      (j/jstr (str "Closest snapshot " snapshot " at " stamp)) "wayback" (j/jfloat 0.8)))))]
+        (respJson (j/jstr "") rows))))
+
+fn cdxCell row: j/Json i: Int64 -> String
+  (match row
+    ((j/jarr fields) (archiveText (optionOr (listGet fields i) (j/jstr ""))))
+    (_ ""))
+
+fn cdxRows rows: (List j/Json) acc: (List j/Json) -> (List j/Json)
+  (match (listHead rows)
+    ((none) (listReverse acc))
+    ((some row)
+      (let [(stamp (cdxCell row 0))
+            (original (cdxCell row 1))
+            (status (cdxCell row 2))
+            (rest (optionOr (listTail rows) (list)))]
+        (if (or (= stamp "timestamp") (stringEmpty? original))
+          (cdxRows rest acc)
+          (cdxRows rest (cons (resultItem (j/jstr original) (pt/cleanUrl (j/jstr original))
+                                          (j/jstr (str "Archived at " stamp " with status " status)) "cdx" (j/jfloat 0.75)) acc))))))
+
+fn cdxReq url: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://web.archive.org/cdx/search/cdx?url=" (pt/urlQuote url "") "&output=json&limit=" (stringFromInt64 limit) "&fl=timestamp,original,statuscode")
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn cdxParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (match data
+        ((j/jarr rows) (respJson (j/jstr "") (cdxRows rows (list))))
+        (_ (respJson (j/jstr "") (list))))))
+
+fn iasearchRows docs: (List j/Json) acc: (List j/Json) -> (List j/Json)
+  (match (listHead docs)
+    ((none) (listReverse acc))
+    ((some doc)
+      (let [(identifier (archiveText (optionOr (pt/jget doc "identifier") (j/jstr ""))))
+            (title0 (archiveText (optionOr (pt/jget doc "title") (j/jstr ""))))
+            (title (if (stringEmpty? title0) identifier title0))
+            (rest (optionOr (listTail docs) (list)))]
+        (if (stringEmpty? identifier)
+          (iasearchRows rest acc)
+          (iasearchRows rest (cons (resultItem (j/jstr title)
+                                               (pt/cleanUrl (j/jstr (str "https://archive.org/details/" identifier)))
+                                               (j/jstr (str "Internet Archive item " identifier)) "iasearch" (j/jfloat 0.75)) acc))))))
+
+fn iasearchReq query: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://archive.org/advancedsearch.php?q=" (pt/urlQuote query "") "&fl[]=identifier&fl[]=title&rows=" (stringFromInt64 limit) "&output=json")
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn iasearchParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (let [(response (optionOr (pt/jget data "response") (j/jobj (list))))
+            (docs (optionOr (pt/jget response "docs") (j/jarr (list))))]
+        (match docs
+          ((j/jarr xs) (respJson (j/jstr "") (iasearchRows xs (list))))
+          (_ (respJson (j/jstr "") (list)))))))
+
 fn syntheticReq query: String limit: Int64 key: String -> HttpReq
   (HttpReq :url "https://api.synthetic.new/v2/search"
            :headers (list (pair "Content-Type" "application/json") (pair "Authorization" (str "Bearer " key)) (pair "User-Agent" "ASL-Gateway/1.0"))
@@ -747,6 +871,14 @@ fn braveParse r: HttpResult -> j/Json
                   ((j/jarr xs) (match (braveRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
                   (_ (ok (respJson (j/jstr "") (list))))))))))))
 
+fn archiveEngineName? name: String -> Bool
+  (or (or (= name "arxiv") (= name "wayback")) (or (= name "cdx") (= name "iasearch")))
+
+fn ! doArchiveSearch! st: HubState name: String query: String limit: Int64 -> j/Json
+  (match (engineReq st name query limit)
+    ((none) (j/jnull))
+    ((some req) (parseEngine name (runOne! st req) limit)))
+
 fn engineReq st: HubState name: String query: String limit: Int64 -> (Option HttpReq)
   (cond
     ((= name "synthetic")
@@ -758,6 +890,10 @@ fn engineReq st: HubState name: String query: String limit: Int64 -> (Option Htt
     ((= name "brave") (let [(k (envGetNonEmpty st "BRAVE_API_KEY"))] (if (stringEmpty? k) (none) (some (braveReq query limit k)))))
     ((= name "wiki") (some (wikiReq query limit)))
     ((= name "serper") (let [(k (envGetNonEmpty st "SERPER_API_KEY"))] (if (stringEmpty? k) (none) (some (serperReq query limit k)))))
+    ((= name "arxiv") (some (arxivReq query limit)))
+    ((= name "wayback") (some (waybackReq query)))
+    ((= name "cdx") (some (cdxReq query limit)))
+    ((= name "iasearch") (some (iasearchReq query limit)))
     (else (none)))
 
 fn enginePlan st: HubState query: String limit: Int64 -> (List (Pair String HttpReq))
@@ -768,7 +904,7 @@ fn enginePlan st: HubState query: String limit: Int64 -> (List (Pair String Http
         (list) (engineOrder))
 
 fn parseEngine name: String r: HttpResult limit: Int64 -> j/Json
-  (cond ((= name "synthetic") (syntheticParse r)) ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) (else (j/jnull)))
+  (cond ((= name "synthetic") (syntheticParse r)) ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) ((= name "arxiv") (arxivParse r)) ((= name "wayback") (waybackParse r)) ((= name "cdx") (cdxParse r)) ((= name "iasearch") (iasearchParse r)) (else (j/jnull)))
 
 fn engineGood? d: j/Json -> Bool
   (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))
@@ -895,6 +1031,7 @@ fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 ->
                         ((= choice "serper") (pair (ok (pair (doSerperSearch! st query limit (none)) (list))) st))
                         ((or (= choice "wikipedia") (= choice "wiki")) (pair (ok (pair (doWikiSearch! st query limit) (list))) st))
                         ((= choice "ddg") (let [(d (doDdgSearch! st query limit))] (pair (ok (pair (pairFirst d) (list))) (pairSecond d))))
+                        ((archiveEngineName? choice) (pair (ok (pair (doArchiveSearch! st choice query limit) (list))) st))
                         (else (autoSearch! st query limit))))
                 (st1 (pairSecond step))]
             (match (pairFirst step)
