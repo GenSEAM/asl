@@ -61,7 +61,7 @@ fn ! touchUsed! path: String -> Bool
     (ok? (fileWrite (str path "/.used") (stringFromInt64 (nowNs))))
     (match (fileReadBytes path)
       ((err _) false)
-      ((ok b) (let [(part (str path ".part." (stringFromInt64 (procSelf))))]
+      ((ok b) (let [(part (str path ".part." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
                 (and (ok? (fileWrite part b)) (ok? (pathRename part path)))))))
 
 fn ! pruneStage! dir: String prefix: String current: String -> Int64
@@ -77,7 +77,11 @@ fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String Stri
         (match (ensureDir! (outsideStageDir ctx))
           ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
           ((ok _)
-            (match (if (sys/isFile? dest) (ok ()) (fileWrite dest src))
+            (match (if (sys/isFile? dest)
+                      (match (fileReadString dest)
+                        ((ok d) (if (= d src) (ok ()) (writeAtomic! dest (stringToBytes src))))
+                        ((err _) (writeAtomic! dest (stringToBytes src))))
+                      (writeAtomic! dest (stringToBytes src)))
               ((err e3) (err (str "cannot write " dest ": " e3)))
               ((ok _) (do (touchUsed! dest) (pruneStage! (outsideStageDir ctx) "" (str digest ".asl")) (ok rel)))))))))
 
@@ -123,7 +127,7 @@ fn ! writeAtomic! dest: String content: Bytes -> (Result Unit String)
   (match (ensureDir! (ckr/parentDirOf dest))
     ((err e2) (err (str "cannot create " (ckr/parentDirOf dest) ": " e2)))
     ((ok _)
-      (let [(part (str (ckr/parentDirOf dest) "/.part." (stringFromInt64 (procSelf)) "." (sys/baseName dest)))]
+      (let [(part (str (ckr/parentDirOf dest) "/.part." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs)) "." (sys/baseName dest)))]
         (match (fileWrite part content)
           ((err e3) (err (str "cannot write " part ": " e3)))
           ((ok _) (match (pathRename part dest)
@@ -229,7 +233,7 @@ fn ! writeMirrorConfig! root: String mirrorDir: String -> (Result Unit String)
   (let [(origText (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
         (ws (workspaceNameOf origText))
         (synth (str "(:asl-config :workspace \"" ws "\" :root true)\n"))]
-    (fileWrite (str mirrorDir "/.asl.config.asn") synth))
+    (writeAtomic! (str mirrorDir "/.asl.config.asn") (stringToBytes synth)))
 
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a test opens data files (parquet fixtures, .asn contracts) by paths relative to the package, so the mirror carries every tracked and untracked-but-not-ignored file of the package as bytes, listed by git; a package that is not a git work tree falls back to every file outside dot-directories plus the .asl files under .asl/mem that the index walk skips")
 fn ! gitFiles! root: String -> (Option (List String))
