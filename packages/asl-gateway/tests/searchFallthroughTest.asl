@@ -38,32 +38,37 @@ fn fieldStr v: j/Json k: String -> String
 
 fn testOrder -> Bool
   (do
-    (assert (= (se/engineOrder) (list "synthetic" "tavily" "brave" "wiki" "serper"))
-            "engine order is synthetic, tavily, brave, wikipedia, serper last")
-    (assert (= (listLength (se/engineOrder)) 5) "engine order has five engines")
-    (assert (= (optionOr (listGet (se/engineOrder) 0) "") "synthetic") "synthetic is first")
-    (assert (= (optionOr (listGet (se/engineOrder) 1) "") "tavily") "tavily is second")
-    (assert (= (optionOr (listGet (se/engineOrder) 4) "") "serper") "serper is last")
-    (refute (listContains? (se/engineOrder) "searxng") "no searxng in the engine order")
-    (refute (listContains? (se/engineOrder) "ddg") "no html-scraping ddg in the engine order")
+    (assert (= (se/engineOrder) (list "synthetic" "brave"))
+            "tier 1 is synthetic and brave")
+    (assert (= (se/tier2Order) (list "tavily" "serper"))
+            "tier 2 is tavily then serper")
+    (assert (= (listLength (se/engineOrder)) 2) "tier 1 has two engines")
+    (assert (= (optionOr (listGet (se/engineOrder) 0) "") "synthetic") "synthetic is first in tier 1")
+    (assert (= (optionOr (listGet (se/engineOrder) 1) "") "brave") "brave is second in tier 1")
+    (assert (= (optionOr (listGet (se/tier2Order) 1) "") "serper") "serper is last in tier 2")
+    (refute (listContains? (se/engineOrder) "wiki") "wiki is not in tier 1")
+    (refute (listContains? (se/tier2Order) "wiki") "wiki is not in tier 2")
+    (refute (listContains? (se/engineOrder) "searxng") "no searxng in tier 1")
+    (refute (listContains? (se/engineOrder) "ddg") "no html-scraping ddg in tier 1")
     true)
 
 fn testPlan -> Bool
-  (let [(noBrave (hub (list (pair "TAVILY_API_KEY" "tk") (pair "SERPER_API_KEY" "sk"))))
-        (withBrave (hub (list (pair "TAVILY_API_KEY" "tk") (pair "BRAVE_API_KEY" "bk") (pair "SERPER_API_KEY" "sk"))))
-        (withSynth (hub (list (pair "SYNTHETIC_API_KEY" "yk") (pair "TAVILY_API_KEY" "tk") (pair "SERPER_API_KEY" "sk"))))
+  (let [(noBrave (hub (list (pair "SYNTHETIC_API_KEY" "yk") (pair "TAVILY_API_KEY" "tk") (pair "SERPER_API_KEY" "sk"))))
+        (withBrave (hub (list (pair "SYNTHETIC_API_KEY" "yk") (pair "TAVILY_API_KEY" "tk") (pair "BRAVE_API_KEY" "bk") (pair "SERPER_API_KEY" "sk"))))
         (onlySerper (hub (list (pair "SERPER_API_KEY" "sk"))))]
     (do
-      (assert (= (names (se/enginePlan noBrave "q" 5)) (list "tavily" "wiki" "serper"))
-              "brave absent key is skipped")
-      (assert (= (names (se/enginePlan withBrave "q" 5)) (list "tavily" "brave" "wiki" "serper"))
-              "brave with a key sits second, before wikipedia")
-      (assert (= (names (se/enginePlan withSynth "q" 5)) (list "synthetic" "tavily" "wiki" "serper"))
-              "synthetic with a key is planned first")
-      (refute (listContains? (names (se/enginePlan noBrave "q" 5)) "synthetic")
-              "missing synthetic key skips it")
-      (assert (= (names (se/enginePlan onlySerper "q" 5)) (list "wiki" "serper"))
-              "serper is last and only planned with a key")
+      (assert (= (names (se/enginePlan withBrave "q" 5)) (list "synthetic" "brave"))
+              "synthetic and brave are planned together in tier 1")
+      (assert (= (names (se/enginePlan noBrave "q" 5)) (list "synthetic"))
+              "a missing brave key leaves synthetic only")
+      (assert (= (names (se/enginePlan onlySerper "q" 5)) (list))
+              "a tier 2 key does not add a tier 1 request")
+      (refute (listContains? (names (se/enginePlan withBrave "q" 5)) "tavily")
+              "tavily is not requested in tier 1")
+      (refute (listContains? (names (se/enginePlan withBrave "q" 5)) "serper")
+              "serper is not requested in tier 1")
+      (refute (listContains? (names (se/enginePlan withBrave "q" 5)) "wiki")
+              "wiki is never planned by default")
       (refute (listContains? (names (se/enginePlan withBrave "q" 5)) "searxng") "no searxng engine is planned")
       (refute (listContains? (names (se/enginePlan withBrave "q" 5)) "ddg") "no html-scraping engine is planned")
       true))
@@ -179,6 +184,83 @@ fn testSyntheticTextCapBoundary -> Bool
       (assert (= (stringLength (fieldStr r "snippet")) 300) "snippet falls back to first 300 chars of long text")
       true))
 
+fn okJson r: (Result j/Json pt/PyErr) -> j/Json
+  (match r
+    ((ok v) v)
+    ((err e) (j/jnull)))
+
+fn resultAt d: j/Json i: Int64 -> j/Json
+  (match (optionOr (pt/jget d "results") (j/jarr (list)))
+    ((j/jarr xs) (optionOr (listGet xs i) (j/jnull)))
+    (_ (j/jnull)))
+
+fn errorRows d: j/Json -> (List j/Json)
+  (match (optionOr (pt/jget d "errors") (j/jarr (list)))
+    ((j/jarr xs) xs)
+    (_ (list)))
+
+fn errorCount d: j/Json -> Int64
+  (listLength (errorRows d))
+
+fn testTier1Merge -> Bool
+  (let [(synthOk (se/syntheticParse (resp 200 "{\"results\":[{\"url\":\"https://same.example\",\"title\":\"Syn shared\",\"text\":\"syn text\"},{\"url\":\"https://syn-only.example\",\"title\":\"Syn only\",\"text\":\"syn only text\"}]}")))
+        (braveOk (se/braveParse (resp 200 "{\"web\":{\"results\":[{\"title\":\"Brave shared\",\"url\":\"https://same.example\",\"description\":\"brave duplicate\"},{\"title\":\"Brave only\",\"url\":\"https://brave-only.example\",\"description\":\"brave only\"}]}}")))
+        (d (okJson (se/tier1Select (list (pair "synthetic" synthOk) (pair "brave" braveOk)) 10)))]
+    (do
+      (assert (= (resultCount d) 3) "both good tier 1 answers merge without a duplicate url")
+      (assert (= (fieldStr (resultAt d 0) "title") "Syn shared") "synthetic wins the shared url")
+      (assert (= (fieldStr (resultAt d 0) "engine") "synthetic") "synthetic rows precede brave rows")
+      (assert (= (fieldStr (resultAt d 1) "url") "https://syn-only.example") "the second synthetic row is kept")
+      (assert (= (fieldStr (resultAt d 2) "title") "Brave only") "the unique brave row is kept")
+      (assert (= (errorCount d) 0) "two good tier 1 answers have no errors")
+      true))
+
+fn testBraveMissingSyntheticOnly -> Bool
+  (let [(st (hub (list (pair "SYNTHETIC_API_KEY" "yk") (pair "TAVILY_API_KEY" "tk") (pair "SERPER_API_KEY" "sk"))))
+        (synthOk (se/syntheticParse (resp 200 "{\"results\":[{\"url\":\"https://syn.example\",\"title\":\"Syn\",\"text\":\"full text\"}]}")))
+        (d (okJson (se/tier1Select (list (pair "synthetic" synthOk)) 5)))]
+    (do
+      (assert (= (names (se/enginePlan st "q" 5)) (list "synthetic")) "without a brave key only synthetic is requested")
+      (assert (= (resultCount d) 1) "the synthetic answer is kept")
+      (assert (= (fieldStr (firstResult d) "engine") "synthetic") "no brave row appears without its key")
+      true))
+
+fn testTier2TavilyAfterTier1Fail -> Bool
+  (let [(synth429 (se/syntheticParse (resp 429 "{}")))
+        (brave500 (se/braveParse (resp 500 "{}")))
+        (t1 (okJson (se/tier1Select (list (pair "synthetic" synth429) (pair "brave" brave500)) 5)))
+        (tavOk (se/tavilyParse (resp 200 "{\"answer\":\"tavily answer\",\"results\":[{\"title\":\"T\",\"url\":\"https://t.example\",\"content\":\"tav hit\",\"score\":0.9}]}")))
+        (serperOk (se/serperParse (resp 200 "{\"organic\":[{\"title\":\"S\",\"link\":\"https://s.example\",\"snippet\":\"serper hit\"}]}")))
+        (d (okJson (se/tier2Select (list (pair "tavily" tavOk) (pair "serper" serperOk)) 5 (errorRows t1))))]
+    (do
+      (assert (= (resultCount t1) 0) "failed tier 1 responses produce no answer")
+      (assert (= (errorCount t1) 2) "both tier 1 failures are recorded")
+      (assert (= (resultCount d) 1) "tavily supplies the tier 2 answer")
+      (assert (= (fieldStr (firstResult d) "engine") "tavily") "tavily is the first good tier 2 answer")
+      (assert (= (fieldStr d "answer") "tavily answer") "the tavily answer text is retained")
+      (assert (= (errorCount d) 2) "tier 1 errors survive the tier 2 fallback")
+      true))
+
+fn testTier2SerperAfterTavilyFail -> Bool
+  (let [(tav432 (se/tavilyParse (resp 432 "{}")))
+        (serperOk (se/serperParse (resp 200 "{\"organic\":[{\"title\":\"S\",\"link\":\"https://s.example\",\"snippet\":\"serper hit\"}]}")))
+        (d (okJson (se/tier2Select (list (pair "tavily" tav432) (pair "serper" serperOk)) 5 (list))))]
+    (do
+      (assert (= (resultCount d) 1) "serper supplies the answer after tavily fails")
+      (assert (= (fieldStr (firstResult d) "engine") "serper") "serper is last and used after tavily")
+      (assert (= (errorCount d) 1) "the tavily failure is recorded")
+      true))
+
+fn testWikiNeverDefault -> Bool
+  (let [(st (hub (list (pair "SYNTHETIC_API_KEY" "yk") (pair "BRAVE_API_KEY" "bk") (pair "TAVILY_API_KEY" "tk") (pair "SERPER_API_KEY" "sk"))))
+        (planNames (names (se/enginePlan st "q" 5)))]
+    (do
+      (refute (listContains? (se/engineOrder) "wiki") "wiki is outside the default tier 1 path")
+      (refute (listContains? (se/tier2Order) "wiki") "wiki is outside the default tier 2 path")
+      (refute (listContains? planNames "wiki") "no wiki request is planned by default")
+      (assert (= planNames (list "synthetic" "brave")) "the default request batch contains only tier 1 engines")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testOrder) "testOrder passed")
@@ -193,4 +275,9 @@ fn ! runTests -> Bool
     (assert (testSyntheticEmpty) "testSyntheticEmpty passed")
     (assert (testSyntheticTextCap) "testSyntheticTextCap passed")
     (assert (testSyntheticTextCapBoundary) "testSyntheticTextCapBoundary passed")
+    (assert (testTier1Merge) "testTier1Merge passed")
+    (assert (testBraveMissingSyntheticOnly) "testBraveMissingSyntheticOnly passed")
+    (assert (testTier2TavilyAfterTier1Fail) "testTier2TavilyAfterTier1Fail passed")
+    (assert (testTier2SerperAfterTavilyFail) "testTier2SerperAfterTavilyFail passed")
+    (assert (testWikiNeverDefault) "testWikiNeverDefault passed")
     true)
