@@ -2125,9 +2125,14 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (or writesPersisted ownedDone))
                   gatesTerminal (and (not (listEmpty? ra.gates)) (not state.commitRequested))
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
-                  history (listAppend wrapped.history
+                  historyRaw (listAppend wrapped.history
                     (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
                       (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0")))))))
+                  historyKeep (ctx/contextKeepTurnsFor! rootDir)
+                  historyToolCap (ctx/contextToolCapBytesFor! rootDir)
+                  historyTokens (optionOr servedCtx 24000)
+                  history (ctx/freezeTranscriptHistory historyRaw historyKeep historyToolCap
+                    (ctx/contextKeptCapBytes historyTokens historyKeep historyToolCap) (ctx/contextLatestCapBytes historyTokens))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
                     (or (liveReviewerAvailable? wrapped.provider) (= (optionOr ra.intent "") "reinforce"))))
                   reviewResult (if reviewInvoked

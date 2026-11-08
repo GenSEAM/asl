@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor contextTokensForIn contextTokensAt! contextTokensFor! gatewayConfigPathFrom aliasRowText modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded renderTranscriptKept contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -889,6 +889,41 @@ fn contextKeptCapBytes contextTokens: Int64 keepTurns: Int64 toolCapBytes: Int64
 fn renderTranscriptBounded history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 latestCapBytes: Int64 -> String
   (renderTranscriptKept history keepTurns toolCapBytes maxOlderLines toolCapBytes latestCapBytes)
 
+fn frozenTurnLine h: j/Json -> String
+  (let [frozen (jgetStr h "frozen")]
+    (if (stringEmpty? frozen) (turnReceiptLine h) frozen))
+
+fn liveTurnLine h: j/Json capBytes: Int64 -> String
+  (let [rendered (jgetStr h "rendered")]
+    (if (stringEmpty? rendered) (turnWhole h capBytes) rendered))
+
+fn transcriptTurnCopy h: j/Json extra: (List (Pair String j/Json)) -> j/Json
+  (j/jobj (listAppend (list (pair "turn" (j/jstr (jgetStr h "turn"))) (pair "sent" (j/jstr (jgetStr h "sent")))
+    (pair "got" (j/jstr (jgetStr h "got"))) (pair "ops" (j/jstr (jgetStr h "ops")))
+    (pair "files" (j/jstr (jgetStr h "files"))) (pair "gates" (j/jstr (jgetStr h "gates")))
+    (pair "wrote" (j/jstr (jgetStr h "wrote")))) extra))
+
+; (:m :ref LEON-STABLE-PREFIX :do "a live turn keeps the exact line first rendered for it, and a turn stores its deterministic frozen receipt line when it leaves the kept window; the next call therefore appends bytes instead of re-clipping or re-compacting an earlier line")
+fn freezeTranscriptTurn h: j/Json -> j/Json
+  (if (stringEmpty? (jgetStr h "frozen"))
+    (transcriptTurnCopy h (list (pair "frozen" (j/jstr (turnReceiptLine h)))))
+    h)
+
+fn renderTranscriptTurn h: j/Json capBytes: Int64 -> j/Json
+  (if (stringEmpty? (jgetStr h "rendered"))
+    (transcriptTurnCopy h (list (pair "rendered" (j/jstr (turnWhole h capBytes)))))
+    h)
+
+fn freezeTranscriptHistory history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> (List j/Json)
+  (let [n (listLength history)
+        cutAt (compactionCut n keepTurns (contextCompactStep))
+        older (optionOr (listSlice history 0 cutAt) (list))
+        kept (optionOr (listSlice history cutAt (- n 1)) (list))
+        latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))]
+    (listAppend (map freezeTranscriptTurn older)
+      (listAppend (map (fn [h] (renderTranscriptTurn h (max toolCapBytes keptCapBytes))) kept)
+        (map (fn [h] (renderTranscriptTurn h (max toolCapBytes latestCapBytes))) latest))))
+
 fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)
     ""
@@ -899,10 +934,12 @@ fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: In
           survivors (optionOr (listSlice older (max 0 (- olderCount maxOlderLines)) olderCount) (list))
           kept (optionOr (listSlice history cutAt (- n 1)) (list))
           latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))
-          summaryLines (map turnReceiptLine survivors)
-          keptLines (map (fn [h] (turnWhole h (max toolCapBytes keptCapBytes))) kept)
-          latestLines (map (fn [h] (turnWhole h (max toolCapBytes latestCapBytes))) latest)]
-      (c/joinSep (listAppend summaryLines (listAppend keptLines latestLines)) "\n")))
+          frozenPart (c/joinSep (map frozenTurnLine survivors) "\n")
+          liveWindow (c/joinSep (listAppend
+            (map (fn [h] (liveTurnLine h (max toolCapBytes keptCapBytes))) kept)
+            (map (fn [h] (liveTurnLine h (max toolCapBytes latestCapBytes))) latest)) "\n")]
+      (if (stringEmpty? frozenPart) liveWindow
+        (if (stringEmpty? liveWindow) frozenPart (str frozenPart "\n" liveWindow)))))
 
 fn noWriteNudge deliver: (Option String) wrote: Bool done: Int64 files: (List String) win: (Option (List Int64)) readStreak: Int64 redGate: j/Json -> String
   (cond

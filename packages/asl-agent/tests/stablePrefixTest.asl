@@ -1,6 +1,6 @@
 (module aslAgent/tests/stablePrefixTest
   :x [runTests]
-  :i [(aslAgent/journal :a jr) (asl-harness/launch :a lh)])
+  :i [(aslAgent/journal :a jr) (asl-harness/launch :a lh) (aslAgent/context :a ctx) (asl-json/json :a j)])
 
 ; (:m :ref LEON-STABLE-PREFIX :do "two sessions of the same card in different worktrees, with different tasks, bases and gates, share a byte-identical system prefix that covers the layers, ops, batch and pool rows; only the env layer, gates and base differ and come last")
 
@@ -39,6 +39,17 @@ fn ! loopSource! -> String
   (str (resultOr (fileReadString "asl/packages/asl-agent/src/loop.asl") "") (resultOr (fileReadString "asl/packages/asl-agent/src/main.asl") "")
        (resultOr (fileReadString "asl/packages/asl-agent/src/runLoop.asl") ""))
 
+fn prefixTurn n: Int64 -> j/Json
+  (j/jobj (list (pair "turn" (j/jint n)) (pair "sent" (j/jstr (str "sent-" (stringFromInt64 n))))
+    (pair "got" (j/jstr (str "got-" (stringFromInt64 n) "-01234567890123456789012345678901234567890123456789012345678901234567890123456789")))
+    (pair "ops" (j/jstr "read")) (pair "files" (j/jstr "src/main.asl")) (pair "gates" (j/jstr ""))))
+
+fn prefixFreeze history: (List j/Json) -> (List j/Json)
+  (ctx/freezeTranscriptHistory history 2 40 60 400)
+
+fn prefixRender history: (List j/Json) -> String
+  (ctx/renderTranscriptKept history 2 40 50 60 400)
+
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
         a (promptFor! repo "Create hello.txt" "main" (list "true"))
@@ -47,7 +58,14 @@ fn ! runTests -> Bool
         common (commonLen a b 0 shorter)
         sharedHead (optionOr (stringSlice a 0 common) "")
         src (loopSource!)
-        _ (fileWrite "/tmp/leonPrefixNumbers.txt" (str "common " (stringFromInt64 common) " lenA " (stringFromInt64 (stringLength a)) " lenB " (stringFromInt64 (stringLength b)) "\n"))]
+        _ (fileWrite "/tmp/leonPrefixNumbers.txt" (str "common " (stringFromInt64 common) " lenA " (stringFromInt64 (stringLength a)) " lenB " (stringFromInt64 (stringLength b)) "\n"))
+        prefixAll (map prefixTurn (list 1 2 3 4 5 6 7 8))
+        prefix6 (prefixFreeze (optionOr (listSlice prefixAll 0 6) (list)))
+        text6 (prefixRender prefix6)
+        prefix7 (prefixFreeze (listAppend prefix6 (optionOr (listSlice prefixAll 6 7) (list))))
+        text7 (prefixRender prefix7)
+        prefix8 (prefixFreeze (listAppend prefix7 (optionOr (listSlice prefixAll 7 8) (list))))
+        text8 (prefixRender prefix8)]
     (do
       (assert (> shorter 0) "both prompts built")
       (assert (stringContains? sharedHead "(:ops ") "the common prefix covers the ops row")
@@ -67,4 +85,6 @@ fn ! runTests -> Bool
       (assert (listAll? keepsShellLayers? (map (fn [c] (renderFor! repo c)) (list "claude" "codex" "agy"))) "claude, codex and agy renders keep reply, abstain and breaker")
       (assert (keepsShellLayers? (renderFor! repo "chat")) "the toolless chat render keeps reply, abstain and breaker")
       (assert (not (keepsShellLayers? (renderFor! repo "leon"))) "the leon render drops them")
+      (assert (stringStartsWith? text7 text6) "the rendered history after turn 6 is a byte prefix of the history after turn 7")
+      (assert (stringStartsWith? text8 text7) "the rendered history after turn 7 is a byte prefix of the history after turn 8")
       true))
