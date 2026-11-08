@@ -2,7 +2,7 @@
   :x [Bucket HubState newHubState mkHub hubWithNow hubSleep! hubNote hubCliCall hubStderr hubWithBreaker hubWithBuckets
       HttpReq HttpResult httpResp httpFail curlConfig curlChildEnv parseCurlOutput runCurlBatch! runOne! httpError httpOk? validateReq headerNameOk charsetNameOk runTool! iconvDecode! decodeBody! contentCharset urlTypeCheck repl
       jobj3 engineError respJson jreq
-      tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      syntheticReq syntheticParse tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
       engineOrder enginePlan selectEngine tier1Search!
       doTavilySearch! doSerperSearch! doWikiSearch! doSearxngSearch! doDdgSearch! parallelTier1Search! executeSearchHub!
       escapeAsnStr formatSearchAsn]
@@ -362,6 +362,52 @@ fn collect items: (List j/Json) f: (fn [j/Json] -> (Result (Option j/Json) pt/Py
         ((err e) (err e))
         ((ok o) (collect (optionOr (listTail items) (list)) f (match o ((some v) (cons v acc)) ((none) acc)))))))
 
+fn syntheticHighlights h: j/Json -> String
+  (match h
+    ((j/jarr xs) (pt/joinSep (map (fn [(x j/Json)] -> String (match x ((j/jstr s) s) (_ (pt/pyStr x)))) xs) " "))
+    (_ ""))
+
+fn syntheticText t: j/Json -> String
+  (match t ((j/jstr s) s) (_ ""))
+
+fn syntheticSnippet hl: j/Json text: j/Json -> j/Json
+  (let [(h (syntheticHighlights hl)) (s (syntheticText text))]
+    (if (not (stringEmpty? h)) (j/jstr h) (j/jstr (pt/sliceB s 0 (min 300 (stringLength s))))))
+
+fn syntheticTextCap t: j/Json -> j/Json
+  (let [(s (syntheticText t))] (j/jstr (pt/sliceB s 0 (min 20000 (stringLength s)))))
+
+fn syntheticRows items: (List j/Json) acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
+  (match (listHead items)
+    ((none) (ok (listReverse acc)))
+    ((some it)
+      (match (pt/jgetOr it "title" (j/jstr ""))
+        ((err e) (err e))
+        ((ok title)
+          (let [(url (pt/cleanUrl (optionOr (pt/jget it "url") (j/jstr ""))))
+                (text (optionOr (pt/jget it "text") (j/jstr "")))
+                (hl (optionOr (pt/jget it "highlights") (j/jarr (list))))
+                (item (j/jobj (list (pair "title" title) (pair "url" url) (pair "snippet" (syntheticSnippet hl text)) (pair "text" (syntheticTextCap text)) (pair "engine" (j/jstr "synthetic")) (pair "score" (j/jfloat 0.95)))))]
+            (syntheticRows (optionOr (listTail items) (list)) (cons item acc)))))))
+
+fn syntheticParse r: HttpResult -> j/Json
+  (orErr
+    (match (jsonBody r)
+      ((err e) (err e))
+      ((ok data)
+        (match (pt/jgetOr data "results" (j/jarr (list)))
+          ((err e) (err e))
+          ((ok rs)
+            (match rs
+              ((j/jarr xs) (match (syntheticRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
+              (_ (ok (respJson (j/jstr "") (list))))))))))
+
+fn syntheticReq query: String limit: Int64 key: String -> HttpReq
+  (HttpReq :url "https://api.synthetic.new/v2/search"
+           :headers (list (pair "Content-Type" "application/json") (pair "Authorization" (str "Bearer " key)) (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (some (pt/jsonDumps (j/jobj (list (pair "query" (j/jstr query)))) -1))
+           :timeout (j/jint 10))
+
 fn tavilyReq query: String limit: Int64 key: String -> HttpReq
   (HttpReq :url "https://api.tavily.com/search"
            :headers (list (pair "Content-Type" "application/json") (pair "Authorization" (str "Bearer " key)) (pair "User-Agent" "ASL-Gateway/1.0"))
@@ -666,7 +712,7 @@ fn mergeLoop items: (List j/Json) seen: (List String) merged: (List j/Json) limi
               (mergeLoop (optionOr (listTail items) (list)) seen merged limit)))))))
 
 fn engineOrder -> (List String)
-  (list "tavily" "brave" "wiki" "serper")
+  (list "synthetic" "tavily" "brave" "wiki" "serper")
 
 fn braveReq query: String limit: Int64 key: String -> HttpReq
   (HttpReq :url (str "https://api.search.brave.com/res/v1/web/search?q=" (pt/urlQuote query "/") "&count=" (stringFromInt64 limit))
@@ -700,6 +746,11 @@ fn braveParse r: HttpResult -> j/Json
 
 fn engineReq st: HubState name: String query: String limit: Int64 -> (Option HttpReq)
   (cond
+    ((= name "synthetic")
+      (if (none? (mapGet st.env "SYNTHETIC_API_KEY"))
+        (none)
+        (let [(k (envGetNonEmpty st "SYNTHETIC_API_KEY"))]
+          (if (stringEmpty? k) (none) (some (syntheticReq query limit k))))))
     ((= name "tavily") (let [(k (envGetNonEmpty st "TAVILY_API_KEY"))] (if (stringEmpty? k) (none) (some (tavilyReq query limit k)))))
     ((= name "brave") (let [(k (envGetNonEmpty st "BRAVE_API_KEY"))] (if (stringEmpty? k) (none) (some (braveReq query limit k)))))
     ((= name "wiki") (some (wikiReq query limit)))
@@ -714,7 +765,7 @@ fn enginePlan st: HubState query: String limit: Int64 -> (List (Pair String Http
         (list) (engineOrder))
 
 fn parseEngine name: String r: HttpResult limit: Int64 -> j/Json
-  (cond ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) (else (j/jnull)))
+  (cond ((= name "synthetic") (syntheticParse r)) ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) (else (j/jnull)))
 
 fn engineGood? d: j/Json -> Bool
   (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))
