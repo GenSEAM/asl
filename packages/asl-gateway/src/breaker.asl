@@ -27,6 +27,7 @@
       breakerNoteTimeout
       breakerResetTimeout
       breakerIsQuotaError
+      breakerIsConcurrency429
       breakerIsProviderWideQuota
       breakerScope
       breakerSnapshot
@@ -413,3 +414,7 @@ fn breakerUntil st: BreakerState provider: String -> (Option Int64)
 
 fn breakerSeenProviders st: BreakerState -> (List String)
   (mapKeys st.seen)
+
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "a 429 whose body names concurrent requests is the provider's concurrency cap, not a spent quota: the gateway lowers its lane cap and parks instead of opening a breaker")
+fn breakerIsConcurrency429 status: Int64 body: String -> Bool
+  (and (= status 429) (stringContains? (stringLower body) "concurrent"))

@@ -15,6 +15,7 @@
       effBreakerEvent
       effUsageNote
       effLimit
+      effConcurrency429
       effUsageFallback
       effSpreadOrder
       effSpreadNote429
@@ -111,6 +112,8 @@
   (:c effUsageFallback [(provider String) (alias String)])
   ; (:m :ref GW-LIMIT-WINDOWS :do "asks the reactor whether a provider limit window is spent for this member; the answer is empty to go ahead, else (outcome reason)")
   (:c effLimit [(provider String) (alias String)])
+  ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream answered 429 naming concurrency: the server frees this call's lease and lowers the lane cap; chat then parks and asks again")
+  (:c effConcurrency429 [(provider String) (alias String)])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "asks the server for this call's spread-member order: real per-profile+intent SWRR state (GatewayLoop.spreadState) and real breaker/429-cooldown availability live server-side, never in chat.asl; pools carries one (alias, providerPool:alias) pair per spread member so the server can check the real BreakerState without re-resolving the config table")
   (:c effSpreadOrder [(profile String) (intent String) (spread (List (Pair String Int64))) (cooldownSec Int64) (pools (List (Pair String String)))])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 at the server's own wall clock (GatewayLoop.spreadLast429), independent of and in addition to the existing per-model breaker trip -- :cooldownSec is configurable per route and almost never equals BreakerState's own fixed cooldown")
@@ -231,7 +234,8 @@
   (:f api String)
   (:f path String)
   (:f retryUsed Int64)
-  (:f retryDeadline (Option Float64)))
+  (:f retryDeadline (Option Float64))
+  (:f parkedMs Int64 :default 0))
 
 
 ; (:m :do "role/intent cascades and their calibrated default temperatures come from the gateway config's profile routes, never from a built-in list in source; a role or intent string is resolved the same way an intent is for the profile-routed path (c/gatewayRouteEntries!), so a config-only change to a route's :chain or :temperature changes the chosen model with no rebuild")
@@ -1789,7 +1793,7 @@ fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
   (askStrings (effLimit a.upstream.provider a.alias)
     (fn [(v (List String))] -> ChatStep
       (match (listHead v)
-        ((none) (httpAttemptSend cx l a))
+        ((none) (httpAttemptSend cx l (with a :parkedMs waitedMs)))
         ((some outcome)
           (if (!= outcome "park")
             (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))
@@ -2373,6 +2377,23 @@ fn retryHttp cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (L
     (fn [] -> ChatStep (httpFailedFinal cx l a status reason headers body)))
 
 fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
+  (if (and (b/breakerIsConcurrency429 status body) (limitedAttempt? cx a))
+    (concurrencyParked cx l a)
+    (httpFailedPlain cx l a status reason headers body))
+
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "a concurrency 429 is the gateway's to absorb: the lane cap falls, no breaker opens and nothing reaches the caller; the last member sleeps the poll interval and asks admission again until the queue budget is gone, an earlier member is skipped at once so a later one can answer")
+fn concurrencyParked cx: Ctx l: Loop a: Attempt -> ChatStep
+  (let [(prov a.upstream.provider)
+        (poll (c/defaultConcurrencyPollMs))
+        (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
+    (tell (effConcurrency429 prov a.alias)
+      (fn [] -> ChatStep
+        (cond
+          ((not (lastMember? l)) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit, a later chain member answers"))
+          ((>= (+ a.parkedMs poll) budgetMs) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit for the whole queue budget"))
+          (else (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l (with a :parkedMs (+ a.parkedMs poll)) (+ a.parkedMs poll)))))))))
+
+fn httpFailedPlain cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (let [(policy (retryPolicyFor cx a))]
     ; (:m :ref CTX-PIN-RELAY :do "a pin profile relays an overflow like any other failure (GW-MODES); only route and judge hop to a larger window")
     (if (and (!= cx.mode "pin") (contextOverflowError? status body))
@@ -2519,6 +2540,7 @@ fn effectJson eff: ChatEffect -> j/Json
       ((effBreakerDownAll ps) (op "breakerDownAll" (list (pair "pools" (j/jarr (map (fn [(p String)] -> j/Json (j/jstr p)) ps))))))
       ((effBreakerEvent e p park) (op "breaker" (listAppend (list (pair "event" (j/jstr e)) (pair "pool" (j/jstr p))) (if (> park 0) (list (pair "parkSec" (j/jint park))) (list)))))
       ((effUsageNote p a o u) (op "usageNote" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)) (pair "outcome" (j/jstr o)) (pair "usage" u))))
+      ((effConcurrency429 p a) (op "concurrency429" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effLimit p a) (op "limit" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effUsageFallback p a) (op "usageFallback" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effSpreadOrder prof i spr cd pools)
