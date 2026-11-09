@@ -1,6 +1,6 @@
 (module asl-cli/tests/stageRaceTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr) (asl-cli/native :a nv)])
 
 fn ! repoRoot! -> String
   (resultOr (realPath ".") ".")
@@ -85,5 +85,31 @@ fn ! testAtomicStage! -> Bool
       (assert (= removed.exit 0) "fixture directory is removed")
       true))
 
+; (:m :ref LEON-LAUNCH-STAGE-RACE :do "prune keeps a fresh file another stager wrote and removes an old stray one")
+fn ! testPruneKeepsFresh! -> Bool
+  (let [(dir (str (optionOr (envGet "TMPDIR") "/tmp") "/stagePrune" (stringFromInt64 (nowNs))))
+        (_a (dirCreate dir))
+        (kept (str dir "/kept.asl"))
+        (fresh (str dir "/fresh.asl"))
+        (old (str dir "/old.asl"))
+        (_b (fileWrite kept "k"))
+        (_c (fileWrite fresh "f"))
+        (_d (fileWrite old "o"))
+        (_e (fileUtime old (- (nowNs) 7200000000000)))
+        (removed (nv/pruneStaleStaged! dir (list kept)))
+        (keptThere (fileExists? kept))
+        (freshThere (fileExists? fresh))
+        (oldThere (fileExists? old))
+        (_f (pathRemove dir))]
+    (do (assert keptThere "an expected file stays")
+        (assert freshThere "a fresh file outside this stager's set stays: a concurrent stager wrote it")
+        (refute oldThere "an old stray file is pruned")
+        (assert (= removed 1) (str "one file pruned: " (stringFromInt64 removed)))
+        true))
+
 fn ! runTests -> Bool
-  (testAtomicStage!)
+  (let [(fresh (testPruneKeepsFresh!))
+        (atomic (testAtomicStage!))]
+    (do (assert fresh "prune keeps fresh concurrent files and removes old strays")
+        (assert atomic "staging is atomic under a concurrent reader")
+        true))

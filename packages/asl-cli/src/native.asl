@@ -1,5 +1,5 @@
 (module asl-cli/native
-  :x [main]
+  :x [main pruneStaleStaged!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
@@ -400,9 +400,15 @@ fn ! stagedDests root: String dir: String files: (List String) -> (List String)
 fn hiddenRel? rel: String -> Bool
   (listAny? (fn [(seg String)] -> Bool (stringStartsWith? seg ".")) (stringSplit rel "/"))
 
+; (:m :ref LEON-LAUNCH-STAGE-RACE :do "a mirror file written in the last 600 s belongs to a concurrent stager with the same digest, so prune leaves it; five launches in one second lost bounded.asl and jobPool.asl to each other's prune")
+fn ! freshStaged? path: String -> Bool
+  (match (fileStat path)
+    ((ok st) (< (- (nowNs) st.mtimeNs) 600000000000))
+    ((err _) false))
+
 fn ! pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64
   (let [(keep (fold (fn [(m (Map String Bool)) (d String)] -> (Map String Bool) (mapSet m d true)) (mapEmpty) expected))
-        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))))) (tsa/filesUnder! mirrorDir)))]
+        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (and (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))) (not (freshStaged? f))))) (tsa/filesUnder! mirrorDir)))]
     (do (map (fn [(f String)] -> Bool (ok? (pathRemove f))) stale) (listLength stale)))
 
 fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) digest: String mirrorDir: String pkgDir: String -> (Result String String)
