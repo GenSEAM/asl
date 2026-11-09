@@ -1,6 +1,6 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry]
-  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac)])
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns]
+  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
 
 enum Claim
   (claimOf text: (Option String) receipt: (Option String) cmd: (Option String) exit: (Option Int64) backed: Bool)
@@ -227,6 +227,24 @@ fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateRe
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
     ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none) "HEAD")))
 
+fn fnName line: String -> String
+  (let [toks (filter (fn [t] (not (stringEmpty? t))) (stringSplit line " "))
+        second (optionOr (listGet toks 1) "")]
+    (if (= second "!") (optionOr (listGet toks 2) "") second))
+
+fn fnNames text: String -> (List String)
+  (map fnName (filter (fn [line] (or (stringStartsWith? line "fn ") (stringStartsWith? line "fn ! "))) (stringLines text)))
+
+fn countName name: String texts: (List String) -> Int64
+  (fold (fn [acc t] (+ acc (fold (fn [a line] (if (stringContains? line name) (+ a 1) a)) 0 (stringLines t)))) 0 texts)
+
+fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> (List String)
+  (let [defs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implNow)
+        headDefs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implHead)
+        newDefs (filter (fn [d] (not (listAny? (fn [h] (and (= (pairFirst h) (pairFirst d)) (= (pairSecond h) (pairSecond d)))) headDefs))) defs)
+        texts (map pairSecond implNow)]
+    (map pairSecond (filter (fn [d] (= (countName (pairSecond d) texts) 1)) newDefs)))
+
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
@@ -250,7 +268,11 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
                       removedNew (removeNames! root newFiles)
                       secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env watch) (list))]
                   (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
+              implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
+              implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
+              unwired (if (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile")) (unwiredFns implNow implHead) (list))
+              finalAnswer (if (listEmpty? unwired) answer (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish")))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]
-          (if restored answer (pair false "restore failed")))))))
+          (if restored finalAnswer (pair false "restore failed")))))))
