@@ -1773,6 +1773,14 @@ fn readOnlyCount entries: (List j/Json) -> Int64
 fn readOnlyTail history: (List j/Json) -> Int64
   (readOnlyCount (listReverse history))
 
+; (:m :ref LEON-READ-NUDGE :do "halfway to :readOnlyTurnCap a read-only streak gets one nudge naming the owned files, before the hard stop ends the run with an empty patch (sidecar PR 238: nudge once instead of stopping)")
+fn readOnlyNudgeAt cap: Int64 -> Int64
+  (max 3 (/ cap 2))
+
+fn readOnlyNudge owns: (List String) n: Int64 cap: Int64 -> String
+  (str "(:nudge :readOnly " (stringFromInt64 n) " :cap " (stringFromInt64 cap) " :owns (" (stringJoin (map (fn [o] (str "\"" (c/escapeAsn o) "\"")) owns) " ")
+       ") :do \"" (stringFromInt64 n) " turns only read; the reads above hold what the task needs; the next reply edits one owned file with (:edit), then the gates run; the run stops at " (stringFromInt64 cap) " read-only turns\")")
+
 fn nextReadStreakOf wrote: Bool stalledTurn: Bool stalledStreak: Int64 readStreak: Int64 -> Int64
   (cond (wrote 0) ((and stalledTurn (> stalledStreak (notFoundStreakCap))) readStreak) (else (+ readStreak 1)))
 
@@ -2169,9 +2177,13 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (or writesPersisted ownedDone))
                   gatesTerminal (and (not (listEmpty? ra.gates)) (not state.commitRequested))
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
-                  historyRaw (listAppend wrapped.history
-                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))
-                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0")))))))
+                  historyEntry (fn [text] (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr text))
+                      (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0"))))))
+                  readOnlyCap (readOnlyTurnCapIn (ac/configText! rootDir))
+                  readOnlyNow (readOnlyTail (listAppend wrapped.history (list (historyEntry got))))
+                  nudged (= readOnlyNow (readOnlyNudgeAt readOnlyCap))
+                  _nudgeNote (if nudged (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readNudge :readOnly " (stringFromInt64 readOnlyNow) " :cap " (stringFromInt64 readOnlyCap) ")\n"))) true)
+                  historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str got "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap)) got))))
                   historyKeep (ctx/contextKeepTurnsFor! rootDir)
                   historyToolCap (ctx/contextToolCapBytesFor! rootDir)
                   historyTokens (optionOr servedCtx 24000)
