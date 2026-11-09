@@ -57,9 +57,9 @@ fn ! reviewRoot! tag: String -> String
 
 fn ! runTests -> Bool
   (let [wallRoot (freshRoot! "wall")
-        _cfg (fileWrite (str wallRoot "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false))\n")
+        _cfg (fileWrite (str wallRoot "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false :wallGateMinSec 1 :wallReserveSec 1))\n")
         _gate (fileWrite (str wallRoot "/slow.sh") (slowGate))
-        notes (map (fn [_] "(:step :op \"note\" :text \"waiting\")") (range 0 20))
+        notes (map (fn [i] (str "(:step :op \"write\" :file \"x.txt\" :content \"w" (stringFromInt64 i) "\")")) (range 0 20))
         startNs (nowNs)
         wallExit (runForm! wallRoot "wall" (rk/scriptFixtureTextFromReplies! "wall" notes)
                    (agentForm "wall" wallRoot "\"sh slow.sh\"" " :owns (\"x.txt\") :wallBudget 5 :gateTimeout 60"))
@@ -82,7 +82,7 @@ fn ! runTests -> Bool
       (assert (= (lp/loopBoundary false 0 9 "" false 1.0 10.0 5 4.0 0.5 2 20 0 3 0 0) "continue") "a run inside its wall budget goes on")
       (assert (= (lp/loopBoundary false 0 9 "" false 1.0 10.0 0 600.0 0.5 2 20 0 3 0 0) "continue") "no wall budget, no wall stop")
       (assert (stringContains? wallJournal ":signal :wallBudget") "the scripted run ends on its wall budget signal")
-      (assert (stringContains? wallJournal "s spent of the 5 s wall budget after") "the signal names the spent budget")
+      (assert (stringContains? wallJournal "s spent of the 4 s wall budget after") "the signal names the spent budget: 5 s less the 1 s :wallReserveSec")
       (assert (stringContains? wallJournal "(:result :status :escalated") "the wall stop ends the run escalated")
       (assert (!= wallExit 0) "a wall-budget stop is not a success")
       (assert (< wallSec 20) "a run whose gate sleeps 40 s per turn ends within its 5 s budget plus margin")
