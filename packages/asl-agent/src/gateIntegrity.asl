@@ -236,7 +236,29 @@ fn fnNames text: String -> (List String)
   (map fnName (filter (fn [line] (or (stringStartsWith? line "fn ") (stringStartsWith? line "fn ! "))) (stringLines text)))
 
 fn countName name: String texts: (List String) -> Int64
-  (fold (fn [acc t] (+ acc (fold (fn [a line] (if (stringContains? line name) (+ a 1) a)) 0 (stringLines t)))) 0 texts)
+  (fold
+    (fn [acc t]
+      (+ acc
+        (pairSecond
+          (fold
+            (fn [state line]
+              (let [inHeader (pairFirst state)
+                    n (pairSecond state)
+                    endHeader (or (stringStartsWith? line "fn")
+                                  (or (stringStartsWith? line "enum")
+                                      (or (stringStartsWith? line "schema")
+                                          (or (stringStartsWith? line ";")
+                                              (stringStartsWith? line "#")))))
+                    counted (if (stringContains? line name) (+ n 1) n)]
+                (if inHeader
+                  (if endHeader (pair false counted) state)
+                  (if (stringStartsWith? line "(module")
+                    (pair true n)
+                    (pair false counted)))))
+            (pair false 0)
+            (stringLines t)))))
+    0
+    texts)
 
 fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> (List String)
   (let [defs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implNow)
