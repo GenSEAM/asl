@@ -1330,6 +1330,7 @@ fn applyEffort dialect: String eff: (Option String) body: j/Json -> (Pair j/Json
             (pair (pt/jset body "thinking" (effortObj (list (pair "type" (j/jstr (if off "disabled" "enabled")))))) (some e)))
           (else (pair body none))))))
 
+; (:m :ref GW-RETRY-NO-THINK :do "the same-model retry after an empty reply (a reasoning runaway cut near 220 s, or a length stop with no content) sends effort none, so a reasoning row answers without thinking instead of repeating the runaway; probe 2026-11-10 Synthetic DeepSeek V4.1 Flash: effort none gave 2 completion tokens, low 21")
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
         (m (match entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
@@ -1366,7 +1367,8 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (provKind (match v2 ((some e) e.kind) ((none) "")))
         (rowDialect (match v2 ((some e) e.params.effortDialect) ((none) none)))
         (dialect (if (and ollama (none? rowDialect)) "reasoningEffort" (effortDialectFor provId provKind rowDialect)))
-        (effApplied (applyEffort dialect effGate out0))
+        (effRetry (if (and (> l.emptyRetries 0) (some? effGate)) (some "none") effGate))
+        (effApplied (applyEffort dialect effRetry out0))
         (out1 (pairFirst effApplied))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3a (switchedBody cx alias (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2)))
