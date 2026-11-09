@@ -2,7 +2,7 @@
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
       execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid balanceFix balanceRepair txnRefusal abortAid! abortAidOn applySteps stepsOf
       intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
-      langForPath tryRepairText! orderSubs moduleHints moduleOf importsOf expectedModule txnSubs]
+      langForPath tryRepairText! orderSubs moduleHints moduleOf importsOf expectedModule txnSubs retryTemplate largeFileHint]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (asl-forms/repair :a rep)
@@ -912,7 +912,19 @@ fn refusedMark -> String
   "refused: the delimiters"
 
 fn largeFileHint -> String
-  "write a large file in parts: the first part with write, the rest with edit ops anchored on its last line"
+  "change an existing file with one edit per fn you touch, never resend the whole file"
+
+fn retryTemplate tf: String sizeBytes: Int64 -> String
+  (if (< sizeBytes 4096)
+    (str "(:step :op \"write\" :file \"" tf "\" :content :raw)")
+    (str "(:step :op \"edit\" :file \"" tf "\" :old \"<the exact lines of the one fn you change>\" :new \"<its new text>\")"))
+
+fn fileSizeOr0 root: String tf: String -> Int64
+  (if (fileExists? (joinPath root tf))
+    (match (fileReadString (joinPath root tf))
+      ((ok s) (stringLength s))
+      ((err _) 0))
+    0)
 
 fn runErr out: String -> String
   (cond
@@ -979,7 +991,7 @@ fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List T
   (let [extra (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? msg "the delimiters ( ) [ ] { } and quotes do not balance")) (largeFileHint) "")
         aid (if okRun none (abortAid! root tf steps (str msg " " out " " errText) extra))
         hint0 (match aid ((some x) (match x ((abortAidOf _ _ h) (some h)))) (none none))
-        tmpl (str "(:step :op \"write\" :file \"" tf "\" :content :raw)")
+        tmpl (retryTemplate tf (fileSizeOr0 root tf))
         hint (if (and (not okRun) (and (or (= err "ERR_TXN_FLUSH_FAILED") (= err "ERR_TXN_ABORTED")) (!= tf "")))
                (some (match hint0 ((some h) (str h "; " tmpl)) (none tmpl)))
                hint0)]
