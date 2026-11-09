@@ -601,23 +601,33 @@ fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 e
   (runGatesIn! gates root timeoutSec env watch (gd/gateTimesPath))
 
 fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
-  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")]
-    (map (fn [g]
-           (let [rid (pairFirst g)
-                 cmd (pairSecond g)]
-             (match (gd/gateTimeoutFit! timesPath cmd timeoutSec)
-               ((some ms) (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
-                            (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout")))
-               ((none)
-             (match (runGate! cmd root timeoutSec childEnv watch)
-               ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
-               ((ok b)
-                 (listAppend
-                   (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
-                     (rs "stdout" b.out) (rs "stderr" b.errText))
-                   (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
-                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))))
-      gates))
+  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")
+        st (fold (fn [(st (Pair Bool (List (List (Pair String RVal))))) (g (Pair String String))] -> (Pair Bool (List (List (Pair String RVal))))
+                   (let [failed (pairFirst st)
+                         recs (pairSecond st)
+                         rec (if failed
+                               (list (rs "id" (pairFirst g)) (rs "cmd" (pairSecond g)) (pair "exit" (rNull)) (rs "skipped" "afterBuildFail"))
+                               (let [rid (pairFirst g)
+                                     cmd (pairSecond g)]
+                                 (match (gd/gateTimeoutFit! timesPath cmd timeoutSec)
+                                   ((some ms) (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
+                                                (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout")))
+                                   ((none)
+                                    (match (runGate! cmd root timeoutSec childEnv watch)
+                                      ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
+                                      ((ok b)
+                                       (listAppend
+                                         (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
+                                           (rs "stdout" b.out) (rs "stderr" b.errText))
+                                         (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
+                                           (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))))]
+                     (pair (or failed
+                               (and (stringEndsWith? (pairSecond g) "build.sh")
+                                    (match (recGet rec "exit") ((some v) (match v ((rInt x) (not (= x 0))) (_ false))) ((none) false))))
+                           (listAppend recs (list rec)))))
+                 (pair false (list))
+                 gates)]
+    (pairSecond st))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))
   (let [res (runBounded! (list "sh" "-n" "-c" cmd) (if (stringEmpty? root) (none) (some root)) (some 10) env (none))
