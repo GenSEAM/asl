@@ -1,5 +1,5 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout]
   :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
 
 enum Claim
@@ -245,6 +245,10 @@ fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String 
         texts (map pairSecond implNow)]
     (map pairSecond (filter (fn [d] (= (countName (pairSecond d) texts) 1)) newDefs)))
 
+; (:m :ref REVERT-REBUILD-FLOOR :do "a revert run of an asl-agent source rebuilds the native closure, 557 s for toolMemoLoopTest on 2026-11-09 against a 3 s run with the change, so a revert gate gets at least 900 s; under the 300 s gate timeout every such revert timed out")
+fn revertTimeout timeout: Int64 -> Int64
+  (if (< timeout 60) timeout (max timeout 900))
+
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
@@ -260,13 +264,13 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
               wroteHead (writeTexts! root existing)
               bumped (fold (fn [ok p] (and ok (bumpMtime! (str root "/" (pairFirst p))))) wroteHead existing)
-              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root timeout env watch) (list))
+              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))
               firstDecision (revertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
               answer (if (and bumped (pairFirst firstDecision))
                 firstDecision
                 (let [headRestored (and (writeTexts! root existing) (bumpTexts! root existing))
                       removedNew (removeNames! root newFiles)
-                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env watch) (list))]
+                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))]
                   (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
               implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
               implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
