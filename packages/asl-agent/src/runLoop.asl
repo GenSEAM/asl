@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -734,6 +734,14 @@ fn reviewerUnavailable? message: String -> Bool
   (listAny? (fn [m] (stringContains? message m))
     (list "ERR_NO_UPSTREAM" "no model answered" "circuit breaker open" "Gateway HTTP error 502" "Gateway HTTP error 503" "Gateway HTTP error 504"))
 
+fn modelFamily name: String -> String
+  (let [lower (stringLower name)
+        base (optionOr (listLast (stringSplit lower "/")) lower)
+        noKimi (if (stringStartsWith? base "kimi-") (optionOr (stringSlice base 5 (stringLength base)) base) base)]
+    (if (stringEndsWith? noKimi "-thinking")
+      (optionOr (stringSlice noKimi 0 (- (stringLength noKimi) 9)) noKimi)
+      noKimi))
+
 fn specFail model: String reasons: (List String) -> s/SpecVerdict
   (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
 
@@ -767,7 +775,7 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
               ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
               ((stringEmpty? grader) (specFail grader (list "the grader reported no model, so it cannot be shown to differ from the writer")))
               ((stringEmpty? writer) (specFail grader (list "the writer model is unknown, so the grader cannot be shown to differ")))
-              ((= grader writer) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
+              ((= (modelFamily grader) (modelFamily writer)) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
               (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
 
 fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) -> String
