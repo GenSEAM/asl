@@ -1,5 +1,5 @@
 (module aslAgent/aslOps
-  :x [RVal Bounded PumpEnd RunAslResult
+  :x [RVal Bounded PumpEnd RunAslResult MemoEntry
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
       nearestLines placeholderAssert? runBounded runAsl
@@ -36,6 +36,8 @@ enum PumpEnd
   (:f timedOut Bool)
   (:f seconds Int64)
   (:f fellBack String))
+
+(schema MemoEntry (:f run t/AslRun) (:f rid String) (:f age Int64))
 
 fn runExit r: RunAslResult -> Int64 r.exit
 fn runStdout r: RunAslResult -> String r.stdout
@@ -730,7 +732,7 @@ fn ! memoKey root: String form: String fullPath: String -> (Option String)
     ((err _) none)
     ((ok text) (some (bytesSha256 (stringToBytes (str form "\n" fullPath "\n" text))))))
 
-fn ! memoGet! dir: String key: String -> (Option t/AslRun)
+fn ! memoGet! dir: String key: String -> (Option MemoEntry)
   (match (fileReadString (memoFile dir key))
     ((err _) none)
     ((ok text)
@@ -740,6 +742,9 @@ fn ! memoGet! dir: String key: String -> (Option t/AslRun)
           (let [parts (stringSplit (c/sliceOf text 0 nl) " ")
                 code (stringToInt64 (c/firstOf parts))
                 outLen (stringToInt64 (c/firstOf (c/restOf parts)))
+                rid (optionOr (listGet parts 2) "")
+                ts (match (listGet parts 3) ((some s) (stringToInt64 s)) ((none) none))
+                age (match ts ((some t0) (- (nowNs) t0)) ((none) 600000000001))
                 body (c/sliceOf text (+ nl 1) (stringLength text))]
             (match code
               ((none) none)
@@ -748,14 +753,14 @@ fn ! memoGet! dir: String key: String -> (Option t/AslRun)
                   ((none) none)
                   ((some ol)
                     (if (> ol (stringLength body)) none
-                      (some (t/aslRun cd (c/sliceOf body 0 ol) (c/sliceOf body ol (stringLength body))))))))))))))
+                      (some (MemoEntry :run (t/aslRun cd (c/sliceOf body 0 ol) (c/sliceOf body ol (stringLength body))) :rid rid :age age))))))))))))
 
 ; (:m :do "a memo entry is written to a temp name and renamed into place so a reader never sees a partial file; any error means the entry is skipped, and the receipt says memo skipped")
-fn ! memoPut! dir: String key: String res: t/AslRun -> Bool
+fn ! memoPut! dir: String key: String rid: String res: t/AslRun -> Bool
   (let [out (aslRunOut res)
         path (memoFile dir key)
         tmp (str path ".tmp" (stringFromInt64 (procSelf)))
-        body (str (stringFromInt64 (aslRunCode res)) " " (stringFromInt64 (stringLength out)) "\n" out (aslRunErr res))]
+        body (str (stringFromInt64 (aslRunCode res)) " " (stringFromInt64 (stringLength out)) " " rid " " (stringFromInt64 (nowNs)) "\n" out (aslRunErr res))]
     (match (fileWrite tmp body)
       ((err _) false)
       ((ok _) (ok? (pathRename tmp path)))))
@@ -915,10 +920,12 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               mkey (match memoRun ((some _) (memoKey root form memoPath)) ((none) none))
               memoDirNow (optionOr memoRun "")
               memoHit (match mkey ((some k) (memoGet! memoDirNow k)) ((none) none))
-              res (match memoHit ((some r) r) ((none) (run form root)))
+              res (match memoHit ((some e) e.run) ((none) (run form root)))
               putOk (match memoHit
                       ((some _) true)
-                      ((none) (match mkey ((some k) (if (= (aslRunCode res) 0) (memoPut! memoDirNow k res) true)) ((none) true))))
+                      ((none) (match mkey ((some k) (if (= (aslRunCode res) 0) (memoPut! memoDirNow k rid res) true)) ((none) true))))
+              memoFresh (match memoHit ((some e) (and (!= e.rid "") (and (!= e.rid rid) (< e.age 600000000000)))) ((none) false))
+              sameText (match memoHit ((some e) (str "(:same :id \"" e.rid "\" :note \"identical to that earlier result; read a narrower range for new text\")")) ((none) ""))
               code (aslRunCode res)
               out (aslRunOut res)
               errText (aslRunErr res)
@@ -958,7 +965,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
                        (else (none)))]
           (listAppend (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr filePath))
             (pair "span" (match span ((some sp) (rPair (pairFirst sp) (pairSecond sp))) ((none) (rNone))))
-            (pair "content" (if (= code 0) (rStr fullCont) (rNone)))
+            (pair "content" (if (= code 0) (rStr (if memoFresh sameText fullCont)) (rNone)))
             (pair "status" (rStr st))
             (pair "error" (match errVal ((some e) (rStr e)) ((none) (rNone))))
             (pair "message" (match msgVal ((some m) (rStr m)) ((none) (rNone))))
