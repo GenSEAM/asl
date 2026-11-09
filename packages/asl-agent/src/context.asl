@@ -1554,8 +1554,11 @@ fn unmetForm deliver: (Option String) reached: Bool wrote: Bool findings: (List 
     (if (stringEmpty? why) "" (str "(:unmet :deliver :" d " :reason \"" why "\")")))
 
 
+; (:m :ref GRADER-FACTS-NOT-PROSE :do "the grader judges the code against the task's requirements; process steps the harness itself checks (red before, revert and mutant runs, the commit line, the final report) are not requirements, since k3.1-pro failed two runs only on their missing prose")
 fn specCheckSystem -> String
   (str "You check a finished change against its task. "
+       "Judge only whether the diff does what the task requires, and say which requirement the code misses or gets wrong. "
+       "Do not fail a change for missing process evidence: red-before or mutant proofs, revert runs, a commit message, or a final report are checked by the harness, not by you. "
        "You may count as evidence receipts that show an effect, such as a file or directory "
        "absent after a run, a gate's asserts, or a run's output. "
        "Reply with one form: "
