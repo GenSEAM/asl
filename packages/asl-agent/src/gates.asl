@@ -35,8 +35,9 @@ fn gateTimeout g: GateResult -> Bool
 fn gateSeconds g: GateResult -> Int64
   (match g ((gateResultOf _ _ _ _ _ s) s))
 
+; (:m :ref GATEINTEGRITY-TIMEOUT-PASSES :do "a revert run that timed out shows no assertion failing, so it is timeoutOnRevert, never failsOnRevert; SPECDIRTY 2026-11-09 passed integrity on two 300 s revert timeouts")
 fn gateVerdicts results: (List GateResult) reverted: Bool -> (List String)
-  (map (fn [g] (c/gateVerdict reverted (gateExit g) (gateStdout g) (gateStderr g))) results)
+  (map (fn [g] (if (and reverted (gateTimeout g)) "timeoutOnRevert" (c/gateVerdict reverted (gateExit g) (gateStdout g) (gateStderr g)))) results)
 
 fn stripComment s: String -> String
   (match (stringIndexOf s "#")
