@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -737,6 +737,13 @@ fn reviewerUnavailable? message: String -> Bool
 fn specFail model: String reasons: (List String) -> s/SpecVerdict
   (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
 
+; (:m :ref LEON-DONE-WITHOUT-WIRING :do "specTargets is the distinct union of the files this run wrote and the owned files that differ from HEAD, so a continuation run that writes nothing on top of a restored patch still grades the dirty tree; specCheckWanted? is the guard that runs the check only at an ok finish with at least one target")
+fn specTargets written: (List String) dirty: (List String) -> (List String)
+  (distinct (listAppend written dirty))
+
+fn specCheckWanted? specCheck: Bool status: String targets: (List String) -> Bool
+  (and specCheck (and (= status "ok") (not (listEmpty? targets))))
+
 ; (:m :ref LEON-CAPS :do "the diff is graded against the task by the env.grade channel, a gateway role other than the writer's; a reviewer error, an unreadable reply, a grader that reports no model, a grader that is the writer's own model, an unknown writer model, and a not-met verdict are all fail; a provider with no grader channel is skipped, which still ends needsReview, never a silent pass")
 fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List String) -> s/SpecVerdict
   (let [state run.state
@@ -832,8 +839,10 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
       ((ok _)
         (let [written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))
               _why (if (and (= status0 "failed") (= state.status "ok")) (ok? (jr/journalWrite env.journalPath (str "(:verdict :failed :why \"findings without a claim, and no green declared gate over written files\" :findings " (stringFromInt64 (listLength findings)) ")\n"))) true)
-              spec (if (and env.specCheck (and (= status0 "ok") (not (listEmpty? written))))
-                     (some (specCheckRun! env run rootDir written))
+              dirty (resultOr (go/changedOwnedFiles! env.owns rootDir none) (list))
+              targets (specTargets written dirty)
+              spec (if (specCheckWanted? env.specCheck status0 targets)
+                     (some (specCheckRun! env run rootDir targets))
                      none)
               finalStatus (match spec ((some v) (if (listContains? (list "fail" "skipped" "unavailable") v.verdict) "needsReview" status0)) ((none) status0))
               gatesGreen (declaredGatesGreen env.gates state.lastGates)
