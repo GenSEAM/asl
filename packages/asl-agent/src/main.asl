@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps readOnlyEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1191,6 +1191,31 @@ fn readOnlyOps -> (List String)
 fn unchangedTurn? names: (List String) wrote: Bool -> Bool
   (and (not wrote) (and (not (listEmpty? names)) (listAll? (fn [n] (listContains? (listAppend (readOnlyOps) (list "write" "edit")) n)) names)))
 
+; (:m :ref GATE-DIGEST-REUSE :do "a worktree digest equal to the last gated digest reuses that verdict even when the turn has non-read op names")
+fn reuseGateDigest? previous: (Option String) current: String -> Bool
+  (match previous
+    ((some digest) (= digest current))
+    ((none) false))
+
+fn ! worktreeDigest! owns: (List String) root: String -> String
+  (let [diff (optionOr (go/gitText! (list "git" "diff" "HEAD" "--") root) "")
+        untracked (optionOr (go/gitText! (listAppend (list "git" "ls-files" "--others" "--exclude-standard" "--") owns) root) "")
+        paths (filter (fn [p] (not (stringEmpty? p))) (stringLines untracked))
+        contents (map (fn [p] (str p "
+" (resultOr (fileReadString (str root "/" p)) ""))) paths)]
+    (bytesSha256 (stringToBytes (str diff "
+" (stringJoin contents "
+")))))
+
+fn lastGateResultFor cmd: String prior: (List g/GateResult) -> (Option g/GateResult)
+  (listHead (filter (fn [gate] (= (g/gateCmd gate) cmd)) (listReverse prior)))
+
+fn reusedGateResults commands: (List String) prior: (List g/GateResult) -> (List g/GateResult)
+  (listReverse (fold (fn [acc cmd]
+    (match (lastGateResultFor cmd prior)
+      ((some gate) (cons gate acc))
+      ((none) acc))) (list) commands))
+
 fn liveOpName op: (List (Pair String c/KvVal)) -> String
   (match (c/dictGet op "op")
     ((some value) (match value ((c/kvStr name) name) (_ "")))
@@ -2090,7 +2115,18 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
-                  newGates (if (or (not wantGates) wallStop) (list) (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid))
+                  digestPath (str path ".gateDigest")
+                  digestNow (if (and wantGates (not wallStop)) (worktreeDigest! ra.owns rootDir) "")
+                  digestPrev (match (fileReadString digestPath) ((ok d) (some (stringTrim d))) ((err _) none))
+                  reuseGates (and (not (stringEmpty? digestNow)) (and (not (listEmpty? state.allGateResults)) (reuseGateDigest? digestPrev digestNow)))
+                  reused (if reuseGates (reusedGateResults ra.gates state.allGateResults) (list))
+                  reuseAll (and reuseGates (= (listLength reused) (listLength ra.gates)))
+                  _reuseNote (if reuseAll (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :gateReuse :digest \"" digestNow "\" :gates " (stringFromInt64 (listLength reused)) ")\n"))) true)
+                  newGates (cond
+                             ((or (not wantGates) wallStop) (list))
+                             (reuseAll reused)
+                             (else (runLiveGates! ra.gates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid)))
+                  _digestSaved (if (and (not (stringEmpty? digestNow)) (not (listEmpty? newGates))) (ok? (fileWrite digestPath digestNow)) true)
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   turnOpNames (c/joinSep (map liveOpName operations) " ")
