@@ -89,7 +89,8 @@ fn ! runTests -> Bool
   (let [(solo (once! "solo" "solo" (fn [(m String)] -> String (lengthEmpty m))))
         (cascade (once! "any" "any" (fn [(m String)] -> String (if (= m "model-1") (lengthEmpty m) (reply m "(:step ok)" "stop" "")))))
         (plain (once! "plain" "solo" (fn [(m String)] -> String (reply m "" "stop" ""))))
-        (cut (once! "cut" "solo" (fn [(m String)] -> String (replyUsing m "" "stop" "" "{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}"))))]
+        (cut (once! "cut" "solo" (fn [(m String)] -> String (replyUsing m "" "stop" "" "{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}"))))
+        (cutLength (once! "cutLength" "solo" (fn [(m String)] -> String (replyUsing m "" "length" "" "{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}"))))]
     (do (assert (= solo.end "done") (str "the single-member chat ends: " solo.end))
         (assert (= solo.models (list "model-1")) (str "a length-empty reply is not retried on the same model, asked: " (stringJoin solo.models " ")))
         (assert (and (= solo.status 502) (stringContains? solo.body "ERR_EMPTY_LENGTH") (stringContains? solo.body "finish_reason length") (stringContains? solo.body "26 reasoning chars"))
@@ -98,5 +99,7 @@ fn ! runTests -> Bool
         (assert (and (= plain.models (list "model-1" "model-1")) (stringContains? plain.body "ERR_EMPTY_CONTENT")) (str "an empty reply that did not stop at length keeps its same-model retry: " (stringJoin plain.models " ") " " plain.body))
         (assert (and (= cut.models (list "model-1" "model-1")) (listContains? cut.notes "upstreamCut") (not (listContains? cut.notes "empty")))
                 (str "an empty 200 with zero usage is noted upstreamCut and keeps its retry: " (stringJoin cut.models " ") " notes " (stringJoin cut.notes " ")))
+        (assert (and (= cutLength.models (list "model-1" "model-1")) (listContains? cutLength.notes "upstreamCut") (not (listContains? cutLength.notes "emptyLength")))
+                (str "a zero-usage empty 200 with finish_reason length is an upstream cut, noted upstreamCut and retried, not emptyLength: " (stringJoin cutLength.models " ") " notes " (stringJoin cutLength.notes " ")))
         (assert (and (listContains? plain.notes "empty") (not (listContains? plain.notes "upstreamCut"))) (str "an empty reply that counted tokens stays noted empty: " (stringJoin plain.notes " ")))
         true))

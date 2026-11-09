@@ -2271,7 +2271,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
     (match proj
       ((some p)
        (if (and (emptyContent? p.content) (not (toolCalls? (firstMessage p.resp))))
-         (if (= (finishReason p.resp) "length")
+         (if (and (= (finishReason p.resp) "length") (not (zeroUsage? p.resp)))
            (lengthStopped cx l a p)
          (tell (usageNote prov alias (if (zeroUsage? p.resp) "upstreamCut" "empty"))
            (fn [] -> ChatStep
