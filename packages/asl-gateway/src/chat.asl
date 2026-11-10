@@ -653,7 +653,10 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
         (b1 (match ep.temperatureFixed
               ((some _) (pt/jset b0 "temperature" (floatJson ep.temperatureFixed)))
               ((none) (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))))
-        (b2 (match ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
+        (b1b (match ep.topP
+               ((some _) (if (listContains? cx.reqKeys "top_p") b1 (pt/jset b1 "top_p" (floatJson ep.topP))))
+               ((none) b1)))
+        (b2 (match ep.effort ((some s) (pt/jset b1b "effort" (j/jstr s))) ((none) b1b)))
         (b3 (match ep.maxTokens
               ((some n) (if (listContains? cx.reqKeys "max_tokens") b2 (pt/jset b2 "max_tokens" (paramJson cx e "maxTokens" (j/jint n)))))
               ((none) b2)))

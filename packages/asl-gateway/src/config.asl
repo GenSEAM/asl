@@ -128,6 +128,7 @@ fn scalarToString sc: AsnScalar -> String
     ((scalarStr s) s))
 
 (schema GatewayParams
+  (:f topP (Option Float64) :default none)
   (:f temperature (Option Float64))
   (:f effort (Option String))
   (:f effortDialect (Option String))
@@ -164,6 +165,7 @@ fn emptyGatewayParams -> GatewayParams
 fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (GatewayParams
     :temperature (if (some? override.temperature) override.temperature base.temperature)
+    :topP (if (some? override.topP) override.topP base.topP)
     :effort (if (some? override.effort) override.effort base.effort)
     :effortDialect (if (some? override.effortDialect) override.effortDialect base.effortDialect)
     :maxTokens (if (some? override.maxTokens) override.maxTokens base.maxTokens)
@@ -932,6 +934,22 @@ fn asnFigure expr: rd/SExpr -> AsnScalar
     (_ (asnScalar expr)))
 
 
+fn checkTopP props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "topP")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(sc (asnFigure expr))]
+        (match sc
+          ((scalarFloat f)
+            (if (and (not (< f 0.0)) (not (> f 1.0)))
+              (pair (with cur :topP (some f)) errs)
+              (pair cur (cons (str what ": :topP must be a number in 0..1") errs))))
+          ((scalarInt n)
+            (if (and (not (< n 0)) (not (> n 1)))
+              (pair (with cur :topP (some (int64ToFloat64 n))) errs)
+              (pair cur (cons (str what ": :topP must be a number in 0..1") errs))))
+          (_ (pair cur (cons (str what ": :topP must be a number in 0..1") errs)))))))
+
 fn checkTemperature props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "temperature")
     ((none) (pair cur errs))
@@ -1089,7 +1107,8 @@ fn checkRpm props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (
 
 fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
   (let [(s0 (pair (emptyGatewayParams) (list)))
-        (s1 (checkTemperature props what (pairFirst s0) (pairSecond s0)))
+        (s0b (checkTopP props what (pairFirst s0) (pairSecond s0)))
+        (s1 (checkTemperature props what (pairFirst s0b) (pairSecond s0b)))
         (s2 (checkEffort props what (pairFirst s1) (pairSecond s1)))
         (s3 (checkMaxTokens props what (pairFirst s2) (pairSecond s2)))
         (s4 (checkContextBudget props what (pairFirst s3) (pairSecond s3)))
@@ -1138,6 +1157,7 @@ fn checkRetry props: (Map String rd/SExpr) what: String cur: GatewayParams errs:
 fn paramPresent? params: GatewayParams k: String -> Bool
   (cond
     ((= k "temperature") (some? params.temperature))
+    ((= k "topP") (some? params.topP))
     ((= k "effort") (some? params.effort))
     ((= k "effortDialect") (some? params.effortDialect))
     ((= k "maxTokens") (some? params.maxTokens))
@@ -1169,7 +1189,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asnFigure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
+        (list "temperature" "topP" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
