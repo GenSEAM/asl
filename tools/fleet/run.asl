@@ -75,8 +75,11 @@
 fn job argv: (List String) cwd: String env: (List String) -> Job
   (Job :argv argv :cwd cwd :env env)
 
+; (:m :ref CHILDENV-STRIP-MORE :do "the fleet bridge and gateway children must not inherit the owner ssh agent socket row or any password row: the exact name SSH_AUTH_SOCK and any name containing PASSWORD join the API key suffix, TOKEN and SECRET filters")
 fn secretName? name: String -> Bool
-  (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
+  (or (= name "SSH_AUTH_SOCK")
+      (or (stringContains? name "PASSWORD")
+          (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))))
 
 ; (:m :ref CACHE-HOME-LEAK :do "the caches that key off HOME, each with its one override: a child started with another HOME (a test's temp home) reuses the shared caches only when it gets every row; ASL_CHECK_CACHE missing alone made a fresh-HOME vps.asl run 349894 ms against 4157 ms (node2, 2026-10-30). ASL_NATIVE_TEST_CACHE keys off HOME only in a linked worktree (nativeTest defaultCacheDirFor); the main checkout keeps .asl/cache/nativeTest, so the row is left out there unless set")
 fn cacheRows -> (List (Pair String String))
