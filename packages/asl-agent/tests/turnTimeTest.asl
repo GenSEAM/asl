@@ -1,6 +1,6 @@
 (module aslAgent/tests/turnTimeTest
   :x [runTests]
-  :i [(aslAgent/core :a c)])
+  :i [(aslAgent/core :a c) (asl-tools/vcs/git :a vg)])
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -31,13 +31,17 @@ fn ! write path: String text: String -> Bool
 fn ! readOr path: String -> String
   (resultOr (fileReadString path) "")
 
+fn ! gitOk root: String args: (List String) -> Bool
+  (let [o (vg/gitRun! root args 60)]
+    (= o.exit 0))
+
 fn ! initCommitRepo root: String initial: String -> Bool
   (and (write (str root "/subject.txt") initial)
-    (and (= (processRun (str "git -C " (shellQuote root) " init -q -b main")).exitCode 0)
-      (and (= (processRun (str "git -C " (shellQuote root) " config user.name liveLoop")).exitCode 0)
-        (and (= (processRun (str "git -C " (shellQuote root) " config user.email live-loop@example.invalid")).exitCode 0)
-          (and (= (processRun (str "git -C " (shellQuote root) " add -- subject.txt")).exitCode 0)
-            (and (= (processRun (str "git -C " (shellQuote root) " commit -q -m initial")).exitCode 0)
+    (and (gitOk root (list "init" "-q" "-b" "main"))
+      (and (gitOk root (list "config" "user.name" "turnTime"))
+        (and (gitOk root (list "config" "user.email" "turn-time@example.invalid"))
+          (and (gitOk root (list "add" "--" "subject.txt"))
+            (and (gitOk root (list "commit" "-q" "-m" "initial"))
               (write (str root "/unrelated.txt") "outside\n")))))))
 
 fn fieldAfter text: String key: String -> String
