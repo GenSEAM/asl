@@ -906,11 +906,17 @@ fn switchedBody cx: Ctx alias: String body: j/Json -> j/Json
   (if (and cx.dropOnSwitch (and (not (stringEmpty? cx.stuck)) (!= alias cx.stuck))) (dropReasoning body) body)
 
 ; (:m :ref GW-MODES :do "a pin profile tries the first member of its route and nothing after it, so no reroute, spread or fallback profile ever replaces the named model")
+; (:m :ref GRADER-EXCLUDE-NAME :do "an exclude matches a member by alias, by row name, or by model key (lower case, provider prefix before : and path dropped), so the served name deepseek-ai/DeepSeek-V4.1-Flash-1017 excludes every row named hf:deepseek-ai/DeepSeek-V4.1-Flash-1017; 2026-11-10 GW-TOPP-ROW was graded by its own writer model through a second alias")
+fn modelKey name: String -> String
+  (let [(low (stringLower name))
+        (noPrefix (match (stringIndexOf low ":") ((some k) (optionOr (stringSlice low (+ k 1) (stringLength low)) low)) ((none) low)))]
+    (optionOr (listLast (stringSplit noPrefix "/")) noPrefix))
+
 fn entryMatchesExclude? entry: c/GatewayResolvedEntry ex: String -> Bool
   (if (stringEmpty? ex)
     false
     (match entry
-      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (= e.dispatch ex))))
+      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (or (= e.dispatch ex) (and (not (stringEmpty? (modelKey ex))) (= (modelKey e.name) (modelKey ex)))))))
       ((c/entryUnresolved a) (= a ex))))
 
 fn filterExcluded cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)

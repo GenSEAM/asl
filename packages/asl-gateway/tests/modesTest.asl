@@ -159,9 +159,13 @@ fn ! testExclude -> Bool
         (solo (onceExcl! "exSolo" ":mode pin" "any" "m1" good))
         (all (onceExcl! "exAll" "" "solo" "m1" good))
         (soloOk (onceExcl! "exSoloOk" "" "solo" "" good))
-        (none (onceExcl! "exNone" "" "any" "" good))]
+        (none (onceExcl! "exNone" "" "any" "" good))
+        (served (onceExcl! "exServed" "" "any" "vendor/MODEL-1" good))
+        (prefixed (onceExcl! "exPrefixed" "" "any" "hf:org/model-1" good))]
     (do (assert (= mixed.models (list "model-2")) (str "a mixed cascade keeps the non-matching member, got " (stringJoin mixed.models " ")))
         (assert (= none.models (list "model-1")) "no exclude asks the first member")
+        (assert (= served.models (list "model-2")) (str "a served model name with a path and other case excludes the row of that model, got " (stringJoin served.models " ")))
+        (assert (= prefixed.models (list "model-2")) (str "a provider-prefixed name excludes the row of that model, got " (stringJoin prefixed.models " ")))
         (assert (= solo.models (list "model-2")) (str "pin skips the excluded first member, got " (stringJoin solo.models " ")))
         (assert (and (= all.status 400) (= all.end "done") (listEmpty? all.models)) (str "every member excluded answers 400 and asks no model, got " (stringFromInt64 all.status) " " (stringJoin all.models " ")))
         (assert (and (= soloOk.status 200) (= soloOk.models (list "model-1"))) "the solo route works when nothing is excluded")
