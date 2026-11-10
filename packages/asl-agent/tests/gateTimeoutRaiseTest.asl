@@ -3,7 +3,7 @@
   :i [(aslAgent/gates :a gd) (aslAgent/gitOps :a go)])
 
 fn writeFixture path: String -> Bool
-  (match (fileWrite path "(:suiteTime :suite \"raiseTest.asl\" :ms 4000)\n(:suiteTime :suite \"hugeTest.asl\" :ms 3000000)\n")
+  (match (fileWrite path "(:suiteTime :suite \"raiseTest.asl\" :ms 4000)\n(:suiteTime :suite \"hugeTest.asl\" :ms 3000000)\n(:suiteTime :suite \"sleepTest.asl\" :ms 4000)\n")
     ((ok _) true)
     ((err _) false))
 
@@ -13,15 +13,16 @@ fn ! runTests -> Bool
         real (resultOr (realPath tmp) tmp)
         path (str real "/gateTimes.asn")
         wrote (writeFixture path)
-        recs (go/runGatesIn! (list (pair "g1" "true raiseTest.asl") (pair "g2" "true hugeTest.asl") (pair "g3" "true plainTest.asl")) real 2 (none) (none) path)
+        recs (go/runGatesIn! (list (pair "g1" "true raiseTest.asl") (pair "g2" "true hugeTest.asl") (pair "g3" "true plainTest.asl") (pair "g4" "/bin/sh -c 'sleep 3' sleepTest.asl")) real 2 (none) (none) path)
         r1 (optionOr (listGet recs 0) (list))
         r2 (optionOr (listGet recs 1) (list))
         r3 (optionOr (listGet recs 2) (list))
+        r4 (optionOr (listGet recs 3) (list))
         removed (pathRemove real)]
     (do
       (assert (ok? made) "the fixture directory is created")
       (assert wrote "the fixture times file is written")
-      (assert (= (listLength recs) 3) "one record per gate")
+      (assert (= (listLength recs) 4) "one record per gate")
       (assert (= (gd/gateRaisedSec 4000) 6) "4000 ms x 1.5 raises to 6 s")
       (assert (= (gd/gateRaisedSec 4001) 7) "the raised value rounds up")
       (assert (= (gd/gateTimeoutCapSec) 3600) "the cap is 3600 s")
@@ -36,5 +37,7 @@ fn ! runTests -> Bool
       (assert (= (go/recGet r3 "exit") (some (go/rInt 0))) "a gate without a record runs")
       (assert (none? (go/recGet r3 "raised")) "a gate without a record is not raised")
       (assert (none? (go/recGet r3 "timeoutSec")) "a gate without a record keeps the plain timeout")
+      (assert (= (go/recGet r4 "exit") (some (go/rInt 0))) "a 3 s gate recorded at 4000 ms with timeout 2 finishes under the raised timeout")
+      (assert (none? (go/recGet r4 "timeout")) "the 3 s gate did not time out")
       (assert (ok? removed) "the fixture directory is removed")
       true))
