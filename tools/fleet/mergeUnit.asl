@@ -14,7 +14,9 @@
   (:f audit String :default "./bin/asl audit consistency")
   (:f lock String)
   (:f log String :default "")
-  (:f retries Int64 :default 3))
+  (:f retries Int64 :default 3)
+  (:f testCmd String :default "./bin/asl test")
+  (:f lockMaxAgeS Int64 :default 3600))
 
 fn ! homeDir -> String
   (optionOr (envGet "HOME") "/tmp")
@@ -46,7 +48,7 @@ fn ! waitLoop! pid: Int64 deadline: Int64 -> Bool
     (else (do (sleepMs 500) (waitLoop! pid deadline))))
 
 fn ! sh! dir: String cmd: String secs: Int64 -> fr/Done
-  (fr/runOneLimited (fr/job (list "env" "-u" "ASL_ROOT" "-u" "ASL_PRELUDE" "sh" "-c" cmd) dir (fr/childEnv (list))) (fr/limits secs 64))
+  (fr/runOneLimited (fr/job (list "env" "-u" "ASL_ROOT" "-u" "ASL_PRELUDE" "nice" "-n" "10" "sh" "-c" cmd) dir (fr/childEnv (list))) (fr/limits secs 64))
 
 fn green? d: fr/Done -> Bool
   (and (= d.verdict "exit") (= d.exit 0))
@@ -69,6 +71,34 @@ fn ! gatesOf! unit: String cfg: Cfg -> (List String)
       ((err _) (list))))
 
 ; (:m :do "the gates of one unit in order: true when none blocks; each red gate is judged against the main repo")
+; (:m :ref BASH-EXIT-MERGE :do "the neighbour tests of a change, as merge4 found them: for each file changed on the branch since main under */src/*.asl, the module named on its line 1, then every pkg/tests/*.asl that mentions (MODULE  and contains runTests; each becomes the gate cfg.testCmd + path")
+fn ! moduleOf! path: String -> String
+  (match (fileReadString path)
+    ((ok text) (let [(l (optionOr (listHead (stringLines text)) ""))]
+                 (if (stringStartsWith? l "(module ") (optionOr (listHead (stringSplit (stringReplace (stringReplace l "(module " "") ")" "") " ")) "") "")))
+    ((err _) ""))
+
+fn ! testsFor! wt: String file: String -> (List String)
+  (let [(pkg (optionOr (listHead (stringSplit file "/src/")) ""))
+        (mod (moduleOf! (str wt "/" file)))
+        (dir (str wt "/" pkg "/tests"))
+        (names (resultOr (dirList dir) (list)))]
+    (if (or (stringEmpty? mod) (stringEmpty? pkg)) (list)
+      (map (fn [n] (str pkg "/tests/" n))
+        (filter (fn [n] (and (stringEndsWith? n ".asl")
+                             (let [(t (resultOr (fileReadString (str dir "/" n)) ""))]
+                               (and (stringContains? t (str "(" mod " ")) (stringContains? t "runTests")))))
+          names))))
+
+fn ! neighbourGates! cfg: Cfg wt: String -> (List String)
+  (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
+        (files (filter (fn [f] (and (stringContains? f "/src/") (stringEndsWith? f ".asl"))) (stringLines d.out)))
+        (tests (fold (fn [acc f] (listAppend acc (testsFor! wt f))) (list) files))]
+    (map (fn [t] (str cfg.testCmd " " t)) tests))
+
+fn uniq xs: (List String) -> (List String)
+  (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
+
 fn ! gatesPass! cfg: Cfg unit: String wt: String gates: (List String) -> Bool
   (fold (fn [(ok0 Bool) (g String)] -> Bool
           (if (gateRun! wt g cfg.gateSecs)
@@ -84,8 +114,10 @@ fn ! auditPass! cfg: Cfg wt: String -> Bool
       (and (= d.verdict "exit") (stringContains? d.out "audit consistency: passed"))))
 
 ; (:m :do "the rebase of the worktree onto the main branch; a conflict is aborted and reported false")
+; (:m :ref BASH-EXIT-MERGE :do "a build leaves the tracked .asl.config.asn modified, and a dirty tree makes the rebase fail as a false conflict: that one path is restored from HEAD through the vcs layer first (an untracked or absent file is a no-op)")
 fn ! rebaseOnto! cfg: Cfg wt: String -> Bool
-  (let [(r (gitOut! wt (list "rebase" "-q" cfg.branch)))]
+  (let [(_ (if (stringEmpty? (stringTrim (vg/changes! wt (list ".asl.config.asn")).out)) 0 (do (vg/restoreTree! wt "HEAD" (list ".asl.config.asn")) 0)))
+        (r (gitOut! wt (list "rebase" "-q" cfg.branch)))]
     (if (= r.exit 0) true
       (do (gitOut! wt (list "rebase" "--abort")) false)))
 
@@ -94,10 +126,17 @@ fn ! hostBuild! dir: String -> Bool
     (green? (sh! dir "nice sh asl/host/build.sh" 1800))
     true)
 
+; (:m :ref BASH-EXIT-MERGE :do "a lock directory older than lockMaxAgeS (default 3600 s, by its mtime) is stale: a merge that died holding it must not skip rebuilds forever")
+fn ! lockStale? cfg: Cfg -> Bool
+  (match (fileStat cfg.lock)
+    ((ok st) (> (- (/ (nowNs) 1000000000) st.mtime) cfg.lockMaxAgeS))
+    ((err _) false))
+
 ; (:m :do "the main host rebuild under a mkdir lock: mkdir fails when another merge holds it, so the rebuild is skipped, never doubled; a missing build script is a no-op")
 fn ! mainBuild! cfg: Cfg unit: String -> Bool
   (let [(parent (stringReplace cfg.lock "/mainbuild.lock" ""))
         (_ (dirCreate parent))
+        (_x (if (lockStale? cfg) (do (pathRemove cfg.lock) (emit! cfg unit "MAIN-BUILD-LOCK-EXPIRED" (str ":maxAgeS " cfg.lockMaxAgeS))) true))
         (got (fr/runOneLimited (fr/job (list "mkdir" cfg.lock) "." (fr/childEnv (list))) (fr/limits 20 8)))]
     (cond
       ((!= got.exit 0) (do (emit! cfg unit "MAIN-BUILD-SKIPPED" ":why \"another merge builds\"") true))
@@ -126,7 +165,7 @@ fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (gatesOf! unit cfg))]
+        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (neighbourGates! cfg wt)))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
