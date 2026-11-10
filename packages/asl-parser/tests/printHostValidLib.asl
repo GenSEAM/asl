@@ -104,18 +104,31 @@ fn runCheck! host: String path: String -> HostRun
   (:f removed Bool)
   (:f removeDetail String))
 
-fn hostCheck! host: String srcPath: String text: String -> (Result CheckOutcome String)
-  (match (createTemp! (parentDir srcPath) text 0)
-    ((err e) (err e))
-    ((ok tmp)
-     (let [(printed (runCheck! host tmp))
-           (removed (pathRemove tmp))
-           (source (runCheck! host srcPath))]
-       (ok (CheckOutcome
-             :source source
-             :printed printed
-             :removed (ok? removed)
-             :removeDetail (match removed ((ok _) (str "removed " tmp)) ((err e) (str "remove " tmp ": " e))))))))
+; (:m :ref TEST-SPEED-PRINTHOSTVALID-BATCH :do "one bin/asl check per chunk instead of one per file: the receipt holds one line per path, ok PATH: or check failed: PATH:, and the error lines of a failed path start with PATH:; a path with no verdict line (the batch died early) is checked alone")
+fn verdictIn lines: (List String) path: String -> (Option HostRun)
+  (cond
+    ((listAny? (fn [(l String)] -> Bool (stringStartsWith? l (str "ok " path ": "))) lines)
+     (some (HostRun :valid true :detail "exit 0: ok in batch")))
+    ((listAny? (fn [(l String)] -> Bool (stringStartsWith? l (str "check failed: " path ": "))) lines)
+     (some (HostRun :valid false :detail (str "exit 1: " (firstHostError (stringJoin (filter (fn [(l String)] -> Bool (stringStartsWith? l (str path ":"))) lines) "\n"))))))
+    (else (none)))
+
+fn batchCheck! host: String paths: (List String) -> (Map String HostRun)
+  (if (listEmpty? paths)
+    (mapEmpty)
+    (let [(res (processRun (str (shellQuote host) " check " (stringJoin (map shellQuote paths) " ") " 2>&1")))
+          (lines (stringLines (str res.stdout res.stderr)))]
+      (fold (fn [(m (Map String HostRun)) (p String)] -> (Map String HostRun)
+              (mapSet m p (match (verdictIn lines p) ((some r) r) ((none) (runCheck! host p)))))
+            (mapEmpty) paths)))
+
+fn chunked xs: (List String) n: Int64 -> (List (List String))
+  (if (listEmpty? xs)
+    (list)
+    (cons (listTake xs n) (chunked (listDrop xs n) n)))
+
+fn runOf runs: (Map String HostRun) path: String -> HostRun
+  (mapGetOr runs path (HostRun :valid false :detail (str "no check ran for " path)))
 
 fn printForms forms: (List a/TopForm) -> String
   (match (listHead forms)
@@ -125,14 +138,42 @@ fn printForms forms: (List a/TopForm) -> String
        (_ (stringJoin (map (fn [(t a/TopForm)] -> String (ap/printTopForm t)) forms) "\n\n"))))
     ((none) ""))
 
-fn checkFile! host: String root: String path: String -> (Result CheckOutcome String)
-  (let [(abs (str root "/" path))]
-    (match (fileReadString abs)
-      ((err _) (err (str path ": read failed")))
-      ((ok src)
-       (match (a/parse src)
-         ((err e) (err (str path ": parse error " e.msg)))
-         ((ok forms) (hostCheck! host abs (printForms forms)))))))
+fn printedText! root: String path: String -> (Result String String)
+  (match (fileReadString (str root "/" path))
+    ((err _) (err (str path ": read failed")))
+    ((ok src)
+     (match (a/parse src)
+       ((err e) (err (str path ": parse error " e.msg)))
+       ((ok forms) (ok (printForms forms))))))
+
+; (:m :ref TEST-SPEED-PRINTHOSTVALID-BATCH :do "printed copies and sources go in separate batches: a copy declares its source's module name, so the two in one checker process would share one module entry")
+fn ! checkChunk! host: String root: String paths: (List String) -> (List FileResult)
+  (let [(abs (map (fn [(p String)] -> String (str root "/" p)) paths))
+        (temps (map (fn [(pa (Pair String String))] -> (Result String String)
+                      (match (printedText! root (pairFirst pa))
+                        ((err e) (err e))
+                        ((ok text) (createTemp! (parentDir (pairSecond pa)) text 0))))
+                    (zip paths abs)))
+        (made (map (fn [(t (Result String String))] -> String (resultOr t "")) (filter ok? temps)))
+        (printed (batchCheck! host made))
+        (removed (fold (fn [(m (Map String String)) (t String)] -> (Map String String)
+                         (mapSet m t (match (pathRemove t) ((ok _) "") ((err e) (str "remove " t ": " e)))))
+                       (mapEmpty) made))
+        (sources (batchCheck! host (map (fn [(x (Pair String (Result String String)))] -> String (pairFirst x))
+                                        (filter (fn [(x (Pair String (Result String String)))] -> Bool (ok? (pairSecond x))) (zip abs temps)))))]
+    (map (fn [(x (Pair (Pair String String) (Result String String)))] -> FileResult
+           (FileResult
+             :path (pairFirst (pairFirst x))
+             :outcome (match (pairSecond x)
+                        ((err e) (err e))
+                        ((ok tmp)
+                         (let [(why (mapGetOr removed tmp "not removed"))]
+                           (ok (CheckOutcome
+                                 :source (runOf sources (pairSecond (pairFirst x)))
+                                 :printed (runOf printed tmp)
+                                 :removed (stringEmpty? why)
+                                 :removeDetail (if (stringEmpty? why) (str "removed " tmp) why))))))))
+         (zip (zip paths abs) temps)))
 
 (schema FileResult
   (:f path String)
@@ -187,7 +228,7 @@ fn runShard! label: String n: Int64 k: Int64 -> Bool
            (let [(swept (sweepStrays! root allFiles))
                  (shard (prl/shardFiles allFiles n k))
                  (expected (prl/expectedShardCount (listLength allFiles) n k))
-                 (results (map (fn [(p String)] -> FileResult (FileResult :path p :outcome (checkFile! host root p))) shard))
+                 (results (fold (fn [(acc (List FileResult)) (c (List String))] -> (List FileResult) (listAppend acc (checkChunk! host root c))) (list) (chunked shard 48)))
                  (failing (filter fileFails? results))
                  (sourceValid (filter sourceValid? results))
                  (excluded (filter (fn [(r FileResult)] -> Bool (some? (knownHostInvalidReason r.path))) results))]
