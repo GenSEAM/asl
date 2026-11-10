@@ -319,7 +319,7 @@
 (:doc :symbol "asl/packages/asl-gates/src/stratification.asl#StratificationReport.healthy" :text "Overall architectural health status")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#" :text "Per-suite wall-time ledger for the gate runner: one (:suiteTime :suite S :ms N) row per suite in $HOME/.asl/run/gateTimes.asn (ASL_GATE_TIMES overrides), written by tmp and rename, keyed by suite with the newest run winning, and the start order it implies: unknown suites first by name, then known suites by descending ms.")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#SuiteTime.suite" :text "suite path")
-(:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#SuiteTime.ms" :text "wall time of its last run in ms")
+(:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#SuiteTime.ms" :text "lower median in ms of the kept samples (up to the last 5 runs, newest last in the :samples field of the row)")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#timesPath!" :text "ASL_GATE_TIMES keeps tests off the shared ledger")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#quotedLoop" :text "unescape to the closing quote; none if missing")
 (:doc :symbol "asl/packages/asl-gates/src/suiteTimes.asl#parseTimes" :text "a malformed row is an error, never skipped")
