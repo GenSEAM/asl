@@ -17,6 +17,7 @@ schema LoopEnv
   (:f model (Option String)) (:f gateTimeout (Option Int64)) (:f wallBudget (Option Int64))
   (:f resume (Option j/Json)) (:f intent (Option String)) (:f plan Bool) (:f specCheck Bool)
   (:f commit Bool)
+  (:f inheritedBase String :default "")
   (:f next (fn [String String] -> pv/Turn))
   (:f advise (fn [String String] -> (Result (Option String) String)))
   (:f review (fn [String String] -> (Result (Option String) String)))

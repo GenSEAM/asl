@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [ownedDigest! commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -539,6 +539,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
                         (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
                         (list))
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
+                _inherited (if (and (none? env.resume) (not (stringEmpty? env.inheritedBase))) (ok? (jr/journalWrite env.journalPath (str "(:inheritedBase :sha \"" (c/escapeAsn env.inheritedBase) "\")\n"))) true)
                 _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
           (ready (LoopRun
             :state (withBaseline (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
@@ -844,17 +845,38 @@ fn ! resumeBaseSha! journalPath: String -> (Option String)
 fn withNoChange run: LoopRun state: s/LoopState -> LoopRun
   (with run :state (with state :signalName (some "noChange")))
 
+; (:m :ref RAWREPLAY-RED :do "digest of the owned dirty state: git diff HEAD plus the untracked files under owns; the lower rung's handoff passes it as :inheritedBase and the run journals it as (:inheritedBase :sha ...)")
+fn ! ownedDigest! owns: (List String) root: String -> String
+  (let [diff (optionOr (go/gitText! (list "git" "diff" "HEAD" "--") root) "")
+        untracked (optionOr (go/gitText! (listAppend (list "git" "ls-files" "--others" "--exclude-standard" "--") owns) root) "")
+        paths (filter (fn [p] (not (stringEmpty? p))) (stringLines untracked))
+        contents (map (fn [p] (str p "\n" (resultOr (fileReadString (str root "/" p)) ""))) paths)]
+    (bytesSha256 (stringToBytes (str diff "\n" (stringJoin contents "\n")))))
+
+fn ! inheritedBaseSha! journalPath: String -> (Option String)
+  (match (listHead (filter (fn [l] (stringStartsWith? l "(:inheritedBase :sha \"")) (stringLines (resultOr (fileReadString journalPath) ""))))
+    ((some l) (let [rest (c/sliceOf l 22 (stringLength l))] (some (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\"") 0)))))
+    ((none) none))
+
 fn ! refusedWrite? journalPath: String -> Bool
   (listAny? (fn [l] (and (stringStartsWith? l "(:op :turn ")
                          (and (not (stringContains? l " :status ok"))
                               (listAny? (fn [n] (stringContains? l (str " :name \"" n "\""))) (list "write" "edit" "txn" "delete")))))
             (stringLines (resultOr (fileReadString journalPath) "")))
 
-; (:m :ref RAWREPLAY-RED :do "7de069c5874e6633: a session that writes nothing still ends ok when the owned files already differ from HEAD (a lower rung changed them before the session) and the declared gates are green; a clean owned tree, or a session whose own write was refused, with no patch is noChange (LEON-OK-WITHOUT-CHANGE)")
-fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) dirty: (List String) refusedWrite: Bool -> Bool
+fn withInheritedChange run: LoopRun state: s/LoopState -> LoopRun
+  (with run :state (with state :signalName (some "inheritedChange")))
+
+; (:m :ref RAWREPLAY-RED :do "7de069c5874e6633: a session that wrote nothing is not noChange only when the lower rung that changed the owned files handed that state over explicitly: the run's (:inheritedBase :sha D) row equals the current owned dirty digest and no write of its own was refused; a dirty tree with no marker, a mismatching marker, a clean tree or a refused write stays noChange/needsReview (LEON-OK-WITHOUT-CHANGE)")
+fn ! inheritedHolds? env: s/LoopEnv rootDir: String -> Bool
+  (match (inheritedBaseSha! env.journalPath)
+    ((some sha) (and (= sha (ownedDigest! env.owns rootDir)) (not (refusedWrite? env.journalPath))))
+    ((none) false))
+
+fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) inherited: Bool -> Bool
   (if (and (= status "ok") (and (not (listEmpty? env.gates)) (and (not (listEmpty? env.owns)) (!= (optionOr state.deliver "") "findings"))))
     (match patch
-      ((none) (or (listEmpty? dirty) refusedWrite))
+      ((none) (not inherited))
       ((some p)
         (match (resumeBaseSha! env.journalPath)
           ((some sha) (= sha (bytesSha256 (stringToBytes (resultOr (fileReadString (str rootDir "/" p)) "")))))
@@ -893,10 +915,13 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
             ((ok hand)
               (let [patch (pairFirst (pairSecond hand))
                     restored (pairSecond (pairSecond hand))
-                    noChange (noChangeEnd? env state rootDir finalStatus patch dirty (refusedWrite? env.journalPath))
+                    inherited (inheritedHolds? env rootDir)
+                    noChange (noChangeEnd? env state rootDir finalStatus patch inherited)
                     endStatus (if noChange "needsReview" finalStatus)
                     _noChange (if noChange (journalSignal! env state.turn "noChange" "no persisted change versus the start of the run, or none beyond the restored patch") true)
-                    run2 (if noChange (withNoChange run state) run)]
+                    inheritedEnd (and (not noChange) (and inherited (and (none? patch) (= finalStatus "ok") (not (listEmpty? env.gates)))))
+                    _inheritedNote (if inheritedEnd (journalSignal! env state.turn "inheritedChange" (str "no work in this session; the ok rests on changes inherited from a lower rung in " (stringJoin dirty " "))) true)
+                    run2 (cond (noChange (withNoChange run state)) (inheritedEnd (withInheritedChange run state)) (else run))]
                 (match (commit! env run2 rootDir endStatus gatesGreen)
                   ((err e) (failed e patch restored))
                   ((ok commit)

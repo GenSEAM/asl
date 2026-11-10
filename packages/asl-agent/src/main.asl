@@ -139,6 +139,7 @@
   (:f contextTokens (Option Int64))
   (:f plan Bool)
   (:f commit Bool :default false)
+  (:f inheritedBase String :default "")
   (:f attractor String :default "")
   (:f nativeTools String :default "")
   (:f prefix String :default "")
@@ -149,7 +150,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events")
+        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events" "inheritedBase")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -361,7 +362,7 @@ fn strParam v: j/Json -> j/Json
 
 fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List (Pair String j/Json)) (Option String))
   (cond
-    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "toolRoot" "poolChan" "remote" "unit" "events") key)
+    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "toolRoot" "poolChan" "remote" "unit" "events" "inheritedBase") key)
       (pair (paramSet ps key (strParam v)) none))
     ((= key "mode") (pair (paramSet ps "modeHint" (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
@@ -1199,14 +1200,7 @@ fn reuseGateDigest? previous: (Option String) current: String -> Bool
     ((none) false))
 
 fn ! worktreeDigest! owns: (List String) root: String -> String
-  (let [diff (optionOr (go/gitText! (list "git" "diff" "HEAD" "--") root) "")
-        untracked (optionOr (go/gitText! (listAppend (list "git" "ls-files" "--others" "--exclude-standard" "--") owns) root) "")
-        paths (filter (fn [p] (not (stringEmpty? p))) (stringLines untracked))
-        contents (map (fn [p] (str p "
-" (resultOr (fileReadString (str root "/" p)) ""))) paths)]
-    (bytesSha256 (stringToBytes (str diff "
-" (stringJoin contents "
-")))))
+  (rl/ownedDigest! owns root)
 
 fn lastGateResultFor cmd: String prior: (List g/GateResult) -> (Option g/GateResult)
   (listHead (filter (fn [gate] (= (g/gateCmd gate) cmd)) (listReverse prior)))
@@ -2423,7 +2417,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                         :owns ra.owns :gates ra.gates :rootDir rootDir :budget ra.budget :inputTokenBudget ra.inputTokenBudget
                         :journalPath path :maxRetries 3 :sessionId (some session) :base (some ra.base)
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
-                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit :toolRoot repoRoot
+                        :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit :inheritedBase ra.inheritedBase :toolRoot repoRoot
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
                         :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
@@ -2476,6 +2470,7 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :gateParallelism ra.gateParallelism :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
+           :inheritedBase ra.inheritedBase
            :remote ra.remote
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
            :plan ra.plan :commit ra.commit :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
@@ -2495,7 +2490,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false))
+                    :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false)) :inheritedBase (textValue (paramOr ps "inheritedBase" (j/jstr "")))
                     :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
 
