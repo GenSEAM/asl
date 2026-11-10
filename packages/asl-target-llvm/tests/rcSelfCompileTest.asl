@@ -86,6 +86,20 @@ schema Stages
   asanOut: String
   untracedOut: String
 
+fn resultAt rs: (List (Result String String)) k: Int64 -> (Result String String)
+  (optionOr (listGet rs k) (err "branch result missing"))
+
+; (:m :ref TEST-SPEED-RCSELF :do "the four stage3 variants depend only on stage2 and write distinct labelled files in the work dir, so they run as forked workers, three at a time (parMap); each returns its Result, the parent inspects them in the original order, and every assert stays in the parent")
+fn ! branch libs: Libs work: String c: String s2: String k: Int64 -> (Result String String)
+  (cond
+    ((= k 0) (compileMode s2 "0" work "stage3" c))
+    ((= k 1) (andThen (andThen (compileMode s2 "1" work "stage3rc" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3rc") false)))
+                      (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4rc" c))))
+    ((= k 2) (andThen (andThen (compileMode s2 "asan" work "stage3asan" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3asan") true)))
+                      (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4asan" c))))
+    (else (andThen (andThen (compileMode s2 "notraceStats" work "stage3nt" c) (fn [(l String)] -> (Result String String) (linkMode libs l (str work "/stage3nt") "notrace")))
+                   (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4nt" c)))))
+
 fn ! stages libs: Libs work: String -> (Result Stages String)
   (let [(c (seed/compilerSource))]
     (match (seed/verify (root) (resultOr (fileReadString (str (root) "/" (seed/manifestPath))) "") work)
@@ -95,21 +109,19 @@ fn ! stages libs: Libs work: String -> (Result Stages String)
                     (fn [(s1 String)] -> (Result String String) (andThen (compileMode s1 "0" work "stage2" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage2") false)))))
          ((err x) (err x))
          ((ok s2)
-          (match (compileMode s2 "0" work "stage3" c)
-            ((err x) (err x))
-            ((ok traced)
-             (match (andThen (andThen (compileMode s2 "1" work "stage3rc" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3rc") false)))
-                          (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4rc" c)))
-               ((err x) (err x))
-               ((ok countedOut)
-                (match (andThen (andThen (compileMode s2 "asan" work "stage3asan" c) (fn [(l String)] -> (Result String String) (linkWith libs l (str work "/stage3asan") true)))
-                             (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4asan" c)))
-                  ((err x) (err x))
-                  ((ok asanOut)
-                   (match (andThen (andThen (compileMode s2 "notraceStats" work "stage3nt" c) (fn [(l String)] -> (Result String String) (linkMode libs l (str work "/stage3nt") "notrace")))
-                                (fn [(b String)] -> (Result String String) (compileMode b "0" work "stage4nt" c)))
-                     ((err x) (err x))
-                     ((ok untracedOut) (ok (Stages :stage2 s2 :traced traced :counted (str work "/stage3rc.ll") :countedOut countedOut :asanOut asanOut :untracedOut untracedOut)))))))))))))))
+          (let [(rs (parMap (fn [(k Int64)] -> (Result String String) (branch libs work c s2 k)) (list 0 1 2 3) 3))]
+            (match (resultAt rs 0)
+              ((err x) (err x))
+              ((ok traced)
+               (match (resultAt rs 1)
+                 ((err x) (err x))
+                 ((ok countedOut)
+                  (match (resultAt rs 2)
+                    ((err x) (err x))
+                    ((ok asanOut)
+                     (match (resultAt rs 3)
+                       ((err x) (err x))
+                       ((ok untracedOut) (ok (Stages :stage2 s2 :traced traced :counted (str work "/stage3rc.ll") :countedOut countedOut :asanOut asanOut :untracedOut untracedOut))))))))))))))))
 
 fn ! testSelfCompile libs: Libs -> Bool
   (let [(work (newWork "rcSelfCompile"))
