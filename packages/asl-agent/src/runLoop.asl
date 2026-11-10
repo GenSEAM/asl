@@ -844,10 +844,17 @@ fn ! resumeBaseSha! journalPath: String -> (Option String)
 fn withNoChange run: LoopRun state: s/LoopState -> LoopRun
   (with run :state (with state :signalName (some "noChange")))
 
-fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) -> Bool
+fn ! refusedWrite? journalPath: String -> Bool
+  (listAny? (fn [l] (and (stringStartsWith? l "(:op :turn ")
+                         (and (not (stringContains? l " :status ok"))
+                              (listAny? (fn [n] (stringContains? l (str " :name \"" n "\""))) (list "write" "edit" "txn" "delete")))))
+            (stringLines (resultOr (fileReadString journalPath) "")))
+
+; (:m :ref RAWREPLAY-RED :do "7de069c5874e6633: a session that writes nothing still ends ok when the owned files already differ from HEAD (a lower rung changed them before the session) and the declared gates are green; a clean owned tree, or a session whose own write was refused, with no patch is noChange (LEON-OK-WITHOUT-CHANGE)")
+fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) dirty: (List String) refusedWrite: Bool -> Bool
   (if (and (= status "ok") (and (not (listEmpty? env.gates)) (and (not (listEmpty? env.owns)) (!= (optionOr state.deliver "") "findings"))))
     (match patch
-      ((none) true)
+      ((none) (or (listEmpty? dirty) refusedWrite))
       ((some p)
         (match (resumeBaseSha! env.journalPath)
           ((some sha) (= sha (bytesSha256 (stringToBytes (resultOr (fileReadString (str rootDir "/" p)) "")))))
@@ -886,7 +893,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
             ((ok hand)
               (let [patch (pairFirst (pairSecond hand))
                     restored (pairSecond (pairSecond hand))
-                    noChange (noChangeEnd? env state rootDir finalStatus patch)
+                    noChange (noChangeEnd? env state rootDir finalStatus patch dirty (refusedWrite? env.journalPath))
                     endStatus (if noChange "needsReview" finalStatus)
                     _noChange (if noChange (journalSignal! env state.turn "noChange" "no persisted change versus the start of the run, or none beyond the restored patch") true)
                     run2 (if noChange (withNoChange run state) run)]
