@@ -3,7 +3,7 @@
   :i [(asl-tools/fleet/run :a fr)
       (aslHarness/tests/agentLoopRecorderKit :a rk)])
 
-; (:m :ref LEON-TIMEOUT-NO-RECEIPT :do "an outer bound kills a scripted Leon run mid-turn after one persisted edit (bounded.asl 30 s; the kill is SIGKILL, no hook can run): the journal still names a patch file that exists and holds the edit, because the loop checkpoints the patch after every turn. The fixture child is hard-bounded by bounded.asl and its tree is killed by the runner")
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT :do "an outer bound kills a scripted Leon run mid-turn after one persisted edit (bounded.asl 240 s, room for a cold compile; the kill is SIGKILL, no hook can run): the journal still names a patch file that exists and holds the edit, because the loop checkpoints the patch after every turn. The fixture child is hard-bounded by bounded.asl and its tree is killed by the runner")
 fn ! child! root: String argv: (List String) -> fr/Done
   (fr/runOneLimited (fr/job (listAppend (list "./bin/asl" "run" "asl/tools/fleet/bounded.asl") argv) root (fr/childEnv (list))) (fr/limits 120 64))
 
@@ -20,7 +20,7 @@ fn checkpointPatch journal: String -> String
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
         root (rk/freshRecorderRoot! "killCheckpoint")
-        done (child! repo (list "30" "--" "./bin/asl" "run" "asl/packages/asl-agent/tests/killCheckpointDriver.asl" root))
+        done (child! repo (list "240" "--" "./bin/asl" "run" "asl/packages/asl-agent/tests/killCheckpointDriver.asl" root))
         journalDir (str root "/.asl/run/agentLoop")
         names (resultOr (dirList journalDir) (list))
         jname (optionOr (listHead (filter (fn [n] (stringEndsWith? n ".journal")) names)) "")

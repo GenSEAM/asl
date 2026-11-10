@@ -11,7 +11,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         _repo (and (ok? (fileWrite (str root "/task.txt") "before\n"))
                    (gk/initGitRepoWith! root "killCheckpoint" "kill-checkpoint@example.invalid" (list "task.txt")))
         edit "(:step :op \"edit\" :file \"task.txt\" :old \"before\" :new \"after\")"
-        stall "(:step :op \"run\" :cmd \"sleep 90\")"
+        stall "(:step :op \"run\" :cmd \"sleep 900\")"
         _fix (dirCreate (str root "/tests/fixtures/agentLoop/mvp"))
         _fx (fileWrite (str root "/tests/fixtures/agentLoop/mvp/kc.asn") (rk/scriptFixtureTextFromReplies! "kc" (list edit stall "(:done)")))
         form (str "(:agent :task \"Edit task.txt, then run the slow check.\" :backend \"script/kc\" :root \"" (c/escapeAsn root)
