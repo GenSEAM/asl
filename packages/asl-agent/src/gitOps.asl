@@ -600,6 +600,17 @@ fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (runGatesIn! gates root timeoutSec env watch (gd/gateTimesPath))
 
+fn ! gateRunRec! rid: String cmd: String root: String sec: Int64 childEnv: (List String) watch: (Option Int64) extra: (List (Pair String RVal)) -> (List (Pair String RVal))
+  (match (runGate! cmd root sec childEnv watch)
+    ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
+    ((ok b)
+     (listAppend
+       (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
+         (rs "stdout" b.out) (rs "stderr" b.errText))
+       (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" sec)) (list))
+         (listAppend (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))
+           extra)))))
+
 fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
   (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")
         st (fold (fn [(st (Pair Bool (List (List (Pair String RVal))))) (g (Pair String String))] -> (Pair Bool (List (List (Pair String RVal))))
@@ -610,17 +621,14 @@ fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64
                                (let [rid (pairFirst g)
                                      cmd (pairSecond g)]
                                  (match (gd/gateTimeoutFit! timesPath cmd timeoutSec)
-                                   ((some ms) (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
-                                                (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout")))
-                                   ((none)
-                                    (match (runGate! cmd root timeoutSec childEnv watch)
-                                      ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
-                                      ((ok b)
-                                       (listAppend
-                                         (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
-                                           (rs "stdout" b.out) (rs "stderr" b.errText))
-                                         (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
-                                           (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))))]
+                                   ((some ms)
+                                    (let [raised (gd/gateRaisedSec ms)]
+                                      (if (> raised (gd/gateTimeoutCapSec))
+                                        (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
+                                              (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout"))
+                                        (gateRunRec! rid cmd root raised childEnv watch
+                                          (list (ri "timeoutSec" raised) (ri "recordedMs" ms) (rs "raised" "gateTimes"))))))
+                                   ((none) (gateRunRec! rid cmd root timeoutSec childEnv watch (list))))))]
                      (pair (or failed
                                (and (stringEndsWith? (pairSecond g) "build.sh")
                                     (match (recGet rec "exit") ((some v) (match v ((rInt x) (not (= x 0))) (_ false))) ((none) false))))

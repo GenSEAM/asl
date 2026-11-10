@@ -8,7 +8,7 @@
       parseCmdTokens isPathLike candidateGatePaths! missingGatePaths! missingGateFiles!
       vacuousOutsideOwns!
       gateRunScripts gatePartitionFiles gateVacuousMessage gateRevertOutcome gateRevertVerdict
-      gateTimesPath readGateTimes! gateTimeoutFit gateTimeoutFit! gateSuiteOf]
+      gateTimesPath readGateTimes! gateTimeoutFit gateTimeoutFit! gateSuiteOf gateTimeoutCapSec gateRaisedSec]
   :i [(aslAgent/core :a c) (aslAgent/diff :a d)])
 
 enum GateResult
@@ -553,6 +553,12 @@ fn gateSuiteOf cmd: String -> (Option String)
 
 fn gateTimeoutFit recordedMs: Int64 timeoutSec: Int64 -> Bool
   (> (* recordedMs 3) (* timeoutSec 2000))
+
+fn gateTimeoutCapSec -> Int64
+  3600
+
+fn gateRaisedSec recordedMs: Int64 -> Int64
+  (/ (+ (* recordedMs 3) 1999) 2000)
 
 fn ! gateTimeoutFit! timesPath: String cmd: String timeoutSec: Int64 -> (Option Int64)
   (match (gateSuiteOf cmd)

@@ -3,7 +3,7 @@
   :i [(aslAgent/gates :a gd) (aslAgent/gitOps :a go)])
 
 fn writeFixture path: String -> Bool
-  (match (fileWrite path "(:suiteTime :suite \"slowTest.asl\" :ms 500000)\n(:suiteTime :suite \"fastTest.asl\" :ms 1000)\n")
+  (match (fileWrite path "(:suiteTime :suite \"slowTest.asl\" :ms 5000000)\n(:suiteTime :suite \"fastTest.asl\" :ms 1000)\n")
     ((ok _) true)
     ((err _) false))
 
@@ -24,8 +24,8 @@ fn ! runTests -> Bool
     (do
       (assert (ok? made) "the fixture directory is created")
       (assert wrote "the fixture times file is written")
-      (assert (some? slow) "a suite recorded at 500000 ms with timeout 300 is skipped")
-      (assert (= (optionOr slow 0) 500000) "the skip carries the recorded ms")
+      (assert (some? slow) "a suite recorded at 5000000 ms with timeout 300 is skipped")
+      (assert (= (optionOr slow 0) 5000000) "the skip carries the recorded ms")
       (assert (none? fast) "a suite recorded at 1000 ms with timeout 300 runs")
       (assert (none? unknown) "an unknown suite runs")
       (assert (= (listLength recs) 2) "runGatesIn! returns one record per gate")
