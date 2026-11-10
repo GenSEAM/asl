@@ -3,7 +3,7 @@
   :i [(aslAgent/gates :a gd) (aslAgent/gitOps :a go)])
 
 fn writeFixture path: String -> Bool
-  (match (fileWrite path "(:suiteTime :suite \"raiseTest.asl\" :ms 4000)\n(:suiteTime :suite \"hugeTest.asl\" :ms 3000000)\n(:suiteTime :suite \"sleepTest.asl\" :ms 4000)\n")
+  (match (fileWrite path "(:suiteTime :suite \"raiseTest.asl\" :ms 4000 :samples (4000 9000 3000 4000 4000))\n(:suiteTime :suite \"hugeTest.asl\" :ms 3000000)\n(:suiteTime :suite \"sleepTest.asl\" :ms 4000)\n")
     ((ok _) true)
     ((err _) false))
 

@@ -525,9 +525,8 @@ fn gateParseRow line: String -> (Option (Pair String Int64))
       ((some p)
        (let [(suite (pairFirst p))
              (tail (stringJoin (pairSecond p) ""))
-             (digits (if (and (stringStartsWith? tail " :ms ") (stringEndsWith? tail ")"))
-                       (optionOr (stringSlice tail 5 (- (stringLength tail) 1)) "")
-                       ""))]
+             (rest (if (and (stringStartsWith? tail " :ms ") (stringEndsWith? tail ")")) (optionOr (stringSlice tail 5 (stringLength tail)) "") ""))
+             (digits (optionOr (listHead (stringSplit (if (stringContains? rest " :samples ") rest (optionOr (stringSlice rest 0 (- (stringLength rest) 1)) "")) " ")) ""))]
          (match (stringToInt64 digits)
            ((none) (none))
            ((some ms) (some (pair suite ms))))))))
