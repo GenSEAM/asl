@@ -1741,7 +1741,7 @@ fn duplicateOpsNote dropped: Int64 -> String
 
 ; (:m :ref LEON-YIELD-F2 :do "node2 2026-11-04: in 123 of 217 readStreak stops the model was writing and every write was refused, yet only a persisted write reset the streak; a turn that attempted a write or edit and persisted nothing counts like a not-found read, extending the streak at most notFoundStreakCap turns in a row; repeatFailure still guards identical refused content")
 fn writeAttempt? ops: (List (List (Pair String c/KvVal))) -> Bool
-  (listAny? (fn [o] (listContains? (list "write" "edit") (liveOpName o))) ops)
+  (listAny? (fn [o] (listContains? (list "write" "edit" "txn" "delete") (liveOpName o))) ops)
 
 ; (:m :ref LEON-YIELD-F2B :do "audit: after one persisted write, refused writes on every turn were stopped only by wallBudget; stalledTurnCap (adopted 12, :agentLoop :stalledTurnCap in the run root's .asl.config.asn) consecutive turns that persisted nothing and read a missing file or attempted a write or edit stop the run as readStreak with cause refusedWrites (notFound when no write was attempted)")
 fn defaultStalledTurnCap -> Int64
