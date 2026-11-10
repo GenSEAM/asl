@@ -36,8 +36,16 @@ fn maskIds text: String -> String
       (let [(from (skipQuotes text (+ at 13)))]
         (str (optionOr (stringSlice text 0 from) "") "IDMASKED" (maskIds (optionOr (stringSlice text (+ from 16) (stringLength text)) ""))))))
 
+; (:m :ref LEONSPEED-TURNTIME :do "a (:turnTime :turn N ...) row holds measured milliseconds and, on the pool path, :pool true, so two runs never match on it: the row is compared by its turn number alone, and its presence per turn is still asserted")
+fn maskTurnTime text: String -> String
+  (stringJoin (map (fn [(l String)] -> String
+                     (if (stringStartsWith? l "(:turnTime :turn ")
+                       (str (stringJoin (listTake (stringSplit l " ") 3) " ") ")")
+                       l))
+                (stringSplit text "\n")) "\n")
+
 fn journalOf root: String sid: String -> String
-  (maskIds (stringReplace (stringReplace (resultOr (fileReadString (str root "/.asl/run/agentLoop/" sid ".journal")) "") sid "SID") root "ROOT"))
+  (maskTurnTime (maskIds (stringReplace (stringReplace (resultOr (fileReadString (str root "/.asl/run/agentLoop/" sid ".journal")) "") sid "SID") root "ROOT")))
 
 fn onlyIn a: String b: String -> (List String)
   (let [(other (stringSplit b "\n"))]
