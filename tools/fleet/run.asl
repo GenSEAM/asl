@@ -351,8 +351,49 @@ fn ! killRounds root: Int64 groups: (List Int64) known: (List Int64) rounds: Int
         (listLength left)
         (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1)))))
 
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "a descendant that left the tree before any sample (setsid, parent gone, ppid 1) is in no ppid walk and no group, so the walk alone missed it; every spawn puts a unique token in the child's environment (ASL_FLEET_TAG, inherited down and never dropped by exec or setsid), and a kill reads the root's token and adds every process of this user whose environment holds it, as pins, so the ordinary tree walk adopts and kills it; a foreign process never holds the token")
+fn tagName -> String
+  "ASL_FLEET_TAG"
+
+fn tagText n: Int64 -> String
+  (str "ft" (stringFromInt64 n) "e")
+
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "the token's number rides in the job's known list as a negative entry (no pid or pin is negative, so knownPid? and pinnedLive? never read it), so every judge and verdict that carries known carries the token to the kill")
+fn tagNums known: (List Int64) -> (List Int64)
+  (map (fn [(k Int64)] -> Int64 (- 0 k)) (filter (fn [(k Int64)] -> Bool (< k 0)) known))
+
+fn ! tagEnv n: Int64 env: (List String) -> (List String)
+  (let [(old (optionOr (listHead (filter (fn [(row String)] -> Bool (stringStartsWith? row (str (tagName) "="))) env)) ""))
+        (rest (filter (fn [(row String)] -> Bool (not (stringStartsWith? row (str (tagName) "=")))) env))
+        (oldV (optionOr (stringSlice old (+ (stringLength (tagName)) 1) (stringLength old)) ""))]
+    (cons (str (tagName) "=" (if (stringEmpty? old) "" (str oldV ",")) (tagText n)) rest))
+
+fn ! envRows text: String -> (List (Pair Int64 String))
+  (fold (fn [(acc (List (Pair Int64 String))) (line String)] -> (List (Pair Int64 String))
+          (let [(t (stringTrim line))
+                (sp (optionOr (stringIndexOf t " ") 0))
+                (pid (optionOr (stringToInt64 (optionOr (stringSlice t 0 sp) "")) 0))]
+            (if (> pid 1) (cons (pair pid t) acc) acc)))
+        (list) (stringLines text))
+
+fn ! psEnvText! -> String
+  (resultOr (shellOut "ps -A -ww -E -o pid=,command= 2>/dev/null || ps ewwax -o pid=,command= 2>/dev/null" 10000) "")
+
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "pids whose environment holds one of the job's tokens; a process whose environment ps cannot show (a system binary such as sh or sleep) is found by its tree position as before")
+fn ! taggedPids! nums: (List Int64) -> (List Int64)
+  (if (listEmpty? nums)
+    (list)
+    (let [(rows (envRows (psEnvText!)))
+          (tags (map (fn [(n Int64)] -> String (tagText n)) nums))]
+      (map (fn [(r (Pair Int64 String))] -> Int64 (pairFirst r))
+           (filter (fn [(r (Pair Int64 String))] -> Bool (and (!= (pairFirst r) (procSelf)) (listAny? (fn [(t String)] -> Bool (stringContains? (pairSecond r) t)) tags))) rows))))
+
 fn ! killTreeWith! root: Int64 groups: (List Int64) known: (List Int64) -> Int64
-  (killRounds root groups known 5)
+  (let [(tagged (taggedPids! (tagNums known)))
+        (snap (procSnapshot))
+        (extra (if (listEmpty? tagged) (list) (pinsOf snap tagged)))
+        (tgroups (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? tagged p.pid)) snap)))]
+    (killRounds root (addNew groups tgroups) (addNew known extra) 5))
 
 fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
@@ -527,11 +568,11 @@ fn ! finishSep r: RunningSep -> ProcOut
 
 fn ! spawnSep argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
   (let [(start (monotonicNs))]
-    (match (procSpawnv argv (some cwd) (some (withPwd cwd env)))
+    (match (procSpawnv argv (some cwd) (some (tagEnv start (withPwd cwd env))))
       ((err e) (err (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " (quoteArgv argv) ": " e))))
       ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdNonBlocking p.stdout true)) (_ (fdNonBlocking p.stderr true))]
                 (ok (RunningSep :pid p.pid :outFd p.stdout :errFd p.stderr :outText "" :errText ""
-                      :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list)))))))
+                      :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list (- 0 start))))))))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "a detached /bin/sh watchdog was rejected: D157 forbids shell in the tree, and a watchdog process is itself a child with no timeout/descendant-limit accounting through this file, exactly the escape spawnSafety forbids. Lease reaping replaces it: no extra process, no shell text, just a row-keyed record under ~/.asl/run/fleet/leases a later runGuarded call can find and act on")
 fn ! leaseDir -> String
