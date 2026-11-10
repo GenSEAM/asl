@@ -1779,11 +1779,15 @@ fn ! sweepStore! cDir: String -> Int64
       0
       (if (buildingLive? cDir) 0 (do (fileWrite mark "") (sweepStoreNow! cDir)))))
 
-; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes its pid to cDir/building while parMap workers build; a live owner holds off store pruning, a dead owner's marker is ignored")
+; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes cDir/building.PID (own marker per builder, name carries the pid) while parMap workers build; any live marker holds off store pruning, a dead pid marker is removed when seen")
+fn ! markerLive? cDir: String name: String -> Bool
+  (let [(live (match (stringToInt64 (optionOr (listGet (stringSplit name ".") 1) "")) ((some pid) (pidAlive? pid)) ((none) false)))]
+    (if live true (do (pathRemove (str cDir "/" name)) false)))
+
 fn ! buildingLive? cDir: String -> Bool
-  (match (fileReadString (str cDir "/building"))
-    ((err _) false)
-    ((ok s) (match (stringToInt64 (stringTrim s)) ((some pid) (resultOr (procAlive? pid) false)) ((none) false))))
+  (listAny? (fn [(l Bool)] -> Bool l)
+    (map (fn [(n String)] -> Bool (markerLive? cDir n))
+         (filter (fn [(n String)] -> Bool (stringStartsWith? n "building.")) (resultOr (dirList cDir) (list)))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "one sweep at a time per store, under sweep.lock; a build leases its slot with slot/lock while it fills it, and sweepEntries! re-stamps each entry right before deleting it")
 fn ! sweepStoreNow! cDir: String -> Int64
@@ -1861,8 +1865,9 @@ fn ! prepare path: String fp: String -> Built
 
 fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
   (let [(build (fn [(p String)] -> Built (prepareIn cDir p fp "test")))
-        (marker (str cDir "/building"))
-        (_ (fileWrite marker (stringFromInt64 (procSelf))))
+        (marker (str cDir "/building." (stringFromInt64 (procSelf))))
+        (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
+        (_ (fileWrite marker ""))
         (w (suiteWorkersFor k (resultOr (cpuCount) 1)))
         (built (if (> w 1) (parMap build paths w) (map build paths)))
         (_ (pathRemove marker))

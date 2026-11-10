@@ -26,6 +26,41 @@ fn ! freshCache! root: String name: String -> String
         (_ (dirCreate d))]
     (resultOr (realPath d) d))
 
+fn ! markerCache! root: String name: String -> String
+  (let [(d (str root "/" name))
+        (_ (dirCreate d))]
+    d)
+
+fn ! swept? d: String -> Bool
+  (do (nt/sweepStore! d) (fileExists? (str d "/swept")))
+
+fn ! markersHold? ign: String -> Bool
+  (let [(rootRaw (str (optionOr (envGet "TMPDIR") "/tmp") "/prepareAllMarkers-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (_ (dirCreate rootRaw))
+        (root (resultOr (realPath rootRaw) rootRaw))
+        (me (stringFromInt64 (procSelf)))
+        (live1 (str "building." me))
+        (live2 (str "building." me ".b"))
+        (dead "building.999999")
+        (a (markerCache! root "mkLive"))
+        (_ (fileWrite (str a "/" live1) ""))
+        (heldLive (not (swept? a)))
+        (b (markerCache! root "mkDead"))
+        (_ (fileWrite (str b "/" dead) ""))
+        (sweptDead (swept? b))
+        (deadGone (not (fileExists? (str b "/" dead))))
+        (c (markerCache! root "mkTwo"))
+        (_ (fileWrite (str c "/" live1) ""))
+        (_ (fileWrite (str c "/" live2) ""))
+        (_ (pathRemove (str c "/" live1)))
+        (heldOne (not (swept? c)))
+        (_ (pathRemove (str c "/" live2)))
+        (sweptNone (swept? c))
+        (d (markerCache! root "mkNone"))
+        (sweptEmpty (swept? d))
+        (_ (pathRemove root))]
+    (and heldLive (and sweptDead (and deadGone (and heldOne (and sweptNone sweptEmpty))))))
+
 fn ! runTests -> Bool
   (let [(rootRaw (str (optionOr (envGet "TMPDIR") "/tmp") "/prepareAllTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (made (dirCreate rootRaw))
@@ -52,6 +87,7 @@ fn ! runTests -> Bool
       (assert (and warmBuilt (= (binariesOf warm) (binariesOf cold))) (str "the warm parallel pass returns the cold binaries: " (reasonsOf warm)))
       (assert (= recompiledWarm 0) (str "the warm pass recompiles nothing: " (stringFromInt64 recompiledWarm)))
       (assert seqBuilt (str "the sequential pass builds every suite: " (reasonsOf seq)))
+      (assert (markersHold? root) "building.PID markers: live holds the sweep, dead is ignored and removed, two live keep the hold until both go")
       (assert (ok? removed) (str "remove " root))
       (assert (= (nt/suiteWorkersFor 10 10) 4) (str "10 jobs on 10 cpus give 4 suite workers, not 10: " (stringFromInt64 (nt/suiteWorkersFor 10 10))))
       (assert (= (nt/suiteWorkersFor 2 10) 2) "the asked k caps the workers")
