@@ -53,4 +53,7 @@ fn ! runTests -> Bool
       (assert (= recompiledWarm 0) (str "the warm pass recompiles nothing: " (stringFromInt64 recompiledWarm)))
       (assert seqBuilt (str "the sequential pass builds every suite: " (reasonsOf seq)))
       (assert (ok? removed) (str "remove " root))
+      (assert (= (nt/suiteWorkersFor 10 10) 4) (str "10 jobs on 10 cpus give 4 suite workers, not 10: " (stringFromInt64 (nt/suiteWorkersFor 10 10))))
+      (assert (= (nt/suiteWorkersFor 2 10) 2) "the asked k caps the workers")
+      (assert (= (nt/suiteWorkersFor 10 3) 1) "a small machine builds one suite at a time")
       true))

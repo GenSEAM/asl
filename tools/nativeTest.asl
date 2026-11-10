@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -1863,10 +1863,15 @@ fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List
   (let [(build (fn [(p String)] -> Built (prepareIn cDir p fp "test")))
         (marker (str cDir "/building"))
         (_ (fileWrite marker (stringFromInt64 (procSelf))))
-        (built (if (> k 1) (parMap build paths k) (map build paths)))
+        (w (suiteWorkersFor k (resultOr (cpuCount) 1)))
+        (built (if (> w 1) (parMap build paths w) (map build paths)))
         (_ (pathRemove marker))
         (_ (sweepStore! cDir))]
     built)
+
+; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "each suite worker may run jobSlots! (default 4) clang jobs of its own, so suite workers are capped at (cpus - 2) / 2: 4 on 10 cpus, a peak of 16 short clang jobs plus 4 lowerings, and two cpus left for the principal (U7-K)")
+fn suiteWorkersFor k: Int64 cpus: Int64 -> Int64
+  (max 1 (min k (/ (- cpus 2) 2)))
 
 fn ! prepareAll paths: (List String) fp: String k: Int64 -> (List Built)
   (prepareAllIn (cacheDir!) paths fp k)
