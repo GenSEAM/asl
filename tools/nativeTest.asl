@@ -1539,13 +1539,20 @@ fn ! compileUnitsWorker! args: (List String) -> (Result Int64 String)
         (failWith (fn [(what String) (ds (List irTy/IrDiag))] -> (Result Int64 String) (do (eprintln (str "nativeTest --compile-units: " what ": " (diagText ds))) (ok 1))))]
     (if (or (stringEmpty? wrapper) (listEmpty? paths))
       (do (eprintln "usage: nativeTest --compile-units CACHEDIR FINGERPRINT MODE SLOT WRAPPER UNIT...") (ok 2))
-      (match (workerClosure! wrapper slot paths)
+      (let [(t0 (monotonicNs))
+            (closure (workerClosure! wrapper slot paths))
+            (t1 (monotonicNs))
+            (preludeRes (lk/loadClosure! (toolPath (lk/preludePath))))
+            (t2 (monotonicNs))
+            (overlayRes (lk/overlayUnitAt! (toolPath (lk/nativeOverlayDir))))
+            (t3 (monotonicNs))]
+      (match closure
         ((err ds) (failWith "closure load failed" ds))
         ((ok units)
-         (match (lk/loadClosure! (toolPath (lk/preludePath)))
+         (match preludeRes
            ((err pds) (failWith "prelude load failed" pds))
            ((ok pUnits)
-            (match (lk/overlayUnitAt! (toolPath (lk/nativeOverlayDir)))
+            (match overlayRes
               ((err ods) (failWith "native overlay load failed" ods))
               ((ok o)
                (let [(prelude (optionOr (listHead pUnits) (lk/LinkUnit :path "" :name "prelude" :forms (list) :positions (mapEmpty) :imports (list))))
@@ -1553,9 +1560,11 @@ fn ! compileUnitsWorker! args: (List String) -> (Result Int64 String)
                      (mine (filter (fn [(u lk/LinkUnit)] -> Bool (and (listContains? paths u.path) (!= u.name entryUnit.name))) units))
                      (raw (compileUnitsStep (nativeFacts! cDir fp) cDir fp mine units (ifaceMapOf units) prelude (withOverlay prelude o) (overlayNamesOf o) entryUnit slot 0 (list) (list) (jobSlots!) (optLevelFor mode)))
                      (results (drainAllPending (pairFirst raw) (pairSecond raw)))
+                     (t4 (monotonicNs))
+                     (_ (telemetry (str "NATIVE-WORKER-PHASES :units " (stringFromInt64 (listLength mine)) " :closure " (stringFromInt64 (listLength units)) " :closureMs " (ms (- t1 t0)) " :preludeMs " (ms (- t2 t1)) " :overlayMs " (ms (- t3 t2)) " :compileMs " (ms (- t4 t3)))))
                      (bad (filter (fn [(r ModCompileResult)] -> Bool (not r.ok)) results))]
                  (do (map (fn [(r ModCompileResult)] -> Unit (eprintln (str "nativeTest --compile-units: " r.path ": " r.err))) bad)
-                     (ok (if (and (listEmpty? bad) (= (listLength mine) (listLength paths))) 0 1))))))))))))
+                     (ok (if (and (listEmpty? bad) (= (listLength mine) (listLength paths))) 0 1)))))))))))))
 
 ; (:m :ref NATIVETEST-RC :do "the RC pass needs the whole program (its user set and the routed helpers), so a suite under a .asl.config.asn :native :rc other than :tracing is linked and emitted as one module and linked with that mode's runtime; :tracing keeps the per-module cached pipeline")
 fn ! rcModeFor! path: String -> (Result String String)
