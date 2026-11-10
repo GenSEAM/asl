@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -524,7 +524,7 @@ fn ! manifestHolds? text: String -> Bool
   (manifestHoldsAt "." -1 text)
 
 fn ! writeAtomic path: String text: String -> (Result Unit String)
-  (let [(tmp (str path ".tmp." (monotonicNs)))]
+  (let [(tmp (str path ".tmp." (stringFromInt64 (procSelf)) "." (monotonicNs)))]
     (match (fileWrite tmp text)
       ((err e) (err e))
       ((ok _) (pathRename tmp path))))
@@ -1777,7 +1777,13 @@ fn ! sweepStore! cDir: String -> Int64
   (let [(mark (str cDir "/swept"))]
     (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
       0
-      (do (fileWrite mark "") (sweepStoreNow! cDir))))
+      (if (buildingLive? cDir) 0 (do (fileWrite mark "") (sweepStoreNow! cDir)))))
+
+; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes its pid to cDir/building while parMap workers build; a live owner holds off store pruning, a dead owner's marker is ignored")
+fn ! buildingLive? cDir: String -> Bool
+  (match (fileReadString (str cDir "/building"))
+    ((err _) false)
+    ((ok s) (match (stringToInt64 (stringTrim s)) ((some pid) (resultOr (procAlive? pid) false)) ((none) false))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "one sweep at a time per store, under sweep.lock; a build leases its slot with slot/lock while it fills it, and sweepEntries! re-stamps each entry right before deleting it")
 fn ! sweepStoreNow! cDir: String -> Int64
@@ -1852,6 +1858,18 @@ fn ! prepareTestSource actualPath: String logicalPath: String fp: String -> Buil
 
 fn ! prepare path: String fp: String -> Built
   (prepareIn (cacheDir!) path fp "test")
+
+fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
+  (let [(build (fn [(p String)] -> Built (prepareIn cDir p fp "test")))
+        (marker (str cDir "/building"))
+        (_ (fileWrite marker (stringFromInt64 (procSelf))))
+        (built (if (> k 1) (parMap build paths k) (map build paths)))
+        (_ (pathRemove marker))
+        (_ (sweepStore! cDir))]
+    built)
+
+fn ! prepareAll paths: (List String) fp: String k: Int64 -> (List Built)
+  (prepareAllIn (cacheDir!) paths fp k)
 
 fn ! prepareRunIn cDir: String path: String fp: String -> Built
   (prepareIn cDir path fp "run")
