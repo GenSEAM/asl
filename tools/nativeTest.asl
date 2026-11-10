@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -395,7 +395,111 @@ fn ! optLevelFor mode: String -> String
   (optionOr (envGet "ASL_NATIVE_OPT") (if (= mode "test") "-O1" "-O2"))
 
 fn ! fingerprintOf clangVersion: String targetTriple: String -> String
-  (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple (fold (fn [(acc (List String)) (r String)] -> (List String) (listAppend acc (map (fn [(l String)] -> String (relativeTo (toolRoot) l)) (treeLines r)))) (list) (toolchainRoots))))) "\n")))
+  (fingerprintIn (toolRoot) clangVersion targetTriple)
+
+; (:m :ref FPNARROW :do "nativeTest.asl enters the fingerprint as its artifactSlice, not its bytes: a cached object, prelude, suite binary or checker verdict can only come from code the compile paths run, so editing a driver-only body (sweep, suite pool, test runner, verdict parsing, the key itself) or a top-level comment keeps every module warm; every other root still enters by content digest")
+fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
+  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
+        (lines (fold (fn [(acc (List String)) (r String)] -> (List String)
+                       (listAppend acc (if (= r (selfSource))
+                                         (list (match (fileReadString (under r))
+                                                 ((err e) (str r " missing " e))
+                                                 ((ok src) (str r " slice " (bytesSha256 (stringToBytes (artifactSlice src)))))))
+                                         (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under r))))))
+                     (list) (nb/toolchainRootPaths)))]
+    (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
+
+; (:m :ref FPNARROW :do "bodies that cannot shape a cached artifact: entry dispatch, the suite sweep and its pool, the test runner and verdict parsing, and the fingerprint itself; one of them still enters the slice when any other fn names it")
+fn driverOnlyNames -> (List String)
+  (list "main" "dispatch!" "testMain" "runTests" "prepareAll" "prepareAllIn" "suiteWorkersFor" "strideOrder" "unstride" "prepareCommand!"
+        "runOne" "runFile" "runBuilt!" "runStaged!" "runKept!" "keptRun" "execStaged!" "evalExpression!"
+        "verdictOf" "reportCounts" "hostVerdictLine" "failLine" "suiteFailLine" "initVerdict" "judgeInit!"
+        "fingerprint" "fingerprintOf" "fingerprintIn" "fingerprintOr" "fingerprintMemoDir" "treeStamps" "toolchainRoots"
+        "driverOnlyNames" "driverOnly?" "artifactSlice" "sliceStep" "sliceReach" "reachFrom" "scanLine" "closeToken" "identByte?" "itemNameOf")
+
+fn driverOnly? name: String -> Bool
+  (or (listContains? (driverOnlyNames) name)
+      (let [(bs (stringToBytes name))]
+        (and (stringStartsWith? name "test") (> (bytesLength bs) 4) (>= (bytesGet bs 4) 65) (<= (bytesGet bs 4) 90))))
+
+(schema LineScan
+  (:f inString Bool)
+  (:f text String)
+  (:f idents (List String)))
+
+(schema SliceItem
+  (:f name String)
+  (:f header Bool)
+  (:f lines (List String))
+  (:f idents (List String)))
+
+(schema SliceAcc
+  (:f inString Bool)
+  (:f items (List SliceItem)))
+
+fn identByte? b: Int64 -> Bool
+  (or (and (>= b 97) (<= b 122)) (and (>= b 65) (<= b 90)) (and (>= b 48) (<= b 57)) (= b 95) (= b 33) (= b 63) (= b 45))
+
+fn closeToken line: String tok: Int64 at: Int64 acc: (List String) -> (List String)
+  (if (>= tok 0) (cons (optionOr (stringSlice line tok at) "") acc) acc)
+
+; (:m :ref FPNARROW :do "one line, string state carried in: identifiers outside strings and comments are the references, and the text up to a comment is what the slice hashes")
+fn scanLine line: String bs: Bytes n: Int64 i: Int64 inStr: Bool tok: Int64 acc: (List String) -> LineScan
+  (cond
+    ((>= i n) (LineScan :inString inStr :text line :idents (closeToken line tok n acc)))
+    (inStr (let [(b (bytesGet bs i))]
+             (cond ((= b 92) (scanLine line bs n (+ i 2) true -1 acc))
+                   ((= b 34) (scanLine line bs n (+ i 1) false -1 acc))
+                   (else (scanLine line bs n (+ i 1) true -1 acc)))))
+    (else (let [(b (bytesGet bs i))]
+            (cond ((identByte? b) (scanLine line bs n (+ i 1) false (if (>= tok 0) tok i) acc))
+                  ((= b 59) (LineScan :inString false :text (optionOr (stringSlice line 0 i) "") :idents (closeToken line tok i acc)))
+                  (else (scanLine line bs n (+ i 1) (= b 34) -1 (closeToken line tok i acc)))))))
+
+fn itemNameOf line: String -> String
+  (if (stringStartsWith? line "fn ")
+    (let [(ws (stringSplit line " "))
+          (w1 (optionOr (listGet ws 1) ""))]
+      (if (= w1 "!") (optionOr (listGet ws 2) "") w1))
+    "")
+
+; (:m :ref FPNARROW :do "a line starting in column 0 outside a string opens a new top-level item; a misread boundary only moves lines into an item that is always kept, never out of one")
+fn sliceStep acc: SliceAcc line: String -> SliceAcc
+  (let [(bs (stringToBytes line))
+        (n (bytesLength bs))
+        (opens (or (listEmpty? acc.items) (and (not acc.inString) (> n 0) (!= (bytesGet bs 0) 32) (!= (bytesGet bs 0) 9))))
+        (sc (scanLine line bs n 0 acc.inString -1 (list)))
+        (cur (if opens (SliceItem :name (itemNameOf line) :header (stringStartsWith? line "(module") :lines (list) :idents (list))
+                 (optionOr (listHead acc.items) (SliceItem :name "" :header false :lines (list) :idents (list)))))
+        (rest (if opens acc.items (listDrop acc.items 1)))]
+    (SliceAcc :inString sc.inString :items (cons (SliceItem :name cur.name :header cur.header :lines (if (and (not acc.inString) (stringEmpty? (stringTrim sc.text))) cur.lines (cons sc.text cur.lines)) :idents (listAppend sc.idents cur.idents)) rest)))
+
+fn reachFrom refs: (Map String (List String)) todo: (List String) seen: (Map String Bool) -> (Map String Bool)
+  (match (listHead todo)
+    ((none) seen)
+    ((some x) (if (or (mapHas? seen x) (not (mapHas? refs x)))
+                (reachFrom refs (listDrop todo 1) seen)
+                (reachFrom refs (listAppend (optionOr (mapGet refs x) (list)) (listDrop todo 1)) (mapSet seen x true)))))
+
+; (:m :ref FPNARROW :do "kept fns: every fn not driver-only, every name a kept fn or a non-header item references, transitively; same-named fns merge their references")
+fn sliceReach items: (List SliceItem) -> (Map String Bool)
+  (let [(refs (fold (fn [(m (Map String (List String))) (it SliceItem)] -> (Map String (List String))
+                      (if (stringEmpty? it.name) m (mapSet m it.name (listAppend it.idents (optionOr (mapGet m it.name) (list))))))
+                    (mapEmpty) items))
+        (seeds (fold (fn [(acc (List String)) (it SliceItem)] -> (List String)
+                       (cond ((stringEmpty? it.name) (if it.header acc (listAppend it.idents acc)))
+                             ((driverOnly? it.name) acc)
+                             (else (cons it.name acc))))
+                     (list) items))]
+    (reachFrom refs seeds (mapEmpty)))
+
+; (:m :ref FPNARROW :do "the module header, schemas and kept fns in file order, comments and blank lines outside strings dropped")
+fn artifactSlice src: String -> String
+  (let [(items (listReverse (fold (fn [(acc SliceAcc) (l String)] -> SliceAcc (sliceStep acc l)) (SliceAcc :inString false :items (list)) (stringSplit src "\n")).items))
+        (kept (sliceReach items))]
+    (stringJoin (fold (fn [(acc (List String)) (it SliceItem)] -> (List String) (if (or (stringEmpty? it.name) (mapHas? kept it.name)) (listAppend acc (listReverse it.lines)) acc))
+                      (list) items)
+                "\n"))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "a stat walk of the toolchain roots: one path size mtime line per file and the newest mtime seen")
 fn ! treeStamps path: String -> (Pair Int64 (List String))
