@@ -384,6 +384,7 @@ fn escapeAttempt! base: String host: String cmdPath: String k: String target: St
         r (if (and (ok? made) (ok? w1) (ok? w2) (ok? w3) (ok? w4)) (runChild! (list host "run" cmdPath "apply-fix" "--id" "DEF-E-1") root env) (err "setup failed"))]
     (pair (match r ((ok x) (str x.out x.err)) ((err e) e)) (resultOr (fileReadString outside) "")))
 
+; (:m :ref TEST-SPEED-CMDTEST :do "the fixture cases run in six forked workers (parMap); each case owns its scratch dir c<k> and kills its own sleeper, a worker returns only (cid, verdict), and every assert stays in this parent")
 fn ! runTests -> Bool
   (let [text (resultOr (fileReadString (fixturePath)) "")
         lines (caseLines text)
@@ -392,9 +393,9 @@ fn ! runTests -> Bool
         host (absPath! "bin/asl")
         cmdPath (absPath! "asl/tools/mesh/cmd.asl")
         selectedCount (fold (fn [n p] (+ n (if (selected! (at (caseFields (pairSecond p)) 0)) 1 0))) 0 (enumerate lines))
-        results (map (fn [p] (let [cid (at (caseFields (pairSecond p)) 0)]
-                               (pair cid (if (selected! cid) (checkCase! base (pairFirst p) (pairSecond p) host cmdPath) true))))
-                     (enumerate lines))
+        results (parMap (fn [p] (let [cid (at (caseFields (pairSecond p)) 0)]
+                                  (pair cid (if (selected! cid) (checkCase! base (pairFirst p) (pairSecond p) host cmdPath) true))))
+                        (enumerate lines) 6)
         patch (largePatch 8000)
         t0 (monotonicNs)
         reason (cmd/preflushReason patch)
