@@ -1,5 +1,5 @@
 (module aslAgent/main
-  :x [withRemote knownParams acceptedKeys nearestKey! tokenizeAsn Invocation paramGet parseInvocation
+  :x [withRemote knownParams acceptedKeys nearestKey! liveTxnTargets tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
@@ -1226,6 +1226,24 @@ fn liveOpPath op: (List (Pair String c/KvVal)) -> String
     ((some value) (match value ((c/kvStr path) path) (_ "")))
     ((none) (match (c/dictGet op "path") ((some value) (match value ((c/kvStr path) path) (_ ""))) ((none) ""))))
 
+fn liveKvStr kv: (List (Pair String c/KvVal)) key: String -> String
+  (match (c/dictGet kv key)
+    ((some value) (match value ((c/kvStr s) s) (_ "")))
+    ((none) ""))
+
+fn liveTxnSubName kv: (List (Pair String c/KvVal)) -> String
+  (if (= (liveKvStr kv "_head") "step") (liveKvStr kv "op") (liveKvStr kv "_head"))
+
+; (:m :ref LEON-TXN-SNAPSHOT :do "a txn op's inner write and edit targets must be snapshotted before the txn is sent, so liveExecOps! collects them from the op's form string, reading op from step subs and head from write or edit subs exactly as txn.asl mapSub does")
+fn liveTxnTargets op: (List (Pair String c/KvVal)) -> (List String)
+  (let [form (liveKvStr op "form")]
+    (filter (fn [p] (not (stringEmpty? p)))
+      (map (fn [sub]
+        (let [kv (c/parseKv sub)
+              name (liveTxnSubName kv)]
+          (if (or (= name "write") (= name "edit")) (liveKvStr kv "file") "")))
+        (tx/txnSubs form))))
+
 fn liveConfirmReceipt out: ex/ExecOut -> (Option j/Json)
   (let [rec out.rec]
     (match (ex/recGet rec "needsConfirm")
@@ -1570,7 +1588,13 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
           superseded (and (= opName "delete") (and (not (stringEmpty? target))
                        (listAny? (fn [o] (and (= (liveOpName o) "write") (= (liveOpPath o) target))) (c/restOf ops))))
           owned (and mutating (and (not superseded) (and (not (stringEmpty? target)) (c/checkOwns target (c/effectiveOwns ra.owns) rootDir))))
-          before (if owned (jr/snapshotBeforeWrite run.written target) (ok run.written))
+          ; (:m :ref LEON-TXN-SNAPSHOT :do "liveExecOps! snapshotted only a top-level write, edit or delete target; a txn op was never snapshotted, so execTxn!'s snapAll found each inner target missing from writtenPaths and rejected every txn with ERR_SNAPSHOT unless the file had been written earlier in the run. Snapshot every owned write and edit target inside the txn form before the txn is sent")
+          txnTargets (if (= opName "txn")
+            (filter (fn [p] (c/checkOwns p (c/effectiveOwns ra.owns) rootDir)) (liveTxnTargets op))
+            (list))
+          before (if (= opName "txn")
+            (fold (fn [acc path] (match acc ((err e) (err e)) ((ok w) (jr/snapshotBeforeWrite w path)))) (ok run.written) txnTargets)
+            (if owned (jr/snapshotBeforeWrite run.written target) (ok run.written)))
           runOp (fn [form root] (let [r (ao/runAsl repoRoot form root ra.timeout none "subprocess")]
                                   (tx/aslRun (ao/runExit r) (ao/runStdout r) (ao/runStderr r))))
           ; (:m :ref LEON-POOL-ASK-OP :do "(:ask) and (:answer) are pool ops: poolOps runs them and exec never sees them")
