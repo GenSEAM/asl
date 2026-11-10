@@ -2038,9 +2038,14 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))]
     (LiveAsk :sysA sysA :user user :prefill prefill :turnOwnSent turnOwnSent :cardNames (map pairFirst cards) :advisorOk (liveHookOk? advisorResult)))
 
+; (:m :ref LEONSPEED-TURNTIME :do "milliseconds between two monotonicNs readings, never negative")
+fn nsToMs ns: Int64 -> Int64
+  (max 0 (/ ns 1000000))
+
 fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system: String env: ls/LoopEnv
     providerCall: (fn [pv/Provider String String] -> pv/Turn) wrapped: rl/ProviderRun -> (Pair rl/ProviderRun ls/Step)
-  (let [ask (liveAsk! ra repoRoot rootDir path system env wrapped)
+  (let [turnStartNs (monotonicNs)
+        ask (liveAsk! ra repoRoot rootDir path system env wrapped)
         run wrapped.run
         state run.state
         turn state.turn
@@ -2052,6 +2057,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           ra.gates (resultOr (tx/loadEffects! repoRoot) (list)) "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
           ra.timeout none run.session none))
         routeLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
+        modelStartNs (monotonicNs)
         retried (match ra.route
           ((some rs) (routedCall! ra rs rootDir path turn run.session sysA user wrapped.provider
             (fn [text] (routeVerdict! text ra rootDir repoRoot path routeEnvFor run routeLeft))))
@@ -2061,11 +2067,12 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
           env.sleep env.now rootDir)))
+        modelEndNs (monotonicNs)
         _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))]
-    (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried)))
+    (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried) turnStartNs (nsToMs (- modelEndNs modelStartNs))))
 
-fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: ls/LoopEnv wrapped: rl/ProviderRun ask: LiveAsk response: pv/Turn retries: Int64 -> (Pair rl/ProviderRun ls/Step)
+fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: ls/LoopEnv wrapped: rl/ProviderRun ask: LiveAsk response: pv/Turn retries: Int64 turnStartNs: Int64 modelMs: Int64 -> (Pair rl/ProviderRun ls/Step)
   (let [run wrapped.run
         state run.state
         turn state.turn
@@ -2123,8 +2130,10 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (and (listAny? (fn [o] (= (liveOpName o) "gate")) operations)
                       (wallTooShort? (wallLeft env.wallBudget (- (env.now) state.runStarted)) gateMin)))
                   execOps (if gateOpStop (filter (fn [o] (!= (liveOpName o) "gate")) operations) operations)
+                  toolStartNs (monotonicNs)
                   execResult (if parseDefect (pair run (pair "" false))
                     (liveExecOps! execOps ra rootDir repoRoot run.session path execEnv run))
+                  toolEndNs (monotonicNs)
                   executedRaw (pairFirst execResult)
                   executed0 (match (if ra.plan (livePlanJson facts.forms) none)
                     ((some planState) (rl/withState executedRaw (rl/withPlan executedRaw.state planState)))
@@ -2157,6 +2166,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   reused (if reuseGates (reusedGateResults ra.gates state.allGateResults) (list))
                   reuseAll (and reuseGates (= (listLength reused) (listLength ra.gates)))
                   _reuseNote (if reuseAll (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :gateReuse :digest \"" digestNow "\" :gates " (stringFromInt64 (listLength reused)) ")\n"))) true)
+                  gateStartNs (monotonicNs)
                   newGates (cond
                              ((or (not wantGates) wallStop) (list))
                              (reuseAll reused)
@@ -2166,6 +2176,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                                      (if (and redPassed (not (listEmpty? skipped)))
                                        (listAppend firstRun (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
                                        firstRun))))
+                  gateEndNs (monotonicNs)
                   _digestSaved (if (and (not (stringEmpty? digestNow)) (not (listEmpty? newGates))) (ok? (fileWrite digestPath digestNow)) true)
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
@@ -2174,6 +2185,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   turnGateSummary (liveGateSummary newGates)
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
+                  ; (:m :ref LEONSPEED-TURNTIME :do "one (:turnTime ...) row per turn: modelMs the provider call with its retries, gateMs the gate batch, toolMs the executed ops, totalMs from the turn start to this row; monotonic clock")
+                  _ (fileAppend path (str "(:turnTime :turn " (stringFromInt64 turn) " :modelMs " (stringFromInt64 modelMs) " :gateMs " (stringFromInt64 (nsToMs (- gateEndNs gateStartNs)))
+                       " :toolMs " (stringFromInt64 (nsToMs (- toolEndNs toolStartNs))) " :totalMs " (stringFromInt64 (nsToMs (- (monotonicNs) turnStartNs))) ")\n"))
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
                   _ (let [(edits (jr/editReceiptsOf opReceipts))] (if (stringEmpty? edits) true (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :observation \"" (c/escapeAsn edits) "\")\n")))))
                   _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
