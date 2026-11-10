@@ -226,7 +226,7 @@ fn ! attempt! root: String id: String row: String ctx: String model: String budg
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(arg (optionOr (listHead args) ""))
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))
-        (model (optArg args "--model" "synDs41FlashT1H"))
+        (model (optArg args "--model" "synDs41Flash"))
         (budget (optionOr (stringToInt64 (optArg args "--budget" "24")) 24))
         (timeout (optionOr (stringToInt64 (optArg args "--timeout" "900")) 900))
         (row (rowOf! arg root (optArg args "--plan" "")))
