@@ -172,6 +172,19 @@ fn ! testRoundTripWithExtractor! -> Bool
       (assert (= (processRun (str "rm -rf '" dir "'")).exitCode 0) "sandbox removed")
       true))
 
+; (:m :ref CHK-PRINT-TEMP-LEAK :do "a dot file named like the print-host-valid temp (.asl_chk_print_pPID_NS_0.asl) beside a source is not listed by aslFilesUnder!, so its exports are never counted as missing doc rows; the plain source beside it still is")
+fn ! testDotFilesSkipped! -> Bool
+  (let [(dir (sandboxDir!))
+        (a (fileWrite (str dir "/a.asl") "(module m/a\n  :x [f])\nfn f -> Bool\n  true\n"))
+        (b (fileWrite (str dir "/.asl_chk_print_p1_2_0.asl") "(module m/a\n  :x [f])\nfn f -> Bool\n  true\n"))
+        (listed (dl/aslFilesUnder! dir ""))
+        (cleaned (pathRemove dir))]
+    (do
+      (assert (and (ok? a) (ok? b)) "the sandbox files are written")
+      (assert (= (resultOr listed (list "error")) (list "/a.asl")) (str "only the plain source is listed: " (match listed ((ok l) (stringJoin l " ")) ((err e) e))))
+      (assert (ok? cleaned) "the sandbox is removed")
+      true))
+
 fn testMutantGuards! -> Bool
   (do
     (assert (= (dl/renderText "a\\nb") "a\nb") "mutant guard: renderText decodes the escaped newline a reader stored verbatim")
@@ -266,6 +279,7 @@ fn ! runTests -> Bool
     (assert (testResolveRows!) "testResolveRows!")
     (assert (testRoundTripWithExtractor!) "testRoundTripWithExtractor!")
     (assert (testMutantGuards!) "testMutantGuards!")
+    (assert (testDotFilesSkipped!) "a temp dot file is not a source")
     (assert (testExportGaps!) "testExportGaps!")
     (assert (testCoverageRatchet!) "testCoverageRatchet!")
     (assert (testPackageGaps!) "testPackageGaps!")
