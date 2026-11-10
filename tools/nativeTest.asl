@@ -412,10 +412,14 @@ fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> Str
 ; (:m :ref FPNARROW :do "bodies that cannot shape a cached artifact: entry dispatch, the suite sweep and its pool, the test runner and verdict parsing, and the fingerprint itself; one of them still enters the slice when any other fn names it")
 fn driverOnlyNames -> (List String)
   (list "main" "dispatch!" "testMain" "runTests" "prepareAll" "prepareAllIn" "suiteWorkersFor" "strideOrder" "unstride" "prepareCommand!"
-        "runOne" "runFile" "runBuilt!" "runStaged!" "runKept!" "keptRun" "execStaged!" "evalExpression!"
+        "runOne" "runFile" "runBuilt!" "runStaged!" "runKept!" "execStaged!" "evalExpression!"
         "verdictOf" "reportCounts" "hostVerdictLine" "failLine" "suiteFailLine" "initVerdict" "judgeInit!"
         "fingerprint" "fingerprintOf" "fingerprintIn" "fingerprintOr" "fingerprintMemoDir" "treeStamps" "toolchainRoots"
-        "driverOnlyNames" "driverOnly?" "artifactSlice" "sliceStep" "sliceReach" "reachFrom" "scanLine" "closeToken" "identByte?" "itemNameOf")
+        "driverOnlyNames" "driverOnly?" "routeNames" "artifactSlice" "sliceStep" "sliceReach" "reachFrom" "scanLine" "closeToken" "identByte?" "itemNameOf")
+
+; (:m :ref FPNARROW :do "main is driver-only for traversal, its routes to the runner and sweep stay out, yet its own text is hashed: the --compile-units route into compileUnitsWorker! runs in every worker, so an edit to main changes the fingerprint")
+fn routeNames -> (List String)
+  (list "main")
 
 fn driverOnly? name: String -> Bool
   (or (listContains? (driverOnlyNames) name)
@@ -493,11 +497,11 @@ fn sliceReach items: (List SliceItem) -> (Map String Bool)
                      (list) items))]
     (reachFrom refs seeds (mapEmpty)))
 
-; (:m :ref FPNARROW :do "the module header, schemas and kept fns in file order, comments and blank lines outside strings dropped")
+; (:m :ref FPNARROW :do "the module header, schemas, routeNames and kept fns in file order, comments and blank lines outside strings dropped")
 fn artifactSlice src: String -> String
   (let [(items (listReverse (fold (fn [(acc SliceAcc) (l String)] -> SliceAcc (sliceStep acc l)) (SliceAcc :inString false :items (list)) (stringSplit src "\n")).items))
         (kept (sliceReach items))]
-    (stringJoin (fold (fn [(acc (List String)) (it SliceItem)] -> (List String) (if (or (stringEmpty? it.name) (mapHas? kept it.name)) (listAppend acc (listReverse it.lines)) acc))
+    (stringJoin (fold (fn [(acc (List String)) (it SliceItem)] -> (List String) (if (or (stringEmpty? it.name) (mapHas? kept it.name) (listContains? (routeNames) it.name)) (listAppend acc (listReverse it.lines)) acc))
                       (list) items)
                 "\n"))
 
