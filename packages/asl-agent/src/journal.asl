@@ -1,7 +1,7 @@
 (module aslAgent/journal
   :x [Snapshot Written AsnNode Layer
       harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
-      applyResumePatch resumeApplied handBack writtenField handBackFields editReceiptsOf
+      applyResumePatch resumeApplied handBack checkpoint! writtenField handBackFields editReceiptsOf
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
   :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr) (asl-tools/vcs/git :a vg)])
 
@@ -567,6 +567,20 @@ fn ! handBack w: Written rootDir: String journalPath: String sessionId: String r
                   (match (restoreAndReport! rootDir journalPath start changed)
                     ((err e) (err e))
                     ((ok _) (ok (pair w2 (pair (some (pathRel patchFile rootDir)) (map pairFirst changed))))))))))))))
+
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT :do "after a turn: the patch of the tree against the run start is rewritten at the path handBack uses and, when its text changed, a (:checkpoint :turn N :patch path) line names it; the outer bound kills with SIGKILL and ASL has no signal hook, so this line and file are what survive a kill; no restore, no state change, an error is ignored (the final handBack reports its own)")
+fn ! checkpoint! w: Written rootDir: String journalPath: String sessionId: String turn: Int64 -> Bool
+  (let [base (if (stringEmpty? journalPath) (pathJoin rootDir (str ".asl/run/agentLoop/" sessionId)) (splitExt journalPath))
+        old (resultOr (readText! (str base ".patch")) "")]
+    (match (handBack w rootDir journalPath sessionId false w.startHead)
+      ((err _) false)
+      ((ok hand)
+        (match (pairFirst (pairSecond hand))
+          ((none) false)
+          ((some p)
+            (if (= old (resultOr (readText! (str base ".patch")) ""))
+              false
+              (ok? (journalWrite journalPath (str "(:checkpoint :turn " (stringFromInt64 turn) " :patch \"" (escapeAsn p) "\")\n")))))))))
 
 fn ! copyInto! src: String dest: String -> (Result Int64 String)
   (if (isFile? src)

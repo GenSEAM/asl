@@ -908,7 +908,8 @@ fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair
           ((proceed)
             (match (body env headed)
               ((pair next nextStep)
-                (match nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body))))))
+                (let [_cp (jr/checkpoint! next.written (absoluteRoot! env.rootDir) env.journalPath next.session next.state.turn)]
+                  (match nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body)))))))
           ((nextTurn) headed)
           ((stop) headed)))))
 
@@ -962,7 +963,8 @@ fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopE
         ((proceed)
           (match (body env headed)
             ((pair next nextStep)
-              (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
+              (let [_cp (jr/checkpoint! next.run.written (absoluteRoot! env.rootDir) env.journalPath next.run.session next.run.state.turn)]
+                (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body)))))))
         ((nextTurn) headed)
         ((stop) headed))))
 
