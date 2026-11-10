@@ -1758,6 +1758,7 @@
 (:doc :symbol "asl/tools/tests/svdImportTest.asl#runTests" :text "pins parseSvd on a GPIOA and GPIOB fixture against a hand table, that swapped ODR and BSRR offsets fail the comparison, and that a mismatched close tag reports its line")
 (:doc :symbol "asl/tools/nativeTest.asl#linkedWorktree?" :text "true when the root is a linked git worktree, whose .git is a file")
 (:doc :symbol "asl/tools/nativeTest.asl#defaultCacheDirFor" :text "the native test cache directory: HOME/.asl/run/nativeTest shared by linked worktrees, otherwise .asl/cache/nativeTest under the root")
+(:doc :symbol "asl/tools/nativeTest.asl#optLevelFor" :text "the clang opt level a mode compiles at: ASL_NATIVE_OPT when set, else -O1 for test and -O2 otherwise; module and unit cache keys carry it")
 (:doc :symbol "asl/tools/nativeTest.asl#fingerprintIn" :text "the native cache fingerprint of the toolchain under ROOT for a clang version and target triple: content digests of every toolchain root, with nativeTest.asl entering as the digest of its artifactSlice")
 (:doc :symbol "asl/tools/nativeTest.asl#artifactSlice" :text "the part of nativeTest.asl source that can shape a cached artifact: module header, schemas and every fn except driver-only ones no other fn names, comments and blank lines outside strings dropped")
 (:doc :symbol "asl/tools/workspaceConfigCheck.asl#main" :text "asl run workspaceConfigCheck.asl check FILE [SCHEMA]: checks a workspace or home config file against asl/grammar/workspaceConfig.asn, prints the receipt, exit 1 on any error")

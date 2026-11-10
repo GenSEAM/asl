@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -881,13 +881,13 @@ fn unitFailed path: String e: String -> UnitStep
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the key holds the unit name: an implicit script module is named by its path as seen from the cwd (greet from its own dir, asl/packages/.../greet from the root), and an object compiled under one name linked under the other left greet.main undefined once run binaries stopped being reused")
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the entry wrapper is keyed by its text, imports and inits, not its path: an ephemeral run writes it under a per-run name, and the same text lowers to the same object wherever it sits, so a warm run reuses the wrapper object instead of compiling it again")
 ; (:m :ref LEONSERVE-COLD-START :do "a module inside the workspace is keyed by its path from the workspace root, not the absolute one: the object holds the module name and root-relative loci only, so a worktree at another path with the same source and imports reuses the objects instead of compiling the whole closure again (226 modules, 529 s for leonServe in a fresh worktree)")
-fn ! unitKey fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (unitKeyIn (selfRoot) fp u ifaceMap isEntry inits)
+fn ! unitKey fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+  (unitKeyIn (selfRoot) fp opt u ifaceMap isEntry inits)
 
-fn ! unitKeyIn root: String fp: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+fn ! unitKeyIn root: String fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
   (moduleCacheKey fp (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
                   (listAppend (map (fn [(imp (Pair String String))] -> String (str (relativeTo root (pairSecond imp)) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
-                              (cons (str "@name " u.name) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list)))))
+                              (cons (str "@name " u.name) (cons (str "@opt " opt) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list))))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "an ephemeral slot keeps only the objects of transient text (-e, -, eval) and of an entry whose closure holds such text; a script's entry object goes to the shared module cache, content-addressed and swept like any other")
 fn ! slotObject? slot: String u: lk/LinkUnit units: (List lk/LinkUnit) isEntry: Bool -> Bool
@@ -901,24 +901,24 @@ fn hitResult path: String objPath: String refs: (List String) -> ModCompileResul
                     :initName (optionOr (listHead (map (fn [(r String)] -> String (optionOr (stringSlice r 6 (stringLength r)) "")) (filter (fn [(r String)] -> Bool (stringStartsWith? r "@init:")) refs))) "")
                     :err "")
 
-fn ! unitObjPath cDir: String fp: String slot: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (str (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)) "/" (unitKey fp u ifaceMap isEntry inits))
+fn ! unitObjPath cDir: String fp: String opt: String slot: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
+  (str (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)) "/" (unitKey fp opt u ifaceMap isEntry inits))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "every unit of the closure, the entry last with the inits of the units before it, as compileUnitsStep keys them; none at the first unit whose object is not cached")
-fn ! cachedUnits cDir: String fp: String slot: String units: (List lk/LinkUnit) ifaceMap: (Map String String) entry: lk/LinkUnit -> (Option (List ModCompileResult))
+fn ! cachedUnits cDir: String fp: String opt: String slot: String units: (List lk/LinkUnit) ifaceMap: (Map String String) entry: lk/LinkUnit -> (Option (List ModCompileResult))
   (fold (fn [(acc (Option (List ModCompileResult))) (u lk/LinkUnit)] -> (Option (List ModCompileResult))
           (match acc
             ((none) (none))
             ((some rs)
              (let [(isEntry (= u.name entry.name))
-                   (stem (unitObjPath cDir fp slot u units ifaceMap isEntry (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (map (fn [(r ModCompileResult)] -> String r.initName) rs))))]
+                   (stem (unitObjPath cDir fp opt slot u units ifaceMap isEntry (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (map (fn [(r ModCompileResult)] -> String r.initName) rs))))]
                (match (readVerifiedMeta (str stem ".meta") (str stem ".o"))
                  ((none) (none))
                  ((some refs) (some (listAppend rs (list (hitResult u.path (str stem ".o") refs))))))))))
         (some (list)) units)
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "a build whose every unit object and the full prelude object are cached links them at once: the prelude and the native overlay are not parsed and nothing is lowered, so a warm run spawns one clang, the link")
-fn ! cachedLink! cDir: String fp: String slot: String bin: String key: String uRes: (Result (List lk/LinkUnit) (List irTy/IrDiag)) t0: Int64 -> (Option Built)
+fn ! cachedLink! cDir: String fp: String opt: String slot: String bin: String key: String uRes: (Result (List lk/LinkUnit) (List irTy/IrDiag)) t0: Int64 -> (Option Built)
   (match uRes
     ((err _) (none))
     ((ok units)
@@ -929,7 +929,7 @@ fn ! cachedLink! cDir: String fp: String slot: String bin: String key: String uR
          (match (readVerifiedMeta (str pStem ".meta") (str pStem ".o"))
            ((none) (none))
            ((some _)
-            (match (cachedUnits cDir fp slot units (ifaceMapOf units) (optionOr (listGet units (- (listLength units) 1)) (lk/emptyUnit "")))
+            (match (cachedUnits cDir fp opt slot units (ifaceMapOf units) (optionOr (listGet units (- (listLength units) 1)) (lk/emptyUnit "")))
               ((none) (none))
               ((some results)
                (let [(t1 (monotonicNs))
@@ -968,7 +968,7 @@ fn ! settled! lock: String step: UnitStep -> UnitStep
 
 fn ! compileUnitPrepare facts: (Option libc/TripleFacts) cDir: String fp: String u: lk/LinkUnit units: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String counter: Int64 inits: (List String) opt: String -> UnitStep
   (let [(isEntry (= u.name entry.name))
-        (uKey (unitKey fp u ifaceMap isEntry inits))
+        (uKey (unitKey fp opt u ifaceMap isEntry inits))
         (objDir (if (slotObject? slot u units isEntry) slot (modulesDirIn cDir)))
         (objPath (str objDir "/" uKey ".o"))
         (metaPath (str objDir "/" uKey ".meta"))
@@ -1328,10 +1328,10 @@ fn ! workerArgv cDir: String fp: String -> (Option (List String))
             ((some b) (if (runningExe? b) (none) (some (list b))))
             ((none) (none)))))
 
-fn ! uncachedUnits cDir: String fp: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) -> (List lk/LinkUnit)
+fn ! uncachedUnits cDir: String fp: String opt: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) -> (List lk/LinkUnit)
   (filter (fn [(u lk/LinkUnit)] -> Bool
             (and (!= u.name entry.name)
-                 (let [(k (unitKey fp u ifaceMap false (list)))]
+                 (let [(k (unitKey fp opt u ifaceMap false (list)))]
                    (none? (readVerifiedMeta (str (modulesDirIn cDir) "/" k ".meta") (str (modulesDirIn cDir) "/" k ".o"))))))
           units)
 
@@ -1386,7 +1386,7 @@ fn ! fullPreludePending? cDir: String fp: String opt: String extra: (List String
 fn ! spawnUnitWorkers! t0: Int64 cDir: String fp: String mode: String slot: String wrapper: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) jobs: Int64 parentBusy: Bool -> WorkerPlan
   (let [(_ (leaveIfOrphaned!))
         (k (workerCount! jobs))
-        (todo0 (if (>= k 2) (uncachedUnits cDir fp units entry ifaceMap) (list)))
+        (todo0 (if (>= k 2) (uncachedUnits cDir fp (optLevelFor mode) units entry ifaceMap) (list)))
         (argv (if (>= (min k (listLength todo0)) 2) (workerArgv cDir fp) (none)))
         (todo (if (some? argv) todo0 (list)))
         (n (min k (listLength todo)))]
@@ -1727,7 +1727,7 @@ fn ! compileSeparate! cDir: String path: String src: String slot: String key: St
                ((ok _)
                 (let [(tA (monotonicNs))
                       (uA (lk/loadClosure! wrapper))]
-                 (match (cachedLink! cDir fp slot bin key uA tA)
+                 (match (cachedLink! cDir fp (optLevelFor mode) slot bin key uA tA)
                   ((some b) b)
                   ((none)
                 (let [(t0 tA)
