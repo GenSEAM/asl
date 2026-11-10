@@ -195,7 +195,7 @@ fn vacuousForm integrity: (Pair Bool String) -> (Option String)
     (if (pairFirst integrity)
       none
       (match (stringIndexOf msg "\n(:gateVacuous ")
-        ((none) none)
+        ((none) (match (stringIndexOf msg "\n(:gateUnwired") ((none) none) ((some at) (stringSlice msg (+ at 1) (stringLength msg)))))
         ((some at) (stringSlice msg (+ at 1) (stringLength msg))))))
 
 fn defaultGateVacuousRounds -> Int64
@@ -297,7 +297,7 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
               implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
               unwired (if (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile")) (unwiredFns implNow implHead) (list))
-              finalAnswer (if (listEmpty? unwired) answer (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish")))
+              finalAnswer (if (listEmpty? unwired) answer (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish" "\n(:gateUnwired :fns (" (stringJoin (map (fn [n] (str "\"" n "\"")) unwired) " ") ") :do \"call each from the code path the task changes, then finish\")")))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]
