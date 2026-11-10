@@ -2,7 +2,7 @@
   :x [Live Book leonOpen! leonTurn! leonExit leonRouted? leonViaHub? leonDrop]
   :i [(aslAgent/main :a m) (aslAgent/sessionPool :a sp) (aslAgent/runLoop :a rl)
       (aslAgent/loopState :a ls) (aslAgent/providers :a pv) (aslAgent/retry :a rt)
-      (aslAgent/context :a ctx)])
+      (aslAgent/context :a ctx) (aslAgent/journal :a jr)])
 
 ; (:m :ref SE3-POOL-DRIVER :do "one Leon run per session id, driven by sessionPool: the pool's turn function is leonTurn! over a book of live runs, so many runs share one process and none blocks while a model call is in flight. A turn ends at the hub post (askHub: the pool sends it and wakes the run with the raw reply) or at the end of the run (the receipt is the session's result); script, replay and CLI providers answer at once and the run goes on inside the same call. A run reads the same journal as liveTurn! gives, because setup, head, ask, apply and finish are the very functions the blocking path composes; what the pool path does not do yet is route, provider retry, and the parent watcher")
 (schema Live
@@ -121,10 +121,13 @@ fn ! settled! book: (List (Pair String Live)) id: String live: Live ask: m/LiveA
     (appliedTo! book id (with live :ask none) (m/liveApply! sess.ra sess.repoRoot sess.rootDir sess.path sess.env live.wrapped ask t live.retries (monotonicNs) 0 true)))
 
 fn ! appliedTo! book: (List (Pair String Live)) id: String live: Live applied: (Pair rl/ProviderRun ls/Step) -> (Pair (List (Pair String Live)) sp/Turn)
-  (match (pairSecond applied)
-    ((stop) (endRun! book id live (pairFirst applied)))
-    ((nextTurn) (headOn! book id live (pairFirst applied)))
-    ((proceed) (headOn! book id live (pairFirst applied))))
+  (let [(run (pairFirst applied))
+        (env live.sess.env)
+        (_cp (jr/checkpoint! run.run.written (resultOr (realPath (if (stringEmpty? env.rootDir) "." env.rootDir)) (jr/pathNorm env.rootDir)) env.journalPath run.run.session run.run.state.turn))]
+    (match (pairSecond applied)
+      ((stop) (endRun! book id live (pairFirst applied)))
+      ((nextTurn) (headOn! book id live (pairFirst applied)))
+      ((proceed) (headOn! book id live (pairFirst applied)))))
 
 ; (:m :ref SE3-POOL-DRIVER :do "head of the next turn, as runBodyWithProvider! takes it: proceed asks the model, nextTurn and stop end the run")
 fn ! headOn! book: (List (Pair String Live)) id: String live: Live wrapped: rl/ProviderRun -> (Pair (List (Pair String Live)) sp/Turn)
