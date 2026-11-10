@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -1863,13 +1863,22 @@ fn ! prepareTestSource actualPath: String logicalPath: String fp: String -> Buil
 fn ! prepare path: String fp: String -> Built
   (prepareIn (cacheDir!) path fp "test")
 
+; (:m :ref SWEEP-STRIDE :do "parMap hands each worker one contiguous chunk, and cold suites cluster by directory, so one worker got the whole cold tail (measured 2026-11-10: one worker busy for an hour while three sat done); dealing paths round-robin spreads them, and the inverse puts results back in input order")
+fn strideOrder n: Int64 w: Int64 -> (List Int64)
+  (fold (fn [(acc (List Int64)) (r Int64)] -> (List Int64) (listAppend acc (filter (fn [(i Int64)] -> Bool (= (mod i w) r)) (range 0 n)))) (list) (range 0 w))
+
+fn unstride order: (List Int64) xs: (List Built) -> (List Built)
+  (let [(byIndex (fold (fn [(m (Map Int64 Built)) (p (Pair Int64 Built))] -> (Map Int64 Built) (mapSet m (pairFirst p) (pairSecond p))) (mapEmpty) (zip order xs)))]
+    (map (fn [(i Int64)] -> Built (optionOr (mapGet byIndex i) (Built :binary (none) :reason "stride lost a result" :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))) (range 0 (listLength order))))
+
 fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
   (let [(build (fn [(p String)] -> Built (prepareIn cDir p fp "test")))
         (marker (str cDir "/building." (stringFromInt64 (procSelf))))
         (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
         (_ (fileWrite marker ""))
         (w (suiteWorkersFor k (resultOr (cpuCount) 1)))
-        (built (if (> w 1) (parMap build paths w) (map build paths)))
+        (order (strideOrder (listLength paths) w))
+        (built (if (> w 1) (unstride order (parMap build (map (fn [(i Int64)] -> String (optionOr (listGet paths i) "")) order) w)) (map build paths)))
         (_ (pathRemove marker))
         (_ (sweepStore! cDir))]
     built)
