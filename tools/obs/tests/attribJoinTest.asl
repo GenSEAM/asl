@@ -30,8 +30,10 @@ fn ! runTests -> Bool
         (g2 (gateway 1))
         (noReply (journal "journalNoReply.fixture.asn"))
         (gateErr (journal "journalGateErr.fixture.asn"))
-        (plain (journal "journalPlainFail.fixture.asn"))]
+        (plain (journal "journalPlainFail.fixture.asn"))
+        (timed (journal "journalTurnTime.fixture.asn"))]
     (do
+      (assert (= timed.turn 2) (str "(:turnTime rows are not counted as turns: " timed.turn))
       (assert (= g1.run "abc1230000000000") (str "the ledger row joins by session: " g1.run))
       (assert (= g1.turn 2) "the ledger row keeps its turn")
       (assert (= g2.run "work") "a row without :session keeps the profile as its run")

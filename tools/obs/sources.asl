@@ -125,7 +125,7 @@ fn journalObs ctx: Ctx nowMs: Int64 text: String -> (Option ob/Obs)
             (some (finalize ctx
                     (with (ob/blankObs) :at ctx.mtime :source "leon" :run (sOf sf ":id") :unitId (lastSegment (sOf sf ":root"))
                           :caseId (str "task-" (optionOr (stringSlice (bytesSha256 (stringToBytes task)) 0 8) ""))
-                          :model (if (stringEmpty? served) (sOf sf ":model") served) :intent (sOf sf ":intent") :turn (countWhere ls "(:turn")
+                          :model (if (stringEmpty? served) (sOf sf ":model") served) :intent (sOf sf ":intent") :turn (countWhere ls "(:turn ")
                           :tokensIn (if (some? res) (sx/intField uf ":input") (sumUsage ls ":input"))
                           :tokensOut (if (some? res) (sx/intField uf ":output") (sumUsage ls ":output"))
                           :outcome outcome :gate (flt/clip (flt/redact gateCmd) 80) :exitCode gexit)
