@@ -1898,3 +1898,5 @@
 (:doc :symbol "asl/packages/asl-target-llvm/src/lowLevelRoute.asl#routedNames?" :text "True when any internal name starts with asl-target-llvm/lowLevelRoute., a routed wrapper.")
 (:doc :symbol "asl/packages/asl-target-llvm/src/main.asl#routeForWith" :text "The low-level hub routes after arrays; fs is the feature table list of lowLevelRoute, a test passes its own.")
 (:doc :symbol "asl/packages/asl-target-llvm/src/ssa.asl#emitLlvmModuleCEntries" :text "Emit the LLVM module text with its C entry points, or the diagnostics.")
+(:doc :symbol "asl/packages/asl-target-llvm/tests/nativeForEntryTest.asl#runTests" :text "run the emitLlvmProgramNativeFor! cases: a Linux target and the host target give different LLVM text, emitLlvmProgramNativeWith! equals the For entry with the host target, an RC mode adds runtime calls, and an unknown mode is ERR_LLVM_RC_MODE")
+(:doc :symbol "asl/packages/asl-target-llvm/tests/procKillNameTest.asl#runTests" :text "run the procKill signal name cases on four own sleepers: KILL, SIGKILL, TERM and SIGTERM kill them, while an unknown, an empty and a lower-case name are refused with io:22 and leave the sleeper alive")

@@ -210,3 +210,4 @@
 (:doc :symbol "asl/packages/asl-target-sh/tests/lowerTest.asl#" :text "Unit tests for tree-to-tree ASL-to-ShAst lowering under ADR D133.")
 (:doc :symbol "asl/packages/asl-target-sh/tests/distribTest.asl#L37" :text "1. Real Mach-O headers")
 (:doc :symbol "asl/packages/asl-target-sh/tests/stepCloneTest.asl#runTests" :text "stepClone! keeps an entry already chosen, and in a dry run over an empty clone, an existing clone and a clone carrying the CLI and installer sources ends at bin/asl, bin/asl and the portable host/out/asl entry")
+(:doc :symbol "asl/packages/asl-target-sh/tests/combinedRulesTest.asl#runTests" :text "run the combinedRulesText! cases on fixture files: without .asl/rules.asn the text is the language rules, otherwise the workspace rule lines are inserted before the first (:pack line without their (:workspaceRules header")
