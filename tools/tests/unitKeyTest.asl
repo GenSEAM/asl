@@ -39,6 +39,13 @@ fn ! runTests -> Bool
         (kO1Again (nt/unitKeyIn a "fp1" "-O1" (unitAt pa (list)) noIface false (list)))
         (kEntryO1 (nt/unitKeyIn a "fp1" "-O1" (unitAt pa (list)) noIface true (list "i")))
         (kEntryO2 (nt/unitKeyIn a "fp1" "-O2" (unitAt pa (list)) noIface true (list "i")))
+        (rc (nt/rcTag (nt/rcModeFor! "t/x.asl")))
+        (slotO1 (nt/suiteSlotKeyIn "/w/a" "test" "-O1" rc "t/x.asl" "aa"))
+        (slotO2 (nt/suiteSlotKeyIn "/w/a" "test" "-O2" rc "t/x.asl" "aa"))
+        (slotO1Again (nt/suiteSlotKeyIn "/w/a" "test" "-O1" rc "t/x.asl" "aa"))
+        (slotLive (nt/suiteSlotKey "test" "t/x.asl" pa))
+        (slotLiveExpect (nt/suiteSlotKeyIn (nt/treeOf ".") "test" (nt/optLevelFor "test") rc "t/x.asl" (nt/fileDigest pa)))
+        (slotLiveOther (nt/suiteSlotKeyIn (nt/treeOf ".") "test" (if (= (nt/optLevelFor "test") "-O3") "-O2" "-O3") rc "t/x.asl" (nt/fileDigest pa)))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " a " " b " " c) 5000)))]
     (do
       (assert (= kA kB) "the same relative path and text under two roots shares one key")
@@ -52,5 +59,9 @@ fn ! runTests -> Bool
       (assert (!= kEntryO1 kEntryO2) "the entry object is keyed by opt level too")
       (assert (= (nt/optLevelFor "test") (optionOr (envGet "ASL_NATIVE_OPT") "-O1")) "test mode compiles at -O1 unless ASL_NATIVE_OPT says otherwise")
       (assert (= (nt/optLevelFor "run") (optionOr (envGet "ASL_NATIVE_OPT") "-O2")) "run mode compiles at -O2 unless ASL_NATIVE_OPT says otherwise")
+      (assert (!= slotO1 slotO2) "suite slot keys differ when the opt level (ASL_NATIVE_OPT) differs")
+      (assert (= slotO1 slotO1Again) "the same opt level gives the same suite slot key")
+      (assert (= slotLive slotLiveExpect) "suiteSlotKey keys the slot by optLevelFor of its mode")
+      (assert (!= slotLive slotLiveOther) "suiteSlotKey under another opt level is another slot")
       (assert removed "temp dirs removed")
       true))

@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf suiteSlotKey suiteSlotKeyIn treeOf relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -544,14 +544,15 @@ fn wrapperVersion -> String
 fn slotKey path: String suiteDigest: String -> String
   (bytesSha256 (stringToBytes (str (format) "\n" (wrapperVersion) "\n" path "\n" suiteDigest)))
 
-fn suiteSlotKeyIn tree: String mode: String rc: String logicalPath: String digest: String -> String
-  (slotKey (str mode rc ":" (importPathOf logicalPath) "@" tree) digest)
+; (:m :ref MODKEY-OPTLEVEL :do "the linked binary carries the opt level its objects were compiled at, so a slot built under another ASL_NATIVE_OPT is another slot")
+fn suiteSlotKeyIn tree: String mode: String opt: String rc: String logicalPath: String digest: String -> String
+  (slotKey (str mode opt rc ":" (importPathOf logicalPath) "@" tree) digest)
 
 fn ! treeOf root: String -> String
   (resultOr (realPath root) root)
 
 fn ! suiteSlotKey mode: String logicalPath: String actualPath: String -> String
-  (suiteSlotKeyIn (treeOf (toolRoot)) mode (rcTag (rcModeFor! logicalPath)) logicalPath (fileDigest actualPath))
+  (suiteSlotKeyIn (treeOf (toolRoot)) mode (optLevelFor mode) (rcTag (rcModeFor! logicalPath)) logicalPath (fileDigest actualPath))
 
 fn relativeTo root: String path: String -> String
   (if (stringStartsWith? path (str root "/")) (optionOr (stringSlice path (+ (stringLength root) 1) (stringLength path)) path) path)
@@ -2208,7 +2209,7 @@ fn ! keptRun root: String rel: String fp: String -> (Option String)
     (none)
     (match (fileReadString (str root "/" rel))
       ((err _) (none))
-      ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
+      ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
                 (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
                   ((some b) b.binary)
                   ((none) (none)))))))
