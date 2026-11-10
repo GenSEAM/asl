@@ -118,7 +118,7 @@ fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAs
 fn ! settled! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk t: pv/Turn -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(sess live.sess)
         (logged (m/appendRetryLines! sess.path live.wrapped.run.state.turn live.retries))]
-    (appliedTo! book id (with live :ask none) (m/liveApply! sess.ra sess.repoRoot sess.rootDir sess.path sess.env live.wrapped ask t live.retries (monotonicNs) 0)))
+    (appliedTo! book id (with live :ask none) (m/liveApply! sess.ra sess.repoRoot sess.rootDir sess.path sess.env live.wrapped ask t live.retries (monotonicNs) 0 true)))
 
 fn ! appliedTo! book: (List (Pair String Live)) id: String live: Live applied: (Pair rl/ProviderRun ls/Step) -> (Pair (List (Pair String Live)) sp/Turn)
   (match (pairSecond applied)

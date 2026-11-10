@@ -1,7 +1,7 @@
 (module aslAgent/gitOps
   :x [RVal rStr rInt rBool rNull rPair LineArg laNone laBad laNum Bounded GitCtx
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
-      runGates! runGatesIn! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
+      runGates! runGatesIn! runGatesPar! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
   :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg) (aslAgent/gates :a gd)])
 
@@ -701,11 +701,11 @@ fn ! gatePrep! g: (Pair String String) timesPath: String timeoutSec: Int64 -> (P
                          :extra (list (ri "timeoutSec" raised) (ri "recordedMs" ms) (rs "raised" "gateTimes")))))))
       ((none) (pair none (GateSpec :rid rid :cmd cmd :sec timeoutSec :extra (list))))))
 
-fn ! chunkRecs! chunk: (List (Pair String String)) root: String timeoutSec: Int64 childEnv: (List String) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
+fn ! chunkRecs! chunk: (List (Pair String String)) root: String timeoutSec: Int64 childEnv: (List String) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
   (let [preps (map (fn [g] (gatePrep! g timesPath timeoutSec)) chunk)
         jobs (map (fn [p] (pair (pairFirst p) (pairSecond (pairSecond p))))
                (filter (fn [p] (none? (pairFirst (pairSecond p)))) (enumerate preps)))
-        got (parLoop! root childEnv watch (gateParallelism) jobs (list) (list))]
+        got (parLoop! root childEnv watch limit jobs (list) (list))]
     (map (fn [p]
            (match (pairFirst (pairSecond p))
              ((some r) r)
@@ -715,12 +715,18 @@ fn ! chunkRecs! chunk: (List (Pair String String)) root: String timeoutSec: Int6
       (enumerate preps)))
 
 fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
+  (runGatesCap! gates root timeoutSec env watch timesPath (gateParallelism))
+
+fn runGatesPar! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) limit: Int64 -> (List (List (Pair String RVal)))
+  (runGatesCap! gates root timeoutSec env watch (gd/gateTimesPath) limit)
+
+fn runGatesCap! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
   (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")
         st (fold (fn [(st (Pair Bool (List (List (Pair String RVal))))) (chunk (List (Pair String String)))] -> (Pair Bool (List (List (Pair String RVal))))
                    (let [failed (pairFirst st)
                          recs (if failed
                                 (map (fn [g] (list (rs "id" (pairFirst g)) (rs "cmd" (pairSecond g)) (pair "exit" (rNull)) (rs "skipped" "afterBuildFail"))) chunk)
-                                (chunkRecs! chunk root timeoutSec childEnv watch timesPath))
+                                (chunkRecs! chunk root timeoutSec childEnv watch timesPath limit))
                          buildRed (and (not failed) (and (buildGate? (optionOr (listHead chunk) (pair "" "")))
                                    (match (listHead recs)
                                      ((some rec) (match (recGet rec "exit") ((some v) (match v ((rInt x) (not (= x 0))) (_ false))) ((none) false)))

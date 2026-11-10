@@ -130,6 +130,7 @@
   (:f budget Int64)
   (:f inputTokenBudget Int64)
   (:f gateTimeout Int64)
+  (:f gateParallelism Int64)
   (:f wallBudget (Option Int64))
   (:f intent (Option String))
   (:f base String)
@@ -148,7 +149,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events")
+        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -374,7 +375,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
       (pair (paramSet ps key (j/jbool (match v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
     ((= key "contextTokens")
       (pair (paramSet ps key (match (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
-    ((or (= key "gateTimeout") (or (= key "wallBudget") (= key "parentPid"))) (pair (paramSet ps key (intOrNull v)) none))
+    ((or (= key "gateTimeout") (or (= key "gateParallelism") (or (= key "wallBudget") (= key "parentPid")))) (pair (paramSet ps key (intOrNull v)) none))
     ((= key "plan") (pair (paramSet ps key (match v ((j/jbool b) (j/jbool b)) (_ (j/jnull)))) none))
     ((= key "attractor") (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((= key "nativeTools") (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
@@ -1669,8 +1670,8 @@ fn liveGateResult row: (List (Pair String go/RVal)) -> g/GateResult
 fn liveLastGateMap gates: (List g/GateResult) old: (Map String j/Json) -> (Map String j/Json)
   (fold (fn [acc gate] (mapSet acc (g/gateCmd gate) (ls/gateJson gate))) old gates)
 
-fn ! runLiveGates! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (List g/GateResult)
-  (map liveGateResult (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent))
+fn ! runLiveGates! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) parallelism: Int64 -> (List g/GateResult)
+  (map liveGateResult (go/runGatesPar! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent parallelism))
 
 ; (:m :ref LEON-ORPHAN-PARENT :do "the calling CLI passes its pid as :parentPid; once that process is gone nobody reads this run, so Leon ends at the next turn boundary, and a gate it waits on is killed with its group")
 fn ! parentGone? parent: (Option Int64) -> Bool
@@ -1936,7 +1937,7 @@ fn ! routeVerdict! text: String ra: RunArgs rootDir: String repoRoot: String pat
           ((err e) (cr/GateVerdict :passed false :error (str "route scratch copy failed: " e)))
           ((ok kind)
             (let [ran (liveExecOps! ops ra scratch repoRoot run.session (str scratch "/.routeJournal") (mkEnv scratch) run)
-                  gates (runLiveGates! ra.gates scratch (wallCapped ra.gateTimeout left) ra.parentPid)
+                  gates (runLiveGates! ra.gates scratch (wallCapped ra.gateTimeout left) ra.parentPid ra.gateParallelism)
                   red (filter (fn [gt] (!= (g/gateExit gt) 0)) gates)
                   removed (go/scratchDrop! rootDir scratch kind)]
               (cr/GateVerdict :passed (listEmpty? red)
@@ -2070,9 +2071,9 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
         modelEndNs (monotonicNs)
         _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))]
-    (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried) turnStartNs (nsToMs (- modelEndNs modelStartNs))))
+    (liveApply! ra repoRoot rootDir path env wrapped ask (pairFirst retried) (pairSecond retried) turnStartNs (nsToMs (- modelEndNs modelStartNs)) false))
 
-fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: ls/LoopEnv wrapped: rl/ProviderRun ask: LiveAsk response: pv/Turn retries: Int64 turnStartNs: Int64 modelMs: Int64 -> (Pair rl/ProviderRun ls/Step)
+fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: ls/LoopEnv wrapped: rl/ProviderRun ask: LiveAsk response: pv/Turn retries: Int64 turnStartNs: Int64 modelMs: Int64 poolRow: Bool -> (Pair rl/ProviderRun ls/Step)
   (let [run wrapped.run
         state run.state
         turn state.turn
@@ -2170,11 +2171,11 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   newGates (cond
                              ((or (not wantGates) wallStop) (list))
                              (reuseAll reused)
-                             (else (let [firstRun (runLiveGates! turnGates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid)
+                             (else (let [firstRun (runLiveGates! turnGates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid ra.gateParallelism)
                                          skipped (filter (fn [cmd] (not (listContains? turnGates cmd))) ra.gates)
                                          redPassed (listAll? (fn [r] (= (g/gateExit r) 0)) firstRun)]
                                      (if (and redPassed (not (listEmpty? skipped)))
-                                       (listAppend firstRun (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid))
+                                       (listAppend firstRun (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid ra.gateParallelism))
                                        firstRun))))
                   gateEndNs (monotonicNs)
                   _digestSaved (if (and (not (stringEmpty? digestNow)) (not (listEmpty? newGates))) (ok? (fileWrite digestPath digestNow)) true)
@@ -2186,7 +2187,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   ; (:m :ref LEONSPEED-TURNTIME :do "one (:turnTime ...) row per turn: modelMs the provider call with its retries, gateMs the gate batch, toolMs the executed ops, totalMs from the turn start to this row; monotonic clock")
-                  _ (fileAppend path (str "(:turnTime :turn " (stringFromInt64 turn) " :modelMs " (stringFromInt64 modelMs) " :gateMs " (stringFromInt64 (nsToMs (- gateEndNs gateStartNs)))
+                  _ (fileAppend path (str "(:turnTime :turn " (stringFromInt64 turn) " :modelMs " (stringFromInt64 modelMs) (if poolRow " :pool true" "") " :gateMs " (stringFromInt64 (nsToMs (- gateEndNs gateStartNs)))
                        " :toolMs " (stringFromInt64 (nsToMs (- toolEndNs toolStartNs))) " :totalMs " (stringFromInt64 (nsToMs (- (monotonicNs) turnStartNs))) ")\n"))
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
                   _ (let [(edits (jr/editReceiptsOf opReceipts))] (if (stringEmpty? edits) true (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :observation \"" (c/escapeAsn edits) "\")\n")))))
@@ -2472,7 +2473,7 @@ fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResul
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
   (RunArgs :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
-           :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :wallBudget ra.wallBudget
+           :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :gateParallelism ra.gateParallelism :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
            :base st.base
            :remote ra.remote
@@ -2489,6 +2490,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                     :budget (optionOr (intValue (paramOr ps "budget" (j/jint 3000))) 3000)
                     :inputTokenBudget (optionOr (intValue (paramOr ps "inputTokenBudget" (j/jint 0))) 0)
                     :gateTimeout (optionOr (intValue (paramOr ps "gateTimeout" (j/jint 300))) 300)
+                    :gateParallelism (max 1 (min 16 (optionOr (intValue (paramOr ps "gateParallelism" (j/jint 3))) 3)))
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
