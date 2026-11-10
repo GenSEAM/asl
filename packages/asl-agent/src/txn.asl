@@ -218,7 +218,18 @@ fn newlinesBefore s: String at: String -> Int64
         cut (c/sliceOf s 0 (min k (stringLength s)))]
     (stringCountChar cut "\n"))
 
+; (:m :ref TXN-CHECK-PER-EDIT :do "a new fn, its call and its export are three edits and each edit alone is checked, so any order fails with an unbound symbol, an undefined export or a not-exported symbol; the refusal for those three codes says to send the definition, its uses and the export change as the inner subforms of ONE txn step, which is checked once after all of them")
+fn txnLinkedAid err: String text: String -> String
+  (if (or (listContains? (list "ERR_UNKNOWN_SYMBOL" "ERR_UNDEFINED_EXPORT" "ERR_NOT_EXPORTED") err)
+          (or (stringContains? text "ERR_UNKNOWN_SYMBOL") (or (stringContains? text "ERR_UNDEFINED_EXPORT") (stringContains? text "ERR_NOT_EXPORTED"))))
+    "; a definition, its uses and its export depend on each other, so one edit alone cannot pass: send them together as ONE (:step :op \"txn\" :owns (\"F\") (:edit ...) (:edit ...) (:edit ...)) with the edit subforms inline in the step, not a :form string; the txn is checked once after all its edits"
+    "")
+
 fn txnRefusal stdout: String stderr: String fallback: String content: (Option String) -> (Pair String String)
+  (let [r (txnRefusalBase stdout stderr fallback content)]
+    (pair (pairFirst r) (str (pairSecond r) (txnLinkedAid (pairFirst r) (pairSecond r)))))
+
+fn txnRefusalBase stdout: String stderr: String fallback: String content: (Option String) -> (Pair String String)
   (let [n (stringLength stdout)
         code (errorCodeIn stdout)
         tag (if (= code "") (errorTagAt stdout n 0) code)
