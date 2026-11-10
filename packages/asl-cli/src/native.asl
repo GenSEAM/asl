@@ -936,12 +936,20 @@ fn ! runPath! ctx: sys/Context file: String args: (List String) -> Int64
                     ((stringEndsWith? file ".asl") (run! ctx (cons file args)))
                     (else (runInline! ctx (str "f" (stringFromInt64 (procSelf)) "x-" (optionOr (listLast (stringSplit file "/")) file)) src args)))))
 
+; (:m :ref ASL-STDIN-EDIT-HANG :do "asl -f FILE dispatches the file's forms through the native rpc like asl -; the command.asl main it used before spawned asl run asl-forms/main.asl, a source compile that never finished")
+fn ! fileEntry! ctx: sys/Context args: (List String) -> Int64
+  (if (or (!= (listLength args) 2) (not (sys/isFile? (first (rest args)))))
+    (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2)
+    (match (fileReadString (first (rest args)))
+      ((err _) (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2))
+      ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text))))))
+
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
     (cond
       ((= head "-e") (if (listEmpty? (rest args)) (inlineUsage!) (runInline! ctx "e" (first (rest args)) (rest (rest args)))))
       ((= head "-") (stdinEntry! ctx args))
-      ((= head "-f") (match (cmd/main args) ((ok code) code) ((err _) 2)))
+      ((= head "-f") (fileEntry! ctx args))
       ((pathArg? head) (runPath! ctx head (rest args)))
       (else (let [(r (cmd/route! ctx args))]
               (dispatch! ctx (pairFirst r) (pairSecond r))))))
