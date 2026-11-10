@@ -107,30 +107,56 @@ fn shellStub stdout: String -> String
             to (promptEnd stdout from)]
         (str (optionOr (stringSlice stdout 0 from) "") "{SHELL}" (shellStub (optionOr (stringSlice stdout to (stringLength stdout)) ""))))))
 
-fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: String form: String row: String -> Bool
+(schema BatchRow
+  (:f stdout String)
+  (:f exitCode Int64))
+
+fn ! rowMatchesActual repo: String hostDisplay: String scope: String form: String row: String actual: BatchRow -> Bool
   (let [rowScope (fixtureField row "scope")
-        expected (receiptExpected repo hostDisplay row)
-        actual (runAsl env form)]
+        expected (receiptExpected repo hostDisplay row)]
     (and (!= row "")
          (or (= rowScope scope) (and (= scope "default") (= rowScope "")))
          (fixtureFormMatches repo row form)
          (= (shellStub (promptStub actual.stdout)) (shellStub expected))
          (= actual.exitCode (fixtureInt row "exit"))))
 
-fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)
+fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: String form: String row: String -> Bool
+  (let [o (runAsl env form)]
+    (rowMatchesActual repo hostDisplay scope form row (BatchRow :stdout o.stdout :exitCode o.exitCode)))
+
+; (:m :ref MAINPARBATCH :do "all rows of one root run in one mainBatchDriver process; the parent splits its stdout at the row-end markers back into per-row stdout and exit code, so every assertion stays in this process")
+fn batchRowOf chunk: String -> BatchRow
+  (match (stringIndexOf chunk "\u0001ROWEXIT ")
+    ((none) (BatchRow :stdout chunk :exitCode -1))
+    ((some i)
+      (let [tail (optionOr (stringSlice chunk (+ i 9) (stringLength chunk)) "")]
+        (BatchRow :stdout (optionOr (stringSlice chunk 0 i) "")
+                  :exitCode (optionOr (stringToInt64 (stringTrim (stringReplace tail "\u0001" ""))) -1)))))
+
+fn ! runBatch root: String forms: (List String) -> (List BatchRow)
+  (let [cmd (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainBatchDriver.asl " (shellQuote root) " " (stringJoin (map shellQuote forms) " "))
+        out (processRun cmd)
+        chunks (filter (fn [c] (stringContains? c "\u0001ROWEXIT ")) (stringSplit out.stdout "\u0001\n"))]
+    (map batchRowOf (map (fn [c] (str c "\u0001")) chunks)))
+
+fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String prefix: String index: Int64 forms: (List String) results: (List BatchRow) lines: (List String) acc: (List String) -> (List String)
   (match (listHead forms)
     ((none) (listReverse acc))
     ((some form)
       (let [digit (stringFromInt64 index)
             id (str prefix (if (< index 10) (str "0" digit) digit))
-            lines (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n")
             row (if (= prefix "") (fixtureRowForForm repo lines scope form) (fixtureRow lines id))
-            matched (matchesFixtureRow repo hostDisplay scope env form row)]
-        (fixtureMismatchesAt repo hostDisplay scope env prefix (+ index 1) (optionOr (listTail forms) (list))
+            actual (optionOr (listHead results) (BatchRow :stdout "" :exitCode -1))
+            matched (rowMatchesActual repo hostDisplay scope form row actual)]
+        (fixtureMismatchesAt repo hostDisplay scope prefix (+ index 1) (optionOr (listTail forms) (list)) (optionOr (listTail results) (list)) lines
                              (if matched acc (cons form acc))))))
 
-fn ! fixtureMismatches repo: String hostDisplay: String scope: String env: String prefix: String forms: (List String) -> (List String)
-  (fixtureMismatchesAt repo hostDisplay scope env prefix 0 forms (list))
+fn ! fixtureMismatches repo: String hostDisplay: String scope: String root: String prefix: String forms: (List String) -> (List String)
+  (let [results (runBatch root forms)
+        lines (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n")]
+    (if (= (listLength results) (listLength forms))
+      (fixtureMismatchesAt repo hostDisplay scope prefix 0 forms results lines (list))
+      (list (str "batch returned " (stringFromInt64 (listLength results)) " of " (stringFromInt64 (listLength forms)) " rows"))))
 
 fn ! matchesNoArgFixture repo: String hostDisplay: String -> Bool
   (let [row (fixtureRow (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n") "no_arg")
@@ -279,15 +305,15 @@ fn ! runTests -> Bool
         absContext (resultOr (realPath "tests/fixtures/agentLoop/mvp/honest.asn") "")
         noArgAsl (processRun (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl"))
         noArgFixture (matchesNoArgFixture repo hostDisplay)
-        rejected (fixtureMismatches repo hostDisplay "default" at "" (rejectionForms))
-        dry (fixtureMismatches repo hostDisplay "default" at "dry_" (dryRunForms absContext))
+        rejected (fixtureMismatches repo hostDisplay "default" repo "" (rejectionForms))
+        dry (fixtureMismatches repo hostDisplay "default" repo "dry_" (dryRunForms absContext))
         planOn (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=1" (str at " ASL_LEON_PLAN=1") "(:agent :task \"env plan\" :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n") "plan_1"))
         planBad (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=2" (str at " ASL_LEON_PLAN=2") "(:agent :task \"env plan\" :dryRun true)" (fixtureRow (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n") "plan_2"))
         planOff (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=0" (str at " ASL_LEON_PLAN=0") "(:agent :task \"param plan\" :plan true :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n") "plan_0"))
         journalRoot (tempDir "journals")
         journalsWritten (writeJournals journalRoot)
         journalHostDisplay (rb/runnerDisplay! journalRoot)
-        resumed (fixtureMismatches journalRoot journalHostDisplay "resume" (str "ASL_ROOT_DIR=" (shellQuote journalRoot)) "resume_" (resumeForms))
+        resumed (fixtureMismatches journalRoot journalHostDisplay "resume" journalRoot "resume_" (resumeForms))
         liveRoot (tempDir "live")
         fixtureCopied (and (ok? (dirCreate (str liveRoot "/tests/fixtures/agentLoop/mvp")))
                            (write (str liveRoot "/tests/fixtures/agentLoop/mvp/honest.asn") (readOr "tests/fixtures/agentLoop/mvp/honest.asn")))
@@ -313,7 +339,7 @@ fn ! runTests -> Bool
       (assert (listEmpty? resumed) "resume reports and resumed dry runs return their recorded receipt class and exit code")
       (assert fixtureCopied "live root holds the honest script fixture")
       (assert (= live.exitCode 0) "a live run whose script yields one findings reply exits 0")
-      (assert (stringStartsWith? live.stdout "(:agentReceipt :status :ok :modeHint \"scout\" :phases (scout) :session \"") "live receipt: ok, scout phase, mode hint and session first")
+      (assert (stringStartsWith? live.stdout "(:agentReceipt :status :ok :stop done :lastStep (:turn 1 :op \"findings\") :modeHint \"scout\" :phases (scout) :session \"") "live receipt: ok, scout phase, mode hint and session first")
       (assert (stringContains? live.stdout (str ":journal \".asl/run/agentLoop/" session ".journal\" :unbacked 0 :contextTokens 8000 :turns 1 :findings ((:findings (:f :claim \"read file contents without assertion\" :at \"file.txt\"))) :batching (")) "live receipt names its journal and the one turn the real loop ran and its findings")
       (assert (isHex16 session) "a new session id is 16 hex digits")
       (assert (!= session (fieldAfter liveAgain.stdout ":session \"")) "each live run draws a new session id")
