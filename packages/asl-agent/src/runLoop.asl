@@ -845,9 +845,9 @@ fn ! resumeBaseSha! journalPath: String -> (Option String)
 fn withNoChange run: LoopRun state: s/LoopState -> LoopRun
   (with run :state (with state :signalName (some "noChange")))
 
-; (:m :ref RAWREPLAY-RED :do "digest of the owned dirty state: git diff HEAD plus the untracked files under owns; the lower rung's handoff passes it as :inheritedBase and the run journals it as (:inheritedBase :sha ...)")
+; (:m :ref RAWREPLAY-RED :do "digest of the owned dirty state: git diff --binary HEAD limited to owns plus the untracked files under owns; the lower rung's handoff passes it as :inheritedBase and the run journals it as (:inheritedBase :sha ...)")
 fn ! ownedDigest! owns: (List String) root: String -> String
-  (let [diff (optionOr (go/gitText! (list "git" "diff" "HEAD" "--") root) "")
+  (let [diff (optionOr (go/gitText! (listAppend (list "git" "diff" "--binary" "HEAD" "--") owns) root) "")
         untracked (optionOr (go/gitText! (listAppend (list "git" "ls-files" "--others" "--exclude-standard" "--") owns) root) "")
         paths (filter (fn [p] (not (stringEmpty? p))) (stringLines untracked))
         contents (map (fn [p] (str p "\n" (resultOr (fileReadString (str root "/" p)) ""))) paths)]

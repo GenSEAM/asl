@@ -15,11 +15,11 @@ fn turnForm num: Int64 reply: String -> String
 fn greenGate -> String
   "grep -q green subject.txt && echo '1 assertion(s) executed (1 passed)'"
 
-fn ! replay! id: String replies: (List String) seed: String change: String task: String gates: (List String) budget: Int64 inherit: Bool -> Replay
+fn ! replay! id: String replies: (List String) seed: String change: String task: String gates: (List String) budget: Int64 inherit: String -> Replay
   (let [(root (rk/freshRecorderRoot! id))
         (seeded (and (ok? (fileWrite (str root "/subject.txt") seed)) (gk/initGitRepo! root id "raw-protocol@example.invalid")))
         (changed (if (stringEmpty? change) true (ok? (fileWrite (str root "/subject.txt") change))))
-        (marker (if inherit (str " :inheritedBase \"" (rl/ownedDigest! (list "subject.txt" "hint.txt") root) "\"") ""))
+        (marker (if (stringEmpty? inherit) "" (str " :inheritedBase \"" (if (= inherit "good") (rl/ownedDigest! (list "subject.txt" "hint.txt") root) inherit) "\"")))
         (fixtureDir (str root "/tests/fixtures/agentLoop/mvp"))
         (_ (dirCreate fixtureDir))
         (turns (map (fn [p] (turnForm (+ (pairFirst p) 1) (pairSecond p))) (enumerate replies)))
@@ -61,25 +61,28 @@ fn fenced text: String -> String
 
 fn ! runTests -> Bool
   (let [(plain (replay! "rawPlain" (list (str "(:step :op \"write\" :file \"hint.txt\" :content \"" (c/escapeAsn (escapedText)) "\")") "(:done)")
-                 "seed\n" "" "write hint.txt" (list) 4 false))
+                 "seed\n" "" "write hint.txt" (list) 4 ""))
         (before (replay! "rawBefore" (list (str (fenced "hello raw") "\n" (rawStep)) "(:done)")
-                  "seed\n" "" "write hint.txt" (list) 4 false))
+                  "seed\n" "" "write hint.txt" (list) 4 ""))
         (missing (replay! "rawMissing" (list (rawStep) (str (rawStep) "\n" (fenced "second try")) "(:done)")
-                   "seed\n" "" "write hint.txt" (list) 5 false))
+                   "seed\n" "" "write hint.txt" (list) 5 ""))
         (echo (replay! "rawEcho" (list (echoStep) (echoStep) (echoStep) (echoStep) (str (rawStep) "\n" (fenced "after echo")) "(:done)")
-                "seed\n" "" "write hint.txt" (list) 8 false))
+                "seed\n" "" "write hint.txt" (list) 8 ""))
         (nudge (replay! "greenOwned" (list "(:step :op \"gate\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\" :text \"item complete\")"
                                            "(:step :op \"note\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\")")
-                 "before\n" "green\n" "make subject.txt say green and commit it" (list (greenGate)) 6 true))
+                 "before\n" "green\n" "make subject.txt say green and commit it" (list (greenGate)) 6 "good"))
         (leftover (replay! "greenLeftover" (list "(:step :op \"gate\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\" :text \"item complete\")"
                                            "(:step :op \"note\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\")")
-                 "before\n" "green\n" "make subject.txt say green and commit it" (list (greenGate)) 6 false))
+                 "before\n" "green\n" "make subject.txt say green and commit it" (list (greenGate)) 6 ""))
+        (stale (replay! "greenStale" (list "(:step :op \"gate\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\" :text \"item complete\")"
+                                           "(:step :op \"note\")" "(:step :op \"note\" :text \"item complete\")" "(:step :op \"note\")")
+                 "before\n" "green\n" "make subject.txt say green and commit it" (list (greenGate)) 6 "0000000000000000000000000000000000000000000000000000000000000000"))
         (stepDone (replay! "rawStepDone" (list (str (rawStep) "\n" (fenced "written")) "(:step :op \"done\")" "(:step :op \"note\")" "(:step :op \"note\" :text \"done\")" "(:step :op \"note\")")
-                    "seed\n" "" "write hint.txt" (list) 5 false))
+                    "seed\n" "" "write hint.txt" (list) 5 ""))
         (vacuous (replay! "greenVacuous" (list "(:step :op \"gate\")" "(:step :op \"done\")" "(:step :op \"note\")" "(:step :op \"note\" :text \"x\")")
-                   "green\n" "" "make subject.txt say green and commit it" (list (greenGate)) 4 false))]
+                   "green\n" "" "make subject.txt say green and commit it" (list (greenGate)) 4 ""))]
     (do
-      (assert (and plain.seeded (and before.seeded (and missing.seeded (and echo.seeded (and nudge.seeded (and stepDone.seeded (and leftover.seeded vacuous.seeded))))))) "the fixture repos are seeded")
+      (assert (and plain.seeded (and before.seeded (and missing.seeded (and echo.seeded (and nudge.seeded (and stepDone.seeded (and leftover.seeded (and stale.seeded vacuous.seeded)))))))) "the fixture repos are seeded")
       (assert (= plain.file (escapedText)) "c925 turn 1: a plain :content string over the raw size is written as sent, not refused as ERR_USE_RAW")
       (assert (not (stringContains? plain.journal "ERR_USE_RAW")) "no ERR_USE_RAW receipt for a plain string")
       (assert (= before.file "hello raw\n") (str "the only fenced block of the reply binds to the :raw step even before it: " before.file))
@@ -96,6 +99,8 @@ fn ! runTests -> Bool
       (assert (stringContains? nudge.journal ":signal :inheritedChange") "the ok on inherited changes says so: no work was done in the session")
       (assert (not (stringContains? leftover.journal "(:result :status :ok")) "a dirty owned tree with no inheritedBase marker (a leftover or a peer's edit) is not done")
       (assert (and (stringContains? leftover.journal ":signal :noChange") (stringContains? leftover.journal "(:result :status :needsReview")) "the leftover run ends needsReview with :signal :noChange")
+      (assert (and (stringContains? stale.journal "(:inheritedBase :sha \"0000") (not (stringContains? stale.journal "(:result :status :ok"))) "a stale :inheritedBase over a dirty tree (digest differs from the owned state) is refused: not ok")
+      (assert (and (stringContains? stale.journal ":signal :noChange") (stringContains? stale.journal "(:result :status :needsReview")) "the stale-marker run ends needsReview with :signal :noChange")
       (assert (= (replyCount nudge.journal) 1) (str "it ends on the first green turn: " (stringFromInt64 (replyCount nudge.journal)) " replies"))
       (assert (stringContains? stepDone.journal "(:result :status :ok") "7de069 turn 3: a (:step :op done) after a write is done")
       (assert (= (replyCount stepDone.journal) 2) (str "it ends on that turn: " (stringFromInt64 (replyCount stepDone.journal)) " replies"))
