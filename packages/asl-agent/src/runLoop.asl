@@ -503,6 +503,9 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
         baselineOn (!= (optionOr (ac/agentLoopValue cfgText ":baseline") "true") "false")
         preflight (go/gatePreflight! env.gates rootDir none)
         fresh (jr/newWritten rootDir head)
+        resumeSha (match env.resume
+          ((some _) (match (fileReadString (str (jr/splitExt env.journalPath) ".patch")) ((ok t) (some (bytesSha256 (stringToBytes t)))) ((err _) none)))
+          ((none) none))
         patchState (match env.resume
           ((some _) (match (jr/applyResumePatch fresh rootDir env.journalPath sid)
             ((err e) (pair fresh (pair none (some e)))) ((ok applied) applied)))
@@ -515,6 +518,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
     (do
       (jr/journalWrite env.journalPath header)
       (resumeJournal! applied env.journalPath)
+      (if (and (some? applied) (some? resumeSha)) (ok? (jr/journalWrite env.journalPath (str "(:resumeBase :sha \"" (optionOr resumeSha "") "\")\n"))) true)
       (cond
         ((not (listEmpty? cfgProblems))
           (let [message (c/joinSep cfgProblems "; ")]
@@ -831,6 +835,25 @@ fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s
     ((err handErr) (emptyResultWith env run.session "failed" (some handErr) run.state.turn none (list) none none none run.state.baselineGreen))
     ((ok hand) (emptyResultWith env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none run.state.baselineGreen)))
 
+; (:m :ref LEON-OK-WITHOUT-CHANGE :do "a run with declared gates and an :owns brief ends ok only when its final tree differs from its start: handBack's patch is none when every write was rejected or reverted, so green baseline gates cannot carry the verdict. A resumed run that restored a patch must also end with a patch other than the restored one (LEON-DONE-WITHOUT-WIRING); the restored patch's sha is journaled as :resumeBase at setup. Findings deliveries are exempt")
+fn ! resumeBaseSha! journalPath: String -> (Option String)
+  (match (listHead (filter (fn [l] (stringStartsWith? l "(:resumeBase :sha \"")) (stringLines (resultOr (fileReadString journalPath) ""))))
+    ((some l) (let [rest (c/sliceOf l 19 (stringLength l))] (some (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\"") 0)))))
+    ((none) none))
+
+fn withNoChange run: LoopRun state: s/LoopState -> LoopRun
+  (with run :state (with state :signalName (some "noChange")))
+
+fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) -> Bool
+  (if (and (= status "ok") (and (not (listEmpty? env.gates)) (and (not (listEmpty? env.owns)) (!= (optionOr state.deliver "") "findings"))))
+    (match patch
+      ((none) true)
+      ((some p)
+        (match (resumeBaseSha! env.journalPath)
+          ((some sha) (= sha (bytesSha256 (stringToBytes (resultOr (fileReadString (str rootDir "/" p)) "")))))
+          ((none) false))))
+    false)
+
 ; (:m :ref LEON-FAIL-STATUS :do "stale ad-hoc findings data does not fail a run that wrote its owned files and ended on green declared gates, and a downgrade to failed writes a verdict line naming the cause")
 fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
   (let [state run.state
@@ -862,16 +885,20 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
             ((err e) (failed e none (list)))
             ((ok hand)
               (let [patch (pairFirst (pairSecond hand))
-                    restored (pairSecond (pairSecond hand))]
-                (match (commit! env run rootDir finalStatus gatesGreen)
+                    restored (pairSecond (pairSecond hand))
+                    noChange (noChangeEnd? env state rootDir finalStatus patch)
+                    endStatus (if noChange "needsReview" finalStatus)
+                    _noChange (if noChange (journalSignal! env state.turn "noChange" "no persisted change versus the start of the run, or none beyond the restored patch") true)
+                    run2 (if noChange (withNoChange run state) run)]
+                (match (commit! env run2 rootDir endStatus gatesGreen)
                   ((err e) (failed e patch restored))
                   ((ok commit)
-                    (let [commitMissing (and (= finalStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
+                    (let [commitMissing (and (= endStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
                       (match (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
                             (ctx/coreStatsLine (coreHostZero))
-                            (resultText state run.session finalStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
+                            (resultText run2.state run.session endStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
                         ((err e) (failed e patch restored))
-                        ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
+                        ((ok _) (finalResult env run2 endStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
 
 fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> LoopRun
   (match (head! env run.state run.parseDefectStreak)
