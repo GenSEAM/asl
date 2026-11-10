@@ -645,7 +645,10 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         echoed (stringStartsWith? (opStr op "error" "") "ERR_")
         unbound (or (isRaw "content") (or (isRaw "old") (or (isRaw "new") (and echoed (none? (opGet op field))))))
         owns env.owns
-        effOwns (c/effectiveOwns owns)]
+        effOwns (c/effectiveOwns owns)
+        full (if (stringStartsWith? target "/") target (str (absRoot! env.root) "/" target))
+        existing (resultOr (fileSize full) 0)
+        wholeFile (and (= opName "write") (> existing 4096))]
     (cond
       (unbound
         (some (listAppend (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target)
@@ -655,6 +658,10 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MISSING_ARG") (vs "message" (str opName " needs :file")))))
       ((not (r/insideRoot! target env.root)) (some (rootRec (newId) opName target)))
       ((not (c/checkOwns target effOwns (absRoot! env.root))) (some (ownsRec (newId) opName target owns)))
+      (wholeFile
+        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_WRITE_WHOLE_FILE")
+          (vs "file" target) (pair "bytes" (vInt existing))
+          (vs "hint" "use (:edit :file F :old ... :new ...) on the fn that changes, or (:read :file F :symbol S) first"))))
       (else (none))))
 
 fn ! aslRunner! repoRoot: String transport: String env: (Option (List String)) runTimeout: Int64 deadlineAt: (Option Float64) -> (fn [String String] -> t/AslRun)
