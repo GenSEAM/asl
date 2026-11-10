@@ -1223,3 +1223,6 @@
 (:doc :symbol "asl/packages/asl-agent/tests/vacuousAtDoneTest.asl#runTests" :text "no args: runs the loop with a gate that passes vacuously and checks how a done with no real assertion is handled")
 (:doc :symbol "asl/packages/asl-agent/tests/wholeWriteTest.asl#runTests" :text "no args: checks that a whole write of an existing 5000-byte file is rejected while a 100-byte file is allowed")
 (:doc :symbol "asl/packages/asl-agent/tests/wireCheckTest.asl#runTests" :text "no args: checks the wiring check on fixtures where a helper is called, left uncalled or removed")
+(:doc :symbol "asl/packages/asl-agent/src/gitOps.asl#runGatesPar!" :text "gates root timeoutSec env watch limit: runs the gates with at most limit at once, using the recorded gate times, and returns one record list per gate in gate order")
+(:doc :symbol "asl/packages/asl-agent/tests/gatesParallelTest.asl#runTests" :text "no args: checks that gates run up to the parallelism cap with overlapping stamps, keep gate order in the result and mark pool rows; true when all hold")
+(:doc :symbol "asl/packages/asl-agent/tests/turnTimeTest.asl#runTests" :text "no args: runs a scripted session in a temp git repo and checks one (:turnTime :turn N :modelMs :gateMs :toolMs :totalMs) journal row per turn; true when all hold")
