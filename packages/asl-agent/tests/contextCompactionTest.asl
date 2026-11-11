@@ -24,7 +24,7 @@ fn writeConfig! root: String keepTurns: Int64 toolCapBytes: Int64 maxOlderLines:
   (ok? (fileWrite (str root "/.asl.config.asn")
     (str "(:agentLoop (:specCheck false :contextKeepTurns " (stringFromInt64 keepTurns)
       " :contextToolCapBytes " (stringFromInt64 toolCapBytes)
-      " :contextMaxOlderLines " (stringFromInt64 maxOlderLines) "))\n")))
+      " :contextMaxOlderLines " (stringFromInt64 maxOlderLines) " :readStreakEscalate 100 :readOnlyTurnCap 200))\n")))
 
 fn initRepo! root: String initial: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") initial))
