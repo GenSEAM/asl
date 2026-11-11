@@ -1,12 +1,14 @@
 (module asl/tools/tests/nativeWorkersDefaultTest
   :x [runTests]
   :i [(asl-tools/nativeTest :a nt)
+      (asl-tools/fleet/run :a fr)
       (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 ; (:m :ref NATIVE-WORKERS-DEFAULT :do "compile workers for one suite built alone come from the :native :suiteWorkers row, capped at (cpus-2)/2; a sweep (prepareAllIn) builds with none; objects are byte-identical either way")
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "every child starts through fr/runGuarded with a deadline and a descendant limit (spawnSafety); ASL_NATIVE_WORKERS is dropped from the inherited env so the config default is what a solo build sees")
+fn ! guarded argv: (List String) overrides: (List String) -> fr/ProcOut
+  (fr/runGuarded argv "." (filter (fn [(row String)] -> Bool (not (stringStartsWith? row "ASL_NATIVE_WORKERS="))) (fr/childEnv overrides)) (fr/limits 900 64))
 
 fn ! rowFor! dir: String row: String -> Int64
   (do (fileWrite (str dir "/.asl.config.asn") (str "(:config :native (" row "))\n"))
@@ -48,11 +50,15 @@ fn ! writeFixture! dir: String n: Int64 steps: Int64 -> String
         (_ (fileWrite suite (str "(module " (nt/importPathOf suite) "\n  :x [runTests]\n  :i [" imports "])\n\nfn ! runTests -> Bool\n  (do (assert (> (+ " calls ") 0) \"sum\") true)\n")))]
     suite)
 
-fn ! drive env: String driver: String how: String cache: String suite: String -> ProcessOutput
-  (sh (str "env -u ASL_NATIVE_WORKERS " env " ASL_NATIVE_TRACE=1 ASL_NATIVE_JOBS=4 nice -n 10 bin/asl run " driver " " how " '" cache "' " suite " </dev/null"))
+fn ! drive env: (List String) driver: String how: String cache: String suite: String -> fr/ProcOut
+  (guarded (list "/usr/bin/nice" "-n" "10" "bin/asl" "run" driver how cache suite) (listAppend env (list "ASL_NATIVE_TRACE=1" "ASL_NATIVE_JOBS=4")))
 
 fn ! seedPrelude! from: String to: String -> Bool
-  (= (sh (str "mkdir -p '" to "/modules' && cp -p '" from "'/modules/prelude-* '" to "/modules/'")).exitCode 0)
+  (let [(names (filter (fn [(n String)] -> Bool (stringStartsWith? n "prelude-")) (resultOr (dirList (str from "/modules")) (list))))
+        (made (dirCreate (str to "/modules")))]
+    (and (ok? made)
+         (and (not (listEmpty? names))
+              (= (guarded (listAppend (list "/bin/cp" "-p") (listAppend (map (fn [(n String)] -> String (str from "/modules/" n)) names) (list (str to "/modules/")))) (list)).exitCode 0))))
 
 fn ! bytesOf! dir: String -> Int64
   (fold (fn [(a Int64) (n String)] -> Int64 (+ a (match (fileStat (str dir "/" n)) ((ok st) st.size) ((err _) 0)))) 0
@@ -96,18 +102,19 @@ fn ! testSweepAndSolo dir: String -> Bool
         (warm (str dir "/warm"))
         (solo (str dir "/solo"))
         (sweep (str dir "/sweep"))
-        (warmOut (drive "ASL_NATIVE_WORKERS=4" driver "one" warm suite))
+        (warmOut (drive (list "ASL_NATIVE_WORKERS=4") driver "one" warm suite))
         (seeded (and (seedPrelude! warm solo) (seedPrelude! warm sweep)))
-        (soloOut (drive "" driver "one" solo suite))
-        (sweepOut (drive "" driver "all" sweep suite))
+        (soloOut (drive (list) driver "one" solo suite))
+        (sweepOut (drive (list) driver "all" sweep suite))
         (tinyCache (str dir "/tiny"))
         (seededTiny (seedPrelude! warm tinyCache))
-        (tinyOut (drive "" driver "one" tinyCache smallSuite))
+        (tinyOut (drive (list) driver "one" tinyCache smallSuite))
         (cpus (resultOr (cpuCount) 1))
         (jobs (min 4 cpus))
         (expected (min (nt/soloSpread (min (nt/soloWorkersOf (none) (nb/suiteWorkersFor! ".") cpus) jobs) (bytesOf! pkg)) 7))
         (objsSolo (moduleObjects solo))
-        (objsSweep (moduleObjects sweep))]
+        (objsSweep (moduleObjects sweep))
+        (objsWarm (moduleObjects warm))]
     (do (assert (= warmOut.exitCode 0) (str "an explicit 4-worker build compiles the fixture and leaves the self binary built: " warmOut.stderr))
         (assert seeded "the solo and sweep caches start from the warm prelude objects")
         (assert (= soloOut.exitCode 0) (str "the suite built alone passes: " soloOut.stderr))
@@ -120,7 +127,11 @@ fn ! testSweepAndSolo dir: String -> Bool
         (refute (stringContains? sweepOut.stderr "NATIVE-WORKERS :k") (str "prepareAllIn, the sweep's builder, spawns no compile workers: " sweepOut.stderr))
         (assert (= (listLength objsSolo) 8) (str "the solo cache holds 8 module objects (6 deps, the suite, the entry wrapper): " (listLength objsSolo)))
         (assert (= objsSolo objsSweep) "with and without workers the module objects carry the same keys")
-        (assert (sameBytes? solo sweep objsSolo) "every module object built by workers is byte-identical to the one built without")
+        (assert (sameBytes? solo sweep objsSolo) "every module object of the solo build is byte-identical to the one built without workers")
+        (assert (stringContains? warmOut.stderr "NATIVE-WORKERS :k ") (str "the explicit ASL_NATIVE_WORKERS=4 build ran compile workers, on any machine: " warmOut.stderr))
+        (assert (stringContains? warmOut.stderr "NATIVE-WORKERS :done") "the explicit build waited for its workers before linking")
+        (assert (= objsWarm objsSweep) (str "the worker-built cache holds the same object keys as the sweep build: " (listLength objsWarm) " and " (listLength objsSweep)))
+        (assert (sameBytes? warm sweep objsWarm) "every module object a worker wrote is byte-identical to the one the sweep built in one process")
         true))
 
 fn ! runTests -> Bool
