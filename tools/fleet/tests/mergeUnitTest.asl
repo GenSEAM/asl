@@ -136,7 +136,7 @@ fn ! runCoreTests -> Bool
         (okK7 (mu/mergeUnit! (with cfg :log logK7) "k7"))
         (lk7 (logOf logK7))
         (logK6 (str tmp "/k6.log"))
-        (cliK6 (fr/runOneLimited (fr/job (list "./bin/asl" "run" "asl/tools/fleet/mergeUnit.asl" "--graph-dir" (str tmp "/graphs") "--main" main "--worktrees" wtRoot "--brief-dir" briefs "--audit" "none" "--lock" (str tmp "/cli.lock") "--log" logK6 "--gate-secs" "60" "k6") "." (fr/childEnv (list))) (fr/limits 600 64)))
+        (cliK6 (fr/runOneLimited (fr/job (list "./bin/asl" "run" "asl/tools/fleet/mergeUnit.asl" "--graph-dir" (str tmp "/graphs") "--main" main "--worktrees" wtRoot "--brief-dir" briefs "--audit" "none" "--lock" (str tmp "/cli.lock") "--lock-wait" "30" "--log" logK6 "--gate-secs" "60" "k6") "." (fr/childEnv (list))) (fr/limits 600 64)))
         (lk6 (logOf logK6))
         (mergedIn (fn [(t String)] -> Int64 (listLength (filter (fn [(l String)] -> Bool (stringContains? l ":event :MERGED")) (stringLines t)))))
         (rulesDir (ok? (dirCreate (str main "/asl/grammar"))))
