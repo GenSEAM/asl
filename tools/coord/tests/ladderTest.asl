@@ -285,6 +285,15 @@ fn testBriefWholeDiff -> Bool
         (assert (stringContains? bBig "diff clipped") "a diff past the cap says it was clipped")
         true))
 
+; (:m :ref REVIEW-SCRUB-SILENT :do "a code line naming tokens is withheld with a marker in its place, never dropped silently")
+fn testBriefWithheldMarker -> Bool
+  (let [(u (l/ReviewUnit :id "U3" :task "t" :risk "low" :closureChanged false :writerAlias "x" :writerChannel "agy" :startRung "" :fixesUsed 0 :prior (list)))
+        (b (l/reviewBrief u "+ (list (+ a 1)\n+       (+ b r.inTokens)\n+       (+ c 2))" ""))]
+    (do (assert (stringContains? b "line withheld by the secret filter") (str "a filtered line leaves a marker: " b))
+        (refute (stringContains? b "inTokens") "the filtered line itself does not go out")
+        (assert (stringContains? b "(+ c 2)") "the lines around it are kept")
+        true))
+
 fn testBrief -> Bool
   (let [(u (l/ReviewUnit :id "U1" :task "fix bound\nsee .asl/mem/plan.asn\nkey sk-or-abc123" :risk "low" :closureChanged false :writerAlias "x" :writerChannel "agy" :startRung "" :fixesUsed 0 :prior (list)))
         (b (l/reviewBrief u "+ ok line\n+ TOKEN=abc\n+ path .asl/mem/x\n- gone" "(:receipt U1 :gates ())"))]
@@ -415,4 +424,5 @@ fn ! runTests -> Bool
       (assert (testBlocked) "blocked")
       (assert (testBrief) "brief")
       (assert (testBriefWholeDiff) "whole diff reaches the reviewer")
+      (assert (testBriefWithheldMarker) "a withheld diff line leaves a marker")
       true)

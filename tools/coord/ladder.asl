@@ -336,8 +336,17 @@ fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
 fn reviewDiffLines -> Int64
   800
 
+fn withheldLine -> String
+  "(one line withheld by the secret filter; it exists, so do not fail on its absence)"
+
+; (:m :ref REVIEW-SCRUB-SILENT :do "node2 2026-11-11: the filter dropped every diff line naming token or secret, so aggRow lost its inTokens and cachedTokens lines and synDs41Flash failed THROUGHPUT-DAILY for indices it was not shown; a withheld line now leaves a marker in its place")
+fn reviewScrub diff: String maxLines: Int64 width: Int64 -> (List String)
+  (eg/scrubLinesBy (fn [(l String)] -> Bool false)
+                   (stringJoin (map (fn [(l String)] -> String (if (secretLike? l) (withheldLine) l)) (stringLines diff)) "\n")
+                   maxLines width)
+
 fn reviewDiffPart diff: String -> (List String)
-  (let [(shown (scrubLines diff (reviewDiffLines) 400))
+  (let [(shown (reviewScrub diff (reviewDiffLines) 400))
         (total (listLength (stringLines diff)))]
     (if (> total (reviewDiffLines))
       (listAppend shown (list (str "(diff clipped: " (stringFromInt64 (- total (reviewDiffLines))) " more lines not shown; do not fail on code you were not shown)")))
