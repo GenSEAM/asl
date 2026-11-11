@@ -2222,6 +2222,8 @@
 (:doc :symbol "asl/tools/nativeTest.asl#suiteWorkersFor" :text "k cpus: the suite worker count, the smaller of k and (cpus minus 2) divided by 2, at least 1")
 (:doc :symbol "asl/tools/nativeTest.asl#treeOf" :text "root: the real path of root, or root itself when it cannot be resolved")
 (:doc :symbol "asl/tools/nativeTest.asl#unitKey" :text "fp u ifaceMap isEntry inits: the unit key for a link unit, computed with the self root and interface map")
+(:doc :symbol "asl/tools/nativeTest.asl#workerPhasesWanted?" :text "trace: true only when ASL_NATIVE_TRACE is 1, the one switch that makes a compile worker print its NATIVE-WORKER-PHASES line")
+(:doc :symbol "asl/tools/tests/nativeWorkerPhasesQuietTest.asl#runTests" :text "a 4-worker native build prints no NATIVE-WORKER-PHASES line without the trace and one per worker with ASL_NATIVE_TRACE=1")
 (:doc :symbol "asl/tools/observe/tests/bangDefsTest.asl#runTests" :text "no args: runs the bang definition cases in a scratch cache under the root and returns true when all assertions hold")
 (:doc :symbol "asl/tools/tests/prepareAllTest.asl#runTests" :text "no args: runs the prepare-all cases in a scratch dir under TMPDIR and returns true when all assertions hold")
 (:doc :symbol "asl/tools/vcs/git.asl#applyPatch!" :text "repo patch reverse: applies patch to repo with git apply, reversed when reverse is set, and returns the git output")
