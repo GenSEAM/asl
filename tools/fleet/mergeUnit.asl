@@ -1,6 +1,6 @@
 (module asl-tools/fleet/mergeUnit
   :x [Cfg defaultCfg gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
-  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (tools/fleet/graph :a gr) (asl-gates/suiteTimes :a st)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
 
@@ -23,6 +23,7 @@
   (:f graphSelect Bool :default true)
   (:f graphDir String :default "")
   (:f checkCmd String :default "./bin/asl check")
+  (:f aslBin String :default "./bin/asl")
   (:f invariantCapS Int64 :default 120)
   (:f invariantCosts (List String) :default (list
     "./bin/asl test tools/tests/noSelfHostTest.asl=30"
@@ -103,26 +104,21 @@ fn ! testsFor! wt: String file: String -> (List String)
                                (and (stringContains? t (str "(" mod " ")) (stringContains? t "runTests")))))
           names))))
 
-fn ! readAt! wt: String rev: String p: String -> (Option String)
-  (let [(o (gitOut! wt (list "show" (str rev ":" p))))]
-    (if (= o.exit 0) (some o.out) (none)))
-
-; (:m :ref MERGE-NEIGHBOURS-PAR :do "the neighbour suites by tools/fleet/graph.asl#selectTrain on the worktree's graph: symbol grain when every changed file is confined to fn bodies and signatures, else the file-grain impact set; none when the graph cannot be built, and the import scan runs instead")
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "the neighbour suites from the main checkout's tools/fleet/graph.asl run as a bounded subprocess (aslBin run GRAPH select BASE WT --cache DIR --check CMD, in the worktree), one suite path per line; none when the file is absent, the subprocess fails or times out, and the import scan runs instead. asl/ never imports tools/")
 fn ! graphGates! cfg: Cfg wt: String -> (Option (List String))
-  (match (if (stringEmpty? cfg.graphDir) (gr/graphFor! wt wt "HEAD") (gr/loadGraphIn! cfg.graphDir (gr/classTag) wt wt "HEAD"))
-    ((err _) (none))
-    ((ok g)
-      (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
-            (changed (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out))))
-            (picked (gr/selectTrain g changed (fn [(p String)] -> (Option String) (readAt! wt cfg.branch p)) (fn [(p String)] -> (Option String) (readAt! wt "HEAD" p))
-                                    (fn [(p String)] -> Bool (green? (sh! wt (str cfg.checkCmd " " wt "/" p) 300)))))]
-        (some (map (fn [(t String)] -> String (str cfg.testCmd " " t))
-                   (filter (fn [(t String)] -> Bool (and (stringEndsWith? t ".asl") (and (fileExists? (str wt "/" t)) (not (stringContains? t "/fixtures/"))))) picked))))))
+  (let [(graph (str cfg.main "/tools/fleet/graph.asl"))]
+    (if (not (fileExists? graph)) (none)
+      (let [(d (fr/runOneLimited (fr/job (listAppend (list cfg.aslBin "run" graph "select" cfg.branch wt "--check" cfg.checkCmd) (if (stringEmpty? cfg.graphDir) (list) (list "--cache" cfg.graphDir))) wt (fr/childEnv (list))) (fr/limits 600 64)))]
+        (if (and (= d.verdict "exit") (= d.exit 0))
+          (some (map (fn [(t String)] -> String (str cfg.testCmd " " t))
+                     (filter (fn [(t String)] -> Bool (and (stringEndsWith? t ".asl") (and (fileExists? (str wt "/" t)) (not (stringContains? t "/fixtures/")))))
+                             (map stringTrim (stringLines d.out)))))
+          (none)))))
 
-fn ! neighbourGates! cfg: Cfg wt: String -> (List String)
+fn ! neighbourGates! cfg: Cfg unit: String wt: String -> (List String)
   (match (if cfg.graphSelect (graphGates! cfg wt) (none))
-    ((some gs) gs)
-    ((none) (scanGates! cfg wt)))
+    ((some gs) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs)))) gs))
+    ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\"") (scanGates! cfg wt))))
 
 fn ! scanGates! cfg: Cfg wt: String -> (List String)
   (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
@@ -378,7 +374,7 @@ fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg unit)))))))]
+        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg unit wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg unit)))))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
@@ -432,6 +428,7 @@ fn parseLoop args: (List String) p: Parsed -> Parsed
           ((= a "--merge-lock") (parseLoop more (with p :cfg (with c :mergeLock v))))
           ((= a "--graph-dir") (parseLoop more (with p :cfg (with c :graphDir v))))
           ((= a "--lock-wait") (parseLoop more (with p :cfg (with c :lockWaitS (intOpt v)))))
+          ((= a "--asl-bin") (parseLoop more (with p :cfg (with c :aslBin v))))
           ((= a "--gate-slots") (parseLoop more (with p :cfg (with c :gateSlots (intOpt v)))))
           ((= a "--after") (parseLoop more (with p :after (intOpt v))))
           (else (with p :error (str "unknown option " a)))))))

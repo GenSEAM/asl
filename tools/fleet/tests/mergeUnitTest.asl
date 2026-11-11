@@ -232,7 +232,8 @@ fn ! runSpeedTests -> Bool
         (suites (and srcDirs (and (commitIn! main "pkg/src/mod.asl" modText)
                              (and (commitIn! main "pkg/tests/fTest.asl" "(module pkg/tests/fTest\n  :x [runTests]\n  :i [(pkg/mod :a m)])\nfn runTests -> Bool\n  (m/f)\n")
                                   (commitIn! main "pkg/tests/gTest.asl" "(module pkg/tests/gTest\n  :x [runTests]\n  :i [(pkg/mod :a m)])\nfn runTests -> Bool\n  (m/g)\n")))))
-        (cfg (with (mu/defaultCfg) :main main :worktrees wtRoot :briefDir briefs :lock (str tmp "/mainbuild.lock") :audit "none" :gateSecs 60 :testCmd "test -f" :lockWaitS 60 :graphDir (str tmp "/graphs") :checkCmd "true"))
+        (graphCopy (and (ok? (dirCreate (str main "/tools/fleet"))) (write (str main "/tools/fleet/graph.asl") (resultOr (fileReadString "tools/fleet/graph.asl") ""))))
+        (cfg (with (mu/defaultCfg) :main main :worktrees wtRoot :briefDir briefs :lock (str tmp "/mainbuild.lock") :audit "none" :gateSecs 60 :testCmd "test -f" :lockWaitS 60 :graphDir (str tmp "/graphs") :checkCmd "true" :aslBin (str (resultOr (realPath ".") ".") "/bin/asl")))
         (s1 (addEditUnit! main wtRoot briefs "s1" "pkg/src/mod.asl" "(module pkg/mod\n  :x [f g])\nfn f -> Bool\n  true\nfn g -> Bool\n  (not false)\n" "\"test -f base.txt\""))
         (s1c true)
         (logS1 (str tmp "/s1.log"))
@@ -258,7 +259,7 @@ fn ! runSpeedTests -> Bool
         (staleMk (and (ok? (dirCreate staleDir)) (write (str staleDir "/pid") "4000000")))
         (st1 (addUnit! main wtRoot briefs "st1" "st1.txt" "\"test -f st1.txt\""))
         (logSt (str tmp "/st.log"))
-        (okSt (mu/mergeUnit! (with cfg :log logSt :lock staleLock) "st1"))
+        (okSt (mu/mergeUnit! (with cfg :log logSt :lock staleLock :aslBin "/nonexistent/asl") "st1"))
         (lsSt (logOf logSt))
         (staleGone (not (fileExists? staleDir)))
         (q1 (addUnit! main wtRoot briefs "q1" "q1.txt" "\"sleep 2; test -f q1.txt\""))
@@ -271,6 +272,7 @@ fn ! runSpeedTests -> Bool
         (order (mu/gateOrder cfg (list "test -f fast.asl" "test -f slow.asl" "test -f unknown.asl" "other cmd") (mapSet (mapSet (mapEmpty) "fast.asl" 5) "slow.asl" 900)))
         (cleaned (ok? (pathRemove tmp)))]
     (do
+      (assert (and graphCopy (stringContains? lsS1 ":event :NEIGHBOUR-SELECTOR :by \"scan\"") (stringContains? lsS2 ":event :NEIGHBOUR-SELECTOR :by \"graph\"") (stringContains? lsSt ":event :NEIGHBOUR-SELECTOR :by \"scan\"")) (str "the selector that ran is named: scan when graphSelect is off or the subprocess fails, graph otherwise: " lsS2 lsSt))
       (assert (and dirs base init suites s1 s1c s2 s2c) "the speed fixtures are built through gitInitKit and the vcs module")
       (assert (and okS1 (stringContains? lsS1 "pkg/tests/fTest.asl") (stringContains? lsS1 "pkg/tests/gTest.asl")) (str "the import scan picks both suites that import the changed module: " lsS1))
       (assert (and okS2 (stringContains? lsS2 ":cmd \"test -f pkg/tests/gTest.asl\"") (not (stringContains? lsS2 "fTest")) (not (stringContains? lsS2 ":cmd \"test -f pkg/src/mod.asl"))) (str "selectTrain at symbol grain picks only the suite that reaches the changed fn on a body-only change: " lsS2))
