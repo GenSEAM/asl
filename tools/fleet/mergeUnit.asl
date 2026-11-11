@@ -123,10 +123,22 @@ fn ! neighbourGates! cfg: Cfg unit: String wt: String -> (List String)
       (if (and (listEmpty? gs) (not (stringEmpty? (stringTrim (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))).out))))
         (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\" :why \"graphEmpty\"") (scanGates! cfg wt))
         (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs))))
-            (capNeighbours cfg unit (timesNow!) (scanGates! cfg wt) gs))))
+            (capNeighbours cfg unit (timesNow!) (listAppend (scanGates! cfg wt) (importersOf! cfg wt gs)) gs))))
     ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"scan\" :why " (if cfg.graphSelect "\"graphUnavailable\"" "\"off\""))) (scanGates! cfg wt))))
 
-; (:m :ref MERGE-NEIGHBOUR-FANOUT :do "a file many suites depend on (the test runner, prelude, fleet/run) selects hundreds of neighbour suites and held the merge queue for hours; the selected suites cost their gateTimes median (60 s when unrecorded), and when they would need more than cfg.neighbourBudgetS of wall time on cfg.gateSlots slots, the suites that import the changed module directly (the import scan) are kept and the rest are sampled in a fixed order (sha256 of the suite path, so the same selection always gives the same sample) up to the budget; the event NEIGHBOUR-CAP names :n selected, :picked, :direct, :budgetS and :costS; a set within budget is returned unchanged and logs nothing")
+; (:m :ref MERGE-NEIGHBOUR-FANOUT :do "the suites among gs whose source names a module changed by the branch in an import, (<module> ...), wherever that module lives: the import scan only covers /src/ files, so a change to tools/fleet/run.asl or mergeUnit.asl would otherwise have no direct importer")
+fn ! importersOf! cfg: Cfg wt: String gs: (List String) -> (List String)
+  (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
+        (mods (filter (fn [(m String)] -> Bool (not (stringEmpty? m)))
+                (map (fn [(f String)] -> String (moduleOf! (str wt "/" f))) (filter (fn [(f String)] -> Bool (stringEndsWith? f ".asl")) (stringLines d.out)))))]
+    (if (listEmpty? mods)
+      (list)
+      (filter (fn [(g String)] -> Bool
+                (let [(t (resultOr (fileReadString (str wt "/" (gateKey cfg g))) ""))]
+                  (listAny? (fn [(m String)] -> Bool (stringContains? t (str "(" m " "))) mods)))
+              gs)))
+
+; (:m :ref MERGE-NEIGHBOUR-FANOUT :do "a file many suites depend on (the test runner, prelude, fleet/run) selects hundreds of neighbour suites and held the merge queue for hours; the selected suites cost their gateTimes median (60 s when unrecorded), and when they would need more than cfg.neighbourBudgetS of wall time on cfg.gateSlots slots, the suites that import the changed module directly (the import scan) are kept and the rest are sampled in a fixed order (sha256 of the suite path, so the same selection always gives the same sample) up to the budget; the event NEIGHBOUR-CAP names :n selected, :picked, :direct, :budgetS and :costS; a set within budget is returned unchanged and logs nothing; the default budget 1200 s is adopted, not measured: from ~/.asl/run/gateTimes.asn on 2026-11-11 (1504 suites, total 26429 s, median 1.9 s, p90 18 s, max 1949 s) 1200 s on 2 slots is 2400 slot-seconds, about 9% of all suite time, and the 60 s cost of an unrecorded suite is about 30 times the median")
 fn costSecs cfg: Cfg times: (Map String Int64) g: String -> Int64
   (/ (+ (optionOr (mapGet times (gateKey cfg g)) 60000) 999) 1000)
 
