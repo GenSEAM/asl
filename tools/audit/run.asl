@@ -1,6 +1,6 @@
 (module asl-tools/audit/run
   :x [Lens AuditCfg Finding RunOut segs parseConfig scanText promptOf real? flagged? rowsFor heldBy git! rangeFiles! run! main]
-  :i [(tools/fleet/model :a fm) (asl-tools/fleet/run :a fr) (asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/reviewStage :a rs) (asl-parser/reader :a rd)])
+  :i [(asl-tools/fleet/model :a fm) (asl-tools/fleet/run :a fr) (asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/reviewStage :a rs) (asl-parser/reader :a rd)])
 
 ; (:m :ref AUD-RUN :do "the release audit loop as one command: ~/.asl/audit.asn names the lenses, their models and consensus rule; the range runs from the last release tag (or :since) to HEAD; static lenses find candidates, models vote on bounded code slices, flagged findings of :queue true lenses become (:u ...) rows that are imported dry, then for real; one (:auditRun ...) row per run")
 

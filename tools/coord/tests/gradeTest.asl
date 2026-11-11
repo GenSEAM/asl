@@ -1,6 +1,6 @@
 (module asl/tools/coord/tests/gradeTest
   :x [runTests]
-  :i [(asl-tools/coord/grade :a g) (tools/fleet/model :a fm)])
+  :i [(asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm)])
 
 fn agyFlash -> g/Candidate
   (g/Candidate :channel "agy" :model "gemini-3.8-flash-high" :available true)

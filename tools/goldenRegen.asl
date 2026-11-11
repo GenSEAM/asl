@@ -1,7 +1,7 @@
 (module asl-tools/goldenRegen
   :x [Target PathChange onlyIn significant pathOfLine pathCounts digitsPrefix numberAfter closureFiles git! pinOf! pinOfText! commitsIn! changesOf! untraced? checkerTarget! irTargets! corpusTarget! main]
   :i [(asl-tools/fleet/run :a fr)
-      (tools/fleet/model :a fm)
+      (asl-tools/fleet/model :a fm)
       (asl/packages/asl-checker/tests/quadGoldenTest :a cq)
       (asl/packages/asl-ir/tests/quadGoldenTest :a iq)
       (asl/packages/asl-ir/tests/lowerCorpusTest :a lct)
