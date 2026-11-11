@@ -1,6 +1,6 @@
 (module asl-tools/fleet/mergeUnit
-  :x [Cfg defaultCfg waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
-  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg)])
+  :x [Cfg defaultCfg gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (tools/fleet/graph :a gr) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
 
@@ -17,6 +17,12 @@
   (:f retries Int64 :default 3)
   (:f testCmd String :default "./bin/asl test")
   (:f lockMaxAgeS Int64 :default 3600)
+  (:f mergeLock String :default "")
+  (:f lockWaitS Int64 :default 10800)
+  (:f gateSlots Int64 :default 2)
+  (:f graphSelect Bool :default true)
+  (:f graphDir String :default "")
+  (:f checkCmd String :default "./bin/asl check")
   (:f invariantCapS Int64 :default 120)
   (:f invariantCosts (List String) :default (list
     "./bin/asl test tools/tests/noSelfHostTest.asl=30"
@@ -97,7 +103,28 @@ fn ! testsFor! wt: String file: String -> (List String)
                                (and (stringContains? t (str "(" mod " ")) (stringContains? t "runTests")))))
           names))))
 
+fn ! readAt! wt: String rev: String p: String -> (Option String)
+  (let [(o (gitOut! wt (list "show" (str rev ":" p))))]
+    (if (= o.exit 0) (some o.out) (none)))
+
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "the neighbour suites by tools/fleet/graph.asl#selectTrain on the worktree's graph: symbol grain when every changed file is confined to fn bodies and signatures, else the file-grain impact set; none when the graph cannot be built, and the import scan runs instead")
+fn ! graphGates! cfg: Cfg wt: String -> (Option (List String))
+  (match (if (stringEmpty? cfg.graphDir) (gr/graphFor! wt wt "HEAD") (gr/loadGraphIn! cfg.graphDir (gr/classTag) wt wt "HEAD"))
+    ((err _) (none))
+    ((ok g)
+      (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
+            (changed (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out))))
+            (picked (gr/selectTrain g changed (fn [(p String)] -> (Option String) (readAt! wt cfg.branch p)) (fn [(p String)] -> (Option String) (readAt! wt "HEAD" p))
+                                    (fn [(p String)] -> Bool (green? (sh! wt (str cfg.checkCmd " " wt "/" p) 300)))))]
+        (some (map (fn [(t String)] -> String (str cfg.testCmd " " t))
+                   (filter (fn [(t String)] -> Bool (and (stringEndsWith? t ".asl") (and (fileExists? (str wt "/" t)) (not (stringContains? t "/fixtures/"))))) picked))))))
+
 fn ! neighbourGates! cfg: Cfg wt: String -> (List String)
+  (match (if cfg.graphSelect (graphGates! cfg wt) (none))
+    ((some gs) gs)
+    ((none) (scanGates! cfg wt)))
+
+fn ! scanGates! cfg: Cfg wt: String -> (List String)
   (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
         (files (filter (fn [f] (and (stringContains? f "/src/") (stringEndsWith? f ".asl"))) (stringLines d.out)))
         (tests (fold (fn [acc f] (listAppend acc (testsFor! wt f))) (list) files))]
@@ -197,14 +224,46 @@ fn ! invariantGates! cfg: Cfg unit: String -> (List String)
                                (do (emit! cfg unit "SKIPPED-OVERCAP" (str ":cmd " (q c) " :costS " secs " :capS " cfg.invariantCapS)) false)))))
             cmds))
 
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "a gate's key in the gate times file is its suite path: the test command prefix is dropped, any other command keeps its whole text")
+fn gateKey cfg: Cfg g: String -> String
+  (let [(pre (str cfg.testCmd " "))]
+    (if (stringStartsWith? g pre) (stringTrim (optionOr (stringSlice g (stringLength pre) (stringLength g)) "")) g))
+
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "start order of the gates, longest first by the gateTimes median, a gate with no recorded time first (treated as heavy); the result lists gate indexes")
+fn gateOrder cfg: Cfg gates: (List String) times: (Map String Int64) -> (List Int64)
+  (st/startOrder (map (fn [(g String)] -> String (gateKey cfg g)) gates) times)
+
+fn ! timesNow! -> (Map String Int64)
+  (match (st/timesPath!)
+    ((ok p) (resultOr (st/readTimes! p) (mapEmpty)))
+    ((err _) (mapEmpty)))
+
+fn ! gateJob wt: String cmd: String -> fr/Job
+  (fr/job (list "env" "-u" "ASL_ROOT" "-u" "ASL_PRELUDE" "nice" "-n" "10" "sh" "-c" cmd) wt (fr/childEnv (list)))
+
+fn posOf order: (List Int64) gi: Int64 -> Int64
+  (fold (fn [(acc Int64) (p (Pair Int64 Int64))] -> Int64 (if (= (pairSecond p) gi) (pairFirst p) acc)) -1 (enumerate order))
+
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "every gate runs in the worktree through the fleet pool, cfg.gateSlots at a time, longest first; the result is one green flag per gate in the gates' own order, so verdicts do not depend on the run order")
+fn ! greensOf! cfg: Cfg wt: String gates: (List String) -> (List Bool)
+  (let [(order (gateOrder cfg gates (timesNow!)))
+        (jobs (map (fn [(i Int64)] -> fr/Job (gateJob wt (optionOr (listGet gates i) ""))) order))
+        (dones (fr/runPoolLimited jobs cfg.gateSlots (fr/limits cfg.gateSecs 64)))]
+    (map (fn [(gi Int64)] -> Bool
+           (let [(pos (posOf order gi))]
+             (listAny? (fn [(d fr/Done)] -> Bool (and (= d.idx pos) (green? d))) dones)))
+         (range 0 (listLength gates))))
+
 fn ! gatesPass! cfg: Cfg unit: String wt: String gates: (List String) -> Bool
-  (fold (fn [(ok0 Bool) (g String)] -> Bool
-          (if (gateRun! wt g cfg.gateSecs)
-            (do (emit! cfg unit "GATE" (str ":cmd " (q g) " :exit 0")) ok0)
-            (let [(v (gateVerdict! cfg g))]
-              (do (emit! cfg unit v (str ":cmd " (q g)))
-                  (and ok0 (= v "BASE-RED"))))))
-        true gates)
+  (let [(greens (greensOf! cfg wt gates))]
+    (fold (fn [(ok0 Bool) (i Int64)] -> Bool
+            (let [(g (optionOr (listGet gates i) ""))]
+              (if (optionOr (listGet greens i) false)
+                (do (emit! cfg unit "GATE" (str ":cmd " (q g) " :exit 0")) ok0)
+                (let [(v (gateVerdict! cfg g))]
+                  (do (emit! cfg unit v (str ":cmd " (q g)))
+                      (and ok0 (= v "BASE-RED")))))))
+          true (range 0 (listLength gates))))
 
 fn ! auditPass! cfg: Cfg wt: String -> Bool
   (if (or (stringEmpty? cfg.audit) (= cfg.audit "none")) true
@@ -255,8 +314,64 @@ fn ! ffLoop! cfg: Cfg unit: String wt: String branch: String try: Int64 -> Bool
         (do (emit! cfg unit "REBASED-ONTO-MOVED-MAIN" ":note \"disjoint; the gates ran on the earlier base\"")
             (ffLoop! cfg unit wt branch (+ try 1))))))
 
+; (:m :ref MERGE-QUEUE-LOCK :do "the main-merge lock directory: cfg.mergeLock, or cfg.lock with .merge appended; it holds a pid file naming the owner")
+fn lockDirOf cfg: Cfg -> String
+  (if (stringEmpty? cfg.mergeLock) (str cfg.lock ".merge") cfg.mergeLock)
+
+fn ! ownerOf! dir: String -> Int64
+  (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str dir "/pid")) ""))) -1)
+
+fn ! parentDir! path: String -> String
+  (stringJoin (listTake (stringSplit path "/") (- (listLength (stringSplit path "/")) 1)) "/")
+
+fn ! tryLock! dir: String -> Bool
+  (let [(_ (dirCreate (parentDir! dir)))
+        (got (fr/runOneLimited (fr/job (list "mkdir" dir) "." (fr/childEnv (list))) (fr/limits 20 8)))]
+    (if (= got.exit 0) (ok? (fileWrite (str dir "/pid") (stringFromInt64 (procSelf)))) false))
+
+; (:m :ref MERGE-QUEUE-LOCK :do "a lock is stale when its owner pid is dead, or when it has no pid file and is older than 30 s (a holder that died between mkdir and the pid write); it is taken over by an atomic rename to a private name, so two takers cannot both win, and a lock that turns out to be live again is not kept")
+fn ! staleOwner! dir: String -> (Option Int64)
+  (let [(o (ownerOf! dir))]
+    (cond
+      ((> o 1) (if (resultOr (procAlive? o) true) (none) (some o)))
+      (else (match (fileStat dir)
+              ((ok st) (if (> (- (/ (nowNs) 1000000000) st.mtime) 30) (some o) (none)))
+              ((err _) (none))))))
+
+fn ! takeOver! cfg: Cfg unit: String dir: String owner: Int64 -> Bool
+  (let [(mine (str dir ".stale." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))
+        (mv (fr/runOneLimited (fr/job (list "mv" dir mine) "." (fr/childEnv (list))) (fr/limits 20 8)))]
+    (if (!= mv.exit 0) false
+      (do (pathRemove mine)
+          (emit! cfg unit "LOCK-TAKEOVER" (str ":deadPid " owner))
+          true)))
+
+fn ! lockLoop! cfg: Cfg unit: String dir: String deadline: Int64 waited: Bool -> Bool
+  (cond
+    ((tryLock! dir) true)
+    ((>= (monotonicNs) deadline) (do (emit! cfg unit "LOCK-TIMEOUT" (str ":holder " (stringFromInt64 (ownerOf! dir)))) false))
+    (else
+      (match (staleOwner! dir)
+        ((some o) (do (takeOver! cfg unit dir o) (lockLoop! cfg unit dir deadline waited)))
+        ((none) (do (if waited true (emit! cfg unit "LOCK-WAIT" (str ":holder " (stringFromInt64 (ownerOf! dir)))))
+                    (sleepMs 500)
+                    (lockLoop! cfg unit dir deadline true))))))
+
+; (:m :ref MERGE-QUEUE-LOCK :do "body runs while this process holds the main-merge lock; concurrent callers queue on it for at most cfg.lockWaitS and then fail with LOCK-TIMEOUT")
+fn ! withLock! cfg: Cfg unit: String body: (fn [] -> Bool) -> Bool
+  (let [(dir (lockDirOf cfg))]
+    (if (not (lockLoop! cfg unit dir (+ (monotonicNs) (* cfg.lockWaitS 1000000000)) false)) false
+      (do (emit! cfg unit "LOCK-ACQUIRED" (str ":pid " (stringFromInt64 (procSelf))))
+          (let [(r (body))]
+            (do (pathRemove dir)
+                (emit! cfg unit "LOCK-RELEASED" "")
+                r)))))
+
 ; (:m :do "one unit end to end; hook runs after the gates and the audit, just before the first merge attempt (the test moves main there). true when merged")
 fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
+  (withLock! cfg unit (fn [] -> Bool (mergeLocked! cfg unit hook)))
+
+fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
   (let [(wt (str cfg.worktrees "/asex-" unit))]
     (cond
       ((not (fileExists? wt)) (do (emit! cfg unit "NO-WORKTREE" (str ":path " (q wt))) false))
@@ -314,6 +429,10 @@ fn parseLoop args: (List String) p: Parsed -> Parsed
           ((= a "--branch") (parseLoop more (with p :cfg (with c :branch v))))
           ((= a "--gate-secs") (parseLoop more (with p :cfg (with c :gateSecs (intOpt v)))))
           ((= a "--audit-secs") (parseLoop more (with p :cfg (with c :auditSecs (intOpt v)))))
+          ((= a "--merge-lock") (parseLoop more (with p :cfg (with c :mergeLock v))))
+          ((= a "--graph-dir") (parseLoop more (with p :cfg (with c :graphDir v))))
+          ((= a "--lock-wait") (parseLoop more (with p :cfg (with c :lockWaitS (intOpt v)))))
+          ((= a "--gate-slots") (parseLoop more (with p :cfg (with c :gateSlots (intOpt v)))))
           ((= a "--after") (parseLoop more (with p :after (intOpt v))))
           (else (with p :error (str "unknown option " a)))))))
 
