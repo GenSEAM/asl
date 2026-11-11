@@ -25,9 +25,34 @@ fn headerOf text: String -> String
       (let [(tail (optionOr (stringSlice text i (min (stringLength text) (+ i 8000))) ""))]
         (optionOr (stringSlice tail 0 (headerEnd (stringChars tail) 0 0 false false)) ""))))
 
+fn toolsWsAt c: String -> Bool
+  (or (= c " ") (or (= c "\n") (or (= c "\t") (= c "\r"))))
+
+fn toolsTakeToken cs: (List String) acc: String -> String
+  (match (listHead cs)
+    ((none) acc)
+    ((some c)
+      (if (toolsWsAt c)
+        acc
+        (toolsTakeToken (optionOr (listTail cs) (list)) (str acc c)))))
+
+fn toolsFirstToken piece: String -> String
+  (toolsTakeToken (stringChars (stringTrim piece)) "")
+
+fn toolsIsPath t: String -> Bool
+  (if (< (stringLength t) 6)
+    false
+    (= (optionOr (stringSlice t 0 6) "") "tools/"))
+
+fn toolsStrip t: String -> String
+  (optionOr (stringSlice t 6 (stringLength t)) "")
+
 fn toolsImports header: String -> (List String)
-  (map (fn [(p String)] -> String (optionOr (listHead (stringSplit (optionOr (listHead (stringSplit p " ")) "") ")")) ""))
-       (listDrop (stringSplit header "(tools/") 1))
+  (map (fn [(t String)] -> String (toolsStrip t))
+       (filter (fn [(t String)] -> Bool (toolsIsPath t))
+               (map (fn [(p String)] -> String (toolsFirstToken p))
+                    (listDrop (stringSplit header "(") 1))))
+
 
 fn allowed -> (List String)
   (list
@@ -61,4 +86,6 @@ fn ! runTests -> Bool
       (assert (> (listLength files) 100) "the scan sees the asl tree")
       (assert (listEmpty? fresh) (str "new asl/ to tools/ import edges (asl/ must not depend on tools/): " (stringJoin fresh ", ")))
       (assert (listEmpty? gone) (str "allowlist rows whose edge no longer exists, delete them: " (stringJoin gone ", ")))
+      (assert (= (toolsImports (headerOf "(module m\n  :i [(asl-x/y :a y) ( tools/fleet/slot :a z)])\n")) (list "fleet/slot")) "an import written ( tools/... with space after the paren is a tools edge")
       true))
+
