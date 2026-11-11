@@ -1,5 +1,5 @@
 (module asl-cli/asl1Cache
-  :x [baseHashesIn memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
+  :x [baseHashesIn headNameOf headName! memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String
@@ -179,8 +179,19 @@ fn ! baseHashes compiler: String lib: String clangVersion: String -> (Result Str
   (baseHashesIn (stampDir!) compiler lib clangVersion)
 
 
+; (:m :ref ASL1-NOTRACE-COLD :do "the head file is named by the sha of the base alone, not by the cache dir, so a caller that knows the compiler, runtime library and clang finds the entry a build in its tree uses without building")
+fn headNameOf base: String -> String
+  (str "head-" (bytesSha256 (stringToBytes base)))
+
+fn ! headName! compiler: String lib: String clang: String -> (Result String String)
+  (match (versionLine clang)
+    ((err e) (err e))
+    ((ok version) (match (baseHashes compiler lib version)
+      ((err e) (err e))
+      ((ok base) (ok (headNameOf base))))))
+
 fn headPath! base: String -> String
-  (str (cacheDir!) "/head-" (bytesSha256 (stringToBytes base)))
+  (str (cacheDir!) "/" (headNameOf base))
 
 fn ! makeKey closure: String base: String root: String -> (Result String String)
   (let [(deps (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines (sys/stripTrailingNewlines closure))))]
