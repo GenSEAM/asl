@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -1290,14 +1290,34 @@ fn ! leaveIfOrphaned! -> Unit
 fn ifaceMapOf units: (List lk/LinkUnit) -> (Map String String)
   (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mapSet acc u.path (interfaceDigest u.forms))) (mapEmpty) units)
 
-fn ! workerCount! jobs: Int64 -> Int64
-  (let [(envK (match (envGet "ASL_NATIVE_WORKERS") ((none) 4) ((some s) (optionOr (stringToInt64 s) 4))))
-        (cpus (resultOr (cpuCount) envK))]
-    (max 1 (min (min envK cpus) jobs)))
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "the count for a suite built alone: the :native :suiteWorkers config row, capped at (cpus-2)/2 so its workers leave room for the clang jobs; ASL_NATIVE_WORKERS, when set, still names the count outright, capped at the cpus")
+fn soloWorkersOf asked: (Option Int64) configured: Int64 cpus: Int64 -> Int64
+  (match asked
+    ((some n) (max 1 (min n cpus)))
+    ((none) (max 1 (min configured (/ (- cpus 2) 2)))))
+
+fn ! askedWorkers! -> (Option Int64)
+  (match (envGet "ASL_NATIVE_WORKERS") ((none) (none)) ((some s) (stringToInt64 s)))
+
+fn ! soloWorkers! -> Int64
+  (soloWorkersOf (askedWorkers!) (nb/suiteWorkersFor! (toolRoot)) (resultOr (cpuCount) 1))
+
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "a worker costs about 0.5 s to start and load the prelude, so the config default gives each one at least minWorkerBytes of uncached source: a small suite (emojiGuardTest, 3 units) ran 1.28 s alone and 1.74 s over 3 workers on 2026-11-11; an explicit ASL_NATIVE_WORKERS is taken as asked")
+fn minWorkerBytes -> Int64
+  65536
+
+fn soloSpread k: Int64 bytes: Int64 -> Int64
+  (max 1 (min k (/ bytes (minWorkerBytes))))
+
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "cap 0 means a suite built alone (soloWorkers!); a sweep passes 1, since it already builds suites in parallel")
+fn ! workerCount! cap: Int64 jobs: Int64 -> Int64
+  (max 1 (min (if (> cap 0) cap (soloWorkers!)) jobs))
 
 ; (:m :ref NATIVETEST-HOSTLESS :do "workers run one self binary: asl/tools/nativeTest.asl compiled once per fingerprint into the self cache (never the suite cache, so a suite's module and prelude counts never include nativeTest's own closure), only when ASL_NATIVE_WORKERS asks for two or more, and never the running executable; the self build itself and a worker get none")
-fn ! workersAsked? -> Bool
-  (> (optionOr (stringToInt64 (optionOr (envGet "ASL_NATIVE_WORKERS") "")) 0) 1)
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "the self binary costs about 90 s cold, more than workers save on the largest suite, so the config default uses workers only once it is built; an explicit ASL_NATIVE_WORKERS still builds it")
+fn ! selfWarm? fp: String -> Bool
+  (let [(root (selfRoot))]
+    (some? (selfBinaryOf (selfCacheIn root fp) root fp)))
 
 fn ! runningExe? bin: String -> Bool
   (= (resultOr (realPath bin) bin) (resultOr (realPath (resultOr (procExePath) "")) ""))
@@ -1323,7 +1343,7 @@ fn ! selfWorker! fp: String -> (Option String)
 fn ! workerArgv cDir: String fp: String -> (Option (List String))
   (cond
     ((some? (envGet "ASL_NATIVE_WORKER")) (none))
-    ((not (workersAsked?)) (none))
+    ((and (none? (askedWorkers!)) (not (selfWarm? fp))) (do (telemetry "NATIVE-WORKERS :self-cold (the default runs without workers until the self binary is built)") (none)))
     ((stringStartsWith? cDir (selfDirIn (selfRoot))) (none))
     (else (match (selfWorker! fp)
             ((some b) (if (runningExe? b) (none) (some (list b))))
@@ -1384,21 +1404,23 @@ fn ! fullPreludePending? cDir: String fp: String opt: String extra: (List String
          (none? (readVerifiedMeta (str stem ".meta") (str stem ".o")))
          (not (fileExists? (str stem ".unsupported")))))
 
-fn ! spawnUnitWorkers! t0: Int64 cDir: String fp: String mode: String slot: String wrapper: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) jobs: Int64 parentBusy: Bool -> WorkerPlan
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "balancedGroups weights each worker by its startup cost, so a short todo leaves some worker groups empty; those are not spawned, since a worker with no units only prints its usage")
+fn ! spawnUnitWorkers! t0: Int64 cap: Int64 cDir: String fp: String mode: String slot: String wrapper: String units: (List lk/LinkUnit) entry: lk/LinkUnit ifaceMap: (Map String String) jobs: Int64 parentBusy: Bool -> WorkerPlan
   (let [(_ (leaveIfOrphaned!))
-        (k (workerCount! jobs))
-        (todo0 (if (>= k 2) (uncachedUnits cDir fp (optLevelFor mode) units entry ifaceMap) (list)))
+        (k0 (workerCount! cap jobs))
+        (todo0 (if (>= k0 2) (uncachedUnits cDir fp (optLevelFor mode) units entry ifaceMap) (list)))
+        (k (if (or (> cap 0) (some? (askedWorkers!))) k0 (soloSpread k0 (fold (fn [(a Int64) (u lk/LinkUnit)] -> Int64 (+ a (sourceSize u))) 0 todo0))))
         (argv (if (>= (min k (listLength todo0)) 2) (workerArgv cDir fp) (none)))
         (todo (if (some? argv) todo0 (list)))
         (n (min k (listLength todo)))]
     (if (< n 2)
       (WorkerPlan :procs (list) :own (list) :planned (list) :jobs jobs)
       (let [(perWorker (max 1 (/ jobs n)))
-            (env (some (withEnvOverrides! (list (str "ASL_NATIVE_JOBS=" perWorker) "ASL_NATIVE_WORKERS=1" "ASL_NATIVE_WORKER=1"))))
+            (env (some (withEnvOverrides! (list (str "ASL_NATIVE_JOBS=" perWorker) "ASL_NATIVE_WORKERS=1" (if (telemetryQuiet?) "ASL_NATIVE_WORKER=quiet" "ASL_NATIVE_WORKER=1")))))
             (base (listAppend (optionOr argv (list)) (list "--compile-units" cDir fp mode slot wrapper)))
             (meanSize (/ (fold (fn [(a Int64) (u lk/LinkUnit)] -> Int64 (+ a (sourceSize u))) 0 todo) (max 1 (listLength todo))))
             (groups (balancedGroups todo n (if parentBusy 0 (/ (* 3 meanSize) 2))))
-            (spawned (if parentBusy groups (listDrop groups 1)))
+            (spawned (filter (fn [(g (List String))] -> Bool (not (listEmpty? g))) (if parentBusy groups (listDrop groups 1))))
             (_ (telemetry (str "NATIVE-WORKERS :k " n " :units " (listLength todo) " :workers " (listLength spawned) " :jobsPerWorker " perWorker (if parentBusy " :parent prelude" ""))))]
         (WorkerPlan :procs (fold (fn [(acc (List WorkerProc)) (g (List String))] -> (List WorkerProc) (spawnWorker! t0 base env acc g)) (list) spawned)
                     :own (if parentBusy (list) (optionOr (listHead groups) (list)))
@@ -1679,14 +1701,17 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
                                ((ok libFlags) (linkWhole! slot bin ll deps libFlags t0 t1))))))))))))))))))))
 
 fn ! compileIn cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String -> Built
+  (compileInWith 0 cDir path actualPath src slot key fp mode)
+
+fn ! compileInWith cap: Int64 cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String -> Built
   (match (if (or (= mode "test") (= mode "run")) (checkerRejection! actualPath path fp) (none))
     ((some body) (Built :binary (none) :reason body :cache "checker-reject" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((none)
      (if (= mode "eval")
-       (compileSeparate! cDir path src slot key fp mode)
+       (compileSeparate! cap cDir path src slot key fp mode)
        (match (rcModeFor! path)
          ((err e) (storeFallback slot (list path) e (list)))
-         ((ok rc) (if (= rc "0") (compileSeparate! cDir path src slot key fp mode) (compileWhole! cDir path src slot key mode rc)))))))
+         ((ok rc) (if (= rc "0") (compileSeparate! cap cDir path src slot key fp mode) (compileWhole! cDir path src slot key mode rc)))))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the link of a separate build, shared by the compiling path and the all-cached path: the prelude object, the unit objects in closure order and the runtime archive")
 fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String unitResults: (List ModCompileResult) darwin: Bool facts: (Option libc/TripleFacts) t0: Int64 t1: Int64 t2: Int64 -> Built
@@ -1716,7 +1741,7 @@ fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String 
                 :recompiled recompiled :reused reused
                 :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 tClang0)))))))
 
-fn ! compileSeparate! cDir: String path: String src: String slot: String key: String fp: String mode: String -> Built
+fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String -> Built
   (let [(entry (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src)))
         (wrapper (if (= mode "eval") path (str (wrapperDirIn cDir) "/" key ".asl")))
         (bin (str slot "/" mode))]
@@ -1750,7 +1775,7 @@ fn ! compileSeparate! cDir: String path: String src: String slot: String key: St
                       (preludeOpt (optLevelFor "run"))
                       (plan (if (listEmpty? units0)
                               (WorkerPlan :procs (list) :own (list) :planned (list) :jobs jobs)
-                              (spawnUnitWorkers! t0 cDir fp mode slot wrapper units0 (optionOr (listGet units0 (- (listLength units0) 1)) (lk/emptyUnit "")) ifaceMap0 jobs (fullPreludePending? cDir fp preludeOpt pExtra))))
+                              (spawnUnitWorkers! t0 cap cDir fp mode slot wrapper units0 (optionOr (listGet units0 (- (listLength units0) 1)) (lk/emptyUnit "")) ifaceMap0 jobs (fullPreludePending? cDir fp preludeOpt pExtra))))
                       (pRes (lk/loadClosure! (toolPath (lk/preludePath))))
                       (t1 (monotonicNs))]
                   (match uRes
@@ -1950,6 +1975,9 @@ fn ! compile path: String src: String slot: String key: String fp: String -> Bui
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "a run/test FILE argument is the caller's own, resolved against the caller's cwd like any other CLI tool (NATIVE-CHDIR: the native CLI never chdirs to the toolchain root first); only the toolchain's own internal lookups (cache dirs, dep manifests) are root-relative, so prepareIn reads and digests path as given, never through resolveIn (toolRoot)")
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
+  (prepareInWith 0 cDir path fp mode)
+
+fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String -> Built
   (match (fileReadString path)
     ((err _) (Built :binary (none) :reason (str "cannot read " path) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKey mode path path))
@@ -1958,7 +1986,7 @@ fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileIn cDir path path src slot key fp mode)))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode)))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -1990,7 +2018,7 @@ fn unstride order: (List Int64) xs: (List Built) -> (List Built)
     (map (fn [(i Int64)] -> Built (optionOr (mapGet byIndex i) (Built :binary (none) :reason "stride lost a result" :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))) (range 0 (listLength order))))
 
 fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
-  (let [(build (fn [(p String)] -> Built (prepareIn cDir p fp "test")))
+  (let [(build (fn [(p String)] -> Built (prepareInWith 1 cDir p fp "test")))
         (marker (str cDir "/building." (stringFromInt64 (procSelf))))
         (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
         (_ (fileWrite marker ""))
@@ -2268,8 +2296,10 @@ fn ! selfDirIn root: String -> String
 fn ! selfCacheIn root: String fp: String -> String
   (str (selfDirIn root) "/" fp)
 
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "the self slot is the one prepareRunIn writes, keyed like any run slot by tree, opt level, rc and digest; the old run: key named a slot nothing wrote, so a built self binary always read as absent")
 fn ! selfSlotOf cDir: String root: String fp: String -> String
-  (str cDir "/" fp "/" (slotKey (str "run:" (importPathOf (selfSource))) (fileDigest (str root "/" (selfSource)))))
+  (let [(abs (str root "/" (selfSource)))]
+    (str cDir "/" fp "/" (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! abs)) (selfSource) (fileDigest abs))))
 
 (schema SelfState
   (:f binary (Option String))
@@ -2293,8 +2323,14 @@ fn ! selfStateOf cDir: String root: String fp: String -> SelfState
 fn ! selfBinaryOf cDir: String root: String fp: String -> (Option String)
   (selfStateOf cDir root fp).binary
 
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "a compile worker is quiet when the process that spawned it was: its pid never matches the parent's ASL_NATIVE_QUIET_PID, so the parent says so in ASL_NATIVE_WORKER")
+fn ! telemetryQuiet? -> Bool
+  (and (!= (optionOr (envGet "ASL_NATIVE_TRACE") "") "1")
+       (or (= (optionOr (envGet "ASL_NATIVE_QUIET_PID") "") (stringFromInt64 (procSelf)))
+           (= (optionOr (envGet "ASL_NATIVE_WORKER") "") "quiet")))
+
 fn ! telemetry line: String -> Unit
-  (if (and (= (optionOr (envGet "ASL_NATIVE_QUIET_PID") "") (stringFromInt64 (procSelf))) (!= (optionOr (envGet "ASL_NATIVE_TRACE") "") "1"))
+  (if (telemetryQuiet?)
     ()
     (do (eprintln line) ()))
 

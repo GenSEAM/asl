@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -332,6 +332,20 @@ fn ! lockGraceFor! dir: String -> Int64
                                 ((some n) (if (and (>= n 1) (<= n 3600)) n 10))
                                 ((none) 10)))
                  ((none) 10)))
+
+; (:m :ref NATIVE-WORKERS-DEFAULT :do "compile worker processes for one suite built alone; nativeTest caps the row at (cpus-2)/2 and uses 1 inside a sweep")
+fn defaultSuiteWorkers -> Int64
+  4
+
+fn suiteWorkersValue word: String -> (Option Int64)
+  (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
+    ((some n) (if (and (>= n 1) (<= n 64)) (some n) (none)))
+    ((none) (none)))
+
+fn ! suiteWorkersFor! dir: String -> Int64
+  (match (configured! dir ":suiteWorkers")
+    ((some word) (optionOr (suiteWorkersValue word) (defaultSuiteWorkers)))
+    ((none) (defaultSuiteWorkers)))
 
 fn ! storeCapFor! dir: String -> Int64
   (match (configured! dir ":storeCap")
