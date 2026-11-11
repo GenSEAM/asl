@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mergeUnit
-  :x [Cfg defaultCfg gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
@@ -115,10 +115,14 @@ fn ! graphGates! cfg: Cfg wt: String -> (Option (List String))
                              (map stringTrim (stringLines d.out)))))
           (none)))))
 
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "the graph selector's answer is used when it names at least one suite, or when the branch changed no file; an empty answer for a branch that changed files falls back to the import scan with why graphEmpty, and a missing or failing graph with why graphUnavailable")
 fn ! neighbourGates! cfg: Cfg unit: String wt: String -> (List String)
   (match (if cfg.graphSelect (graphGates! cfg wt) (none))
-    ((some gs) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs)))) gs))
-    ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\"") (scanGates! cfg wt))))
+    ((some gs)
+      (if (and (listEmpty? gs) (not (stringEmpty? (stringTrim (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))).out))))
+        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\" :why \"graphEmpty\"") (scanGates! cfg wt))
+        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs)))) gs)))
+    ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"scan\" :why " (if cfg.graphSelect "\"graphUnavailable\"" "\"off\""))) (scanGates! cfg wt))))
 
 fn ! scanGates! cfg: Cfg wt: String -> (List String)
   (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
@@ -334,13 +338,30 @@ fn ! staleOwner! dir: String -> (Option Int64)
               ((ok st) (if (> (- (/ (nowNs) 1000000000) st.mtime) 30) (some o) (none)))
               ((err _) (none))))))
 
+fn ! mvDir! from: String to: String -> Bool
+  (= (fr/runOneLimited (fr/job (list "mv" from to) "." (fr/childEnv (list))) (fr/limits 20 8)).exit 0)
+
+; (:m :ref MERGE-QUEUE-LOCK :do "after the rename, the pid read from the renamed directory must still be the dead owner this taker observed; a live pid, or another pid, means the lock was taken by someone else in between, and the rename is undone (mv back); when dir exists again the renamed copy is dropped; either way the taker returns false and keeps waiting")
 fn ! takeOver! cfg: Cfg unit: String dir: String owner: Int64 -> Bool
-  (let [(mine (str dir ".stale." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))
-        (mv (fr/runOneLimited (fr/job (list "mv" dir mine) "." (fr/childEnv (list))) (fr/limits 20 8)))]
-    (if (!= mv.exit 0) false
-      (do (pathRemove mine)
-          (emit! cfg unit "LOCK-TAKEOVER" (str ":deadPid " owner))
-          true)))
+  (let [(mine (str dir ".stale." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
+    (if (not (mvDir! dir mine)) false
+      (let [(seen (ownerOf! mine))
+            (liveNow (and (> seen 1) (resultOr (procAlive? seen) true)))]
+        (if (or (!= seen owner) liveNow)
+          (do (or (mvDir! mine dir) (do (pathRemove mine) false))
+              false)
+          (do (pathRemove mine)
+              (emit! cfg unit "LOCK-TAKEOVER" (str ":deadPid " owner))
+              true)))))
+
+; (:m :ref MERGE-QUEUE-LOCK :do "release removes the lock only when its pid file still names this process: the directory is renamed away, the pid verified, then removed; a lock that names someone else is put back")
+fn ! releaseLock! dir: String -> Bool
+  (let [(mine (str dir ".rel." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
+    (if (not (mvDir! dir mine)) false
+      (if (= (ownerOf! mine) (procSelf))
+        (do (pathRemove mine) true)
+        (do (or (mvDir! mine dir) (do (pathRemove mine) false))
+            false))))
 
 fn ! lockLoop! cfg: Cfg unit: String dir: String deadline: Int64 waited: Bool -> Bool
   (cond
@@ -359,7 +380,7 @@ fn ! withLock! cfg: Cfg unit: String body: (fn [] -> Bool) -> Bool
     (if (not (lockLoop! cfg unit dir (+ (monotonicNs) (* cfg.lockWaitS 1000000000)) false)) false
       (do (emit! cfg unit "LOCK-ACQUIRED" (str ":pid " (stringFromInt64 (procSelf))))
           (let [(r (body))]
-            (do (pathRemove dir)
+            (do (releaseLock! dir)
                 (emit! cfg unit "LOCK-RELEASED" "")
                 r)))))
 
