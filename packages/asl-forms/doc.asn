@@ -781,6 +781,8 @@
 (:doc :symbol "asl/packages/asl-forms/src/gate.asl#readOnlyOp?" :text "True when an op with its keywords changes nothing: note list or query, fix without apply, doctor without write, and the plain read and check ops.")
 (:doc :symbol "asl/packages/asl-forms/src/gate.asl#gateOp?" :text "True when an op name is check, chk, gate, test, fix, doctor or audit.")
 (:doc :symbol "asl/packages/asl-forms/src/gate.asl#linesFailed?" :text "True when the error count is above zero or any result line is a rejected step.")
+(:doc :symbol "asl/packages/asl-forms/src/indent.asl#Guided" :text "Indent guidance for a text: the edited text, the edits applied and those skipped")
+(:doc :symbol "asl/packages/asl-forms/src/indent.asl#IndentEdit" :text "One indentation edit: kind, line, column, token, old text, opener position and head, and line offset")
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#guide" :text "Closer edits the indentation of a text implies; closers still open at the end go to the last code line, and a text with no code line has nothing to close.")
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#guideBroken" :text "Like guide but applies only the edits inside segments whose delimiters do not balance; edits in balanced segments come back as skipped.")
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#editsAsn" :text "Indent edits as one parenthesised ASN list of their edit forms.")
