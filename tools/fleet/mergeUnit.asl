@@ -176,7 +176,7 @@ fn ! lockStale? cfg: Cfg -> Bool
 
 ; (:m :do "the main host rebuild under a mkdir lock: mkdir fails when another merge holds it, so the rebuild is skipped, never doubled; a missing build script is a no-op")
 fn ! mainBuild! cfg: Cfg unit: String -> Bool
-  (let [(parent (stringReplace cfg.lock "/mainbuild.lock" ""))
+  (let [(parent (stringJoin (listTake (stringSplit cfg.lock "/") (- (listLength (stringSplit cfg.lock "/")) 1)) "/"))
         (_ (dirCreate parent))
         (_x (if (lockStale? cfg) (do (pathRemove cfg.lock) (emit! cfg unit "MAIN-BUILD-LOCK-EXPIRED" (str ":maxAgeS " cfg.lockMaxAgeS))) true))
         (got (fr/runOneLimited (fr/job (list "mkdir" cfg.lock) "." (fr/childEnv (list))) (fr/limits 20 8)))]
