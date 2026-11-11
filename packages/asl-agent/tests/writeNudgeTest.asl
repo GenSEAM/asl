@@ -9,6 +9,7 @@ fn readTurn -> String
 
 fn ! runTests -> Bool
   (let [root (rk/freshRecorderRoot! "writeNudge")
+        cfg (ok? (fileWrite (str root "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false :readStreakEscalate 100 :readOnlyTurnCap 200))\n"))
         written (ok? (fileWrite (str root "/stub.txt") "stub content, re-read every turn\n"))
         turn1 (str "(:intent :deliver patch :why \"implement impl.txt per the task\")\n" (readTurn))
         replies (listAppend (list turn1) (map (fn [_] (readTurn)) (range 0 19)))
@@ -20,6 +21,7 @@ fn ! runTests -> Bool
         ownsMarker "Write now to impl.txt"
         cleaned (ok? (pathRemove root))]
     (do
+      (assert cfg "the fixture config lifts the read-streak stops so noWrite is the stop under test")
       (assert written "the stub file the scripted turns reread is written")
       (assert (= (listLength replies) 20) "20 scripted turns: 1 intent+read, 19 more reads, none a write")
       (assert (= (listLength turn10Sent) 1) "turn 10's prompt was journaled")
