@@ -29,12 +29,11 @@ fn ! defaultCfg -> Cfg
 fn q s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
 
-; (:m :do "one event line: appended to the cfg log when it names one, else printed whole to stdout, never both (a caller that redirects stdout into the same file would otherwise get every event twice)")
+; (:m :do "one event line, printed whole and appended to the cfg log when it names one")
 fn ! emit! cfg: Cfg unit: String event: String rest: String -> Bool
-  (let [(line (str "(:merge :unit " (q unit) " :event :" event (if (stringEmpty? rest) "" (str " " rest)) ")"))]
-    (if (stringEmpty? cfg.log)
-      (do (println line) true)
-      (ok? (fileAppend cfg.log (str line "\n")))))
+  (let [(line (str "(:merge :unit " (q unit) " :event :" event (if (stringEmpty? rest) "" (str " " rest)) ")"))
+        (_ (println line))]
+    (if (stringEmpty? cfg.log) true (ok? (fileAppend cfg.log (str line "\n")))))
 
 ; (:m :do "wait until pid is gone, polling every 500 ms for at most maxS seconds; true when it is gone (pid <= 1 counts as gone). A pid, never a process name")
 fn ! waitPid! pid: Int64 maxS: Int64 -> Bool
