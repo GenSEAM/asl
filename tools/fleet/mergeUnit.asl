@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mergeUnit
-  :x [claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [capNeighbours claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
@@ -25,6 +25,7 @@
   (:f checkCmd String :default "./bin/asl check")
   (:f aslBin String :default "./bin/asl")
   (:f invariantCapS Int64 :default 120)
+  (:f neighbourBudgetS Int64 :default 1200)
   (:f invariantCosts (List String) :default (list
     "./bin/asl test tools/tests/noSelfHostTest.asl=30"
     "./scripts/install.sh --check-rules=30"
@@ -121,8 +122,41 @@ fn ! neighbourGates! cfg: Cfg unit: String wt: String -> (List String)
     ((some gs)
       (if (and (listEmpty? gs) (not (stringEmpty? (stringTrim (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))).out))))
         (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\" :why \"graphEmpty\"") (scanGates! cfg wt))
-        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs)))) gs)))
+        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs))))
+            (capNeighbours cfg unit (timesNow!) (scanGates! cfg wt) gs))))
     ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"scan\" :why " (if cfg.graphSelect "\"graphUnavailable\"" "\"off\""))) (scanGates! cfg wt))))
+
+; (:m :ref MERGE-NEIGHBOUR-FANOUT :do "a file many suites depend on (the test runner, prelude, fleet/run) selects hundreds of neighbour suites and held the merge queue for hours; the selected suites cost their gateTimes median (60 s when unrecorded), and when they would need more than cfg.neighbourBudgetS of wall time on cfg.gateSlots slots, the suites that import the changed module directly (the import scan) are kept and the rest are sampled in a fixed order (sha256 of the suite path, so the same selection always gives the same sample) up to the budget; the event NEIGHBOUR-CAP names :n selected, :picked, :direct, :budgetS and :costS; a set within budget is returned unchanged and logs nothing")
+fn costSecs cfg: Cfg times: (Map String Int64) g: String -> Int64
+  (/ (+ (optionOr (mapGet times (gateKey cfg g)) 60000) 999) 1000)
+
+fn sumSecs cfg: Cfg times: (Map String Int64) gs: (List String) -> Int64
+  (fold (fn [(acc Int64) (g String)] -> Int64 (+ acc (costSecs cfg times g))) 0 gs)
+
+fn pickWithin cfg: Cfg times: (Map String Int64) left: Int64 gs: (List String) acc: (List String) -> (List String)
+  (match (listHead gs)
+    ((none) (listReverse acc))
+    ((some g)
+      (let [(c (costSecs cfg times g))]
+        (if (<= c left)
+          (pickWithin cfg times (- left c) (optionOr (listTail gs) (list)) (cons g acc))
+          (pickWithin cfg times left (optionOr (listTail gs) (list)) acc)))))
+
+fn hashKey g: String -> String
+  (bytesSha256 (stringToBytes g))
+
+fn capNeighbours cfg: Cfg unit: String times: (Map String Int64) direct: (List String) gs: (List String) -> (List String)
+  (let [(slots (max 1 cfg.gateSlots))
+        (total (sumSecs cfg times gs))]
+    (if (<= (/ (+ total (- slots 1)) slots) cfg.neighbourBudgetS)
+      gs
+      (let [(keep (filter (fn [(g String)] -> Bool (listContains? direct g)) gs))
+            (rest (listSortBy hashKey (filter (fn [(g String)] -> Bool (not (listContains? direct g))) gs)))
+            (room (max 0 (- (* cfg.neighbourBudgetS slots) (sumSecs cfg times keep))))
+            (sample (pickWithin cfg times room rest (list)))
+            (picked (listAppend keep sample))]
+        (do (emit! cfg unit "NEIGHBOUR-CAP" (str ":n " (stringFromInt64 (listLength gs)) " :picked " (stringFromInt64 (listLength picked)) " :direct " (stringFromInt64 (listLength keep)) " :budgetS " (stringFromInt64 cfg.neighbourBudgetS) " :costS " (stringFromInt64 (sumSecs cfg times picked))))
+            picked))))
 
 fn ! scanGates! cfg: Cfg wt: String -> (List String)
   (let [(d (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))))
@@ -478,6 +512,7 @@ fn parseLoop args: (List String) p: Parsed -> Parsed
           ((= a "--audit-secs") (parseLoop more (with p :cfg (with c :auditSecs (intOpt v)))))
           ((= a "--merge-lock") (parseLoop more (with p :cfg (with c :mergeLock v))))
           ((= a "--graph-dir") (parseLoop more (with p :cfg (with c :graphDir v))))
+          ((= a "--neighbour-budget-secs") (parseLoop more (with p :cfg (with c :neighbourBudgetS (intOpt v)))))
           ((= a "--lock-wait") (parseLoop more (with p :cfg (with c :lockWaitS (intOpt v)))))
           ((= a "--asl-bin") (parseLoop more (with p :cfg (with c :aslBin v))))
           ((= a "--gate-slots") (parseLoop more (with p :cfg (with c :gateSlots (intOpt v)))))
@@ -492,12 +527,13 @@ fn ! parseArgs args: (List String) -> Parsed
     (cond
       ((not (stringEmpty? p.error)) p)
       ((or (<= c.gateSecs 0) (<= c.auditSecs 0)) (with p :error "--gate-secs and --audit-secs must be positive integers"))
+      ((<= c.neighbourBudgetS 0) (with p :error "--neighbour-budget-secs must be a positive integer"))
       ((< p.after 0) (with p :error "--after needs a pid"))
       ((listEmpty? p.units) (with p :error "no unit named"))
       (else p)))
 
 fn usage -> String
-  "usage: bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] [--branch B] UNIT..."
+  "usage: bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] [--branch B] [--neighbour-budget-secs N] UNIT..."
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(p (parseArgs args))]
