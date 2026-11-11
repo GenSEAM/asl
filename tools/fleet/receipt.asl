@@ -166,7 +166,7 @@ fn ! gateAudit! items: (List rd/SExpr) declared: String run: (fn [(String)] -> (
     (pair problems row))
 
 fn usage -> String
-  "usage: bin/asl run tools/fleet/receipt.asl FILE [--other FILE]... [--fleet asl/grammar/fleet.asn]"
+  "usage: bin/asl run asl/tools/fleet/receipt.asl FILE [--other FILE]... [--fleet asl/grammar/fleet.asn]"
 
 fn otherFiles args: (List String) -> (List String)
   (match (listHead args)
