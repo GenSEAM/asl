@@ -97,10 +97,14 @@ fn envName row: String -> String
 fn sharedCli -> String
   (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))
 
+; (:m :ref NATIVECLI-RUNTIME :do "HOME=$ROOT also sent asl build (buildHostAbsent) to a per-tree asl1 cache, a cold asl1 build of about 430 s in every fresh worktree (measured 2026-11-11, load 15) while the caller's cache already held the same keyed entry; the caller's asl1 cache is forwarded like the CLI cache")
+fn sharedAsl1 -> String
+  (optionOr (envGet "ASL_NATIVE_ASL1_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/asl1"))
+
 fn cliEnv root: String host: String errFile: String overrides: (List String) -> (List String)
   (listAppend (filter (fn [(row String)] -> Bool (not (listContains? (map envName overrides) (envName row))))
     (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root) (str "ASL_CLI_SCRIPT_DIR=" root "/bin")
-        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_HOST_WITNESS=" host ".log") (str "NATIVE_CLI_ERR=" errFile) (str "ASL_NATIVE_CLI_CACHE=" (sharedCli))))
+        (str "ASL_CLI_ARGV0=" root "/bin/asl") (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_HOST_WITNESS=" host ".log") (str "NATIVE_CLI_ERR=" errFile) (str "ASL_NATIVE_CLI_CACHE=" (sharedCli)) (str "ASL_NATIVE_ASL1_CACHE=" (sharedAsl1))))
     overrides)
 
 fn ! hostWitness! path: String -> (Result Unit String)
@@ -115,10 +119,9 @@ fn caseJob program: (List String) c: Case root: String host: String errFile: Str
   (run/job (listAppend (list "/bin/sh" "-c" "exec \"$0\" \"$@\" 2>\"$NATIVE_CLI_ERR\"") (listAppend program (map (fn [(a String)] -> String (expand a root sweep)) c.argv)))
            root (cliEnv root host errFile (map (fn [(e String)] -> String (expand e root sweep)) c.env)))
 
-fn ! replay! c: Case binary: String root: String errFile: String sweep: String host: String -> (List String)
-  (let [(_ (fileWrite errFile ""))
-        (d (run/runOneLimited (caseJob (list binary) c root host errFile sweep) (run/limits 900 32)))
-        (errText (resultOr (fileReadString errFile) ""))
+; (:m :ref NATIVECLI-RUNTIME :do "cases are judged apart from their run so the pool can run them side by side; each case has its own stderr capture file, and a case that names $SWEEP its own sweep workspace, so no two running cases share a file")
+fn ! judge! c: Case d: run/Done errFile: String root: String sweep: String -> (List String)
+  (let [(errText (resultOr (fileReadString errFile) ""))
         (out (normalize d.out root sweep))
         (errNorm (normalize errText root sweep))]
     (filter (fn [(m String)] -> Bool (not (stringEmpty? m)))
@@ -126,6 +129,15 @@ fn ! replay! c: Case binary: String root: String errFile: String sweep: String h
             (if (= out c.stdout) "" (str "stdout native " (asnQuote out) " host " (asnQuote c.stdout)))
             (if (= errNorm c.stderr) "" (str "stderr native " (asnQuote errNorm) " host " (asnQuote c.stderr)))
             (if (= d.exit c.exit) "" (str "exit native " (stringFromInt64 d.exit) " host " (stringFromInt64 c.exit))))))
+
+fn sweepCase? c: Case -> Bool
+  (listAny? (fn [(a String)] -> Bool (stringContains? a "$SWEEP")) (listAppend c.argv c.env))
+
+fn caseErr errFile: String i: Int64 -> String
+  (str errFile "." (stringFromInt64 i))
+
+fn noSweep -> String
+  "/nonexistent/sweep"
 
 ; (:m :do "a case that re-enters $ROOT/bin/asl (auditIntelTrace) reaches the native CLI cache under HOME=$ROOT; after any source change its first call prints the stale-CLI rebuild banner on stderr, a build event rather than CLI behaviour, so one call with the case environment builds it before the replay")
 fn ! warmCli! root: String errFile: String host: String -> run/Done
@@ -140,8 +152,8 @@ fn ! copyFixture! root: String dir: String name: String -> (Result Unit String)
     ((err e) (err (str "cannot read fixture " name)))
     ((ok text) (match (fileWrite (str dir "/tests/" name) text) ((err e) (err (str "cannot write " name))) ((ok _) (ok ())))))
 
-fn ! prepareSweep! root: String -> (Result String String)
-  (let [(dir (str root "/.asl/cache/nativeCliSweep/" (stringFromInt64 (procSelf))))]
+fn ! prepareSweep! root: String tag: String -> (Result String String)
+  (let [(dir (str root "/.asl/cache/nativeCliSweep/" (stringFromInt64 (procSelf)) "-" tag))]
     (match (dirCreate (str dir "/tests"))
       ((err e) (err (str "cannot create " dir)))
       ((ok _)
@@ -210,18 +222,30 @@ fn ! runTests -> Bool
         (host (str errFile ".hostWitness"))
         (hostLog (str host ".log"))
         (witnessWritten (hostWitness! host))
-        (sweep (prepareSweep! root))
-        (sweepDir (resultOr sweep "/nonexistent/sweep"))
+        (ids (range 0 (listLength liveCases)))
+        (sweeps (map (fn [(i Int64)] -> (Result String String) (if (sweepCase? (optionOr (listGet liveCases i) (Case :id "" :argv (list) :env (list) :stdout "" :stderr "" :exit 0))) (prepareSweep! root (stringFromInt64 i)) (ok (noSweep)))) ids))
+        (sweep (optionOr (listHead (filter err? sweeps)) (ok "every sweep workspace")))
+        (sweepDirs (map (fn [(r (Result String String))] -> String (resultOr r (noSweep))) sweeps))
+        (madeSweeps (filter (fn [(d String)] -> Bool (!= d (noSweep))) sweepDirs))
         (warm (warmCli! root errFile host))
+        (workers (nt/suiteWorkersFor (listLength liveCases) (resultOr (cpuCount) 1)))
         (found (match (if (ok? sweep) built (none))
                  ((none) (list))
-                 ((some bin) (map (fn [(c Case)] -> (Pair String (List String)) (pair c.id (replay! c bin root errFile sweepDir host))) liveCases))))
+                 ((some bin) (let [(_ (map (fn [(i Int64)] -> Bool (ok? (fileWrite (caseErr errFile i) ""))) ids))
+                                   (jobs (map (fn [(i Int64)] -> run/Job (caseJob (list bin) (optionOr (listGet liveCases i) (Case :id "" :argv (list) :env (list) :stdout "" :stderr "" :exit 0)) root host (caseErr errFile i) (optionOr (listGet sweepDirs i) (noSweep)))) ids))
+                                   (done (run/runPoolLimited jobs workers (run/limits 900 32)))]
+                               (map (fn [(d run/Done)] -> (Pair String (List String))
+                                      (match (listGet liveCases d.idx)
+                                        ((none) (pair (str "#" (stringFromInt64 d.idx)) (list "result for no case")))
+                                        ((some c) (pair c.id (judge! c d (caseErr errFile d.idx) root (optionOr (listGet sweepDirs d.idx) (noSweep)))))))
+                                    done)))))
         (problems (fold (fn [(acc (List String)) (p (Pair String (List String)))] -> (List String) (if (listEmpty? (pairSecond p)) acc (listAppend acc (list (str "case " (pairFirst p) ": " (stringJoin (pairSecond p) "; ")))))) (list) found))
         (witnessText (resultOr (fileReadString hostLog) ""))
-        (removed (if (fileExists? errFile) (pathRemove errFile) (ok ())))
+        (removed (fold (fn [(acc (Result Unit String)) (f String)] -> (Result Unit String) (match (if (fileExists? f) (pathRemove f) (ok ())) ((err e) (err e)) ((ok _) acc)))
+                       (ok ()) (cons errFile (map (fn [(i Int64)] -> String (caseErr errFile i)) ids))))
         (hostGone (if (fileExists? host) (pathRemove host) (ok ())))
         (hostLogGone (if (fileExists? hostLog) (pathRemove hostLog) (ok ())))
-        (sweepGone (if (ok? sweep) (pathRemove sweepDir) (ok ())))]
+        (sweepGone (fold (fn [(acc (Result Unit String)) (d String)] -> (Result Unit String) (match (pathRemove d) ((err e) (err e)) ((ok _) acc))) (ok ()) madeSweeps))]
     (do
       (assert (ok? cases) (match cases ((err e) e) ((ok _) "cases read")))
       (assert (listAny? (fn [(c Case)] -> Bool (= c.id "buildHostAbsent")) allCases) "the known BUILD-HOSTBIN gap case stays in the fixture")
@@ -236,5 +260,5 @@ fn ! runTests -> Bool
       (assert (= (listLength found) (listLength liveCases)) "every live case replayed")
       (assert (stringEmpty? witnessText) (str "buildHostAbsent and every other replayed case never touch ctx.hostBin/ASL_HOST (HOSTBIN): " witnessText))
       (assert (listEmpty? problems) (str "native equals asl-host on every live case; " (stringJoin problems " | ")))
-      (assert (and (ok? removed) (and (ok? hostGone) (and (ok? hostLogGone) (and (ok? sweepGone) (not (fileExists? sweepDir)))))) "stderr capture file, host witness stub/log and sweep workspace removed")
+      (assert (and (ok? removed) (and (ok? hostGone) (and (ok? hostLogGone) (and (ok? sweepGone) (not (listAny? (fn [(d String)] -> Bool (fileExists? d)) madeSweeps)))))) "stderr capture file, host witness stub/log and sweep workspace removed")
       (testGatewayVerbsAreForms!)))
