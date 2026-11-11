@@ -39,13 +39,10 @@ fn allowed -> (List String)
     "asl/packages/asl-agent/tests/poolServeFormTest.asl|tools/fleet/leonClient"
     "asl/tools/coord/conductor.asl|tools/fleet/freePool"
     "asl/tools/coord/conductor.asl|tools/fleet/leonClient"
-    "asl/tools/coord/grade.asl|tools/fleet/receipt"
     "asl/tools/coord/janitor.asl|tools/remote/form"
     "asl/tools/coord/tests/condRestartTest.asl|tools/remote/coordDeps"
     "asl/tools/coord/tests/condRestartTest.asl|tools/remote/vps"
-    "asl/tools/coord/tests/gateGuardTest.asl|tools/fleet/freePool"
-    "asl/tools/coord/tests/leadStreamTest.asl|tools/remote/nodeWatch"
-    "asl/tools/fleet/tests/fleetCacheTest.asl|tools/fleet/cache")
+    "asl/tools/coord/tests/gateGuardTest.asl|tools/fleet/freePool")
 
 fn ! edgesOf! path: String -> (List String)
   (map (fn [(m String)] -> String (str path "|tools/" m))
