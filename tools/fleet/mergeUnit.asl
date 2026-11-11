@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mergeUnit
-  :x [Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
@@ -130,14 +130,31 @@ fn ! scanGates! cfg: Cfg wt: String -> (List String)
         (tests (fold (fn [acc f] (listAppend acc (testsFor! wt f))) (list) files))]
     (map (fn [t] (str cfg.testCmd " " t)) tests))
 
+fn skipBlank text: String i: Int64 -> Int64
+  (if (and (< i (stringLength text)) (listContains? (list " " "\t" "\n" "\r") (optionOr (stringSlice text i (+ i 1)) "")))
+    (skipBlank text (+ i 1))
+    i)
+
+; (:m :ref MERGEDOC-LOWS :do "the byte offset of the :x key that opens the export list: :x followed by any run of blanks or newlines (or none) and then [, so :x  [ and a list on the next line count and a longer key such as :xy does not; -1 when absent")
+fn exportKeyAt text: String from: Int64 -> Int64
+  (match (stringIndexOf (optionOr (stringSlice text from (stringLength text)) "") ":x")
+    ((none) -1)
+    ((some rel)
+      (let [(at (+ from rel))
+            (bracket (skipBlank text (+ at 2)))]
+        (if (and (< bracket (stringLength text)) (= (optionOr (stringSlice text bracket (+ bracket 1)) "") "["))
+          bracket
+          (exportKeyAt text (+ at 2))))))
+
 ; (:m :ref MERGE-DOCLEDGER-GATE :do "the text of a module header's :x export list, whitespace normalised; empty when the file has none")
 fn exportHeader text: String -> String
-  (match (stringIndexOf text ":x [")
-    ((none) "")
-    ((some at)
-      (let [(rest (optionOr (stringSlice text (+ at 4) (stringLength text)) ""))
-            (end (optionOr (stringIndexOf rest "]") (stringLength rest)))]
-        (stringJoin (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace (optionOr (stringSlice rest 0 end) "") "\n" " ") " ")) " "))))
+  (let [(bracketAt (exportKeyAt text 0))]
+    (if (< bracketAt 0)
+      ""
+      (let [(rest (optionOr (stringSlice text (+ bracketAt 1) (stringLength text)) ""))
+            (end (optionOr (stringIndexOf rest "]") (stringLength rest)))
+            (flat (stringReplace (stringReplace (optionOr (stringSlice rest 0 end) "") "\n" " ") "\t" " "))]
+        (stringJoin (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit flat " ")) " "))))
 
 fn docFile? path: String -> Bool
   (and (stringEndsWith? path ".asn")
@@ -148,8 +165,11 @@ fn changeOf line: String -> (Pair String String)
   (let [(parts (stringSplit line "\t"))]
     (pair (optionOr (stringSlice (optionOr (listHead parts) "") 0 1) "") (optionOr (listLast parts) "")))
 
+; (:m :ref MERGEDOC-LOWS :do "the file as it was where the branch left main (git merge-base), not at main's tip: a main that moved on, or that already deleted or rewrote the file, must not hide what the branch deleted or changed")
 fn ! baseText! cfg: Cfg wt: String path: String -> String
-  (let [(o (gitOut! wt (list "show" (str cfg.branch ":" path))))]
+  (let [(mb (gitOut! wt (list "merge-base" cfg.branch "HEAD")))
+        (rev (if (= mb.exit 0) (stringTrim mb.out) cfg.branch))
+        (o (gitOut! wt (list "show" (str rev ":" path))))]
     (if (= o.exit 0) o.out ""))
 
 ; (:m :ref MERGE-DOCLEDGER-GATE :do "does one changed path of the branch need the doc ledger test: a doc.asn or asl/doc/*.asn touched; an .asl file deleted whose main header had a non-empty :x list; an .asl file added with a non-empty :x export list (tests with runTests included); an .asl file changed whose :x list differs from main's; a body-only change does not")
@@ -324,10 +344,18 @@ fn ! ownerOf! dir: String -> Int64
 fn ! parentDir! path: String -> String
   (stringJoin (listTake (stringSplit path "/") (- (listLength (stringSplit path "/")) 1)) "/")
 
-fn ! tryLock! dir: String -> Bool
+; (:m :ref MERGE-LOCK-RESIDUAL :do "a claim is a private directory that already holds the pid file, renamed to the lock path in one step: rename(2) onto an existing non-empty directory fails, so exactly one claimant wins, and the lock is never visible without its pid (no mkdir-to-pid-write window); an existing path is refused first so a half-made legacy empty directory is never replaced")
+fn ! claimDir! dir: String -> Bool
   (let [(_ (dirCreate (parentDir! dir)))
-        (got (fr/runOneLimited (fr/job (list "mkdir" dir) "." (fr/childEnv (list))) (fr/limits 20 8)))]
-    (if (= got.exit 0) (ok? (fileWrite (str dir "/pid") (stringFromInt64 (procSelf)))) false))
+        (priv (str dir ".new." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
+    (if (ok? (fileStat dir))
+      false
+      (if (and (ok? (dirCreate priv)) (ok? (fileWrite (str priv "/pid") (stringFromInt64 (procSelf)))) (ok? (pathRename priv dir)))
+        true
+        (do (pathRemove priv) false))))
+
+fn ! tryLock! dir: String -> Bool
+  (claimDir! dir)
 
 ; (:m :ref MERGE-QUEUE-LOCK :do "a lock is stale when its owner pid is dead, or when it has no pid file and is older than 30 s (a holder that died between mkdir and the pid write); it is taken over by an atomic rename to a private name, so two takers cannot both win, and a lock that turns out to be live again is not kept")
 fn ! staleOwner! dir: String -> (Option Int64)
@@ -341,18 +369,20 @@ fn ! staleOwner! dir: String -> (Option Int64)
 fn ! mvDir! from: String to: String -> Bool
   (= (fr/runOneLimited (fr/job (list "mv" from to) "." (fr/childEnv (list))) (fr/limits 20 8)).exit 0)
 
-; (:m :ref MERGE-QUEUE-LOCK :do "after the rename, the pid read from the renamed directory must still be the dead owner this taker observed; a live pid, or another pid, means the lock was taken by someone else in between, and the rename is undone (mv back); when dir exists again the renamed copy is dropped; either way the taker returns false and keeps waiting")
+; (:m :ref MERGE-LOCK-RESIDUAL :do "a takeover is serialised by its own claim, dir.takeover, taken like the lock itself: while it is held no other taker can touch the lock, and a lock directory with a pid cannot be replaced, so the dead owner re-read under the claim is still the one removed and the removal never needs an undo; a live lock, or a dead owner other than the one this taker saw, leaves the lock alone; a takeover claim whose owner died is removed once it is older than 30 s")
 fn ! takeOver! cfg: Cfg unit: String dir: String owner: Int64 -> Bool
-  (let [(mine (str dir ".stale." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
-    (if (not (mvDir! dir mine)) false
-      (let [(seen (ownerOf! mine))
-            (liveNow (and (> seen 1) (resultOr (procAlive? seen) true)))]
-        (if (or (!= seen owner) liveNow)
-          (do (or (mvDir! mine dir) (do (pathRemove mine) false))
-              false)
-          (do (pathRemove mine)
-              (emit! cfg unit "LOCK-TAKEOVER" (str ":deadPid " owner))
-              true)))))
+  (let [(claim (str dir ".takeover"))]
+    (if (not (claimDir! claim))
+      (do (match (staleOwner! claim) ((some _) (pathRemove claim)) ((none) (ok ()))) false)
+      (let [(again (staleOwner! dir))
+            (mine (str dir ".stale." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))
+            (took (match again
+                    ((some o) (and (= o owner) (mvDir! dir mine)))
+                    ((none) false)))
+            (_ (if took (pathRemove mine) (ok ())))
+            (_ (if took (emit! cfg unit "LOCK-TAKEOVER" (str ":deadPid " owner)) true))
+            (_ (releaseLock! claim))]
+        took)))
 
 ; (:m :ref MERGE-QUEUE-LOCK :do "release removes the lock only when its pid file still names this process: the directory is renamed away, the pid verified, then removed; a lock that names someone else is put back")
 fn ! releaseLock! dir: String -> Bool
@@ -374,14 +404,14 @@ fn ! lockLoop! cfg: Cfg unit: String dir: String deadline: Int64 waited: Bool ->
                     (sleepMs 500)
                     (lockLoop! cfg unit dir deadline true))))))
 
-; (:m :ref MERGE-QUEUE-LOCK :do "body runs while this process holds the main-merge lock; concurrent callers queue on it for at most cfg.lockWaitS and then fail with LOCK-TIMEOUT")
+; (:m :ref MERGE-QUEUE-LOCK :do "the LOCK-RELEASED event is written just before the lock is released, so a waiter that takes the lock at once can never log LOCK-ACQUIRED ahead of it; body runs while this process holds the main-merge lock; concurrent callers queue on it for at most cfg.lockWaitS and then fail with LOCK-TIMEOUT")
 fn ! withLock! cfg: Cfg unit: String body: (fn [] -> Bool) -> Bool
   (let [(dir (lockDirOf cfg))]
     (if (not (lockLoop! cfg unit dir (+ (monotonicNs) (* cfg.lockWaitS 1000000000)) false)) false
       (do (emit! cfg unit "LOCK-ACQUIRED" (str ":pid " (stringFromInt64 (procSelf))))
           (let [(r (body))]
-            (do (releaseLock! dir)
-                (emit! cfg unit "LOCK-RELEASED" "")
+            (do (emit! cfg unit "LOCK-RELEASED" "")
+                (releaseLock! dir)
                 r)))))
 
 ; (:m :do "one unit end to end; hook runs after the gates and the audit, just before the first merge attempt (the test moves main there). true when merged")
