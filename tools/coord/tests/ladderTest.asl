@@ -274,6 +274,17 @@ fn testBlocked -> Bool
         (assert (and (stringContains? row ":to queue ") (not (stringContains? row ":to claude")) (stringContains? row ":tiers (claude)")) (str "the escalation goes to the queue with Claude as the last tier once the strong lane has been asked: " row))
         true))
 
+; (:m :ref REVIEW-DIFF-INCOMPLETE :do "node2 2026-11-11: reviewers failed STD-DOTENV, STD-SEMVER and THROUGHPUT-DAILY for a missing test file and bodiless functions while their gates were green, because the brief kept only the first 60 diff lines; a 90-line diff reaches the reviewer whole, and a diff past the cap says how much was cut")
+fn testBriefWholeDiff -> Bool
+  (let [(u (l/ReviewUnit :id "U2" :task "t" :risk "low" :closureChanged false :writerAlias "x" :writerChannel "agy" :startRung "" :fixesUsed 0 :prior (list)))
+        (lines (fn [(n Int64)] -> String (stringJoin (map (fn [(i Int64)] -> String (str "+ line " (stringFromInt64 i))) (range 0 n)) "\n")))
+        (b90 (l/reviewBrief u (lines 90) ""))
+        (bBig (l/reviewBrief u (lines 5000) ""))]
+    (do (assert (stringContains? b90 "+ line 89") "the last line of a 90-line diff reaches the reviewer")
+        (refute (stringContains? b90 "diff clipped") "a diff under the cap carries no clip note")
+        (assert (stringContains? bBig "diff clipped") "a diff past the cap says it was clipped")
+        true))
+
 fn testBrief -> Bool
   (let [(u (l/ReviewUnit :id "U1" :task "fix bound\nsee .asl/mem/plan.asn\nkey sk-or-abc123" :risk "low" :closureChanged false :writerAlias "x" :writerChannel "agy" :startRung "" :fixesUsed 0 :prior (list)))
         (b (l/reviewBrief u "+ ok line\n+ TOKEN=abc\n+ path .asl/mem/x\n- gone" "(:receipt U1 :gates ())"))]
@@ -403,4 +414,5 @@ fn ! runTests -> Bool
       (assert (testSoleLaneBlocks) "a sole lane that dies blocks visibly, statuses are real statuses")
       (assert (testBlocked) "blocked")
       (assert (testBrief) "brief")
+      (assert (testBriefWholeDiff) "whole diff reaches the reviewer")
       true)

@@ -332,10 +332,21 @@ fn clip s: String n: Int64 -> String
 fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
   (eg/scrubLinesBy (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
 
+; (:m :ref REVIEW-DIFF-INCOMPLETE :do "the brief held only 60 diff lines of 200 chars, so reviewers saw half a test file or none and failed green units for missing tests and bodiless functions; 800 lines of 400 chars fits a 120k-token reviewer, and a longer diff ends with a note naming the cut lines so the reviewer does not judge code it was not shown")
+fn reviewDiffLines -> Int64
+  800
+
+fn reviewDiffPart diff: String -> (List String)
+  (let [(shown (scrubLines diff (reviewDiffLines) 400))
+        (total (listLength (stringLines diff)))]
+    (if (> total (reviewDiffLines))
+      (listAppend shown (list (str "(diff clipped: " (stringFromInt64 (- total (reviewDiffLines))) " more lines not shown; do not fail on code you were not shown)")))
+      shown))
+
 fn reviewBrief u: ReviewUnit diff: String gates: String -> String
   (str "(:review :unit " (fm/asnQuote u.id) " :risk " u.risk
        " :task " (fm/asnQuote (stringJoin (scrubLines u.task 12 240) " "))
-       " :diff " (fm/asnStrings (scrubLines diff 60 200))
+       " :diff " (fm/asnStrings (reviewDiffPart diff))
        " :gates " (fm/asnStrings (scrubLines gates 20 200))
        " :reply \"one form only: (:verdict :pass|:fail :defects (\\\"concrete defect with path and symbol\\\") :model name); :fail needs a concrete defect\")")
 
