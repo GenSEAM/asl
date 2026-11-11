@@ -118,14 +118,14 @@ fn ! baseText! cfg: Cfg wt: String path: String -> String
   (let [(o (gitOut! wt (list "show" (str cfg.branch ":" path))))]
     (if (= o.exit 0) o.out ""))
 
-; (:m :ref MERGE-DOCLEDGER-GATE :do "does one changed path of the branch need the doc ledger test: a doc.asn or asl/doc/*.asn touched; an .asl file added with a non-empty :x export list (tests with runTests included); an .asl file changed whose :x list differs from main's; a body-only change does not")
+; (:m :ref MERGE-DOCLEDGER-GATE :do "does one changed path of the branch need the doc ledger test: a doc.asn or asl/doc/*.asn touched; an .asl file deleted whose main header had a non-empty :x list; an .asl file added with a non-empty :x export list (tests with runTests included); an .asl file changed whose :x list differs from main's; a body-only change does not")
 fn ! needsLedger? cfg: Cfg wt: String c: (Pair String String) -> Bool
   (let [(status (pairFirst c))
         (path (pairSecond c))]
     (cond
       ((docFile? path) true)
       ((not (stringEndsWith? path ".asl")) false)
-      ((= status "D") false)
+      ((= status "D") (not (stringEmpty? (exportHeader (baseText! cfg wt path)))))
       (else
         (let [(now (exportHeader (resultOr (fileReadString (str wt "/" path)) "")))
               (was (if (= status "A") "" (exportHeader (baseText! cfg wt path))))]
