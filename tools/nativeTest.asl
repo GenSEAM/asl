@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -1584,7 +1584,7 @@ fn ! compileUnitsWorker! args: (List String) -> (Result Int64 String)
                      (raw (compileUnitsStep (nativeFacts! cDir fp) cDir fp mine units (ifaceMapOf units) prelude (withOverlay prelude o) (overlayNamesOf o) entryUnit slot 0 (list) (list) (jobSlots!) (optLevelFor mode)))
                      (results (drainAllPending (pairFirst raw) (pairSecond raw)))
                      (t4 (monotonicNs))
-                     (_ (telemetry (str "NATIVE-WORKER-PHASES :units " (stringFromInt64 (listLength mine)) " :closure " (stringFromInt64 (listLength units)) " :closureMs " (ms (- t1 t0)) " :preludeMs " (ms (- t2 t1)) " :overlayMs " (ms (- t3 t2)) " :compileMs " (ms (- t4 t3)))))
+                     (_ (traceOnly (str "NATIVE-WORKER-PHASES :units " (stringFromInt64 (listLength mine)) " :closure " (stringFromInt64 (listLength units)) " :closureMs " (ms (- t1 t0)) " :preludeMs " (ms (- t2 t1)) " :overlayMs " (ms (- t3 t2)) " :compileMs " (ms (- t4 t3)))))
                      (bad (filter (fn [(r ModCompileResult)] -> Bool (not r.ok)) results))]
                  (do (map (fn [(r ModCompileResult)] -> Unit (eprintln (str "nativeTest --compile-units: " r.path ": " r.err))) bad)
                      (ok (if (and (listEmpty? bad) (= (listLength mine) (listLength paths))) 0 1)))))))))))))
@@ -2333,6 +2333,15 @@ fn ! telemetry line: String -> Unit
   (if (telemetryQuiet?)
     ()
     (do (eprintln line) ()))
+
+; (:m :ref WORKER-PHASES-QUIET :do "a line only a trace asks for prints on ASL_NATIVE_TRACE=1 alone; telemetry also prints whenever no parent said quiet, which a compile worker never sees")
+fn workerPhasesWanted? trace: String -> Bool
+  (= trace "1")
+
+fn ! traceOnly line: String -> Unit
+  (if (workerPhasesWanted? (optionOr (envGet "ASL_NATIVE_TRACE") ""))
+    (do (eprintln line) ())
+    ())
 
 fn ! lockPid path: String -> (Option Int64)
   (match (fileReadString path)
