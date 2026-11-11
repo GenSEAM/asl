@@ -67,6 +67,7 @@ enum Provider
   (:f gradeReply (Option String))
   (:f gradeModel (Option String))
   (:f gradeError (Option String))
+  (:f gradeDelayMs Int64 :default 0)
   (:f attemptLogPath (Option String)))
 
 (schema Timing
@@ -635,6 +636,7 @@ fn parseScriptFixture text: String attemptLogPath: (Option String) -> ScriptData
       :gradeReply (fixtureField text ":gradeReply" 0 n)
       :gradeModel (fixtureField text ":gradeModel" 0 n)
       :gradeError (fixtureField text ":gradeError" 0 n)
+      :gradeDelayMs (optionOr (stringToInt64 (optionOr (fixtureField text ":gradeDelayMs" 0 n) "0")) 0)
       :attemptLogPath attemptLogPath))
 
 fn lineBreakWidth bs: Bytes n: Int64 i: Int64 -> Int64
@@ -1660,7 +1662,7 @@ fn noGraderChannel p: Provider -> Turn
 fn ! grade! p: Provider intent: String profile: String system: String text: String -> Turn
   (match p
     ((scriptFixtureProvider scriptName fixture scriptIndex)
-      (match fixture.gradeReply
+      (match (do (if (> fixture.gradeDelayMs 0) (sleepMs fixture.gradeDelayMs) ()) fixture.gradeReply)
         ((some reply)
           (Turn :provider p :reply (ok (some reply))
             :meta (TurnMeta :timing none :usage none :finish none :truncated false

@@ -965,7 +965,7 @@ fn formatReceipt r: LoopResult -> String
        (if (listEmpty? r.vacuousGates) "" (str " :vacuousGates (" (stringJoin (map (fn [g] (str "\"" (c/escapeAsn g) "\"")) r.vacuousGates) " ") ")"))
        (match r.specCheck
          ((some v) (cond
-                     ((= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)")
+                     ((= v.verdict "skipped") (str " :specCheck (:verdict skipped :reason " (optionOr (listHead v.reasons) "noGrader") ")"))
                      ((= v.verdict "unavailable") (unavailableSpecText v.reasons))
                      (else (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons ("
                         (stringJoin (map (fn [x] (str "\"" (c/escapeAsn x) "\"")) v.reasons) " ") "))"))))

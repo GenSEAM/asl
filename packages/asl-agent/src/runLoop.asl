@@ -716,7 +716,7 @@ fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGre
 fn specText spec: (Option s/SpecVerdict) -> String
   (match spec
     ((some v) (cond
-                ((= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)")
+                ((= v.verdict "skipped") (str " :specCheck (:verdict skipped :reason " (optionOr (listHead v.reasons) "noGrader") ")"))
                 ((= v.verdict "unavailable") (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons (" (quoted v.reasons) "))"))
                 (else (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons (" (quoted v.reasons) "))"))))
     ((none) ""))
@@ -883,6 +883,24 @@ fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: Stri
           ((none) false))))
     false)
 
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "the least wall the slow finish steps (the spec check grader call) need: :wallFinishMinSec, default 60; a finish with less left than that skips the grader and marks (:specCheck (:verdict skipped :reasons (wallBudget))), which ends the run needsReview instead of letting the outer bound kill it with no receipt")
+fn ! loopWallSetting rootDir: String key: String fallback: Int64 -> Int64
+  (match (ac/agentLoopValue (ac/configText! rootDir) key)
+    ((some v) (optionOr (ac/positiveInt v) fallback))
+    ((none) fallback))
+
+fn ! finishLeftSec! env: s/LoopEnv state: s/LoopState rootDir: String -> (Option Int64)
+  (match env.wallBudget
+    ((some w) (some (- (+ w (loopWallSetting rootDir ":wallReserveSec" 120)) (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0))))
+    ((none) none))
+
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "the first thing finish does: a (:partialReceipt ...) journal row, written when a wall budget bounds the run, with the turns, the stop cause, the journal path and the files written so far, written before the kill, the grader call and the hand-back, so a run the outer bound kills mid-finish still leaves its cause behind")
+fn ! partialReceipt! env: s/LoopEnv run: LoopRun -> Bool
+  (let [state run.state
+        written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))]
+    (ok? (jr/journalWrite env.journalPath (str "(:partialReceipt :turns " (stringFromInt64 state.turn) " :stop \"" (optionOr state.signalName state.status) "\" :status :" state.status
+                         " :journal \"" (c/escapeAsn env.journalPath) "\" :written (" (quoted written) "))\n"))))
+
 ; (:m :ref LEON-FAIL-STATUS :do "stale ad-hoc findings data does not fail a run that wrote its owned files and ended on green declared gates, and a downgrade to failed writes a verdict line naming the cause")
 fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
   (let [state run.state
@@ -893,7 +911,8 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
           (listAny? (fn [f] (stringContains? f ":claim")) findings) (listLength state.runUnbackedClaims) 0) "|")
         status0 (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
-        failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))]
+        failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))
+        _partial (match env.wallBudget ((none) true) ((some _) (partialReceipt! env run)))]
     (match (killRun! env run rootDir)
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
@@ -901,8 +920,15 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
               _why (if (and (= status0 "failed") (= state.status "ok")) (ok? (jr/journalWrite env.journalPath (str "(:verdict :failed :why \"findings without a claim, and no green declared gate over written files\" :findings " (stringFromInt64 (listLength findings)) ")\n"))) true)
               dirty (resultOr (go/changedOwnedFiles! env.owns rootDir none) (list))
               targets (specTargets written dirty)
+              finishLeft (finishLeftSec! env state rootDir)
+              finishShort (match finishLeft ((some l) (< l (loopWallSetting rootDir ":wallFinishMinSec" 60))) ((none) false))
+              _finishNote (if (and finishShort (specCheckWanted? env.specCheck status0 targets))
+                            (journalSignal! env state.turn "finishSkipped" (str "the spec check was skipped: " (stringFromInt64 (optionOr finishLeft 0)) " s of wall left for the finish"))
+                            true)
               spec (if (specCheckWanted? env.specCheck status0 targets)
-                     (some (specCheckRun! env run rootDir targets))
+                     (if finishShort
+                       (some (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "wallBudget")))
+                       (some (specCheckRun! env run rootDir targets)))
                      none)
               finalStatus (match spec ((some v) (if (listContains? (list "fail" "skipped" "unavailable") v.verdict) "needsReview" status0)) ((none) status0))
               gatesGreen (declaredGatesGreen env.gates state.lastGates)
