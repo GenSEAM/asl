@@ -1,6 +1,6 @@
 (module aslAgent/tests/finishWallBudgetTest
   :x [runTests]
-  :i [(aslAgent/core :a c) (aslAgent/runLoop :a rl) (asl-tools/fleet/run :a fr)])
+  :i [(aslAgent/core :a c) (aslAgent/runLoop :a rl) (asl-tools/fleet/run :a fr) (aslAgent/tests/gitInitKit :a gk)])
 
 ; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "a run whose grader call would outlast the wall left for the finish writes its (:partialReceipt ...) first, skips the grader with (:specCheck (:verdict skipped :reasons (wallBudget))) and ends needsReview inside the outer bound; the same run with wall to spare still calls the grader; the fixture grader sleeps 300 s, the outer bound is 90 s after a warm-up run that pays the host compile")
 fn ! child argv: (List String) cwd: String -> Bool
@@ -25,11 +25,7 @@ fn ! readOr path: String -> String
 
 fn ! initRepo root: String -> Bool
   (and (write (str root "/subject.txt") "before\n")
-    (and (child (list "git" "-C" root "init" "-q" "-b" "main") root)
-      (and (child (list "git" "-C" root "config" "user.name" "finishWall") root)
-        (and (child (list "git" "-C" root "config" "user.email" "finish-wall@example.invalid") root)
-          (and (child (list "git" "-C" root "add" "--" "subject.txt") root)
-            (child (list "git" "-C" root "commit" "-q" "-m" "initial") root))))))
+    (gk/initGitRepo! root "finishWall" "finish-wall@example.invalid"))
 
 fn fieldAfter text: String key: String -> String
   (match (stringIndexOf text key)
