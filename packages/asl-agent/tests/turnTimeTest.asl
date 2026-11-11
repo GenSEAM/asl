@@ -1,6 +1,6 @@
 (module aslAgent/tests/turnTimeTest
   :x [runTests]
-  :i [(aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk)])
+  :i [(aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk) (asl-tools/fleet/run :a fr)])
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -19,11 +19,15 @@ fn ! resolveHost hOpt: (Option String) defaultRel: String -> (Option String)
                     (assert false (str "the stage-0 host is absent at " p "; build it with sh asl/host/build.sh or set ASL_HOST"))
                     (none))))))
 
+; (:m :ref SPAWNSAFETY-RED :do "every child of this test starts through fleet/run: runGuarded with a timeout, a descendant limit and childEnv, so a verdict kills the whole tree; stdout and stderr stay separate as with processRun")
+fn ! sh cmd: String -> fr/ProcOut
+  (fr/runGuarded (list "sh" "-c" cmd) (resultOr (realPath ".") ".") (fr/childEnv (list)) (fr/limits 2400 128))
+
 fn ! host -> (Option String)
   (resolveHost (envGet "ASL_HOST") "bin/asl")
 
 fn ! tempDir -> String
-  (stringTrim (processRun "mktemp -d /tmp/asl-live-loop-XXXXXX").stdout)
+  (stringTrim (sh "mktemp -d /tmp/asl-live-loop-XXXXXX").stdout)
 
 fn ! write path: String text: String -> Bool
   (ok? (fileWrite path text))
@@ -44,18 +48,18 @@ fn fieldAfter text: String key: String -> String
             rest (c/sliceOf text start (stringLength text))]
         (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) "")))))
 
-fn ! runMain root: String task: String backend: String extra: String -> ProcessOutput
+fn ! runMain root: String task: String backend: String extra: String -> fr/ProcOut
   (match (host)
-    ((none) (processRun "exit 127"))
+    ((none) (sh "exit 127"))
     ((some h)
      (let [form (str "(:agent :task \"" task "\" :backend \"script/" backend "\" :root \"" root "\" " extra ")")
            prefix (str "ASL_HOST=" (shellQuote h) " ASL_ROOT_DIR=" (shellQuote (resultOr (realPath ".") ".")) " ")
            driver (resultOr (realPath "asl/packages/asl-agent/tests/mainDriver.asl") "asl/packages/asl-agent/tests/mainDriver.asl")
            args (str (shellQuote h) " run " (shellQuote driver) " " (shellQuote form))
-           niceProbe (processRun "nice -n 15 true 2>&1")
+           niceProbe (sh "nice -n 15 true 2>&1")
            niceOk (and (= niceProbe.exitCode 0)
                        (not (stringContains? (str niceProbe.stdout niceProbe.stderr) "Operation not permitted")))]
-       (processRun (str prefix (if niceOk (str "nice -n 15 " args) args))))))
+       (sh (str prefix (if niceOk (str "nice -n 15 " args) args))))))
 
 
 fn ! stageFixture root: String name: String -> Bool

@@ -1,6 +1,6 @@
 (module aslAgent/tests/mainParityTest
   :x [runTests]
-  :i [(aslAgent/core :a c) (asl-proc/runnerBin :a rb)])
+  :i [(aslAgent/core :a c) (asl-proc/runnerBin :a rb) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref LEON-HARNESS5 :do "the dry-run systemPrompt value is compared as {PROMPT}: it carries the date, platform, cwd and branch rows of harness5 and is asserted by leonHarness5Test")
 
@@ -9,11 +9,15 @@
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
+; (:m :ref SPAWNSAFETY-RED :do "every child of this test starts through fleet/run: runGuarded with a timeout, a descendant limit and childEnv, so a verdict kills the whole tree; stdout and stderr stay separate as with processRun")
+fn ! sh cmd: String -> fr/ProcOut
+  (fr/runGuarded (list "sh" "-c" cmd) (resultOr (realPath ".") ".") (fr/childEnv (list)) (fr/limits 2400 128))
+
 fn ! host -> String
   (optionOr (envGet "ASL_HOST") "bin/asl")
 
-fn ! runAsl env: String form: String -> ProcessOutput
-  (processRun (str env " nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl " (shellQuote form)))
+fn ! runAsl env: String form: String -> fr/ProcOut
+  (sh (str env " nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl " (shellQuote form)))
 
 fn ! kvText value: c/KvVal -> String
   (match value ((c/kvStr text) text) ((c/kvInt _) ""))
@@ -135,7 +139,7 @@ fn batchRowOf chunk: String -> BatchRow
 
 fn ! runBatch root: String forms: (List String) -> (List BatchRow)
   (let [cmd (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainBatchDriver.asl " (shellQuote root) " " (stringJoin (map shellQuote forms) " "))
-        out (processRun cmd)
+        out (sh cmd)
         chunks (filter (fn [c] (stringContains? c "\u0001ROWEXIT ")) (stringSplit out.stdout "\u0001\n"))]
     (map batchRowOf (map (fn [c] (str c "\u0001")) chunks)))
 
@@ -161,7 +165,7 @@ fn ! fixtureMismatches repo: String hostDisplay: String scope: String root: Stri
 fn ! matchesNoArgFixture repo: String hostDisplay: String -> Bool
   (let [row (fixtureRow (stringSplit (readOr "asl/packages/asl-agent/tests/mainParityFixtures.asn") "\n") "no_arg")
         expected (receiptExpected repo hostDisplay row)
-        actual (processRun (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl"))]
+        actual (sh (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl"))]
     (and (!= row "")
          (= (fixtureField row "scope") "default")
          (= actual.stdout expected)
@@ -281,7 +285,7 @@ fn ! writeJournals root: String -> Bool
          (write (str dir "endedOk.journal") "(:session :task \"t\")\n(:turn 1 :reply \"x\")\n(:result :status :ok)\n")))
 
 fn ! tempDir tag: String -> String
-  (stringTrim (processRun (str "mktemp -d /tmp/asl-main-" tag ".XXXXXX")).stdout)
+  (stringTrim (sh (str "mktemp -d /tmp/asl-main-" tag ".XXXXXX")).stdout)
 
 fn fieldAfter text: String key: String -> String
   (match (stringIndexOf text key)
@@ -303,7 +307,7 @@ fn ! runTests -> Bool
         hostDisplay (rb/runnerDisplay! repo)
         at (str "ASL_ROOT_DIR=" (shellQuote repo))
         absContext (resultOr (realPath "tests/fixtures/agentLoop/mvp/honest.asn") "")
-        noArgAsl (processRun (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl"))
+        noArgAsl (sh (str "nice -n 15 " (host) " run asl/packages/asl-agent/tests/mainDriver.asl"))
         noArgFixture (matchesNoArgFixture repo hostDisplay)
         rejected (fixtureMismatches repo hostDisplay "default" repo "" (rejectionForms))
         dry (fixtureMismatches repo hostDisplay "default" repo "dry_" (dryRunForms absContext))
