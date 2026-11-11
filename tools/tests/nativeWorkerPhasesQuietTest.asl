@@ -43,8 +43,15 @@ fn ! writeFixture! dir: String n: Int64 steps: Int64 -> String
         (_ (fileWrite suite (str "(module " (nt/importPathOf suite) "\n  :x [runTests]\n  :i [" imports "])\n\nfn ! runTests -> Bool\n  (do (assert (> (+ " calls ") 0) \"sum\") true)\n")))]
     suite)
 
+; (:m :ref WORKER-PHASES-QUIET :do "bin/asl sets ASL_NATIVE_QUIET_PID to its own pid before it execs the native CLI, so a build through it is always quiet; the child here starts the CLI binary named by the head pointer directly, with the bin/asl env and ASL_NATIVE_QUIET_PID=1, a pid that is not the builder's, so the builder is not quiet and hands its workers ASL_NATIVE_WORKER=1")
+fn ! cliDir! root: String -> String
+  (stringTrim (resultOr (fileReadString (str (optionOr (envGet "HOME") "") "/.asl/run/nativeCli/head" (stringReplace root "/" "_"))) ""))
+
 fn ! driveWith! env: (List String) driver: String cache: String suite: String -> fr/ProcOut
-  (guarded (list "/usr/bin/nice" "-n" "10" "bin/asl" "run" driver "one" cache suite) (listAppend env (list "ASL_NATIVE_WORKERS=4" "ASL_NATIVE_JOBS=4" "ASL_NATIVE_QUIET_PID=")))
+  (let [(root (resultOr (realPath ".") "."))
+        (dir (cliDir! root))]
+    (guarded (list "/usr/bin/nice" "-n" "10" (str dir "/bin") "run" driver "one" cache suite)
+             (listAppend env (list "ASL_NATIVE_WORKERS=4" "ASL_NATIVE_JOBS=4" "ASL_NATIVE_QUIET_PID=1" (str "ASL_NATIVE_CLI_DIR=" dir) (str "ASL_CLI_ROOT=" root) (str "ASL_CLI_SCRIPT_DIR=" root "/bin") (str "ASL_CLI_ARGV0=" root "/bin/asl") "ASL_CLI_ENTRY_PID=1" (str "ASL_PRELUDE=" root "/asl/prelude/prelude.asl")))))
 
 fn ! seedPrelude! from: String to: String -> Bool
   (let [(names (filter (fn [(n String)] -> Bool (stringStartsWith? n "prelude-")) (resultOr (dirList (str from "/modules")) (list))))
