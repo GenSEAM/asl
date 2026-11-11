@@ -61,7 +61,7 @@ fn numAfter text: String marker: String -> Int64
 
 ; (:m :ref MERGECHECK-BUDGET-LOWS :do "gates the stage budgets: the stage child's argv carries --merge-check-sec when the conductor was given it, the flag reaches RealCfg, and the merge-check budget plus the train limit stay under the stage deadline (both literals in conductor.asl: the stage-sec default and the (fr/limits N 200) of the train run)")
 fn ! testBudgets -> Bool
-  (let [(dir "/tmp/mcBudgetStore")
+  (let [(dir (pf/scratch "condMc" "budgets"))
         (src (resultOr (fileReadString "asl/tools/coord/conductor.asl") ""))
         (stageDefault (cd/stageSecDefault))
         (trainLimit (cd/trainLimitSec))
