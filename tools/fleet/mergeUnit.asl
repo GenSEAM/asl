@@ -18,7 +18,12 @@
   (:f testCmd String :default "./bin/asl test")
   (:f lockMaxAgeS Int64 :default 3600)
   (:f invariantCapS Int64 :default 120)
-  (:f invariantCosts (List String) :default (list "./bin/asl audit gates --full --sync=1200" "./scripts/install.sh --check-rules=30")))
+  (:f invariantCosts (List String) :default (list
+    "./bin/asl test tools/tests/noSelfHostTest.asl=30"
+    "./scripts/install.sh --check-rules=30"
+    "git rev-parse --is-inside-work-tree >/dev/null 2>&1 && test $(git remote 2>/dev/null | wc -l) -eq 0=1"
+    "./bin/asl audit consistency=30"
+    "./bin/asl audit gates --full --sync=1200")))
 
 fn ! homeDir -> String
   (optionOr (envGet "HOME") "/tmp")
@@ -153,24 +158,44 @@ fn ! rulesCmds! cfg: Cfg -> (List String)
         (list)
         (list (str cfg.main "/asl/grammar/rules.asn") (str cfg.main "/.asl/rules.asn")))
 
+; (:m :ref MERGE-INVARIANT-GATES :do "the text of a quoted string up to its closing quote, with \\\" and \\\\ unescaped; a command may hold quotes, and a piece with no closing quote is read to its end")
+fn quotedText chars: (List String) acc: (List String) -> String
+  (match (listHead chars)
+    ((none) (stringJoin (listReverse acc) ""))
+    ((some c)
+      (let [(rest (optionOr (listTail chars) (list)))]
+        (cond
+          ((= c "\"") (stringJoin (listReverse acc) ""))
+          ((and (= c "\\") (some? (listHead rest)))
+            (let [(n (optionOr (listHead rest) ""))]
+              (if (or (= n "\"") (= n "\\"))
+                (quotedText (optionOr (listTail rest) (list)) (cons n acc))
+                (quotedText rest (cons c acc)))))
+          (else (quotedText rest (cons c acc)))))))
+
 fn enforcedIn text: String -> (List String)
-  (map (fn [(piece String)] -> String (optionOr (listHead (stringSplit piece "\"")) ""))
+  (map (fn [(piece String)] -> String (quotedText (stringChars piece) (list)))
        (listDrop (stringSplit text ":enforcedBy \"") 1))
 
-; (:m :ref MERGE-INVARIANT-GATES :do "the recorded cost in seconds of a command from cfg.invariantCosts rows cmd=secs; 0 when no row names it")
-fn costOf cfg: Cfg cmd: String -> Int64
-  (fold (fn [(best Int64) (row String)] -> Int64
+; (:m :ref MERGE-INVARIANT-GATES :do "the recorded cost in seconds of a command from cfg.invariantCosts rows cmd=secs (the number after the last =); none when no row names it, which the caller treats as too costly to run unasked")
+fn costOf cfg: Cfg cmd: String -> (Option Int64)
+  (fold (fn [(best (Option Int64)) (row String)] -> (Option Int64)
           (let [(parts (stringSplit row "="))
                 (n (listLength parts))]
             (if (and (> n 1) (= (norm (stringJoin (listTake parts (- n 1)) "=")) (norm cmd)))
-              (optionOr (stringToInt64 (optionOr (listLast parts) "")) 0)
+              (stringToInt64 (optionOr (listLast parts) ""))
               best)))
-        0 cfg.invariantCosts)
+        (none) cfg.invariantCosts)
 
-; (:m :ref MERGE-INVARIANT-GATES :do "the invariant gates every unit with gates runs: the rules files' :enforcedBy commands, except the audit command (auditPass! runs that one in the worktree) and any whose recorded cost exceeds cfg.invariantCapS")
-fn ! invariantGates! cfg: Cfg -> (List String)
-  (filter (fn [(c String)] -> Bool (and (not (stringEmpty? c)) (and (!= (norm c) (norm cfg.audit)) (<= (costOf cfg c) cfg.invariantCapS))))
-          (uniq (rulesCmds! cfg)))
+; (:m :ref MERGE-INVARIANT-GATES :do "the invariant gates every unit with gates runs: the rules files' :enforcedBy commands, except the audit command (auditPass! runs that one in the worktree); a command whose recorded cost exceeds cfg.invariantCapS is skipped with a SKIPPED-OVERCAP event, and one no cost row names is skipped with SKIPPED-UNCOSTED, so a new slow invariant never joins silently")
+fn ! invariantGates! cfg: Cfg unit: String -> (List String)
+  (let [(cmds (filter (fn [(c String)] -> Bool (and (not (stringEmpty? c)) (!= (norm c) (norm cfg.audit)))) (uniq (rulesCmds! cfg))))]
+    (filter (fn [(c String)] -> Bool
+              (match (costOf cfg c)
+                ((none) (do (emit! cfg unit "SKIPPED-UNCOSTED" (str ":cmd " (q c))) false))
+                ((some secs) (if (<= secs cfg.invariantCapS) true
+                               (do (emit! cfg unit "SKIPPED-OVERCAP" (str ":cmd " (q c) " :costS " secs " :capS " cfg.invariantCapS)) false)))))
+            cmds))
 
 fn ! gatesPass! cfg: Cfg unit: String wt: String gates: (List String) -> Bool
   (fold (fn [(ok0 Bool) (g String)] -> Bool
@@ -238,7 +263,7 @@ fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg)))))))]
+        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg unit)))))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
