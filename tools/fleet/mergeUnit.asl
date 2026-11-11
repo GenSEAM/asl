@@ -16,7 +16,9 @@
   (:f log String :default "")
   (:f retries Int64 :default 3)
   (:f testCmd String :default "./bin/asl test")
-  (:f lockMaxAgeS Int64 :default 3600))
+  (:f lockMaxAgeS Int64 :default 3600)
+  (:f invariantCapS Int64 :default 120)
+  (:f invariantCosts (List String) :default (list "./bin/asl audit gates --full --sync=1200" "./scripts/install.sh --check-rules=30")))
 
 fn ! homeDir -> String
   (optionOr (envGet "HOME") "/tmp")
@@ -138,8 +140,37 @@ fn ! ledgerGates! cfg: Cfg wt: String -> (List String)
       (list (str cfg.testCmd " asl/packages/asl-gates/tests/docLedgerTest.asl"))
       (list)))
 
+; (:m :ref MERGE-INVARIANT-GATES :do "gates compare by their text with runs of blanks collapsed, the first spelling wins, so an invariant the brief already names is run once, as the brief wrote it")
+fn norm s: String -> String
+  (stringJoin (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit s " ")) " ")
+
 fn uniq xs: (List String) -> (List String)
-  (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
+  (fold (fn [acc x] (if (listAny? (fn [(y String)] -> Bool (= (norm y) (norm x))) acc) acc (listAppend acc (list x)))) (list) xs)
+
+; (:m :ref MERGE-INVARIANT-GATES :do "the :enforcedBy command of every rule in the rules files (asl/grammar/rules.asn and the workspace .asl/rules.asn of the main repo), :none skipped")
+fn ! rulesCmds! cfg: Cfg -> (List String)
+  (fold (fn [acc path] (listAppend acc (enforcedIn (resultOr (fileReadString path) ""))))
+        (list)
+        (list (str cfg.main "/asl/grammar/rules.asn") (str cfg.main "/.asl/rules.asn")))
+
+fn enforcedIn text: String -> (List String)
+  (map (fn [(piece String)] -> String (optionOr (listHead (stringSplit piece "\"")) ""))
+       (listDrop (stringSplit text ":enforcedBy \"") 1))
+
+; (:m :ref MERGE-INVARIANT-GATES :do "the recorded cost in seconds of a command from cfg.invariantCosts rows cmd=secs; 0 when no row names it")
+fn costOf cfg: Cfg cmd: String -> Int64
+  (fold (fn [(best Int64) (row String)] -> Int64
+          (let [(parts (stringSplit row "="))
+                (n (listLength parts))]
+            (if (and (> n 1) (= (norm (stringJoin (listTake parts (- n 1)) "=")) (norm cmd)))
+              (optionOr (stringToInt64 (optionOr (listLast parts) "")) 0)
+              best)))
+        0 cfg.invariantCosts)
+
+; (:m :ref MERGE-INVARIANT-GATES :do "the invariant gates every unit with gates runs: the rules files' :enforcedBy commands, except the audit command (auditPass! runs that one in the worktree) and any whose recorded cost exceeds cfg.invariantCapS")
+fn ! invariantGates! cfg: Cfg -> (List String)
+  (filter (fn [(c String)] -> Bool (and (not (stringEmpty? c)) (and (!= (norm c) (norm cfg.audit)) (<= (costOf cfg c) cfg.invariantCapS))))
+          (uniq (rulesCmds! cfg)))
 
 fn ! gatesPass! cfg: Cfg unit: String wt: String gates: (List String) -> Bool
   (fold (fn [(ok0 Bool) (g String)] -> Bool
@@ -207,7 +238,7 @@ fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (ledgerGates! cfg wt))))))]
+        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg)))))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
