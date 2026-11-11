@@ -29,11 +29,12 @@ fn ! defaultCfg -> Cfg
 fn q s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
 
-; (:m :do "one event line, printed whole and appended to the cfg log when it names one")
+; (:m :do "one event line: appended to the cfg log when it names one, else printed whole to stdout, never both (a caller that redirects stdout into the same file would otherwise get every event twice)")
 fn ! emit! cfg: Cfg unit: String event: String rest: String -> Bool
-  (let [(line (str "(:merge :unit " (q unit) " :event :" event (if (stringEmpty? rest) "" (str " " rest)) ")"))
-        (_ (println line))]
-    (if (stringEmpty? cfg.log) true (ok? (fileAppend cfg.log (str line "\n")))))
+  (let [(line (str "(:merge :unit " (q unit) " :event :" event (if (stringEmpty? rest) "" (str " " rest)) ")"))]
+    (if (stringEmpty? cfg.log)
+      (do (println line) true)
+      (ok? (fileAppend cfg.log (str line "\n")))))
 
 ; (:m :do "wait until pid is gone, polling every 500 ms for at most maxS seconds; true when it is gone (pid <= 1 counts as gone). A pid, never a process name")
 fn ! waitPid! pid: Int64 maxS: Int64 -> Bool
@@ -95,6 +96,48 @@ fn ! neighbourGates! cfg: Cfg wt: String -> (List String)
         (files (filter (fn [f] (and (stringContains? f "/src/") (stringEndsWith? f ".asl"))) (stringLines d.out)))
         (tests (fold (fn [acc f] (listAppend acc (testsFor! wt f))) (list) files))]
     (map (fn [t] (str cfg.testCmd " " t)) tests))
+
+; (:m :ref MERGE-DOCLEDGER-GATE :do "the text of a module header's :x export list, whitespace normalised; empty when the file has none")
+fn exportHeader text: String -> String
+  (match (stringIndexOf text ":x [")
+    ((none) "")
+    ((some at)
+      (let [(rest (optionOr (stringSlice text (+ at 4) (stringLength text)) ""))
+            (end (optionOr (stringIndexOf rest "]") (stringLength rest)))]
+        (stringJoin (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace (optionOr (stringSlice rest 0 end) "") "\n" " ") " ")) " "))))
+
+fn docFile? path: String -> Bool
+  (and (stringEndsWith? path ".asn")
+       (or (= path "doc.asn") (or (stringEndsWith? path "/doc.asn") (stringStartsWith? path "asl/doc/"))))
+
+; (:m :ref MERGE-DOCLEDGER-GATE :do "a change line of git diff --name-status: the status letter and the new path (a rename names the new path last)")
+fn changeOf line: String -> (Pair String String)
+  (let [(parts (stringSplit line "\t"))]
+    (pair (optionOr (stringSlice (optionOr (listHead parts) "") 0 1) "") (optionOr (listLast parts) "")))
+
+fn ! baseText! cfg: Cfg wt: String path: String -> String
+  (let [(o (gitOut! wt (list "show" (str cfg.branch ":" path))))]
+    (if (= o.exit 0) o.out ""))
+
+; (:m :ref MERGE-DOCLEDGER-GATE :do "does one changed path of the branch need the doc ledger test: a doc.asn or asl/doc/*.asn touched; an .asl file added with a non-empty :x export list (tests with runTests included); an .asl file changed whose :x list differs from main's; a body-only change does not")
+fn ! needsLedger? cfg: Cfg wt: String c: (Pair String String) -> Bool
+  (let [(status (pairFirst c))
+        (path (pairSecond c))]
+    (cond
+      ((docFile? path) true)
+      ((not (stringEndsWith? path ".asl")) false)
+      ((= status "D") false)
+      (else
+        (let [(now (exportHeader (resultOr (fileReadString (str wt "/" path)) "")))
+              (was (if (= status "A") "" (exportHeader (baseText! cfg wt path))))]
+          (!= now was)))))
+
+fn ! ledgerGates! cfg: Cfg wt: String -> (List String)
+  (let [(d (gitOut! wt (list "diff" "--name-status" (str cfg.branch "...HEAD"))))
+        (changes (map changeOf (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines d.out))))]
+    (if (listAny? (fn [(c (Pair String String))] -> Bool (needsLedger? cfg wt c)) changes)
+      (list (str cfg.testCmd " asl/packages/asl-gates/tests/docLedgerTest.asl"))
+      (list)))
 
 fn uniq xs: (List String) -> (List String)
   (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
@@ -165,7 +208,7 @@ fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (neighbourGates! cfg wt)))))]
+        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg wt) (ledgerGates! cfg wt))))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
