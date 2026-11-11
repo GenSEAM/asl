@@ -65,17 +65,24 @@ fn ! runProc argv: (List String) envOpt: (Option (List String)) -> ProcOut
 fn ! fromFr p: fr/ProcOut -> ProcOut
   (ProcOut :exitCode p.exitCode :stdout p.stdout :stderr p.stderr)
 
+; (:m :ref PROC-REAPER-ALL :do "a native test binary gets the same bounded fleet lease as a runGuarded suite: its own pgid is the lease key, the default suite timeout is its deadline, and the row is removed only after pumpCollect has reaped it; a later runGuarded can therefore kill the group if this runner dies first")
 fn ! runProcIn argv: (List String) cwd: (Option String) envOpt: (Option (List String)) -> ProcOut
-  (let [(spawnRes (procSpawnv argv cwd envOpt))]
+  (let [(startNs (monotonicNs))
+        (spawnRes (procSpawnv argv cwd envOpt))]
     (match spawnRes
       ((err e) (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " e)))
       ((ok sp)
-        (let [(_ (fdClose sp.stdin))
+        (let [(lim (fr/defaultLimits))
+              (_ (fr/writeLease! sp.pid (procSelf) startNs
+                   (+ startNs (* (if (> lim.timeoutMs 0) lim.timeoutMs 3600000) 1000000))))
+              (_ (fdClose sp.stdin))
               (outFd sp.stdout)
               (errFd sp.stderr)
               (_ (fdNonBlocking outFd true))
-              (_ (fdNonBlocking errFd true))]
-          (pumpCollect outFd errFd "" "" true true sp.pid)))))
+              (_ (fdNonBlocking errFd true))
+              (out (pumpCollect outFd errFd "" "" true true sp.pid))
+              (_ (pathRemove (fr/leasePath sp.pid)))]
+          out))))
 
 fn withEnvOverrides! overrides: (List String) -> (List String)
   (let [(names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
