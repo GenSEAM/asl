@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [ownedDigest! commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [ownedDigest! finishLeftFor finishShortFor wallBounded? commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -889,10 +889,19 @@ fn ! loopWallSetting rootDir: String key: String fallback: Int64 -> Int64
     ((some v) (optionOr (ac/positiveInt v) fallback))
     ((none) fallback))
 
-fn ! finishLeftSec! env: s/LoopEnv state: s/LoopState rootDir: String -> (Option Int64)
-  (match env.wallBudget
-    ((some w) (some (- (+ w (loopWallSetting rootDir ":wallReserveSec" 120)) (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0))))
+fn wallBounded? wall: (Option Int64) -> Bool
+  (match wall ((some w) (> w 0)) ((none) false))
+
+fn finishLeftFor wall: (Option Int64) reserve: Int64 elapsed: Int64 -> (Option Int64)
+  (match wall
+    ((some w) (if (> w 0) (some (- (+ w reserve) elapsed)) none))
     ((none) none))
+
+fn finishShortFor left: (Option Int64) minSec: Int64 -> Bool
+  (match left ((some l) (< l minSec)) ((none) false))
+
+fn ! finishLeftSec! env: s/LoopEnv state: s/LoopState rootDir: String -> (Option Int64)
+  (finishLeftFor env.wallBudget (loopWallSetting rootDir ":wallReserveSec" 120) (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0))
 
 ; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "the first thing finish does: a (:partialReceipt ...) journal row, written when a wall budget bounds the run, with the turns, the stop cause, the journal path and the files written so far, written before the kill, the grader call and the hand-back, so a run the outer bound kills mid-finish still leaves its cause behind")
 fn ! partialReceipt! env: s/LoopEnv run: LoopRun -> Bool
@@ -912,7 +921,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
         status0 (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
         failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))
-        _partial (match env.wallBudget ((none) true) ((some _) (partialReceipt! env run)))]
+        _partial (match env.wallBudget ((none) true) ((some w) (if (> w 0) (partialReceipt! env run) true)))]
     (match (killRun! env run rootDir)
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
@@ -921,7 +930,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
               dirty (resultOr (go/changedOwnedFiles! env.owns rootDir none) (list))
               targets (specTargets written dirty)
               finishLeft (finishLeftSec! env state rootDir)
-              finishShort (match finishLeft ((some l) (< l (loopWallSetting rootDir ":wallFinishMinSec" 60))) ((none) false))
+              finishShort (finishShortFor finishLeft (loopWallSetting rootDir ":wallFinishMinSec" 60))
               _finishNote (if (and finishShort (specCheckWanted? env.specCheck status0 targets))
                             (journalSignal! env state.turn "finishSkipped" (str "the spec check was skipped: " (stringFromInt64 (optionOr finishLeft 0)) " s of wall left for the finish"))
                             true)

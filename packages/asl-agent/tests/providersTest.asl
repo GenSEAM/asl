@@ -540,6 +540,15 @@ fn ! checkCase root: String line: String -> Bool
       ((= kind "dryRun") (runDryRun kv root))
       (else (checkTrue (str cid " has a known kind: " kind) false))))
 
+fn checkUnquotedFixtureInt -> Bool
+  (let [d (pv/parseScriptFixture "(:script :gradeReply \"(:verdict pass)\" :gradeDelayMs 8000 :gradeModel m)" none)
+        q (pv/parseScriptFixture "(:script :gradeDelayMs \"250\")" none)
+        absent (pv/parseScriptFixture "(:script :gradeReply \"x\")" none)]
+    (and (checkTrue "an unquoted int fixture field parses to its value" (= d.gradeDelayMs 8000))
+      (and (checkTrue "the unquoted field stops at the next keyword" (= d.gradeModel (some "m")))
+        (and (checkTrue "a quoted int fixture field parses too" (= q.gradeDelayMs 250))
+          (checkTrue "an absent delay is 0" (= absent.gradeDelayMs 0))))))
+
 fn ! runTests -> Bool
   (match (resolveHost ".")
     ((none) false)
@@ -559,10 +568,11 @@ fn ! runTests -> Bool
            (sessionHeaderEmpty (checkSessionHeaderEmpty root))
            (freePoolProfilePin (checkFreePoolProfilePin root))
            (toolsFieldOk (checkToolsFieldOmitsWhenEmpty))
+           (unquotedInt (checkUnquotedFixtureInt))
            (dryCodexFiles (checkDryCodexFiles root))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
            (and (checkTrue "every case passed"
-                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (and toolsFieldOk (and dryCodexFiles (listAll? (fn [r] r) results)))))))))))
+                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (and freePoolProfilePin (and toolsFieldOk (and unquotedInt (and dryCodexFiles (listAll? (fn [r] r) results))))))))))))
              (checkTrue "scratch root removed" removed)))))))

@@ -2,7 +2,7 @@
   :x [retryAfterSec withRetryAfter ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
       ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
-      parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
+      parseAsnReply parseScriptFixture asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
       curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! buildDryRunPreview! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (aslAgent/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (aslAgent/nativeTools :a nt)])
 
@@ -564,8 +564,7 @@ fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option Str
                 (match (quotedBodyEnd bs limit (+ v 1))
                   (none none)
                   ((some e) (some (regexUnescape (sub text (+ v 1) e)))))
-                (let [(e (runWhile bs limit v (fn [i] (and (not (isPySpace (bytesGet bs i)))
-                                                         (and (!= (bytesGet bs i) 40) (!= (bytesGet bs i) 41))))))]
+                (let [(e (runWhile bs limit v isAtomByte))]
                   (if (= e v) none (some (sub text v e)))))))))))
 
 ; (:m :ref LEON-RAW-PROTOCOL :do "a turn's :error is looked up outside its :reply string, so a canned reply that itself carries :error (a model echoing a receipt code) stays a reply instead of becoming a scripted provider failure")
