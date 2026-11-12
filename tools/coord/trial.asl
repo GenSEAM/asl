@@ -1,7 +1,7 @@
 (module asl-tools/coord/trial
-  :x [Spec Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! trialMainMoved! stageArgv recordText leonFacts runsPath trialDir
+  :x [Spec clip Head Model TTask Cell emptySpec parseSpec specLines! taskChunks cellsOf cellId devBranchOf specProblems! headProblems! trialMainMoved! stageArgv recordText leonFacts runsPath trialDir
       check! run! collect! forgetAttempt! Setup Step setupOf setupSteps trialLanesText runSpecText setup! main]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-syntax/asl/asn :a asn) (aslGateway/subPace :a sp) (asl-tools/vcs/git :a gv) (asl-text/string :a ts)])
 
 ; (:m :ref LEON-TRIAL :do "TRIAL-DRIVER: N pinned writer models on the same tasks through the real stage CLI (conductor.asl stage write|gates|review|merge), one attempt per (task, model) cell, no ladder and no tick; each merge lands on its own scratch branch <devPrefix><cell> in a devRepo that is never main, and the production heads named in the spec are compared before and after so the trial never moves them")
 
@@ -490,7 +490,7 @@ fn tf b: Bool -> String
   (if b "true" "false")
 
 fn clip s: String -> String
-  (st/q (optionOr (stringSlice s 0 400) s))
+  (st/q (ts/stringClipUtf8 s 400))
 
 ; (:m :do "one stage form of the record in the trialAnalyze shape: write and merge carry :ok true|false, gates :exit :executed and :redBefore (:exit :executed), review :verdict :sig and :reviewers plists")
 fn stageText stage: String r: cd/Res red: String reviewers: String -> String

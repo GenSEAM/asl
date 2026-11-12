@@ -546,6 +546,7 @@
 (:doc :symbol "asl/packages/asl-gates/tests/auditLandedTest.asl#runTests" :text "pure rules, log parsing and a git fixture for audit landed")
 (:doc :symbol "asl/packages/asl-gates/src/auditLanded.asl#evIdsLoose" :text "the tolerant :ev reader for a first line the ASN reader refuses (a mixed-case hyphenated symbol like W1b-FIX): the line without its strings, then the words after the first :ev")
 (:doc :symbol "asl/packages/asl-gates/src/auditLanded.asl#stripStrings" :text "a line with its string literals dropped, backslash escapes honoured")
+(:doc :symbol "asl/packages/asl-gates/src/auditLanded.asl#subjectOf" :text "the first line of a commit message cut to 100 bytes at a UTF-8 character start")
 (:doc :symbol "asl/packages/asl-gates/src/auditForeign.asl#Audit" :text "schema of a foreign audit result: checks (the Check list), head, tail (strings)")
 (:doc :symbol "asl/packages/asl-gates/src/auditGates.asl#allowAbsentCheck!" :text "root: the vcsDirect check for a tree whose .asl/mem/vcsDirectAllow.asn is absent: fails ERR_VCS_NO_MAIN when there is no merge base with main, fails ERR_VCS_ALLOW_DELETED when the file exists at HEAD or at the merge base, else a skipped check")
 (:doc :symbol "asl/packages/asl-gates/src/auditGates.asl#cacheMode" :text "argv: the cache mode of the command line: off for --no-cache, else the value after --cache-dir, else empty (the runner store)")
@@ -618,3 +619,4 @@
 (:doc :symbol "asl/packages/asl-gates/tests/skipAccountingTest.asl#runTests" :text "skip accounting: only suites in skipAllowed.asn are SKIPPED with zero asserts, an unlisted skip row is ERR_SKIP_NOT_ALLOWED, all-skipped fails ERR_ALL_SKIPPED, the decision is made once before the run")
 (:doc :symbol "asl/packages/asl-gates/tests/vcsAuditWireTest.asl#runTests" :text "vcsDirect wired into audit consistency on fixture repos: a clean tree passes, a seeded site fails ERR_VCS_DIRECT, a deleted allowlist ERR_VCS_ALLOW_DELETED, no main ERR_VCS_NO_MAIN, a tracked cache ERR_VCS_CACHE_TRACKED")
 (:doc :symbol "asl/packages/asl-gates/tests/vcsDirectAuditTest.asl#runTests" :text "vcsDirectAudit on in-memory trees: new, allowed and stale sites, patterns, allowlist parsing, helpers by data, shell shapes and occurrence counts")
+(:doc :symbol "asl/packages/asl-gates/tests/landedClipTest.asl#runTests" :text "auditLanded subjectOf cuts a CJK subject back to its character start instead of mid-character")

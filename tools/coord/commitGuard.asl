@@ -1,6 +1,6 @@
 (module asl-tools/coord/commitGuard
-  :x [clearStaleMutex! lockRun! olderThanMin? sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
-  :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr)])
+  :x [esc1 clearStaleMutex! lockRun! olderThanMin? sweepOne! dirtyContext! stableDir! tryLock! exportSlots pruneExport! exportStagedWith! inPlaceOk! sweepStale! configStr exportBase! recordText! guardIndex! guardIndexWith! warmRows! checkBinOf defaultWarmS cfgFor! scaledSecs! configNum Cfg Hit Receipt defaultCfg flagVal hasFlag chunkRows statusOf Added exportStaged! exportHits hitBlocks? parseNameStatus addedLines messageHits conflictHits secretLine? secretHits ignoredHits foreignHit! gather! receipt report! run! guard! commit! main]
+  :i [(asl-gates/auditForeign :a af) (asl-gates/dyck :a dyck) (asl-regex/regex :a rx) (asl-tools/fleet/run :a fr) (asl-text/string :a ts)])
 
 ; (:m :ref COMMIT-GUARD :do "the earliest consistency check, run by the own commit entry (commit!, asl run commitGuard.asl commit --msg M -- PATH...) and by in-process callers (guard!); no git hook: staged (or --range A..B) ASL and ASN balance, asl check per .asl file, foreign growth against the foreignBaseline audit foreign reads, one ASN message line, conflict markers, ignored paths and secret-looking values; one ASN receipt, exit 1 blocks, --warn never blocks")
 
@@ -101,7 +101,7 @@ fn conflictHits added: (List Added) -> (List Hit)
                added))
 
 fn esc1 s: String -> String
-  (let [(c (if (> (stringLength s) 160) (str (optionOr (stringSlice s 0 160) "") "...") s))]
+  (let [(c (if (> (stringLength s) 160) (str (ts/stringClipUtf8 s 160) "...") s))]
     (stringReplace c "\"" "'"))
 
 ; (:m :do "provider key shapes; sk- must not follow an alphanumeric, so task-queue... is no key")

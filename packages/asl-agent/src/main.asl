@@ -4,7 +4,7 @@
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
       providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
-  :i [(aslAgent/core :a c)
+  :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
       (aslAgent/attractor :a at) (aslAgent/nativeTools :a nt)
@@ -1515,7 +1515,7 @@ fn prefixDrop v: String -> (List String)
 
 fn focusTail v: String task: String gates: (List String) wroteSinceGate: Bool -> String
   (if (not (listContains? (prefixList v) "focus")) ""
-    (str "\n\n(:focus :goal \"" (c/escapeAsn (if (> (stringLength task) 400) (optionOr (stringSlice task 0 400) task) task))
+    (str "\n\n(:focus :goal \"" (c/escapeAsn (if (> (stringLength task) 400) (ts/stringClipUtf8 task 400) task))
       "\" :gate \"" (c/escapeAsn (optionOr (listHead gates) "")) "\" :next "
       (if wroteSinceGate "(:step :op \"gate\")" "(:step :op \"read\"|\"edit\"|\"write\" ...)") ")"))
 

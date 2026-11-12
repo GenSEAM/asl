@@ -1,7 +1,7 @@
 (module aslGateway/server
-  :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [gatewayCliMode? failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
-  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
+  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/admission :a adm) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
@@ -587,7 +587,7 @@ fn failureHeaders f: u/UpstreamFailure -> (List (Pair String String))
 ; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "what a failed attempt's ledger row keeps as its reason: the status line and the start of the upstream body, the curl exit and its text, or the tool or protocol detail; ul/callRowLine redacts it before writing")
 fn failureReason f: u/UpstreamFailure -> String
   (match f
-    ((u/httpFailure status reason body _) (str (stringFromInt64 status) " " reason ": " (optionOr (stringSlice body 0 400) body)))
+    ((u/httpFailure status reason body _) (str (stringFromInt64 status) " " reason ": " (ts/stringClipUtf8 body 400)))
     ((u/transportFailure code text) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text)))
     ((u/toolAbsent tool detail) (str tool ": " detail))
     ((u/protocolFailure detail) detail))

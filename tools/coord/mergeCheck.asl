@@ -1,6 +1,6 @@
 (module asl-tools/coord/mergeCheck
   :x [cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
-  :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg) (asl-text/string :a ts)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
 
@@ -247,7 +247,7 @@ fn redactWhy s: String -> String
 fn whyOf out: String -> String
   (let [(ls (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines out)))
         (l (redactWhy (stringTrim (optionOr (listLast ls) ""))))]
-    (optionOr (stringSlice l 0 240) l))
+    (ts/stringClipUtf8 l 240))
 
 fn ! runSuite! side: String cli: String path: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Option SuiteRun)
   (let [(s (leftS deadlineNs stepS))]

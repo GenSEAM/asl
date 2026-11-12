@@ -1238,3 +1238,4 @@
 (:doc :symbol "asl/packages/asl-agent/src/runLoop.asl#wallBounded?" :text "args: a wall budget option; true only for a positive budget, 0 and none mean unbounded")
 (:doc :symbol "asl/packages/asl-agent/src/runLoop.asl#finishLeftFor" :text "args: wall budget option, reserve seconds, elapsed seconds; the seconds left for the finish, none when the budget is none or 0")
 (:doc :symbol "asl/packages/asl-agent/src/runLoop.asl#finishShortFor" :text "args: finish seconds left and the minimum; true when a limit exists and is below the minimum")
+(:doc :symbol "asl/packages/asl-agent/tests/journalClipTest.asl#runTests" :text "fallbackRowText and focusTail cut a CJK tail back to its character start instead of mid-character")

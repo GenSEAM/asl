@@ -1,6 +1,6 @@
 (module asl-gates/auditLanded
-  :x [Commit rowFieldsAny rowText rowItems evIds evIdsLoose stripStrings fromShas exemptKind gradeRows headSince gradeRow GradeRow isoOfMs parseLog landedChecks ledgerPath cmdLanded!]
-  :i [(asl-gates/auditGates :a ag) (asl-syntax/asl/asn :a asn)])
+  :x [subjectOf Commit rowFieldsAny rowText rowItems evIds evIdsLoose stripStrings fromShas exemptKind gradeRows headSince gradeRow GradeRow isoOfMs parseLog landedChecks ledgerPath cmdLanded!]
+  :i [(asl-gates/auditGates :a ag) (asl-syntax/asl/asn :a asn) (asl-text/string :a ts)])
 
 ; (:m :ref LANDED-AUDIT :do "main commits must be graded: the tracked ledger .asl/mem/grades.asn holds one (:grade :ev ID :sha SHA :verdict pass|fixNeeded :by FAMILY :at ISO) row per verdict, the newest row of an ev id wins, and a head row (:gradesHead :since SHA) is the checkpoint older history is not audited from; audit landed [--since REF] lists the commits in REF..HEAD that are neither exempt nor carry an :ev id whose newest verdict is pass, exit 1 on any. Exempt: a merge commit (more than one parent), a wip rescue commit (message head (:c :a wip :do), and a commit touching only the ledger (the verdict itself)")
 (schema Commit
@@ -173,7 +173,7 @@ fn short sha: String -> String
 
 fn subjectOf msg: String -> String
   (let [(l (optionOr (listHead (stringLines msg)) ""))]
-    (optionOr (stringSlice l 0 (if (< (stringLength l) 100) (stringLength l) 100)) l))
+    (ts/stringClipUtf8 l 100))
 
 ; (:m :ref LANDED-AUDIT :do "one failed check per audited commit that is a wip rescue commit (ERR_WIP_ON_MAIN) or has no covering pass row (ERR_UNGRADED, or ERR_NO_EV without any :ev), oldest first; none failing is one passed check counting the audited commits")
 fn landedChecks commits: (List Commit) ledger: String covers: (fn [String String String] -> Bool) -> (List ag/Check)

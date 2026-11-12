@@ -59,7 +59,8 @@
       (aslGateway/wire :a wire)
       (aslGateway/config :a c)
       (aslGateway/localTime :a lt)
-      (asl-parser/reader :a rd)])
+      (asl-parser/reader :a rd)
+      (asl-text/string :a ts)])
 
 ; (:m one append-only row per gateway upstream attempt: at/profile/intent/alias/provider/model/in/cached/out/ttftMs/ms/outcome/charge, plus a caller tag for joining with calibration runs and the effective request parameters applied after profile/model defaults; ttftMs, ms and the optional params are absent when the caller never measured or set them)
 (schema CallRow
@@ -184,7 +185,7 @@ fn labelRun? run: String -> Bool
 
 ; (:m :ref GW-LEDGER-ROTATION-WINDOW :tags (secrets) :do "a reason is upstream text and may echo a credential: the run after Bearer, the run after a key, token, secret, authorization or password label joined by : or =, and every key-shaped run (24 or more letters, digits, dash, underscore or dot holding a letter and a digit, or sk- and 9 more) become [redacted]; newlines become spaces and the result keeps at most 200 characters")
 fn redactReason text: String -> String
-  (let [(flat (stringReplace (stringReplace (stringReplace (optionOr (stringSlice text 0 600) text) "\n" " ") "\r" " ") "\t" " "))
+  (let [(flat (stringReplace (stringReplace (stringReplace (ts/stringClipUtf8 text 600) "\n" " ") "\r" " ") "\t" " "))
         (n (stringLength flat))
         (flush (fn [(st (List String))] -> (List String)
                  (let [(out (optionOr (listGet st 0) "")) (run (optionOr (listGet st 1) "")) (pending (optionOr (listGet st 2) "")) (sep (optionOr (listGet st 3) ""))]
@@ -201,7 +202,7 @@ fn redactReason text: String -> String
                       (list (str (optionOr (listGet f 0) "") c) "" (optionOr (listGet f 2) "") (str (optionOr (listGet f 3) "") c)))))))
         (done (flush (fold step (list "" "" "" "") (range 0 n))))
         (out (optionOr (listGet done 0) ""))]
-    (optionOr (stringSlice out 0 200) out))
+    (ts/stringClipUtf8 out 200))
 
 fn callRowLine row: CallRow -> String
   (str "(:call :at " (stringFromInt64 row.atMs)
