@@ -338,11 +338,27 @@ fn ! auditPass! cfg: Cfg wt: String -> Bool
 
 ; (:m :do "the rebase of the worktree onto the main branch; a conflict is aborted and reported false")
 ; (:m :ref BASH-EXIT-MERGE :do "a build leaves the tracked .asl.config.asn modified, and a dirty tree makes the rebase fail as a false conflict: that one path is restored from HEAD through the vcs layer first (an untracked or absent file is a no-op)")
-fn ! rebaseOnto! cfg: Cfg wt: String -> Bool
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "2026-11-12 LRED-sessionPool: --branch named the unit's own branch, so the rebase onto it was a no-op that exited 0, REBASED-ONTO-MOVED-MAIN was emitted twice and FF-FAIL followed; the result is now empty only when the rebase exited 0 and HEAD contains the main checkout's HEAD, else conflict: or notOnMain: with the git output")
+fn ! rebaseOnto! cfg: Cfg wt: String -> String
   (let [(_ (if (stringEmpty? (stringTrim (vg/changes! wt (list ".asl.config.asn")).out)) 0 (do (vg/restoreTree! wt "HEAD" (list ".asl.config.asn")) 0)))
         (r (gitOut! wt (list "rebase" "-q" cfg.branch)))]
-    (if (= r.exit 0) true
-      (do (gitOut! wt (list "rebase" "--abort")) false)))
+    (if (!= r.exit 0)
+      (do (gitOut! wt (list "rebase" "--abort")) (str "conflict: " (stringTrim r.out)))
+      (let [(h (vg/head! cfg.main))
+            (mainHead (stringTrim h.out))
+            (has (gitOut! wt (list "merge-base" "--is-ancestor" mainHead "HEAD")))]
+        (cond
+          ((or (!= h.exit 0) (stringEmpty? mainHead)) (str "notOnMain: the main checkout has no HEAD: " (stringTrim h.out)))
+          ((!= has.exit 0) (str "notOnMain: HEAD does not contain main " mainHead " after git rebase " cfg.branch (if (stringEmpty? (stringTrim has.out)) "" (str ": " (stringTrim has.out)))))
+          (else "")))))
+
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "true when the rebase landed on main; a conflict emits conflictEvent, a rebase that left HEAD off main emits REBASE-FAILED, both with the git output")
+fn ! rebased! cfg: Cfg unit: String wt: String conflictEvent: String -> Bool
+  (let [(why (rebaseOnto! cfg wt))]
+    (cond
+      ((stringEmpty? why) true)
+      ((stringStartsWith? why "conflict: ") (do (emit! cfg unit conflictEvent (str ":git " (q why))) false))
+      (else (do (emit! cfg unit "REBASE-FAILED" (str ":git " (q why))) false))))
 
 fn ! hostBuild! dir: String -> Bool
   (if (fileExists? (str dir "/asl/host/build.sh"))
@@ -375,7 +391,7 @@ fn ! ffLoop! cfg: Cfg unit: String wt: String branch: String try: Int64 -> Bool
     (cond
       ((= m.exit 0) true)
       ((>= try cfg.retries) (do (emit! cfg unit "FF-FAIL" (str ":tries " try)) false))
-      ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT-AT-MERGE" "") false))
+      ((not (rebased! cfg unit wt "REBASE-CONFLICT-AT-MERGE")) false)
       (else
         (do (emit! cfg unit "REBASED-ONTO-MOVED-MAIN" ":note \"disjoint; the gates ran on the earlier base\"")
             (ffLoop! cfg unit wt branch (+ try 1))))))
@@ -468,7 +484,7 @@ fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
   (let [(wt (str cfg.worktrees "/asex-" unit))]
     (cond
       ((not (fileExists? wt)) (do (emit! cfg unit "NO-WORKTREE" (str ":path " (q wt))) false))
-      ((not (rebaseOnto! cfg wt)) (do (emit! cfg unit "REBASE-CONFLICT" "") false))
+      ((not (rebased! cfg unit wt "REBASE-CONFLICT")) false)
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
         (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg unit wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg unit)))))))]
