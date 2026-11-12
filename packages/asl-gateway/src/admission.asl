@@ -1,12 +1,12 @@
 (module aslGateway/admission
-  :x [Lane laneInit parseLane renderLane parseLeases renderLeases baseOf maxCapOf laneCap effectiveLimits
-      dropOnConcurrency429 raiseOnSuccess tryAdmit growStreak growQuietMs
+  :x [concurrency429After! holdUntil! Lane laneInit parseLane renderLane parseLeases renderLeases baseOf maxCapOf laneCap effectiveLimits
+      dropOnConcurrency429 dropGuardMs raiseOnSuccess tryAdmit growStreak growQuietMs
       admitShared! releaseShared! concurrency429! admissionDir]
   :i [(aslGateway/config :a c)
       (aslGateway/limits :a lim)
       (aslGateway/usage :a g)])
 
-; (:m :ref GW-ADAPTIVE-ADMISSION :do "one lane is one provider and alias; its cap starts at the covering :concurrency row, drops to max(1, inFlight-1) on an upstream 429 that names concurrency, and rises by 1 after growStreak successes with no such 429 for growQuietMs, up to the row's :max (default twice the row). cap 0 means not yet learned. Adopted: 20 successes, 600 s")
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "one lane is one provider and alias; its cap starts at the covering :concurrency row, halves to max(1, inFlight/2) on an upstream 429 that names concurrency, and rises by 1 after growStreak successes with no such 429 for growQuietMs, up to the row's :max (default twice the row). cap 0 means not yet learned. Adopted: 20 successes, 600 s")
 (schema Lane
   (:f cap Int64)
   (:f ok Int64)
@@ -83,10 +83,16 @@ fn effectiveLimits lims: (List c/GatewayLimit) lane: Lane -> (List c/GatewayLimi
 fn inFlightOf leases: (List lim/Lease) provider: String alias: String -> Int64
   (listLength (filter (fn [(x lim/Lease)] -> Bool (and (= x.provider provider) (= x.alias alias))) leases))
 
+; (:m :ref GW-SYN-ADMISSION :do "one multiplicative decrease per burst: calls that fail together on one overload cut the cap once, a 429 within dropGuardMs of the last cut leaves it as it is. Adopted: 2000 ms")
+fn dropGuardMs -> Int64
+  2000
+
 fn dropOnConcurrency429 lane: Lane base: c/GatewayLimit inFlight: Int64 now: Int64 -> Lane
   (let [(cur (laneCap lane base))
-        (target (max 1 (- (min cur inFlight) 1)))]
-    (Lane :cap (min cur target) :ok 0 :last429 now))
+        (target (max 1 (/ (min cur inFlight) 2)))]
+    (if (and (> lane.last429 0) (< (- now lane.last429) (dropGuardMs)))
+      lane
+      (Lane :cap (min cur target) :ok 0 :last429 now)))
 
 fn raiseOnSuccess lane: Lane base: c/GatewayLimit now: Int64 -> Lane
   (let [(cur (laneCap lane base))
@@ -147,18 +153,32 @@ fn ! saveState! home: String provider: String alias: String leases: (List lim/Le
     ((err e) (err e))
     ((ok _) (writeAtomic! (lanePath home provider alias) (renderLane lane))))
 
-; (:m :ref GW-ADAPTIVE-ADMISSION :do "ok true plus the admitted flag; err when the shared state is locked out, unreadable or malformed, which the caller parks on, never falling back to its own list")
+fn holdPath home: String provider: String alias: String -> String
+  (str (lanePath home provider alias) ".hold")
+
+; (:m :ref GW-SYN-ADMISSION :do "a 429 Retry-After pauses its lane: the epoch ms before which nothing is admitted, a plain integer file beside the lane state; unreadable text means no hold")
+fn ! holdUntil! home: String provider: String alias: String -> Int64
+  (match (readOr! (holdPath home provider alias) "0")
+    ((err _) 0)
+    ((ok t) (optionOr (stringToInt64 (stringTrim t)) 0)))
+
+fn maxHoldMs -> Int64
+  300000
+
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "ok true plus the admitted flag; err when the shared state is locked out, unreadable or malformed, which the caller parks on, never falling back to its own list. A lane inside its Retry-After hold admits nothing")
 fn ! admitShared! home: String lims: (List c/GatewayLimit) provider: String alias: String now: Int64 leaseMs: Int64 -> (Result Bool String)
   (match (lockHome! home 400)
     ((err e) (err e))
     ((ok fd)
-     (let [(res (match (loadState! home provider alias)
-                  ((err e) (err e))
-                  ((ok st)
-                   (let [(r (tryAdmit (pairFirst st) (pairSecond st) lims provider alias now leaseMs))]
-                     (match (saveState! home provider alias (pairSecond r) (pairSecond st))
-                       ((err e) (err e))
-                       ((ok _) (ok (pairFirst r))))))))
+     (let [(res (if (< now (holdUntil! home provider alias))
+                  (ok false)
+                  (match (loadState! home provider alias)
+                    ((err e) (err e))
+                    ((ok st)
+                     (let [(r (tryAdmit (pairFirst st) (pairSecond st) lims provider alias now leaseMs))]
+                       (match (saveState! home provider alias (pairSecond r) (pairSecond st))
+                         ((err e) (err e))
+                         ((ok _) (ok (pairFirst r)))))))))
            (closed (fdClose fd))]
        res)))
 
@@ -197,3 +217,20 @@ fn ! concurrency429! home: String lims: (List c/GatewayLimit) provider: String a
                           ((ok _) (ok lane.cap)))))))
               (closed (fdClose fd))]
           res)))))
+
+; (:m :ref GW-SYN-ADMISSION :do "concurrency429! that also honours the upstream's Retry-After: retryAfterMs above 0 holds the lane for min(retryAfterMs, 300000) ms from now, never shortening a longer hold already set; 0 holds nothing")
+fn ! concurrency429After! home: String lims: (List c/GatewayLimit) provider: String alias: String now: Int64 retryAfterMs: Int64 -> (Result Int64 String)
+  (match (concurrency429! home lims provider alias now)
+    ((err e) (err e))
+    ((ok cap)
+     (if (<= retryAfterMs 0)
+       (ok cap)
+       (match (lockHome! home 400)
+         ((err e) (err e))
+         ((ok fd)
+          (let [(until (max (holdUntil! home provider alias) (+ now (min retryAfterMs (maxHoldMs)))))
+                (res (match (writeAtomic! (holdPath home provider alias) (stringFromInt64 until))
+                       ((err e) (err e))
+                       ((ok _) (ok cap))))
+                (closed (fdClose fd))]
+            res))))))
