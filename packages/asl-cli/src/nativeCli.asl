@@ -1,6 +1,6 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
+  :x [kwPrev? plainArg? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
   (let [(configured (optionOr (envGet "ASL_NATIVE_CLI_CACHE") ""))
@@ -273,6 +273,62 @@ fn ! relayRefresh! ctx: sys/Context -> Bool
       (do (eprintln (str "asl: native CLI kept for the relay client; its refresh runs in the background: " (startBuild! ctx (cacheDir!) 2 ""))) true)
       false))
 
+; (:m :ref PERF-CLI-REBUILD :do "asl test with plain suite paths (no other flag than --jobserverDir DIR, ASL_TRACE off, no remote profile) keeps the current CLI when every dep that moved since the head is an .asl file outside the toolchain roots and outside the files the test verb reaches (cliClosure from native.asl main, other verbs' handlers cut); a moved non-.asl dep, a moved toolchain root, a missing dep, a reached file outside deps or a closure that cannot be computed is not pinned; .asl.config.asn :nativeCli :testPin false turns it off")
+fn testArgs args: (List String) -> (List String)
+  (match (listIndexOf args "--jobserverDir")
+    ((some i) (testArgs (listAppend (listTake args i) (listDrop args (+ i 2)))))
+    ((none) args))
+
+fn testPathArg? a: String -> Bool
+  (and (not (stringEmpty? a)) (not (or (stringStartsWith? a "-") (or (stringStartsWith? a "(") (stringStartsWith? a ":")))))
+
+fn testArgv? cmd: (List String) -> Bool
+  (let [(args (testArgs (optionOr (listTail cmd) (list))))]
+    (and (= (optionOr (listHead cmd) "") "test") (and (not (listEmpty? args)) (listAll? testPathArg? args))))
+
+fn ! relativeTo root: String path: String -> (Option String)
+  (if (stringStartsWith? path (str root "/")) (stringSlice path (+ (stringLength root) 1) (stringLength path)) (none))
+
+; (:m :ref PERF-CLI-REBUILD :do "the reached files are cached as root-relative lines in DIR/testClosure, written only when none of them differs from DIR/src, so the cache always describes the sources DIR was built from; an absent or unreadable cache is computed again from the tree")
+fn ! testClosure! root: String dir: String moved: (List String) -> (Option (List String))
+  (match (fileReadString (str dir "/testClosure"))
+    ((ok text) (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text))))
+    ((err _)
+      (let [(real (resultOr (realPath root) root))]
+        (match (cc/closureOf! (str real "/" (cc/testEntry)) (list "main") (cc/testCuts) (cc/testGates))
+          ((err e) (do (eprintln (str "asl: test pin off, closure: " e)) (none)))
+          ((ok files)
+            (let [(rel (map (fn [(f String)] -> (Option String) (relativeTo real f)) files))]
+              (if (listAny? none? rel)
+                (none)
+                (let [(paths (map (fn [(o (Option String))] -> String (optionOr o "")) rel))
+                      (part (str dir "/testClosure.part." (stringFromInt64 (procSelf))))
+                      (_ (if (listAny? (fn [(p String)] -> Bool (listContains? moved p)) paths)
+                           false
+                           (and (ok? (fileWrite part (str (stringJoin paths "\n") "\n"))) (ok? (pathRename part (str dir "/testClosure"))))))]
+                  (some paths)))))))))
+
+fn testPinOn? text: String -> Bool
+  (!= (configWord text "testPin") "false")
+
+; (:m :ref PERF-CLI-REBUILD :do "a dep moved when its bytes differ from the copy DIR/src holds, the same comparison fresh? makes, so an edit that keeps an mtime still counts")
+fn ! movedDeps root: String dir: String deps: (List String) -> (List String)
+  (filter (fn [(p String)] -> Bool (not (sameBytes? (underRoot root p) (str dir "/src/" p)))) deps)
+
+fn ! testPinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (if (not (and (testArgv? cmd) (and (!= (optionOr (envGet "ASL_TRACE") "") "1") (> (mtimeOf stampPath) 0))))
+    false
+    (let [(deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
+          (moved (movedDeps root dir deps))]
+      (and (testPinOn? (resultOr (fileReadString (str root "/.asl.config.asn")) ""))
+        (and (not (listEmpty? deps))
+          (and (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (and (stringEndsWith? p ".asl") (not (under? p (toolchainRootPaths)))))) moved)
+            (and (= (rt/findProfile! (resultOr (realPath ".") ".")) (ok (none)))
+              (match (testClosure! root dir moved)
+                ((none) false)
+                ((some reached) (and (listAll? (fn [(p String)] -> Bool (listContains? deps p)) reached)
+                                     (not (listAny? (fn [(p String)] -> Bool (listContains? reached p)) moved)))))))))))
+
 ; (:m :ref FORMS-PINNED-CLI :do "an argv that is only ASN forms of the edit family (read query observe edit write diff flush discard, intel outline) runs on the newest already-built CLI without a staleness rebuild: such a form reads or stages text and never needs the toolchain edit that made the CLI stale; every keyword of every form, nested ones included, must be in the op's allow-list (allowedKeys) so a :gates, :run or :cmd field never rides along; check, test, run and every other verb keep the staleness rule; only .asl.config.asn :nativeCli :formsPin true turns it on, absent or any other word is off")
 fn formsAllowed -> (List String)
   (list ":read" ":query" ":observe" ":edit" ":write" ":diff" ":flush" ":discard" ":intel :outline" ":intel :op outline")
@@ -360,14 +416,17 @@ fn ! formsPinned? root: String dir: String cmd: (List String) -> Bool
     (and (formsPinOn? text)
       (and (sys/executable? (str dir "/bin")) (formsOnly? cmd))))
 
+; (:m :ref PERF-CLI-REBUILD :do "the one answer the CLI's own stale gate and aslNativeBuild refresh share: a forms-only argv, the relay tool on an unmoved toolchain, or asl test outside the reached files keeps the current CLI")
+fn ! kept? root: String dir: String stampPath: String cmd: (List String) -> Bool
+  (or (formsPinned? root dir cmd) (or (pinned? root dir stampPath cmd) (testPinned? root dir stampPath cmd)))
+
 fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
       ((not (direct?)) (none))
       ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
-      ((formsPinned? ctx.root dir args) (none))
-      ((pinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
+      ((kept? ctx.root dir (headPath (cacheDir!) ctx.root) args) (none))
       ((relayPinned? ctx.root dir (headPath (cacheDir!) ctx.root) args) (do (relayRefresh! ctx) (none)))
       (else (some (awaitStaleRebuild! ctx dir args)))))
 
