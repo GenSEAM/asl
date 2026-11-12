@@ -6,7 +6,7 @@
 fn ! rankLoop! sorted: (List (Pair Int64 Float64)) out: Bytes i: Int64 n: Int64 -> Unit
   (if (>= i n) ()
     (let [(v (pairSecond (optionOr (listGet sorted i) (pair 0 0.0))))
-          (j (tieEnd sorted v i n))
+          (j (tieEnd sorted v (+ i 1) n))
           (r (/ (+ (int64ToFloat64 (+ i 1)) (int64ToFloat64 j)) 2.0))]
       (do (setRange! sorted out i j r)
           (rankLoop! sorted out j n))))
@@ -27,18 +27,26 @@ fn indexedList xs: (List Float64) i: Int64 -> (List (Pair Int64 Float64))
     ((none) (list))
     ((some v) (cons (pair i v) (indexedList (optionOr (listTail xs) (list)) (+ i 1)))))
 
-fn ! ranks xs: (List Float64) -> (List Float64)
-  (let [(n (listLength xs))
-        (out (bytesAlloc (* (max n 1) 8)))
-        (sorted (listSortBy (fn [(p (Pair Int64 Float64))] -> Float64 (pairSecond p)) (indexedList xs 0)))
-        (_ (rankLoop! sorted out 0 n))]
-    (floatsOf out 0 n))
+fn finite? x: Float64 -> Bool
+  (and (not (isNan? x)) (not (= (abs x) (floatInf))))
+
+fn finiteAll? xs: (List Float64) -> Bool
+  (listAll? finite? xs)
+
+fn ! ranks xs: (List Float64) -> (Result (List Float64) String)
+  (if (not (finiteAll? xs)) (err "statsRange: a value is NaN or infinite")
+    (let [(n (listLength xs))
+          (out (bytesAlloc (* (max n 1) 8)))
+          (sorted (listSortBy (fn [(p (Pair Int64 Float64))] -> Float64 (pairSecond p)) (indexedList xs 0)))
+          (_ (rankLoop! sorted out 0 n))]
+      (ok (floatsOf out 0 n))))
 
 fn pearson xs: (List Float64) ys: (List Float64) -> (Result Float64 String)
   (cond
     ((or (listEmpty? xs) (listEmpty? ys)) (err (ds/statsEmpty)))
     ((!= (listLength xs) (listLength ys)) (err "statsRange: the two series differ in length"))
     ((< (listLength xs) 2) (err (ds/statsTooFew)))
+    ((not (and (finiteAll? xs) (finiteAll? ys))) (err "statsRange: a value is NaN or infinite"))
     (else
       (match (ds/mean xs)
         ((err e) (err e))
@@ -58,7 +66,13 @@ fn ! spearman xs: (List Float64) ys: (List Float64) -> (Result Float64 String)
   (cond
     ((or (listEmpty? xs) (listEmpty? ys)) (err (ds/statsEmpty)))
     ((!= (listLength xs) (listLength ys)) (err "statsRange: the two series differ in length"))
-    (else (pearson (ranks xs) (ranks ys))))
+    (else
+      (match (ranks xs)
+        ((err e) (err e))
+        ((ok rx)
+          (match (ranks ys)
+            ((err e) (err e))
+            ((ok ry) (pearson rx ry)))))))
 
 fn tableOk? t: (List (List Int64)) -> Bool
   (let [(k (listLength t))]

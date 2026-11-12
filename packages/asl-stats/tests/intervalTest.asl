@@ -108,6 +108,9 @@ fn testSize! -> Bool
     (assert (= (sizeOf (iv/twoProportionSampleSize 0.3 0.2 0.05 0.8)) 294) "the order of the proportions does not matter")
     (assert (= (sizeOf (iv/twoProportionSampleSize 0.1 0.15 0.05 0.8)) 686) "10% vs 15% needs 686 per group")
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.5 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "equal proportions are statsRange")
+    (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.5 0.500000000001 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a size beyond Int64 is statsRange, never ok 0")
+    (assert (stringStartsWith? (match (iv/twoProportionSampleSize (floatNan) 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a NaN proportion is statsRange")
+    (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.5 0.6 (floatNan) 0.8) ((err e) e) ((ok _) "")) "statsRange") "a NaN alpha is statsRange")
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.0 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a proportion of 0 is statsRange")
     true)
 

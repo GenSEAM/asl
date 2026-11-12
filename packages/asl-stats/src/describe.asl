@@ -11,7 +11,7 @@ fn statsTooFew -> String
 
 fn ! neumaier! xs: (List Float64) s: Float64 c: Float64 -> Float64
   (match (listHead xs)
-    ((none) (+ s c))
+    ((none) (let [(r (+ s c))] (if (and (isNan? r) (not (isNan? s))) s r)))
     ((some x)
       (let [(t (+ s x))
             (c2 (if (>= (abs s) (abs x)) (+ c (+ (- s t) x)) (+ c (+ (- x t) s))))]
@@ -49,7 +49,7 @@ fn stddev xs: (List Float64) -> (Result Float64 String)
 fn percentileSorted sorted: (List Float64) p: Float64 -> (Result Float64 String)
   (cond
     ((listEmpty? sorted) (err (statsEmpty)))
-    ((or (< p 0.0) (> p 100.0)) (err "statsRange: percentile must be 0..100"))
+    ((or (isNan? p) (or (< p 0.0) (> p 100.0))) (err "statsRange: percentile must be 0..100"))
     (else
       (let [(n (listLength sorted))
             (h (/ (* (int64ToFloat64 (- n 1)) p) 100.0))

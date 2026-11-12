@@ -102,6 +102,7 @@ fn ! fillFloats! b: Bytes xs: (List Float64) i: Int64 -> Unit
 
 fn twoProportionSampleSize p1: Float64 p2: Float64 alpha: Float64 power: Float64 -> (Result Int64 String)
   (cond
+    ((or (isNan? p1) (or (isNan? p2) (or (isNan? alpha) (isNan? power)))) (err "statsRange: an argument is NaN"))
     ((or (<= p1 0.0) (or (>= p1 1.0) (or (<= p2 0.0) (>= p2 1.0)))) (err "statsRange: proportions must be inside (0,1)"))
     ((= p1 p2) (err "statsRange: the proportions are equal, no sample size detects a zero difference"))
     ((or (not (confOk? alpha)) (not (confOk? power))) (err "statsRange: alpha and power must be inside (0,1)"))
@@ -112,4 +113,6 @@ fn twoProportionSampleSize p1: Float64 p2: Float64 alpha: Float64 power: Float64
             (a (* za (sqrt (* (* 2.0 pb) (- 1.0 pb)))))
             (b (* zb (sqrt (+ (* p1 (- 1.0 p1)) (* p2 (- 1.0 p2))))))
             (n (/ (* (+ a b) (+ a b)) (* (- p1 p2) (- p1 p2))))]
-        (ok (optionOr (float64ToInt64 (ceil (- n 1.0e-9))) 0)))))
+        (match (float64ToInt64 (ceil (- n 1.0e-9)))
+          ((some k) (ok k))
+          ((none) (err "statsRange: the sample size does not fit in Int64"))))))

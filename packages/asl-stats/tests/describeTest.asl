@@ -65,10 +65,29 @@ fn testErrors! -> Bool
       (assert (stringStartsWith? (errOf (ds/cohenD one (list 1.0 2.0))) "statsTooFew") "Cohen d with a one-value group is statsTooFew")
       true))
 
+fn rk xs: (List Float64) -> (List Float64)
+  (match (ag/ranks xs)
+    ((ok r) r)
+    ((err e) (do (assert false e) (list))))
+
+fn testNonFinite! -> Bool
+  (let [(nan (floatNan))
+        (inf (floatInf))]
+    (do
+      (assert (stringStartsWith? (errOf (ag/spearman (list 1.0 nan 3.0) (list 1.0 2.0 3.0))) "statsRange") "a NaN in x is statsRange and the run terminates")
+      (assert (stringStartsWith? (errOf (ag/spearman (list 1.0 2.0 3.0) (list nan nan nan))) "statsRange") "all-NaN y is statsRange")
+      (assert (stringStartsWith? (errOf (ag/spearman (list 1.0 inf 3.0) (list 1.0 2.0 3.0))) "statsRange") "an infinity is statsRange")
+      (assert (stringStartsWith? (errOf (ag/pearson (list 1.0 nan 3.0) (list 1.0 2.0 3.0))) "statsRange") "pearson refuses NaN too")
+      (assert (stringStartsWith? (match (ag/ranks (list nan 1.0)) ((err e) e) ((ok _) "")) "statsRange") "ranks refuses NaN")
+      (assert (= (ds/sumKahan (list 1.0 inf 2.0)) inf) "a compensated sum with an infinity is that infinity, not NaN")
+      (assert (isNan? (ds/sumKahan (list inf (- 0.0 inf)))) "inf minus inf stays NaN")
+      (assert (stringStartsWith? (errOf (ds/percentile (data) nan)) "statsRange") "a NaN percentile is statsRange")
+      true))
+
 fn testRank! -> Bool
   (do
-    (assert (= (ag/ranks (list 5.0 6.0 7.0 8.0 7.0)) (list 1.0 2.0 3.5 5.0 3.5)) "ties share the average rank")
-    (assert (= (ag/ranks (list 10.0 20.0 20.0 30.0 40.0 40.0 40.0)) (list 1.0 2.5 2.5 4.0 6.0 6.0 6.0)) "a three-way tie takes rank 6")
+    (assert (= (rk (list 5.0 6.0 7.0 8.0 7.0)) (list 1.0 2.0 3.5 5.0 3.5)) "ties share the average rank")
+    (assert (= (rk (list 10.0 20.0 20.0 30.0 40.0 40.0 40.0)) (list 1.0 2.5 2.5 4.0 6.0 6.0 6.0)) "a three-way tie takes rank 6")
     (assert (near? (val (ag/spearman (list 1.0 2.0 3.0 4.0 5.0) (list 5.0 6.0 7.0 8.0 7.0))) 0.8207826816681233 1.0e-12) "Spearman with a tie in y is 0.82078268 (average ranks)")
     (assert (near? (val (ag/spearman (list 10.0 20.0 20.0 30.0 40.0 40.0 40.0) (list 1.0 3.0 2.0 5.0 4.0 4.0 6.0))) 0.8118990304530631 1.0e-12) "Spearman with ties in both series")
     (assert (= (val (ag/spearman (list 1.0 2.0 3.0 4.0) (list 1.0 8.0 27.0 64.0))) 1.0) "a monotone nonlinear pair is exactly 1")
@@ -101,5 +120,6 @@ fn ! runTests -> Bool
     (testEffect!)
     (testErrors!)
     (testRank!)
+    (testNonFinite!)
     (testKappa!)
     true)
