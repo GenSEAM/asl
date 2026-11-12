@@ -30,6 +30,9 @@
   (:f neighbours Bool :default false)
   (:f liveRoot String :default "tools/remote/")
   (:f liveSuites (List String) :default (list "tools/remote/tests/vpsE2eTest.asl"))
+  (:f symbolSelect Bool :default true)
+  (:f affectedTool String :default "")
+  (:f affectedSecs Int64 :default 300)
   (:f invariantCosts (List String) :default (list
     "./bin/asl test tools/tests/noSelfHostTest.asl=30"
     "./scripts/install.sh --check-rules=30"
@@ -147,14 +150,52 @@ fn importNames mod: String path: String -> (List String)
   (let [(byPath (optionOr (stringSlice path 0 (- (stringLength path) 4)) ""))]
     (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (if (= mod byPath) (list mod) (list mod byPath))))
 
-; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the direct suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk")
+; (:m :ref AFFSYM-WIRE :do "a reason chain in an event is cut to 400 characters with a trailing ...; the selector repeats a chain that loops (seen 2026-11-12: runCoreTests <- runTests <- runCoreTests ...)")
+fn clipWhy s: String -> String
+  (if (> (stringLength s) 400) (str (optionOr (stringSlice s 0 400) s) "...") s)
+
+; (:m :ref AFFSYM-WIRE :do "the (suite reason) pairs of an asl/tools/affectedSuites.asl receipt line (:affected ... :suites ((\"path\" \"reason\") ...)); paths and reasons hold no quote")
+fn affectedPairs out: String -> (List (Pair String String))
+  (let [(line (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:affected ")) (stringLines out)) ""))
+        (after (match (stringIndexOf line ":suites (") ((some at) (optionOr (stringSlice line (+ at 9) (stringLength line)) "")) ((none) "")))]
+    (map (fn [(piece String)] -> (Pair String String)
+           (let [(parts (stringSplit piece "\" \""))]
+             (pair (optionOr (listHead parts) "") (optionOr (listHead (stringSplit (optionOr (listGet parts 1) "") "\")")) ""))))
+         (listDrop (stringSplit after "(\"") 1)))
+
+; (:m :ref AFFSYM-WIRE :do "the symbol-level selector: cfg.affectedTool (default the main checkout's asl/tools/affectedSuites.asl) runs as a bounded child in the worktree with --base set to the merge base of cfg.branch, and answers the suites that reach a changed item through a chain of mentions, each with its reason chain; err names why it could not answer (no tool, no merge base, a failed or timed-out run, no receipt line)")
+fn ! symbolSuites! cfg: Cfg wt: String -> (Result (List (Pair String String)) String)
+  (let [(tool (if (stringEmpty? cfg.affectedTool) (str cfg.main "/asl/tools/affectedSuites.asl") cfg.affectedTool))
+        (mb (gitOut! wt (list "merge-base" cfg.branch "HEAD")))]
+    (cond
+      ((not (fileExists? tool)) (err "noTool"))
+      ((!= mb.exit 0) (err "noMergeBase"))
+      (else
+        (let [(d (fr/runOneLimited (fr/job (list cfg.aslBin "run" tool (str "--base=" (stringTrim mb.out))) wt (fr/childEnv (list))) (fr/limits cfg.affectedSecs 64)))]
+          (cond
+            ((not (and (= d.verdict "exit") (= d.exit 0))) (err (str "run " d.verdict " " (stringFromInt64 d.exit))))
+            ((not (stringContains? d.out "(:affected ")) (err "noReceipt"))
+            (else (ok (affectedPairs d.out))))))))
+
+; (:m :ref AFFSYM-WIRE :do "the direct suites of a change: by default the symbol-level selector's answer (only suites reaching a changed item, each logged as SELECTED with its reason chain); when it cannot answer, or with cfg.symbolSelect off, the import scan below runs instead and NEIGHBOUR-SELECTOR names why")
 fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) -> (List String)
+  (match (if cfg.symbolSelect (symbolSuites! cfg wt) (err "off"))
+    ((ok picked)
+      (let [(kept (filter (fn [(p (Pair String String))] -> Bool (suite? wt (pairFirst p))) picked))
+            (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"symbol\" :n " (stringFromInt64 (listLength kept)))))
+            (_ (map (fn [(p (Pair String String))] -> Bool (emit! cfg unit "SELECTED" (str ":suite " (q (pairFirst p)) " :why " (q (clipWhy (pairSecond p)))))) kept))]
+        (map (fn [(t String)] -> String (str cfg.testCmd " " t)) (uniq (map pairFirst kept)))))
+    ((err why) (importerGates! cfg unit wt changes why)))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the import-scan suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk; the fallback of the symbol selector")
+fn ! importerGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) why: String -> (List String)
   (let [(paths (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
         (tests (filter (fn [(p String)] -> Bool (suite? wt p)) paths))
         (names (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str wt "/" p)) p))) (list) paths))
         (imps (if (listEmpty? names) (list) (importersIn! wt (uniq names))))
         (all (uniq (listAppend tests imps)))
-        (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :n " (stringFromInt64 (listLength all)))))]
+        (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :why " (q why) " :n " (stringFromInt64 (listLength all)))))
+        (_ (map (fn [(t String)] -> Bool (emit! cfg unit "SELECTED" (str ":suite " (q t) " :why " (if (listContains? tests t) "\"changed\"" "\"importer\"")))) all))]
     (map (fn [(t String)] -> String (str cfg.testCmd " " t)) all))
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "the live suites: cfg.liveSuites and every :suite of the main checkout's .asl/mem/skipAllowed.asn under cfg.liveRoot (suites that need a reachable VPS)")
