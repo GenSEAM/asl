@@ -338,21 +338,30 @@ fn ! auditPass! cfg: Cfg wt: String -> Bool
 
 ; (:m :do "the rebase of the worktree onto the main branch; a conflict is aborted and reported false")
 ; (:m :ref BASH-EXIT-MERGE :do "a build leaves the tracked .asl.config.asn modified, and a dirty tree makes the rebase fail as a false conflict: that one path is restored from HEAD through the vcs layer first (an untracked or absent file is a no-op)")
-; (:m :ref MERGEUNIT-FF-NOREBASE :do "2026-11-12 LRED-sessionPool: --branch named the unit's own branch, so the rebase onto it was a no-op that exited 0, REBASED-ONTO-MOVED-MAIN was emitted twice and FF-FAIL followed; the result is now empty only when the rebase exited 0 and HEAD contains the main checkout's HEAD, else conflict: or notOnMain: with the git output")
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "2026-11-12 LRED-sessionPool: --branch named the unit's own branch, so the rebase onto it was a no-op that exited 0, REBASED-ONTO-MOVED-MAIN was emitted twice and FF-FAIL followed; the main checkout HEAD sha is read once, the worktree rebases onto that sha and the result is empty only when HEAD then contains it; else conflict: (aborted), failed: (refused, nothing to abort) or notOnMain: with the git output")
 fn ! rebaseOnto! cfg: Cfg wt: String -> String
   (let [(_ (if (stringEmpty? (stringTrim (vg/changes! wt (list ".asl.config.asn")).out)) 0 (do (vg/restoreTree! wt "HEAD" (list ".asl.config.asn")) 0)))
-        (r (gitOut! wt (list "rebase" "-q" cfg.branch)))]
-    (if (!= r.exit 0)
-      (do (gitOut! wt (list "rebase" "--abort")) (str "conflict: " (stringTrim r.out)))
-      (let [(h (vg/head! cfg.main))
-            (mainHead (stringTrim h.out))
-            (has (gitOut! wt (list "merge-base" "--is-ancestor" mainHead "HEAD")))]
-        (cond
-          ((or (!= h.exit 0) (stringEmpty? mainHead)) (str "notOnMain: the main checkout has no HEAD: " (stringTrim h.out)))
-          ((!= has.exit 0) (str "notOnMain: HEAD does not contain main " mainHead " after git rebase " cfg.branch (if (stringEmpty? (stringTrim has.out)) "" (str ": " (stringTrim has.out)))))
-          (else "")))))
+        (h (vg/head! cfg.main))
+        (mainHead (stringTrim h.out))]
+    (if (or (!= h.exit 0) (stringEmpty? mainHead))
+      (str "notOnMain: the main checkout has no HEAD: " (stringTrim h.out))
+      (let [(r (gitOut! wt (list "rebase" "-q" mainHead)))]
+        (if (!= r.exit 0)
+          (if (rebasing! wt)
+            (do (gitOut! wt (list "rebase" "--abort")) (str "conflict: " (stringTrim r.out)))
+            (str "failed: " (stringTrim r.out)))
+          (let [(has (gitOut! wt (list "merge-base" "--is-ancestor" mainHead "HEAD")))]
+            (if (= has.exit 0) ""
+              (str "notOnMain: HEAD does not contain main " mainHead " after git rebase" (if (stringEmpty? (stringTrim has.out)) "" (str ": " (stringTrim has.out))))))))))
 
-; (:m :ref MERGEUNIT-FF-NOREBASE :do "true when the rebase landed on main; a conflict emits conflictEvent, a rebase that left HEAD off main emits REBASE-FAILED, both with the git output")
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "a rebase stopped mid-way leaves rebase-merge or rebase-apply in the worktree's git dir: that is a conflict to abort; a rebase refused up front (dirty tree) leaves neither and needs no abort")
+fn ! rebasing! wt: String -> Bool
+  (let [(m (gitOut! wt (list "rev-parse" "--git-path" "rebase-merge")))
+        (a (gitOut! wt (list "rev-parse" "--git-path" "rebase-apply")))
+        (abs (fn [(p String)] -> String (if (stringStartsWith? p "/") p (str wt "/" p))))]
+    (or (and (= m.exit 0) (fileExists? (abs (stringTrim m.out)))) (and (= a.exit 0) (fileExists? (abs (stringTrim a.out))))))
+
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "true when the rebase landed on main; a conflict emits conflictEvent, a refused rebase or one that left HEAD off main emits REBASE-FAILED, both with the git output")
 fn ! rebased! cfg: Cfg unit: String wt: String conflictEvent: String -> Bool
   (let [(why (rebaseOnto! cfg wt))]
     (cond
