@@ -716,8 +716,8 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
           ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
           ((none) (limitConcurrency! srv1 text sc limits provider alias now)))))
     ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream said 429 for concurrency: free this call's lease and lower the lane cap; a shared-state failure is logged, the call still parks")
-    ((ch/effConcurrency429 provider alias)
-      (let [(r (adm/concurrency429! srv.home (admissionLimits! srv provider alias) provider alias (/ (nowNs) 1000000)))]
+    ((ch/effConcurrency429 provider alias retryAfterMs)
+      (let [(r (adm/concurrency429After! srv.home (admissionLimits! srv provider alias) provider alias (/ (nowNs) 1000000) retryAfterMs))]
         (do (match r ((ok _) true) ((err e) (logLine! (str "(:gateway :admission :error \"" (wire/asnEscape e) "\")"))))
           (pair srv ch/outDone))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))

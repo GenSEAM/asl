@@ -113,7 +113,7 @@
   ; (:m :ref GW-LIMIT-WINDOWS :do "asks the reactor whether a provider limit window is spent for this member; the answer is empty to go ahead, else (outcome reason)")
   (:c effLimit [(provider String) (alias String)])
   ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream answered 429 naming concurrency: the server frees this call's lease and lowers the lane cap; chat then parks and asks again")
-  (:c effConcurrency429 [(provider String) (alias String)])
+  (:c effConcurrency429 [(provider String) (alias String) (retryAfterMs Int64)])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "asks the server for this call's spread-member order: real per-profile+intent SWRR state (GatewayLoop.spreadState) and real breaker/429-cooldown availability live server-side, never in chat.asl; pools carries one (alias, providerPool:alias) pair per spread member so the server can check the real BreakerState without re-resolving the config table")
   (:c effSpreadOrder [(profile String) (intent String) (spread (List (Pair String Int64))) (cooldownSec Int64) (pools (List (Pair String String)))])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 at the server's own wall clock (GatewayLoop.spreadLast429), independent of and in addition to the existing per-model breaker trip -- :cooldownSec is configurable per route and almost never equals BreakerState's own fixed cooldown")
@@ -2389,20 +2389,26 @@ fn retryHttp cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (L
 
 fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (if (and (b/breakerIsConcurrency429 status body) (limitedAttempt? cx a))
-    (concurrencyParked cx l a)
+    (concurrencyParked cx l a headers)
     (httpFailedPlain cx l a status reason headers body))
 
-; (:m :ref GW-ADAPTIVE-ADMISSION :do "a concurrency 429 is the gateway's to absorb: the lane cap falls, no breaker opens and nothing reaches the caller; the last member sleeps the poll interval and asks admission again until the queue budget is gone, an earlier member is skipped at once so a later one can answer")
-fn concurrencyParked cx: Ctx l: Loop a: Attempt -> ChatStep
+; (:m :ref GW-SYN-ADMISSION :do "the 429's Retry-After (seconds or HTTP-date, 0 when absent) rides the effect so admission holds the lane; each parked attempt writes one ledger row with outcome limit:concurrency429, which the limit counters and the lease release both ignore (sentOutcome?), so the lease freed by the effect is released exactly once")
+fn concurrencyParked cx: Ctx l: Loop a: Attempt headers: (List (Pair String String)) -> ChatStep
   (let [(prov a.upstream.provider)
         (poll (c/defaultConcurrencyPollMs))
         (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
-    (tell (effConcurrency429 prov a.alias)
-      (fn [] -> ChatStep
-        (cond
-          ((not (lastMember? l)) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit, a later chain member answers"))
-          ((>= (+ a.parkedMs poll) budgetMs) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit for the whole queue budget"))
-          (else (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l (with a :parkedMs (+ a.parkedMs poll)) (+ a.parkedMs poll)))))))))
+    (askFloat (effClock)
+      (fn [(now Float64)] -> ChatStep
+        (let [(raMs (match (retryAfterSecondsFromNow (retryAfterHeaderOf headers) now)
+                      ((some s) (optionOr (float64ToInt64 (* s 1000.0)) 0))
+                      ((none) 0)))]
+          (tell (effConcurrency429 prov a.alias raMs)
+            (fn [] -> ChatStep
+              (cond
+                ((not (lastMember? l)) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit, a later chain member answers"))
+                ((>= (+ a.parkedMs poll) budgetMs) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit for the whole queue budget"))
+                (else (tellAll (list (usageNote prov a.alias "limit:concurrency429") (effSleepMs poll))
+                        (fn [] -> ChatStep (askLimit cx l (with a :parkedMs (+ a.parkedMs poll)) (+ a.parkedMs poll))))))))))))
 
 fn httpFailedPlain cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (let [(policy (retryPolicyFor cx a))]
@@ -2551,7 +2557,7 @@ fn effectJson eff: ChatEffect -> j/Json
       ((effBreakerDownAll ps) (op "breakerDownAll" (list (pair "pools" (j/jarr (map (fn [(p String)] -> j/Json (j/jstr p)) ps))))))
       ((effBreakerEvent e p park) (op "breaker" (listAppend (list (pair "event" (j/jstr e)) (pair "pool" (j/jstr p))) (if (> park 0) (list (pair "parkSec" (j/jint park))) (list)))))
       ((effUsageNote p a o u) (op "usageNote" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)) (pair "outcome" (j/jstr o)) (pair "usage" u))))
-      ((effConcurrency429 p a) (op "concurrency429" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
+      ((effConcurrency429 p a ms) (op "concurrency429" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)) (pair "retryAfterMs" (j/jint ms)))))
       ((effLimit p a) (op "limit" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effUsageFallback p a) (op "usageFallback" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effSpreadOrder prof i spr cd pools)
