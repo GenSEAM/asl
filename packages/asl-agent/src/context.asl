@@ -880,7 +880,7 @@ fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
 fn contextLatestCapBytes contextTokens: Int64 -> Int64
   (* 2 (readPayloadChars contextTokens))
 
-; (:m :ref TRANSCRIPT-BUDGET-REGRESSION :do "a turn keeps its first rendering until the next compaction point, so up to contextCompactStep turns hold the newest-turn cap at once; held to half the window over those turns, 3000 chars at 8k tokens and 45000 at 120k")
+; (:m :ref TRANSCRIPT-BUDGET-REGRESSION :do "a turn keeps its first rendering until the next compaction point, so up to contextCompactStep turns hold the newest-turn cap at once; held to the window chars (contextTokens x charsPerToken) over step+1, 4800 at 8k tokens, and never above contextLatestCapBytes, so 72000 at 120k")
 fn contextWindowLatestCapBytes contextTokens: Int64 -> Int64
   (min (contextLatestCapBytes contextTokens) (/ (* contextTokens (charsPerToken)) (+ (max 1 (contextCompactStep)) 1)))
 
