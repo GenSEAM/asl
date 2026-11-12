@@ -284,6 +284,7 @@ fn ! testStoreLock! -> Bool
         (_ (age! (bp c b)))
         (held (fileLock (str dir "/lock") true))
         (pinHeld (cas/pin! c a "late"))
+        (unpinHeld (cas/unpin! c a "late"))
         (pinsHeld (resultOr (cas/pinsOf! c a) (list "?")))
         (putHeld (cas/put! c (stringToBytes "old while locked")))
         (bOld (match (fileStat (bp c b)) ((ok st) (< st.mtimeNs (- (nowNs) 1000000000000))) ((err _) false)))
@@ -296,6 +297,7 @@ fn ! testStoreLock! -> Bool
         (_ (rmTree! dir))]
     (do (assert (ok? held) "the test holds the store lock")
         (assert (match pinHeld ((err e) (stringContains? e "busy")) ((ok _) false)) "pin! under a held store lock is a busy err, not a pin")
+        (assert (match unpinHeld ((err e) (stringContains? e "busy")) ((ok _) false)) "unpin! under a held store lock is a busy err")
         (assert (listEmpty? pinsHeld) (str "a refused pin! leaves no marker: " (stringJoin pinsHeld ",")))
         (assert (match putHeld ((err e) (stringContains? e "busy")) ((ok _) false)) "a dedup put! under a held store lock is a busy err, not a silent touch")
         (assert bOld "the refused dedup put! did not touch the blob")

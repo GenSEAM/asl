@@ -167,11 +167,17 @@ fn ! unpin! cas: Cas h: String owner: String -> (Result Int64 String)
   (cond
     ((not (validHash? h)) (err (str "invalid hash " h)))
     ((not (validOwner? owner)) (err (str "invalid owner " owner)))
-    (else (let [(p (str (pinDir cas h) "/" owner))
-                (_ (if (exists? p) (ok? (pathRemove p)) true))
-                (left (pinsOf! cas h))
-                (_ (match left ((ok ps) (if (listEmpty? ps) (ok? (pathRemove (pinDir cas h))) true)) ((err _) true)))]
-            (if (exists? p) (err (str "unpin " owner ": marker still present")) (countOf left)))))
+    (else (match (lockStore! cas)
+            ((err e) (err (str "unpin " owner ": " e)))
+            ((ok fd) (let [(r (unpinLocked! cas h owner)) (_ (fdClose fd))] r)))))
+
+; (:m :ref DSBLOB-LOWS :do "unpin runs under the store lock, so a pin! cannot add a marker between the empty pins read and the pin directory remove")
+fn ! unpinLocked! cas: Cas h: String owner: String -> (Result Int64 String)
+  (let [(p (str (pinDir cas h) "/" owner))
+        (_ (if (exists? p) (ok? (pathRemove p)) true))
+        (left (pinsOf! cas h))
+        (_ (match left ((ok ps) (if (listEmpty? ps) (ok? (pathRemove (pinDir cas h))) true)) ((err _) true)))]
+    (if (exists? p) (err (str "unpin " owner ": marker still present")) (countOf left)))
 
 fn ! old? p: String cutNs: Int64 -> Bool
   (match (fileStat p) ((ok st) (< st.mtimeNs cutNs)) ((err _) false))
