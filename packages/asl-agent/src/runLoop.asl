@@ -1,10 +1,11 @@
 (module aslAgent/runLoop
-  :x [withUnbacked redGateOf specCheckRun! journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [ownedDigest! finishLeftFor finishShortFor wallBounded? commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
       (aslAgent/core :a c) (aslAgent/gates :a g) (asl-json/json :a j)
-      (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)])
+      (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)
+      (asl-tools/vcs/vcs :a vcs)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
@@ -480,7 +481,7 @@ fn ! setup! env: s/LoopEnv -> LoopSetup
 
 ; (:m :ref LEON-ORPHAN-RESIDUE :do "the calling CLI pid reaches the baseline gates, so a dead parent kills them like the per-turn gates")
 fn ! setupWatched! env: s/LoopEnv parent: (Option Int64) -> LoopSetup
-  (let [state (stateFor env)
+  (let [state (let [s0 (stateFor env)] (if (some? env.contextTokens) s0 (with s0 :contextTokens (some (ctx/contextTokensFor! env.model (j/jnull) false)))))
         sid (optionOr env.sessionId (env.newId))
         rootDir (absoluteRoot! env.rootDir)]
     (match (startHead! rootDir)
@@ -502,6 +503,9 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
         baselineOn (!= (optionOr (ac/agentLoopValue cfgText ":baseline") "true") "false")
         preflight (go/gatePreflight! env.gates rootDir none)
         fresh (jr/newWritten rootDir head)
+        resumeSha (match env.resume
+          ((some _) (match (fileReadString (str (jr/splitExt env.journalPath) ".patch")) ((ok t) (some (bytesSha256 (stringToBytes t)))) ((err _) none)))
+          ((none) none))
         patchState (match env.resume
           ((some _) (match (jr/applyResumePatch fresh rootDir env.journalPath sid)
             ((err e) (pair fresh (pair none (some e)))) ((ok applied) applied)))
@@ -514,6 +518,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
     (do
       (jr/journalWrite env.journalPath header)
       (resumeJournal! applied env.journalPath)
+      (if (and (some? applied) (some? resumeSha)) (ok? (jr/journalWrite env.journalPath (str "(:resumeBase :sha \"" (optionOr resumeSha "") "\")\n"))) true)
       (cond
         ((not (listEmpty? cfgProblems))
           (let [message (c/joinSep cfgProblems "; ")]
@@ -534,6 +539,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
                         (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
                         (list))
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
+                _inherited (if (and (none? env.resume) (not (stringEmpty? env.inheritedBase))) (ok? (jr/journalWrite env.journalPath (str "(:inheritedBase :sha \"" (c/escapeAsn env.inheritedBase) "\")\n"))) true)
                 _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
           (ready (LoopRun
             :state (withBaseline (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
@@ -671,24 +677,28 @@ fn ! relativeTo path: String rootDir: String -> String
 fn distinct xs: (List String) -> (List String)
   (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
 
+; (:m :ref LEON-COMMIT-VIA-VCS :do "the guard's checks run by env.toolRoot's bin/asl (the tool tree the run was given, the binary Leon itself runs; empty means the commit root), so a fresh worktree needs no host build of its own; Leon's writes are committed through the vcs layer: vcs/commit! stages exactly the paths the run wrote, commitGuard judges the blobs that land, and a refusal ends the run commitError with the guard receipt (HEAD unchanged); the layer never uses warn here; :indexStale true lands the commit but leaves a journal row and a flag on the commit row so the stale shared index is visible")
 fn ! commitWritten! env: s/LoopEnv run: LoopRun rootDir: String message: String -> (Result (Pair (Option String) (Option String)) String)
   (let [paths (distinct (map (fn [p] (relativeTo p rootDir))
     (listAppend run.state.writtenFiles (writtenPaths run.written))))]
     (if (listEmpty? paths)
       (commitFailed! env "the run wrote no path to commit")
-      (match (jr/git! rootDir (listAppend (list "ls-files" "--others" "--exclude-standard" "--") paths))
+      (commitLanded! env rootDir (vcs/commitWith! rootDir rootDir env.toolRoot paths message "commit"))))
+
+; (:m :ref LEON-COMMIT-VIA-VCS :do "a landed vcs receipt becomes the run commit pair; :indexStale true keeps the sha and puts indexStale in the second slot, which commitFields prints as :commitIndexStale true on the result line the conductor reads, and the journal row stays")
+fn ! commitLanded! env: s/LoopEnv rootDir: String r: vcs/VcsReceipt -> (Result (Pair (Option String) (Option String)) String)
+  (if (= r.code 0)
+    (if (stringContains? r.text ":indexStale true")
+      (match (headSha! rootDir)
         ((err e) (err e))
-        ((ok listed)
-          (let [newFiles (filter (fn [f] (not (stringEmpty? f))) (map ctx/pyStrip (stringLines listed.stdout)))]
-            (match (if (listEmpty? newFiles) (ok 0) (match (jr/git! rootDir (listAppend (list "add" "--") newFiles)) ((err e) (err e)) ((ok o) (ok o.exitCode))))
-              ((err e) (err e))
-              ((ok _)
-                (match (jr/git! rootDir (listAppend (list "commit" "-m" message "--") paths))
-                  ((err e) (err e))
-                  ((ok done)
-                    (if (= done.exitCode 0)
-                      (committed! env rootDir)
-                      (commitFailed! env (ctx/pyStrip (if (stringEmpty? done.stderr) done.stdout done.stderr)))))))))))))
+        ((ok sha) (journaled! env (str "(:commit \"" sha "\")\n(:commitIndexStale \"" sha "\")\n") (pair (some sha) (some "indexStale")))))
+      (committed! env rootDir))
+    (commitFailed! env r.text))
+
+fn commitFields commit: (Pair (Option String) (Option String)) -> String
+  (match (pairFirst commit)
+    ((some sha) (str " :commit \"" sha "\"" (match (pairSecond commit) ((some _) " :commitIndexStale true") ((none) ""))))
+    ((none) (match (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
 
 fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGreen: Bool -> (Result (Pair (Option String) (Option String)) String)
   (let [message (optionOr run.commitMessage "")]
@@ -706,7 +716,7 @@ fn ! commit! env: s/LoopEnv run: LoopRun rootDir: String status: String gatesGre
 fn specText spec: (Option s/SpecVerdict) -> String
   (match spec
     ((some v) (cond
-                ((= v.verdict "skipped") " :specCheck (:verdict skipped :reason noGrader)")
+                ((= v.verdict "skipped") (str " :specCheck (:verdict skipped :reason " (optionOr (listHead v.reasons) "noGrader") ")"))
                 ((= v.verdict "unavailable") (str " :specCheck (:verdict unavailable :reviewer unavailable :reasons (" (quoted v.reasons) "))"))
                 (else (str " :specCheck (:verdict " v.verdict " :model \"" (c/escapeAsn v.model) "\" :reasons (" (quoted v.reasons) "))"))))
     ((none) ""))
@@ -729,8 +739,23 @@ fn reviewerUnavailable? message: String -> Bool
   (listAny? (fn [m] (stringContains? message m))
     (list "ERR_NO_UPSTREAM" "no model answered" "circuit breaker open" "Gateway HTTP error 502" "Gateway HTTP error 503" "Gateway HTTP error 504"))
 
+fn modelFamily name: String -> String
+  (let [lower (stringLower name)
+        base (optionOr (listLast (stringSplit lower "/")) lower)
+        noKimi (if (stringStartsWith? base "kimi-") (optionOr (stringSlice base 5 (stringLength base)) base) base)]
+    (if (stringEndsWith? noKimi "-thinking")
+      (optionOr (stringSlice noKimi 0 (- (stringLength noKimi) 9)) noKimi)
+      noKimi))
+
 fn specFail model: String reasons: (List String) -> s/SpecVerdict
   (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
+
+; (:m :ref LEON-DONE-WITHOUT-WIRING :do "specTargets is the distinct union of the files this run wrote and the owned files that differ from HEAD, so a continuation run that writes nothing on top of a restored patch still grades the dirty tree; specCheckWanted? is the guard that runs the check only at an ok finish with at least one target")
+fn specTargets written: (List String) dirty: (List String) -> (List String)
+  (distinct (listAppend written dirty))
+
+fn specCheckWanted? specCheck: Bool status: String targets: (List String) -> Bool
+  (and specCheck (and (= status "ok") (not (listEmpty? targets))))
 
 ; (:m :ref LEON-CAPS :do "the diff is graded against the task by the env.grade channel, a gateway role other than the writer's; a reviewer error, an unreadable reply, a grader that reports no model, a grader that is the writer's own model, an unknown writer model, and a not-met verdict are all fail; a provider with no grader channel is skipped, which still ends needsReview, never a silent pass")
 fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List String) -> s/SpecVerdict
@@ -755,7 +780,7 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
               ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
               ((stringEmpty? grader) (specFail grader (list "the grader reported no model, so it cannot be shown to differ from the writer")))
               ((stringEmpty? writer) (specFail grader (list "the writer model is unknown, so the grader cannot be shown to differ")))
-              ((= grader writer) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
+              ((= (modelFamily grader) (modelFamily writer)) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
               (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
 
 fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) -> String
@@ -769,9 +794,7 @@ fn resultText state: s/LoopState session: String status: String unbacked: Int64 
       (if (listEmpty? claims) "" (str " :unbackedClaims (" (quoted claims) ")"))
       " :contextTokens " (stringFromInt64 (optionOr state.contextTokens 0))
       (match state.error ((some e) (str " :error :" (stripColons e))) ((none) ""))
-      (match (pairFirst commit)
-        ((some sha) (str " :commit \"" sha "\""))
-        ((none) (match (pairSecond commit) ((some why) (str " :commitError \"" (c/escapeAsn why) "\"")) ((none) ""))))
+      (commitFields commit)
       (if commitMissing " :commitMissing true" "")
       (match state.deliver ((some d) (if (stringEmpty? d) "" (str " :deliver :" d))) ((none) ""))
       " :phases (" (phasesText state.phases) ")"
@@ -813,6 +836,80 @@ fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s
     ((err handErr) (emptyResultWith env run.session "failed" (some handErr) run.state.turn none (list) none none none run.state.baselineGreen))
     ((ok hand) (emptyResultWith env run.session "failed" (some e) run.state.turn (pairFirst (pairSecond hand)) (pairSecond (pairSecond hand)) none none none run.state.baselineGreen)))
 
+; (:m :ref LEON-OK-WITHOUT-CHANGE :do "a run with declared gates and an :owns brief ends ok only when its final tree differs from its start: handBack's patch is none when every write was rejected or reverted, so green baseline gates cannot carry the verdict. A resumed run that restored a patch must also end with a patch other than the restored one (LEON-DONE-WITHOUT-WIRING); the restored patch's sha is journaled as :resumeBase at setup. Findings deliveries are exempt")
+fn ! resumeBaseSha! journalPath: String -> (Option String)
+  (match (listHead (filter (fn [l] (stringStartsWith? l "(:resumeBase :sha \"")) (stringLines (resultOr (fileReadString journalPath) ""))))
+    ((some l) (let [rest (c/sliceOf l 19 (stringLength l))] (some (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\"") 0)))))
+    ((none) none))
+
+fn withNoChange run: LoopRun state: s/LoopState -> LoopRun
+  (with run :state (with state :signalName (some "noChange")))
+
+; (:m :ref RAWREPLAY-RED :do "digest of the owned dirty state: git diff --binary HEAD limited to owns plus the untracked files under owns; the lower rung's handoff passes it as :inheritedBase and the run journals it as (:inheritedBase :sha ...)")
+fn ! ownedDigest! owns: (List String) root: String -> String
+  (let [diff (optionOr (go/gitText! (listAppend (list "git" "diff" "--binary" "HEAD" "--") owns) root) "")
+        untracked (optionOr (go/gitText! (listAppend (list "git" "ls-files" "--others" "--exclude-standard" "--") owns) root) "")
+        paths (filter (fn [p] (not (stringEmpty? p))) (stringLines untracked))
+        contents (map (fn [p] (str p "\n" (resultOr (fileReadString (str root "/" p)) ""))) paths)]
+    (bytesSha256 (stringToBytes (str diff "\n" (stringJoin contents "\n")))))
+
+fn ! inheritedBaseSha! journalPath: String -> (Option String)
+  (match (listHead (filter (fn [l] (stringStartsWith? l "(:inheritedBase :sha \"")) (stringLines (resultOr (fileReadString journalPath) ""))))
+    ((some l) (let [rest (c/sliceOf l 22 (stringLength l))] (some (c/sliceOf rest 0 (optionOr (stringIndexOf rest "\"") 0)))))
+    ((none) none))
+
+fn ! refusedWrite? journalPath: String -> Bool
+  (listAny? (fn [l] (and (stringStartsWith? l "(:op :turn ")
+                         (and (not (stringContains? l " :status ok"))
+                              (listAny? (fn [n] (stringContains? l (str " :name \"" n "\""))) (list "write" "edit" "txn" "delete")))))
+            (stringLines (resultOr (fileReadString journalPath) "")))
+
+fn withInheritedChange run: LoopRun state: s/LoopState -> LoopRun
+  (with run :state (with state :signalName (some "inheritedChange")))
+
+; (:m :ref RAWREPLAY-RED :do "7de069c5874e6633: a session that wrote nothing is not noChange only when the lower rung that changed the owned files handed that state over explicitly: the run's (:inheritedBase :sha D) row equals the current owned dirty digest and no write of its own was refused; a dirty tree with no marker, a mismatching marker, a clean tree or a refused write stays noChange/needsReview (LEON-OK-WITHOUT-CHANGE)")
+fn ! inheritedHolds? env: s/LoopEnv rootDir: String -> Bool
+  (match (inheritedBaseSha! env.journalPath)
+    ((some sha) (and (= sha (ownedDigest! env.owns rootDir)) (not (refusedWrite? env.journalPath))))
+    ((none) false))
+
+fn ! noChangeEnd? env: s/LoopEnv state: s/LoopState rootDir: String status: String patch: (Option String) inherited: Bool -> Bool
+  (if (and (= status "ok") (and (not (listEmpty? env.gates)) (and (not (listEmpty? env.owns)) (!= (optionOr state.deliver "") "findings"))))
+    (match patch
+      ((none) (not inherited))
+      ((some p)
+        (match (resumeBaseSha! env.journalPath)
+          ((some sha) (= sha (bytesSha256 (stringToBytes (resultOr (fileReadString (str rootDir "/" p)) "")))))
+          ((none) false))))
+    false)
+
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "the least wall the slow finish steps (the spec check grader call) need: :wallFinishMinSec, default 60; a finish with less left than that skips the grader and marks (:specCheck (:verdict skipped :reasons (wallBudget))), which ends the run needsReview instead of letting the outer bound kill it with no receipt")
+fn ! loopWallSetting rootDir: String key: String fallback: Int64 -> Int64
+  (match (ac/agentLoopValue (ac/configText! rootDir) key)
+    ((some v) (optionOr (ac/positiveInt v) fallback))
+    ((none) fallback))
+
+fn wallBounded? wall: (Option Int64) -> Bool
+  (match wall ((some w) (> w 0)) ((none) false))
+
+fn finishLeftFor wall: (Option Int64) reserve: Int64 elapsed: Int64 -> (Option Int64)
+  (match wall
+    ((some w) (if (> w 0) (some (- (+ w reserve) elapsed)) none))
+    ((none) none))
+
+fn finishShortFor left: (Option Int64) minSec: Int64 -> Bool
+  (match left ((some l) (< l minSec)) ((none) false))
+
+fn ! finishLeftSec! env: s/LoopEnv state: s/LoopState rootDir: String -> (Option Int64)
+  (finishLeftFor env.wallBudget (loopWallSetting rootDir ":wallReserveSec" 120) (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0))
+
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "the first thing finish does: a (:partialReceipt ...) journal row, written when a wall budget bounds the run, with the turns, the stop cause, the journal path and the files written so far, written before the kill, the grader call and the hand-back, so a run the outer bound kills mid-finish still leaves its cause behind")
+fn ! partialReceipt! env: s/LoopEnv run: LoopRun -> Bool
+  (let [state run.state
+        written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))]
+    (ok? (jr/journalWrite env.journalPath (str "(:partialReceipt :turns " (stringFromInt64 state.turn) " :stop \"" (optionOr state.signalName state.status) "\" :status :" state.status
+                         " :journal \"" (c/escapeAsn env.journalPath) "\" :written (" (quoted written) "))\n"))))
+
 ; (:m :ref LEON-FAIL-STATUS :do "stale ad-hoc findings data does not fail a run that wrote its owned files and ended on green declared gates, and a downgrade to failed writes a verdict line naming the cause")
 fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
   (let [state run.state
@@ -823,14 +920,24 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
           (listAny? (fn [f] (stringContains? f ":claim")) findings) (listLength state.runUnbackedClaims) 0) "|")
         status0 (c/firstOf outcome)
         finalUnbacked (optionOr (stringToInt64 (optionOr (listGet outcome 1) "")) 0)
-        failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))]
+        failed (fn [e patch restored] (emptyResultWith env run.session "failed" (some e) state.turn patch restored none none none state.baselineGreen))
+        _partial (match env.wallBudget ((none) true) ((some w) (if (> w 0) (partialReceipt! env run) true)))]
     (match (killRun! env run rootDir)
       ((err e) (failedAfterKill! env run rootDir e))
       ((ok _)
         (let [written (distinct (listAppend state.writtenFiles (writtenPaths run.written)))
               _why (if (and (= status0 "failed") (= state.status "ok")) (ok? (jr/journalWrite env.journalPath (str "(:verdict :failed :why \"findings without a claim, and no green declared gate over written files\" :findings " (stringFromInt64 (listLength findings)) ")\n"))) true)
-              spec (if (and env.specCheck (and (= status0 "ok") (not (listEmpty? written))))
-                     (some (specCheckRun! env run rootDir written))
+              dirty (resultOr (go/changedOwnedFiles! env.owns rootDir none) (list))
+              targets (specTargets written dirty)
+              finishLeft (finishLeftSec! env state rootDir)
+              finishShort (finishShortFor finishLeft (loopWallSetting rootDir ":wallFinishMinSec" 60))
+              _finishNote (if (and finishShort (specCheckWanted? env.specCheck status0 targets))
+                            (journalSignal! env state.turn "finishSkipped" (str "the spec check was skipped: " (stringFromInt64 (optionOr finishLeft 0)) " s of wall left for the finish"))
+                            true)
+              spec (if (specCheckWanted? env.specCheck status0 targets)
+                     (if finishShort
+                       (some (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "wallBudget")))
+                       (some (specCheckRun! env run rootDir targets)))
                      none)
               finalStatus (match spec ((some v) (if (listContains? (list "fail" "skipped" "unavailable") v.verdict) "needsReview" status0)) ((none) status0))
               gatesGreen (declaredGatesGreen env.gates state.lastGates)
@@ -842,16 +949,23 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
             ((err e) (failed e none (list)))
             ((ok hand)
               (let [patch (pairFirst (pairSecond hand))
-                    restored (pairSecond (pairSecond hand))]
-                (match (commit! env run rootDir finalStatus gatesGreen)
+                    restored (pairSecond (pairSecond hand))
+                    inherited (inheritedHolds? env rootDir)
+                    noChange (noChangeEnd? env state rootDir finalStatus patch inherited)
+                    endStatus (if noChange "needsReview" finalStatus)
+                    _noChange (if noChange (journalSignal! env state.turn "noChange" "no persisted change versus the start of the run, or none beyond the restored patch") true)
+                    inheritedEnd (and (not noChange) (and inherited (and (none? patch) (= finalStatus "ok") (not (listEmpty? env.gates)))))
+                    _inheritedNote (if inheritedEnd (journalSignal! env state.turn "inheritedChange" (str "no work in this session; the ok rests on changes inherited from a lower rung in " (stringJoin dirty " "))) true)
+                    run2 (cond (noChange (withNoChange run state)) (inheritedEnd (withInheritedChange run state)) (else run))]
+                (match (commit! env run2 rootDir endStatus gatesGreen)
                   ((err e) (failed e patch restored))
                   ((ok commit)
-                    (let [commitMissing (and (= finalStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
+                    (let [commitMissing (and (= endStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
                       (match (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
                             (ctx/coreStatsLine (coreHostZero))
-                            (resultText state run.session finalStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
+                            (resultText run2.state run.session endStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
                         ((err e) (failed e patch restored))
-                        ((ok _) (finalResult env run finalStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
+                        ((ok _) (finalResult env run2 endStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
 
 fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair LoopRun s/Step)) -> LoopRun
   (match (head! env run.state run.parseDefectStreak)
@@ -861,7 +975,8 @@ fn ! runBody! env: s/LoopEnv run: LoopRun body: (fn [s/LoopEnv LoopRun] -> (Pair
           ((proceed)
             (match (body env headed)
               ((pair next nextStep)
-                (match nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body))))))
+                (let [_cp (jr/checkpoint! next.written (absoluteRoot! env.rootDir) env.journalPath next.session next.state.turn)]
+                  (match nextStep ((stop) next) ((nextTurn) (runBody! env next body)) ((proceed) (runBody! env next body)))))))
           ((nextTurn) headed)
           ((stop) headed)))))
 
@@ -915,7 +1030,8 @@ fn ! runBodyWithProvider! env: s/LoopEnv wrapped: ProviderRun body: (fn [s/LoopE
         ((proceed)
           (match (body env headed)
             ((pair next nextStep)
-              (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body))))))
+              (let [_cp (jr/checkpoint! next.run.written (absoluteRoot! env.rootDir) env.journalPath next.run.session next.run.state.turn)]
+                (match nextStep ((stop) next) ((nextTurn) (runBodyWithProvider! env next body)) ((proceed) (runBodyWithProvider! env next body)))))))
         ((nextTurn) headed)
         ((stop) headed))))
 

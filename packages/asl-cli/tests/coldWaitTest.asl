@@ -74,7 +74,31 @@ fn ! testStalledHolder -> Bool
           (do (assert locked "fixture: the holder's lock is written")
               (assert (= r.exitCode 1) (str "a waiter behind an alive holder that writes nothing gives up: " r.exitCode " " r.stdout))
               (assert (stringContains? r.stderr "made no progress") (str "and says why: " r.stderr))
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building " cache "/out")) (str "and names the holder it waits on, its pid and out dir, before giving up: " r.stderr))
               (assert (stringStartsWith? kept (str h.pid "\n")) (str "the live holder's lock is left alone: " kept))
+              (assert (ok? gone) "the fixture dir is removed")
+              true)))))
+
+; (:m :ref COLDLOCK-PARTIAL-HOLDER :do "a holder file read before its line 2 is written names the holder as building unknown, and the waiter names the out dir once line 2 appears: the lock holds only the pid line, a helper writes the full file three seconds into a probe that gives up after 6 s without resetting its window")
+fn ! testPartialHolder -> Bool
+  (let [(cache (fresh! "partial"))
+        (out (str cache "/out"))]
+    (match (fr/spawnSep (list "/bin/sh" "-c" "exec sleep 37") "." (fr/childEnv (list)))
+      ((err d) (do (assert false (str "holder spawn failed: " d.stderr)) false))
+      ((ok h)
+        (let [(_ (fdClose h.outFd))
+              (_ (fdClose h.errFd))
+              (made (and (ok? (dirCreate (str cache "/build.lockd"))) (ok? (fileWrite (str cache "/build.lockd/holder") (str h.pid "\n")))))
+              (t0 (/ (monotonicNs) 1000000))
+              (r (fr/runGuarded (list "/bin/sh" "-c" "( sleep 3; printf '%s\\n%s\\n\\n' \"$1\" \"$2\" > \"$3/build.lockd/holder.new\" && mv \"$3/build.lockd/holder.new\" \"$3/build.lockd/holder\" ) & exec /bin/sh \"$4\" --cold-probe \"$3\" 6" "sh" (stringFromInt64 h.pid) out cache (buildSh!)) "." (fr/childEnv (list)) (fr/limits 60 16)))
+              (ms (- (/ (monotonicNs) 1000000) t0))
+              (_ (stopHolder! h.pid))
+              (gone (removeAll! cache))]
+          (do (assert made "fixture: the lock holds only the pid line")
+              (assert (and (= r.exitCode 1) (stringContains? r.stderr "made no progress")) (str "the waiter still gives up on a holder that makes no progress: " (stringFromInt64 r.exitCode) " " r.stderr))
+              (assert (< ms 8500) (str "line 2 arriving at 3 s does not restart the 6 s no-progress window (give up before 8.5 s): " (stringFromInt64 ms) " ms"))
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building unknown")) (str "the first announcement says unknown while line 2 is missing: " r.stderr))
+              (assert (stringContains? r.stderr (str "held by pid " h.pid " building " out)) (str "and the out dir is announced once line 2 appears: " r.stderr))
               (assert (ok? gone) "the fixture dir is removed")
               true)))))
 
@@ -99,6 +123,7 @@ fn ! testDeadHolder -> Bool
 fn ! runTests -> Bool
   (do (assert (testProgressingHolder) "an alive, progressing holder is waited on past the window")
       (assert (testStalledHolder) "an alive holder with no progress makes the waiter give up")
+      (assert (testPartialHolder) "a holder whose line 2 arrives late is announced again with its out dir")
       (assert (testDeadHolder) "a gone holder is taken over")
       (assert (testBusyHolder) "an alive holder that only burns CPU is waited on past the window")
       (assert (testReusedPid) "a reused holder pid with another start time is taken over")

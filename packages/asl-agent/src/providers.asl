@@ -2,8 +2,8 @@
   :x [retryAfterSec withRetryAfter ProviderError providerError valueError fileMissing toolAbsent cliTimeout ioError errorCode errorMessage configPathRefusal
       ProviderEnv VendorConfig HubCall Ask askDone askHub nextTurnAsk! nextTurnReply hubBusy? hubAsk? Provider ScriptStep ScriptData scriptProvider scriptFixtureProvider replayProvider vendorProvider Timing TurnMeta Turn emptyMeta
       pyStrip pyRepr pyReprString pyStr pyJsonDumps universalNewlines
-      parseAsnReply asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
-      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
+      parseAsnReply parseScriptFixture asnNumbers servedFields isLoopback parseScriptTurns parseReplayLines testBackendPrefixes gatewayModelIds!
+      curlConfig parseCurlResponse tempDir! freshDir! attribHeaders buildDryRunInfo! buildDryRunPreview! providerEnv! makeProvider! nextTurn! withPrefill withTools withExclude acceptHeader readJsonReply outgoingMessages profileMessages advise! review! grade! graderAvailable? providerName vendorName splitContext cleanup! toolsField capTimeouts]
   :i [(asl-json/json :a j) (aslAgent/journal :a jr) (asl-proc/coreProcess :a cp) (aslGateway/server :a gs) (aslGateway/dispatch :a gd) (aslGateway/upstream :a gu) (aslGateway/config :a cfg) (aslAgent/nativeTools :a nt)])
 
 enum ProviderError
@@ -67,6 +67,7 @@ enum Provider
   (:f gradeReply (Option String))
   (:f gradeModel (Option String))
   (:f gradeError (Option String))
+  (:f gradeDelayMs Int64 :default 0)
   (:f attemptLogPath (Option String)))
 
 (schema Timing
@@ -563,8 +564,7 @@ fn fixtureField text: String key: String from: Int64 limit: Int64 -> (Option Str
                 (match (quotedBodyEnd bs limit (+ v 1))
                   (none none)
                   ((some e) (some (regexUnescape (sub text (+ v 1) e)))))
-                (let [(e (runWhile bs limit v (fn [i] (and (not (isPySpace (bytesGet bs i)))
-                                                         (and (!= (bytesGet bs i) 40) (!= (bytesGet bs i) 41))))))]
+                (let [(e (runWhile bs limit v isAtomByte))]
                   (if (= e v) none (some (sub text v e)))))))))))
 
 ; (:m :ref LEON-RAW-PROTOCOL :do "a turn's :error is looked up outside its :reply string, so a canned reply that itself carries :error (a model echoing a receipt code) stays a reply instead of becoming a scripted provider failure")
@@ -635,6 +635,7 @@ fn parseScriptFixture text: String attemptLogPath: (Option String) -> ScriptData
       :gradeReply (fixtureField text ":gradeReply" 0 n)
       :gradeModel (fixtureField text ":gradeModel" 0 n)
       :gradeError (fixtureField text ":gradeError" 0 n)
+      :gradeDelayMs (optionOr (stringToInt64 (optionOr (fixtureField text ":gradeDelayMs" 0 n) "0")) 0)
       :attemptLogPath attemptLogPath))
 
 fn lineBreakWidth bs: Bytes n: Int64 i: Int64 -> Int64
@@ -1660,7 +1661,7 @@ fn noGraderChannel p: Provider -> Turn
 fn ! grade! p: Provider intent: String profile: String system: String text: String -> Turn
   (match p
     ((scriptFixtureProvider scriptName fixture scriptIndex)
-      (match fixture.gradeReply
+      (match (do (if (> fixture.gradeDelayMs 0) (sleepMs fixture.gradeDelayMs) ()) fixture.gradeReply)
         ((some reply)
           (Turn :provider p :reply (ok (some reply))
             :meta (TurnMeta :timing none :usage none :finish none :truncated false
@@ -1728,11 +1729,18 @@ fn codexArgv instr: String last: String model: String -> j/Json
                 (if (stringEmpty? model) (list) (list "-m" model)))))
 
 fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+  (dryRunInfo! vendor mode rootDir model timeout queueTimeout env true)
+
+; (:m :ref LEON-DRYRUN-NO-WRITES :do "audit auditTmpleak TOOLROOT-LOWS: a dry run created .asl/run/agentLoop/agents/.agents/plugins/aslLoop/{plugin.json,agents/aslLoopAuto.md} in the repo root it was pointed at; the preview names those paths in the same receipt and creates nothing, while buildDryRunInfo! keeps writing them for the provider parity fixtures")
+fn ! buildDryRunPreview! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+  (dryRunInfo! vendor mode rootDir model timeout queueTimeout env false)
+
+fn ! dryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv write: Bool -> (Result j/Json ProviderError)
   (match (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env "auto")
     ((err e) (err e))
-    ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
+    ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env write)))
 
-fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv write: Bool -> (Result j/Json ProviderError)
   (let [(base (list (pair "vendor" (j/jstr vendor)) (pair "cwd" (j/jstr ""))))
         (t (j/jint (if (= timeout 0) 600 timeout)))
         (q (j/jint (if (= queueTimeout 0) 1200 queueTimeout)))]
@@ -1748,11 +1756,12 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
               (dirs (j/jarr (list (j/jstr agents))))
               (text (str "---\nname: " agent "\ndescription: ASL agent loop endpoint\nmainAgent: true\nsubagent: false\ntools: []\n"
                          "inheritMcp: false\ninheritCustomizations: false\nexcludeDefaultComponents: true\n---\n\n# " agent "\n\n"))
-              (written (match (makeDirs (str pluginDir "/agents"))
-                         ((err e) (err e))
-                         ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
-                                   ((err e) (err e))
-                                   ((ok _) (writeText agentFile text))))))]
+              (written (if (not write) (ok 0)
+                         (match (makeDirs (str pluginDir "/agents"))
+                           ((err e) (err e))
+                           ((ok _) (match (writeText (str pluginDir "/plugin.json") (pyJsonDumps (j/jobj (list (pair "name" (j/jstr "aslLoop"))))))
+                                     ((err e) (err e))
+                                     ((ok _) (writeText agentFile text)))))))]
           (match written
             ((err e) (err e))
             ((ok _)
@@ -1766,7 +1775,7 @@ fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: Strin
       ((= vendor "codex")
         (let [(dir (str rootDir "/.asl/run/agentLoop/codex"))
               (instr (str dir "/" mode ".md"))]
-          (match (makeDirs dir)
+          (match (if write (makeDirs dir) (ok 0))
             ((err e) (err e))
             ((ok _)
               (ok (j/jobj (listAppend base

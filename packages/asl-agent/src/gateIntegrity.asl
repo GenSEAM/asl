@@ -1,6 +1,6 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry]
-  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac)])
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout]
+  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
 
 enum Claim
   (claimOf text: (Option String) receipt: (Option String) cmd: (Option String) exit: (Option Int64) backed: Bool)
@@ -96,10 +96,26 @@ fn ! scanSwallowedErrors! root: String written: (List (Pair String (Option Strin
               (uniqueStrings (listSort (map (fn [path] (scanPath root path)) (listAppend (map pairFirst normalizedWritten) extra))) (list)))]
     (scanSwallowedLoop! root normalizedWritten all))
 
-fn ! rawHead! root: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
-  (match (io/runBounded! (list "git" "show" (str "HEAD:" rel)) (some root) (some timeout) env (none))
+fn ! rawHead! root: String rev: String rel: String timeout: Int64 env: (Option (List String)) -> (Option String)
+  (match (io/runBounded! (list "git" "show" (str rev ":" rel)) (some root) (some timeout) env (none))
     ((ok b) (if (= (optionOr b.code 1) 0) (some b.out) (none)))
     ((err _) (none)))
+
+; (:m :ref LEON-YIELD-F1 :do "the revision the revert check restores files to: the merge-base of HEAD and the run's base branch, so an implementation the driver committed in an earlier round still differs from it; HEAD when the run has no base, the base is HEAD or the merge-base cannot be resolved (then the old behaviour)")
+fn ! revertRev! root: String base: String timeout: Int64 env: (Option (List String)) -> String
+  (if (or (stringEmpty? base) (= base "HEAD"))
+    "HEAD"
+    (match (io/runBounded! (list "git" "merge-base" "HEAD" base) (some root) (some timeout) env (none))
+      ((ok b) (let [sha (stringTrim b.out)] (if (and (= (optionOr b.code 1) 0) (not (stringEmpty? sha))) sha "HEAD")))
+      ((err _) "HEAD")))
+
+; (:m :ref LEON-YIELD-F1 :do "files of the owned paths committed on the branch since the revert revision; git status lists only uncommitted ones, so a committed implementation was invisible and only doc.asn was reverted")
+fn ! committedSince! owns: (List String) root: String rev: String timeout: Int64 env: (Option (List String)) -> (List String)
+  (if (or (= rev "HEAD") (listEmpty? owns))
+    (list)
+    (match (io/runBounded! (listAppend (list "git" "diff" "--name-only" rev "HEAD" "--") owns) (some root) (some timeout) env (none))
+      ((ok b) (if (= (optionOr b.code 1) 0) (map io/pyStrip (filter (fn [l] (not (stringEmpty? (io/pyStrip l)))) (io/pySplitLines b.out false))) (list)))
+      ((err _) (list))))
 
 fn rstr rec: (List (Pair String io/RVal)) key: String -> String
   (match (io/recGet rec key)
@@ -179,7 +195,7 @@ fn vacuousForm integrity: (Pair Bool String) -> (Option String)
     (if (pairFirst integrity)
       none
       (match (stringIndexOf msg "\n(:gateVacuous ")
-        ((none) none)
+        ((none) (match (stringIndexOf msg "\n(:gateUnwired") ((none) none) ((some at) (stringSlice msg (+ at 1) (stringLength msg)))))
         ((some at) (stringSlice msg (+ at 1) (stringLength msg))))))
 
 fn defaultGateVacuousRounds -> Int64
@@ -198,17 +214,64 @@ fn vacuousRetry integrity: (Pair Bool String) rounds: Int64 cap: Int64 -> (Optio
 fn unionPaths a: (List String) b: (List String) -> (List String)
   (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
 
-fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) -> (Pair Bool String)
+fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env (unionPaths changed (map (fn [f] (scanPath root f)) written)) watch)))
+    ((ok changed)
+      (let [rev (revertRev! root base timeout env)
+            all (unionPaths (unionPaths changed (committedSince! owns root rev timeout env)) (map (fn [f] (scanPath root f)) written))]
+        (gateIntegrityWithChanged! gates root gateResults timeout env all watch rev))))
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none))))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none) "HEAD")))
 
-fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) -> (Pair Bool String)
+fn fnName line: String -> String
+  (let [toks (filter (fn [t] (not (stringEmpty? t))) (stringSplit line " "))
+        second (optionOr (listGet toks 1) "")]
+    (if (= second "!") (optionOr (listGet toks 2) "") second))
+
+fn fnNames text: String -> (List String)
+  (map fnName (filter (fn [line] (or (stringStartsWith? line "fn ") (stringStartsWith? line "fn ! "))) (stringLines text)))
+
+fn countName name: String texts: (List String) -> Int64
+  (fold
+    (fn [acc t]
+      (+ acc
+        (pairSecond
+          (fold
+            (fn [state line]
+              (let [inHeader (pairFirst state)
+                    n (pairSecond state)
+                    endHeader (or (stringStartsWith? line "fn")
+                                  (or (stringStartsWith? line "enum")
+                                      (or (stringStartsWith? line "schema")
+                                          (or (stringStartsWith? line ";")
+                                              (stringStartsWith? line "#")))))
+                    counted (if (stringContains? line name) (+ n 1) n)]
+                (if inHeader
+                  (if endHeader (pair false counted) state)
+                  (if (stringStartsWith? line "(module")
+                    (pair true n)
+                    (pair false counted)))))
+            (pair false 0)
+            (stringLines t)))))
+    0
+    texts)
+
+fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> (List String)
+  (let [defs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implNow)
+        headDefs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implHead)
+        newDefs (filter (fn [d] (not (listAny? (fn [h] (and (= (pairFirst h) (pairFirst d)) (= (pairSecond h) (pairSecond d)))) headDefs))) defs)
+        texts (map pairSecond implNow)]
+    (map pairSecond (filter (fn [d] (= (countName (pairSecond d) texts) 1)) newDefs)))
+
+; (:m :ref REVERT-REBUILD-FLOOR :do "a revert run of an asl-agent source rebuilds the native closure, 557 s for toolMemoLoopTest on 2026-11-09 against a 3 s run with the change, so a revert gate gets at least 900 s; under the 300 s gate timeout every such revert timed out")
+fn revertTimeout timeout: Int64 -> Int64
+  (if (< timeout 60) timeout (max timeout 900))
+
+fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
@@ -218,20 +281,24 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
         (if (listEmpty? impl)
           (pair true "revertCheck skipped: the change is only the gate files")
           (let [saved (map (fn [f] (pair f (match (fileReadBytes (str root "/" f)) ((ok b) (some b)) ((err _) (none))))) impl)
-              headText (map (fn [f] (pair f (rawHead! root f timeout env))) impl)
+              headText (map (fn [f] (pair f (rawHead! root rev f timeout env))) impl)
               existing (filter (fn [p] (some? (pairSecond p))) headText)
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
               wroteHead (writeTexts! root existing)
               bumped (fold (fn [ok p] (and ok (bumpMtime! (str root "/" (pairFirst p))))) wroteHead existing)
-              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root timeout env watch) (list))
+              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))
               firstDecision (revertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
               answer (if (and bumped (pairFirst firstDecision))
                 firstDecision
                 (let [headRestored (and (writeTexts! root existing) (bumpTexts! root existing))
                       removedNew (removeNames! root newFiles)
-                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root timeout env watch) (list))]
+                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))]
                   (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
+              implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
+              implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
+              unwired (if (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile")) (unwiredFns implNow implHead) (list))
+              finalAnswer (if (listEmpty? unwired) answer (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish" "\n(:gateUnwired :fns (" (stringJoin (map (fn [n] (str "\"" n "\"")) unwired) " ") ") :do \"call each from the code path the task changes, then finish\")")))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]
-          (if restored answer (pair false "restore failed")))))))
+          (if restored finalAnswer (pair false "restore failed")))))))

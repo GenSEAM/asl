@@ -174,7 +174,7 @@ fn planOpsList -> (List String)
 
 fn readOnlyOpsList -> (List String)
   (list "read" "query" "q" "diff" "check" "tree" "tools" "help" "gitDiff" "gitLog" "gitShow" "gate" "note"
-        "observe" "intent" "outline" "intel")
+        "observe" "intent" "outline" "intel" "search" "research" "crawl")
 
 fn txnReadOpsList -> (List String)
   (list "read" "check" "query" "q" "tree" "diff" "gitDiff" "gitLog" "gitShow" "observe")

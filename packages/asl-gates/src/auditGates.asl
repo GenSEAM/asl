@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -10,6 +10,7 @@
       (asl-gates/runnerLedger :a rl)
       (asl-gates/suiteRunner :a sr)
       (asl-gates/auditForeign :a af)
+      (asl-gates/vcsDirectAudit :a vda)
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
       (asl-tools/agentSurfaceAudit :a asa)
@@ -636,7 +637,7 @@ fn writeRecord! root: String results: (List sr/SuiteResult) -> (Result String St
           ((ok lines)
            (let [(body (str lines ")\n"))
                  (rel (str (fullGreenDir) head ".asn"))
-                 (first (str "(:fullGreen :v 1 :sha \"" head "\" :tree \"" tree "\" :origin :runner :suites " (itos (listLength results))
+                 (first (str "(:fullGreen :v 1 :sha \"" head "\" :tree \"" tree "\" :origin :runner :suites " (itos (listLength results)) (let [(k (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))] (if (> k 0) (str " :skipped " (itos k)) ""))
                              " :receiptDigest \"" (bytesSha256 (stringToBytes body)) "\"\n"))]
              (match (dirCreate (str root "/" (fullGreenDir)))
                ((err e) (err (str "cannot create " (fullGreenDir) ": " e)))
@@ -682,9 +683,10 @@ fn suiteGateChecks! id: String results: (List sr/SuiteResult) ledger: (List rl/L
   (let [(rec (rl/reconcile! results ledger root))
         (bad (map (fn [(c rl/ReconcileCheck)] -> Check
                     (failCheck id c.err (str c.suite ": " c.ev) (none) (none))) rec.checks))]
-    (if (listEmpty? results)
-      (list (failCheck id "ERR_NO_SUITES" "no suite discovered in scope" (none) (none)))
-      (if (listEmpty? bad) (list (passCheck id (some (listLength results)) (none))) bad)))
+    (cond
+      ((listEmpty? results) (list (failCheck id "ERR_NO_SUITES" "no suite discovered in scope" (none) (none))))
+      ((listAll? (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results) (list (failCheck id "ERR_ALL_SKIPPED" "every suite in scope skipped, nothing executed" (none) (none))))
+      (else (if (listEmpty? bad) (list (passCheck id (some (listLength results)) (none))) bad))))
 
 fn snapshotFault id: String f: sr/Fault -> Check
   (if (= f.kind "terminated")
@@ -692,13 +694,13 @@ fn snapshotFault id: String f: sr/Fault -> Check
     (failCheck id "ERR_RUNNER" (str f.kind ": " f.msg) (none) (none)))
 
 fn countAsserts results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.asserts)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedAsserts r))) 0 results)
 
 fn countRefutes results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.refutes)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedRefutes r))) 0 results)
 
 fn countDeclared results: (List sr/SuiteResult) -> Int64
-  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n r.declared)) 0 results)
+  (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (+ n (sr/countedDeclared r))) 0 results)
 
 fn countPassed results: (List sr/SuiteResult) -> Int64
   (fold (fn [(n Int64) (r sr/SuiteResult)] -> Int64 (if (= r.cause "OK") (+ n 1) n)) 0 results)
@@ -759,9 +761,13 @@ fn checkOneFile! root: String a: String -> (List Check)
             (cCoreFixed (Check :id cCore.id :status cCore.status :err cCore.err :ev (str a " " cCore.ev) :n cCore.n :trust cCore.trust))]
         (list cBal cCoreFixed))))
 
+; (:m :ref VCS-AUDIT-WIRE :do "the explicit sweep argv of the core check: a bare check is an error once ASL-TEST-EMPTY-ARG lands, and asl-core accepts --all today")
+fn coreSweepArgv -> (List String)
+  (list "check" "--all")
+
 fn cmdCheck! root: String argv: (List String) -> AuditRun
   (if (listEmpty? argv)
-    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (list "check")))))]
+    (let [(checks (listAppend (syntaxCheck! root "syntax") (list (coreCheck! root "coreCheck" (coreSweepArgv)))))]
       (emit "check" checks "" "" false))
     (let [(checks (fold (fn [(acc (List Check)) (a String)] -> (List Check)
                           (listAppend acc (checkOneFile! root a)))
@@ -769,13 +775,50 @@ fn cmdCheck! root: String argv: (List String) -> AuditRun
                         argv))]
       (emit "check" checks "" "" false)))
 
+; (:m :ref VCS-AUDIT-WIRE :do "an allowlist missing from the tree is a skip only when it is also absent at HEAD and at the merge base with main; present at either means it was deleted, so the check fails closed with ERR_VCS_ALLOW_DELETED")
+fn allowAbsentCheck! root: String -> Check
+  (let [(rel ".asl/mem/vcsDirectAllow.asn")
+        (at (fn [(rev String)] -> Bool
+              (match (git! root (list "ls-tree" "--name-only" rev "--" rel))
+                ((ok listed) (not (stringEmpty? listed)))
+                ((err _) false))))
+        (base (git! root (list "merge-base" "HEAD" "main")))]
+    (cond
+      ((err? base) (failCheck "vcsDirect" "ERR_VCS_NO_MAIN" "the allowlist is absent and there is no main branch to compare with (or this is not a git work tree), so a deletion cannot be ruled out" (none) (none)))
+      ((or (at "HEAD") (at (resultOr base "HEAD")))
+       (failCheck "vcsDirect" "ERR_VCS_ALLOW_DELETED" (str rel " is gone from the tree but exists at HEAD or the merge base with main") (none) (none)))
+      (else (skippedCheck "vcsDirect" (str rel " absent")))))
+
+; (:m :do "the error code of a vcsDirect audit failure: the ERR_VCS_ code the audit named, else ERR_VCS_DIRECT_AUDIT")
+fn vcsErrCode e: String -> String
+  (cond ((stringContains? e "ERR_VCS_NO_MAIN") "ERR_VCS_NO_MAIN") ((stringContains? e "ERR_VCS_CACHE_TRACKED") "ERR_VCS_CACHE_TRACKED") (else "ERR_VCS_DIRECT_AUDIT"))
+
+; (:m :ref VCS-AUDIT-WIRE :do "vcsDirectAudit as one consistency check: a git commit, add, push, update-ref or checkout site outside the allowlist (.asl/mem/vcsDirectAllow.asn, compared with the merge base with main) fails it and the evidence names the sites; a tree without the allowlist skips it, an audit error fails it")
+fn vcsDirectCheck! root: String noCache: Bool -> Check
+  (vcsDirectCheckIn! root (if noCache "off" ""))
+
+; (:m :do "mode is empty for the runner store, off for no cache, else a cache dir; audit consistency passes --no-cache or --cache-dir D")
+fn vcsDirectCheckIn! root: String mode: String -> Check
+  (let [(allow (str root "/.asl/mem/vcsDirectAllow.asn"))]
+    (if (not (isFile! allow))
+      (allowAbsentCheck! root)
+      (match (vda/auditWith! root allow "" mode)
+        ((err e) (failCheck "vcsDirect" (vcsErrCode e) e (none) (none)))
+        ((ok receipt)
+          (if (stringContains? receipt ":status :ok")
+            (passCheck "vcsDirect" (none) (none))
+            (failCheck "vcsDirect" "ERR_VCS_DIRECT" receipt (none) (none)))))))
+
+fn cacheMode argv: (List String) -> String
+  (if (listContains? argv "--no-cache") "off" (optionOr (listGet argv (+ 1 (optionOr (listIndexOf argv "--cache-dir") -2))) ""))
+
 fn cmdConsistency! root: String argv: (List String) -> AuditRun
   (let [(c1 (syntaxCheck! root "syntax"))
         (c2 (list (remoteCheck! root) (ssotCheck! root)))
         (c3 (emojiCheck! root))
         (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
-        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root)))
+        (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheckIn! root (cacheMode argv))))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]
     (emit "consistency" checks "" "" false))
 
@@ -894,6 +937,7 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                                            ((ok rel) (if (stringEmpty? rel) "" (str " :recorded \"" rel "\"")))
                                            ((err _) "")))
                            (runHead (str head " :suites " (itos (listLength results))
+                                          " :skippedSuites " (itos (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))
                                           " :notEvaluated " (itos reconciled.notEvaluated)
                                           " :knownRedHeld " (itos reconciled.held)
                                           " :executedAsserts " (itos (countAsserts results))
@@ -907,5 +951,5 @@ fn cmdGates! root: String argv: (List String) -> AuditRun
 fn ! coverageCheck! root: String -> Check
   (let [(v (cov/verdict! root (str root "/tools/coverageBaseline.asn")))]
     (if (listEmpty? v.violations)
-      (passCheck "gate9CoverageRatchet" (some v.covered) (none))
-      (failCheck "gate9CoverageRatchet" "ERR_COVERAGE_RATCHET" (stringJoin v.violations "; ") (none) (none))))
+      (Check :id "gate9CoverageRatchet" :status ":passed" :err "" :ev (stringJoin v.deltas " ") :n (some v.covered) :trust (none))
+      (failCheck "gate9CoverageRatchet" "ERR_COVERAGE_RATCHET" (stringJoin (listAppend v.violations v.deltas) "; ") (none) (none))))

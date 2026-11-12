@@ -104,7 +104,7 @@ fn classify rel: String isTest: Bool code: String b: Bytes hits: (List (Pair Int
         (be (t/trimSpaceBack b n bs hd.bodyEnd))
         (clean (parenTrim b bs be))
         (isConst (or (constSpan? code bs be) (constSpan? code (pairFirst clean) (pairSecond clean))))
-        (name hd.rawName)]
+        (name (t/bareName hd.rawName))]
     (if (not isConst)
       (if (placeholder? b hits bs be) (some (placeholderStub rel name code b bs be hd)) (none))
       (constStub rel isTest name code (t/sliceStr code bs be) b hits bs be hd)))

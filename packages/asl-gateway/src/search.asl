@@ -2,7 +2,9 @@
   :x [Bucket HubState newHubState mkHub hubWithNow hubSleep! hubNote hubCliCall hubStderr hubWithBreaker hubWithBuckets
       HttpReq HttpResult httpResp httpFail curlConfig curlChildEnv parseCurlOutput runCurlBatch! runOne! httpError httpOk? validateReq headerNameOk charsetNameOk runTool! iconvDecode! decodeBody! contentCharset urlTypeCheck repl
       jobj3 engineError respJson jreq
-      tavilyReq tavilyParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      syntheticReq syntheticParse arxivReq arxivParse waybackReq waybackParse cdxReq cdxParse iasearchReq iasearchParse
+      tavilyReq tavilyParse braveReq braveParse serperReq serperParse wikiReq wikiParse searxngReq searxngParse ddgReq ddgParse ddgLinks ddgSnippets ddgThrottle!
+      engineOrder tier2Order engineReq parseEngine enginePlan selectEngine tier1Select tier2Select tier1Search!
       doTavilySearch! doSerperSearch! doWikiSearch! doSearxngSearch! doDdgSearch! parallelTier1Search! executeSearchHub!
       escapeAsnStr formatSearchAsn]
   :i [(asl-json/json :a j)
@@ -361,6 +363,175 @@ fn collect items: (List j/Json) f: (fn [j/Json] -> (Result (Option j/Json) pt/Py
         ((err e) (err e))
         ((ok o) (collect (optionOr (listTail items) (list)) f (match o ((some v) (cons v acc)) ((none) acc)))))))
 
+fn syntheticHighlights h: j/Json -> String
+  (match h
+    ((j/jarr xs) (pt/joinSep (map (fn [(x j/Json)] -> String (match x ((j/jstr s) s) (_ (pt/pyStr x)))) xs) " "))
+    (_ ""))
+
+fn syntheticText t: j/Json -> String
+  (match t ((j/jstr s) s) (_ ""))
+
+fn syntheticSnippet hl: j/Json text: j/Json -> j/Json
+  (let [(h (syntheticHighlights hl)) (s (syntheticText text))]
+    (if (not (stringEmpty? h)) (j/jstr h) (j/jstr (pt/sliceB s 0 (min 300 (stringLength s))))))
+
+fn syntheticTextCap t: j/Json -> j/Json
+  (let [(s (syntheticText t))] (j/jstr (pt/sliceB s 0 (min 20000 (stringLength s)))))
+
+fn syntheticRows items: (List j/Json) acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
+  (match (listHead items)
+    ((none) (ok (listReverse acc)))
+    ((some it)
+      (match (pt/jgetOr it "title" (j/jstr ""))
+        ((err e) (err e))
+        ((ok title)
+          (let [(url (pt/cleanUrl (optionOr (pt/jget it "url") (j/jstr ""))))
+                (text (optionOr (pt/jget it "text") (j/jstr "")))
+                (hl (optionOr (pt/jget it "highlights") (j/jarr (list))))
+                (item (j/jobj (list (pair "title" title) (pair "url" url) (pair "snippet" (syntheticSnippet hl text)) (pair "text" (syntheticTextCap text)) (pair "engine" (j/jstr "synthetic")) (pair "score" (j/jfloat 0.95)))))]
+            (syntheticRows (optionOr (listTail items) (list)) (cons item acc)))))))
+
+fn syntheticParse r: HttpResult -> j/Json
+  (orErr
+    (match (jsonBody r)
+      ((err e) (err e))
+      ((ok data)
+        (match (pt/jgetOr data "results" (j/jarr (list)))
+          ((err e) (err e))
+          ((ok rs)
+            (match rs
+              ((j/jarr xs) (match (syntheticRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
+              (_ (ok (respJson (j/jstr "") (list))))))))))
+
+fn archiveText v: j/Json -> String
+  (match v ((j/jstr s) s) ((j/jnull) "") (_ (pt/pyStr v)))
+
+fn archiveXmlText s: String tag: String -> String
+  (match (listGet (stringSplit s (str "<" tag ">")) 1)
+    ((some rest) (pt/pyStrip (optionOr (listHead (stringSplit rest (str "</" tag ">"))) "")))
+    ((none) ""))
+
+fn archiveXmlClean s: String -> String
+  (repl (repl (repl s "&amp;" "&") "&lt;" "<") "&gt;" ">")
+
+fn arxivRows entries: (List String) acc: (List j/Json) -> (List j/Json)
+  (match (listHead entries)
+    ((none) (listReverse acc))
+    ((some entry)
+      (let [(title (archiveXmlClean (archiveXmlText entry "title")))
+            (url (archiveXmlClean (archiveXmlText entry "id")))
+            (summary (archiveXmlClean (archiveXmlText entry "summary")))]
+        (arxivRows (optionOr (listTail entries) (list))
+                   (cons (resultItem (j/jstr title) (pt/cleanUrl (j/jstr url)) (j/jstr summary) "arxiv" (j/jfloat 0.8)) acc)))))
+
+fn arxivReq query: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://export.arxiv.org/api/query?search_query=all:" (pt/urlQuote query "") "&max_results=" (stringFromInt64 limit))
+           :headers (list (pair "Accept" "application/atom+xml") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn arxivParse r: HttpResult -> j/Json
+  (match r
+    ((httpFail e _) (engineError e))
+    ((httpResp code reason _ body)
+      (if (not (httpOk? code))
+        (engineError (httpError code reason))
+        (let [(entries (optionOr (listTail (stringSplit body "<entry>")) (list)))]
+          (respJson (j/jstr "") (arxivRows entries (list)))))))
+
+fn waybackReq url: String -> HttpReq
+  (HttpReq :url (str "https://archive.org/wayback/available?url=" (pt/urlQuote url ""))
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 10))
+
+fn waybackOriginal snapshot: String stamp: String -> String
+  (let [(marker (str "/web/" stamp "/"))]
+    (match (stringIndexOf snapshot marker)
+      ((some i) (pt/sliceB snapshot (+ i (stringLength marker)) (stringLength snapshot)))
+      ((none) "")))
+
+fn waybackParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (let [(snapshots (optionOr (pt/jget data "archived_snapshots") (j/jobj (list))))
+            (closest (optionOr (pt/jget snapshots "closest") (j/jobj (list))))
+            (stamp (archiveText (optionOr (pt/jget closest "timestamp") (j/jstr ""))))
+            (snapshot (archiveText (optionOr (pt/jget closest "url") (j/jstr ""))))
+            (given (archiveText (optionOr (pt/jget data "url") (j/jstr ""))))
+            (original (if (stringEmpty? given) (waybackOriginal snapshot stamp) given))
+            (raw (str "https://web.archive.org/web/" stamp "id_/" original))
+            (rows (if (or (stringEmpty? stamp) (stringEmpty? original))
+                    (list)
+                    (list (resultItem (j/jstr original) (pt/cleanUrl (j/jstr raw))
+                                      (j/jstr (str "Closest snapshot " snapshot " at " stamp)) "wayback" (j/jfloat 0.8)))))]
+        (respJson (j/jstr "") rows))))
+
+fn cdxCell row: j/Json i: Int64 -> String
+  (match row
+    ((j/jarr fields) (archiveText (optionOr (listGet fields i) (j/jstr ""))))
+    (_ ""))
+
+fn cdxRows rows: (List j/Json) acc: (List j/Json) -> (List j/Json)
+  (match (listHead rows)
+    ((none) (listReverse acc))
+    ((some row)
+      (let [(stamp (cdxCell row 0))
+            (original (cdxCell row 1))
+            (status (cdxCell row 2))
+            (rest (optionOr (listTail rows) (list)))]
+        (if (or (= stamp "timestamp") (stringEmpty? original))
+          (cdxRows rest acc)
+          (cdxRows rest (cons (resultItem (j/jstr original) (pt/cleanUrl (j/jstr original))
+                                          (j/jstr (str "Archived at " stamp " with status " status)) "cdx" (j/jfloat 0.75)) acc))))))
+
+fn cdxReq url: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://web.archive.org/cdx/search/cdx?url=" (pt/urlQuote url "") "&output=json&limit=" (stringFromInt64 limit) "&fl=timestamp,original,statuscode")
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn cdxParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (match data
+        ((j/jarr rows) (respJson (j/jstr "") (cdxRows rows (list))))
+        (_ (respJson (j/jstr "") (list))))))
+
+fn iasearchRows docs: (List j/Json) acc: (List j/Json) -> (List j/Json)
+  (match (listHead docs)
+    ((none) (listReverse acc))
+    ((some doc)
+      (let [(identifier (archiveText (optionOr (pt/jget doc "identifier") (j/jstr ""))))
+            (title0 (archiveText (optionOr (pt/jget doc "title") (j/jstr ""))))
+            (title (if (stringEmpty? title0) identifier title0))
+            (rest (optionOr (listTail docs) (list)))]
+        (if (stringEmpty? identifier)
+          (iasearchRows rest acc)
+          (iasearchRows rest (cons (resultItem (j/jstr title)
+                                               (pt/cleanUrl (j/jstr (str "https://archive.org/details/" identifier)))
+                                               (j/jstr (str "Internet Archive item " identifier)) "iasearch" (j/jfloat 0.75)) acc))))))
+
+fn iasearchReq query: String limit: Int64 -> HttpReq
+  (HttpReq :url (str "https://archive.org/advancedsearch.php?q=" (pt/urlQuote query "") "&fl[]=identifier&fl[]=title&rows=" (stringFromInt64 limit) "&output=json")
+           :headers (list (pair "Accept" "application/json") (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 15))
+
+fn iasearchParse r: HttpResult -> j/Json
+  (match (jsonBody r)
+    ((err e) (engineError e))
+    ((ok data)
+      (let [(response (optionOr (pt/jget data "response") (j/jobj (list))))
+            (docs (optionOr (pt/jget response "docs") (j/jarr (list))))]
+        (match docs
+          ((j/jarr xs) (respJson (j/jstr "") (iasearchRows xs (list))))
+          (_ (respJson (j/jstr "") (list)))))))
+
+fn syntheticReq query: String limit: Int64 key: String -> HttpReq
+  (HttpReq :url "https://api.synthetic.new/v2/search"
+           :headers (list (pair "Content-Type" "application/json") (pair "Authorization" (str "Bearer " key)) (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (some (pt/jsonDumps (j/jobj (list (pair "query" (j/jstr query)))) -1))
+           :timeout (j/jint 10))
+
 fn tavilyReq query: String limit: Int64 key: String -> HttpReq
   (HttpReq :url "https://api.tavily.com/search"
            :headers (list (pair "Content-Type" "application/json") (pair "Authorization" (str "Bearer " key)) (pair "User-Agent" "ASL-Gateway/1.0"))
@@ -664,34 +835,179 @@ fn mergeLoop items: (List j/Json) seen: (List String) merged: (List j/Json) limi
               (mergeLoop (optionOr (listTail items) (list)) (cons key seen) (listAppend merged (list (pt/jset r "url" u))) limit)
               (mergeLoop (optionOr (listTail items) (list)) seen merged limit)))))))
 
-fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
-  (let [(tav (envGetNonEmpty st "TAVILY_API_KEY"))
-        (ser (envGetNonEmpty st "SERPER_API_KEY"))
-        (mid (cond ((not (stringEmpty? tav)) (some (pair "tavily" (tavilyReq query limit tav)))) ((not (stringEmpty? ser)) (some (pair "serper" (serperReq query limit ser)))) (else (none))))
-        (st1 (ddgThrottle! st))
-        (engines (listAppend (list (pair "wiki" (wikiReq query limit))) (listAppend (match mid ((some m) (list m)) ((none) (list))) (list (pair "ddg" (ddgReq query))))))
-        (outs (runCurlBatch! (map (fn [(e (Pair String HttpReq))] -> HttpReq (pairSecond e)) engines) (curlChildEnv st1.env)))
+fn engineOrder -> (List String)
+  (list "synthetic" "brave")
+
+fn tier2Order -> (List String)
+  (list "tavily" "serper")
+
+fn braveReq query: String limit: Int64 key: String -> HttpReq
+  (HttpReq :url (str "https://api.search.brave.com/res/v1/web/search?q=" (pt/urlQuote query "/") "&count=" (stringFromInt64 limit))
+           :headers (list (pair "Accept" "application/json") (pair "X-Subscription-Token" key) (pair "User-Agent" "ASL-Gateway/1.0"))
+           :data (none) :timeout (j/jint 10))
+
+fn braveRows items: (List j/Json) acc: (List j/Json) -> (Result (List j/Json) pt/PyErr)
+  (match (listHead items)
+    ((none) (ok (listReverse acc)))
+    ((some it)
+      (match (pt/jgetOr it "title" (j/jstr ""))
+        ((err e) (err e))
+        ((ok title)
+          (braveRows (optionOr (listTail items) (list))
+                     (cons (resultItem title (pt/cleanUrl (optionOr (pt/jget it "url") (j/jstr ""))) (optionOr (pt/jget it "description") (j/jstr "")) "brave" (j/jfloat 0.88)) acc))))))
+
+fn braveParse r: HttpResult -> j/Json
+  (orErr
+    (match (jsonBody r)
+      ((err e) (err e))
+      ((ok data)
+        (match (pt/jgetOr data "web" (j/jobj (list)))
+          ((err e) (err e))
+          ((ok web)
+            (match (pt/jgetOr web "results" (j/jarr (list)))
+              ((err e) (err e))
+              ((ok rs)
+                (match rs
+                  ((j/jarr xs) (match (braveRows xs (list)) ((err e) (err e)) ((ok rows) (ok (respJson (j/jstr "") rows)))))
+                  (_ (ok (respJson (j/jstr "") (list))))))))))))
+
+fn archiveEngineName? name: String -> Bool
+  (or (or (= name "arxiv") (= name "wayback")) (or (= name "cdx") (= name "iasearch")))
+
+fn ! doArchiveSearch! st: HubState name: String query: String limit: Int64 -> j/Json
+  (match (engineReq st name query limit)
+    ((none) (j/jnull))
+    ((some req) (parseEngine name (runOne! st req) limit)))
+
+fn engineReq st: HubState name: String query: String limit: Int64 -> (Option HttpReq)
+  (cond
+    ((= name "synthetic")
+      (if (none? (mapGet st.env "SYNTHETIC_API_KEY"))
+        (none)
+        (let [(k (envGetNonEmpty st "SYNTHETIC_API_KEY"))]
+          (if (stringEmpty? k) (none) (some (syntheticReq query limit k))))))
+    ((= name "tavily") (let [(k (envGetNonEmpty st "TAVILY_API_KEY"))] (if (stringEmpty? k) (none) (some (tavilyReq query limit k)))))
+    ((= name "brave") (let [(k (envGetNonEmpty st "BRAVE_API_KEY"))] (if (stringEmpty? k) (none) (some (braveReq query limit k)))))
+    ((= name "wiki") (some (wikiReq query limit)))
+    ((= name "serper") (let [(k (envGetNonEmpty st "SERPER_API_KEY"))] (if (stringEmpty? k) (none) (some (serperReq query limit k)))))
+    ((= name "arxiv") (some (arxivReq query limit)))
+    ((= name "wayback") (some (waybackReq query)))
+    ((= name "cdx") (some (cdxReq query limit)))
+    ((= name "iasearch") (some (iasearchReq query limit)))
+    (else (none)))
+
+fn enginePlan st: HubState query: String limit: Int64 -> (List (Pair String HttpReq))
+  (fold (fn [(acc (List (Pair String HttpReq))) (name String)] -> (List (Pair String HttpReq))
+          (match (engineReq st name query limit)
+            ((some r) (listAppend acc (list (pair name r))))
+            ((none) acc)))
+        (list) (engineOrder))
+
+fn parseEngine name: String r: HttpResult limit: Int64 -> j/Json
+  (cond ((= name "synthetic") (syntheticParse r)) ((= name "tavily") (tavilyParse r)) ((= name "brave") (braveParse r)) ((= name "wiki") (wikiParse r)) ((= name "serper") (serperParse r)) ((= name "arxiv") (arxivParse r)) ((= name "wayback") (waybackParse r)) ((= name "cdx") (cdxParse r)) ((= name "iasearch") (iasearchParse r)) (else (j/jnull)))
+
+fn engineGood? d: j/Json -> Bool
+  (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))
+
+fn selectEngine datas: (List (Pair String j/Json)) -> (Pair (Option (Pair String j/Json)) (List j/Json))
+  (let [(errs (fold (fn [(acc (List j/Json)) (p (Pair String j/Json))] -> (List j/Json)
+                      (let [(d (pairSecond p))]
+                        (if (and (pt/pyTruthy d) (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull))))
+                          (listAppend acc (list (engErr (pairFirst p) (optionOr (pt/jget d "error") (j/jnull)))))
+                          acc)))
+                    (list) datas))
+        (chosen (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (engineGood? (pairSecond p))) datas)))]
+    (pair chosen errs))
+
+fn resultRows d: j/Json -> (List j/Json)
+  (match (optionOr (pt/jget d "results") (j/jarr (list)))
+    ((j/jarr xs) xs)
+    (_ (list)))
+
+fn resultAnswer d: j/Json -> j/Json
+  (let [(a (optionOr (pt/jget d "answer") (j/jnull)))]
+    (if (pt/pyTruthy a) a (j/jstr "")))
+
+fn tier1Select datas: (List (Pair String j/Json)) limit: Int64 -> (Result j/Json pt/PyErr)
+  (let [(sel (selectEngine datas))
+        (errs (pairSecond sel))
+        (good (filter (fn [(p (Pair String j/Json))] -> Bool (engineGood? (pairSecond p))) datas))
+        (byName (fn [(name String)] -> (Option j/Json)
+                  (match (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) name)) good))
+                    ((some p) (some (pairSecond p)))
+                    ((none) (none)))))
+        (withAnswer (listHead (filter (fn [(p (Pair String j/Json))] -> Bool
+                                       (and (engineGood? (pairSecond p))
+                                            (pt/pyTruthy (optionOr (pt/jget (pairSecond p) "answer") (j/jnull)))))
+                                     datas)))
+        (answer (match withAnswer ((some p) (resultAnswer (pairSecond p))) ((none) (j/jstr ""))))
+        (ordered (fold (fn [(acc (List j/Json)) (name String)] -> (List j/Json)
+                         (match (byName name)
+                           ((some d) (listAppend acc (resultRows d)))
+                           ((none) acc)))
+                       (list) (engineOrder)))]
+    (match (mergeLoop ordered (list) (list) limit)
+      ((err e) (err e))
+      ((ok m) (ok (j/jobj (list (pair "answer" answer)
+                                (pair "results" (j/jarr (pairSecond m)))
+                                (pair "errors" (j/jarr errs))))))))
+
+fn ! tier1Search! st: HubState query: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
+  (let [(plan (enginePlan st query limit))
+        (outs (runCurlBatch! (map (fn [(e (Pair String HttpReq))] -> HttpReq (pairSecond e)) plan) (curlChildEnv st.env)))
         (datas (map (fn [(p (Pair (Pair String HttpReq) HttpResult))] -> (Pair String j/Json)
                       (let [(name (pairFirst (pairFirst p))) (r (pairSecond p))]
-                        (pair name (cond ((= name "wiki") (wikiParse r)) ((= name "tavily") (tavilyParse r)) ((= name "serper") (serperParse r)) (else (ddgParse r limit))))))
-                    (zip engines outs)))
-        (errors (fold (fn [(acc (List j/Json)) (p (Pair String j/Json))] -> (List j/Json)
-                        (let [(d (pairSecond p))]
-                          (if (and (pt/pyTruthy d) (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull))))
-                            (listAppend acc (list (engErr (pairFirst p) (optionOr (pt/jget d "error") (j/jnull)))))
-                            acc)))
-                      (list) datas))
-        (good (filter (fn [(p (Pair String j/Json))] -> Bool
-                        (let [(d (pairSecond p))] (and (pt/pyTruthy d) (not (pt/pyTruthy (optionOr (pt/jget d "error") (j/jnull)))) (pt/pyTruthy (optionOr (pt/jget d "results") (j/jnull))))))
-                      datas))
-        (byName (fn [(name String)] -> (Option j/Json) (match (listHead (filter (fn [(p (Pair String j/Json))] -> Bool (= (pairFirst p) name)) good)) ((some p) (some (pairSecond p))) ((none) (none)))))
-        (answer (match (byName "tavily") ((some d) (let [(a (optionOr (pt/jget d "answer") (j/jnull)))] (if (pt/pyTruthy a) a (j/jstr "")))) ((none) (j/jstr ""))))
-        (ordered (fold (fn [(acc (List j/Json)) (name String)] -> (List j/Json)
-                         (match (byName name) ((some d) (listAppend acc (match (optionOr (pt/jget d "results") (j/jarr (list))) ((j/jarr xs) xs) (_ (list))))) ((none) acc)))
-                       (list) (list "wiki" "tavily" "serper" "ddg")))]
-    (match (mergeLoop ordered (list) (list) limit)
-      ((err e) (pair (err e) st1))
-      ((ok m) (pair (ok (j/jobj (list (pair "answer" answer) (pair "results" (j/jarr (pairSecond m))) (pair "errors" (j/jarr errors))))) st1))))
+                        (pair name (parseEngine name r limit))))
+                    (zip plan outs)))]
+    (match (tier1Select datas limit)
+      ((err e) (pair (err e) st))
+      ((ok v) (pair (ok v) st))))
+
+fn ! parallelTier1Search! st: HubState query: String limit: Int64 -> (Pair (Result j/Json pt/PyErr) HubState)
+  (tier1Search! st query limit)
+
+fn tier2Select datas: (List (Pair String j/Json)) limit: Int64 errs: (List j/Json) -> (Result j/Json pt/PyErr)
+  (match (listHead datas)
+    ((none)
+      (ok (j/jobj (list (pair "answer" (j/jstr ""))
+                        (pair "results" (j/jarr (list)))
+                        (pair "errors" (j/jarr errs))))))
+    ((some p)
+      (let [(name (pairFirst p))
+            (d (pairSecond p))
+            (errs1 (listAppend errs (pairSecond (selectEngine (list (pair name d))))))]
+        (if (engineGood? d)
+          (match (mergeLoop (resultRows d) (list) (list) limit)
+            ((err e) (err e))
+            ((ok m)
+              (ok (j/jobj (list (pair "answer" (resultAnswer d))
+                                (pair "results" (j/jarr (pairSecond m)))
+                                (pair "errors" (j/jarr errs1)))))))
+          (tier2Select (optionOr (listTail datas) (list)) limit errs1)))))
+
+fn ! tier2Search! st: HubState query: String limit: Int64 names: (List String) errs: (List j/Json) -> (Pair (Result j/Json pt/PyErr) HubState)
+  (match (listHead names)
+    ((none)
+      (pair (ok (j/jobj (list (pair "answer" (j/jstr ""))
+                              (pair "results" (j/jarr (list)))
+                              (pair "errors" (j/jarr errs))))) st))
+    ((some name)
+      (match (engineReq st name query limit)
+        ((none) (tier2Search! st query limit (optionOr (listTail names) (list)) errs))
+        ((some req)
+          (match (listHead (runCurlBatch! (list req) (curlChildEnv st.env)))
+            ((none) (tier2Search! st query limit (optionOr (listTail names) (list)) errs))
+            ((some r)
+              (let [(d (parseEngine name r limit))
+                    (errs1 (listAppend errs (pairSecond (selectEngine (list (pair name d))))))]
+                (if (engineGood? d)
+                  (match (mergeLoop (resultRows d) (list) (list) limit)
+                    ((err e) (pair (err e) st))
+                    ((ok m)
+                      (pair (ok (j/jobj (list (pair "answer" (resultAnswer d))
+                                              (pair "results" (j/jarr (pairSecond m)))
+                                              (pair "errors" (j/jarr errs1))))) st)))
+                  (tier2Search! st query limit (optionOr (listTail names) (list)) errs1)))))))))
 
 fn errorsOf v: j/Json -> (List j/Json)
   (match (optionOr (pt/jget v "errors") (j/jarr (list))) ((j/jarr xs) xs) (_ (list)))
@@ -715,6 +1031,7 @@ fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 ->
                         ((= choice "serper") (pair (ok (pair (doSerperSearch! st query limit (none)) (list))) st))
                         ((or (= choice "wikipedia") (= choice "wiki")) (pair (ok (pair (doWikiSearch! st query limit) (list))) st))
                         ((= choice "ddg") (let [(d (doDdgSearch! st query limit))] (pair (ok (pair (pairFirst d) (list))) (pairSecond d))))
+                        ((archiveEngineName? choice) (pair (ok (pair (doArchiveSearch! st choice query limit) (list))) st))
                         (else (autoSearch! st query limit))))
                 (st1 (pairSecond step))]
             (match (pairFirst step)
@@ -731,17 +1048,16 @@ fn ! executeSearchHub! st: HubState query: String engine: String limit: Int64 ->
                   (pair (ok res2) st2)))))))))
 
 fn ! autoSearch! st: HubState query: String limit: Int64 -> (Pair (Result (Pair j/Json (List j/Json)) pt/PyErr) HubState)
-  (match (if (stringEmpty? (envGetNonEmpty st "SEARXNG_URL")) (ok (j/jnull)) (doSearxngSearch! st query limit))
-    ((err e) (pair (err e) st))
-    ((ok sx)
-      (let [(sxErr (and (pt/pyTruthy sx) (pt/pyTruthy (optionOr (pt/jget sx "error") (j/jnull)))))
-            (errs (if sxErr (list (engErr "searxng" (optionOr (pt/jget sx "error") (j/jnull)))) (list)))]
-        (if (or (not (pt/pyTruthy sx)) (not (pt/pyTruthy (optionOr (pt/jget sx "results") (j/jnull)))))
-          (let [(t (parallelTier1Search! st query limit))]
-            (match (pairFirst t)
-              ((err e) (pair (err e) (pairSecond t)))
-              ((ok v) (pair (ok (pair v errs)) (pairSecond t)))))
-          (pair (ok (pair sx errs)) st)))))
+  (let [(t (tier1Search! st query limit))]
+    (match (pairFirst t)
+      ((err e) (pair (err e) (pairSecond t)))
+      ((ok v)
+        (if (engineGood? v)
+          (pair (ok (pair v (errorsOf v))) (pairSecond t))
+          (let [(u (tier2Search! (pairSecond t) query limit (tier2Order) (errorsOf v)))]
+            (match (pairFirst u)
+              ((err e) (pair (err e) (pairSecond u)))
+              ((ok w) (pair (ok (pair w (errorsOf w))) (pairSecond u)))))))))
 
 fn escapeAsnStr v: j/Json -> String
   (match v

@@ -87,7 +87,7 @@ fn scanFile! sc: Scan fi: Int64 rel: String code: String -> Scan
         (hs (st/headersOf! code b n))]
     (fold (fn [(acc Scan) (hd st/Header)] -> Scan
             (let [(raw hd.rawName)
-                  (clean (t/pyStrip (t/lstripSet raw "!")))
+                  (clean (t/bareName raw))
                   (sq (tb/internStr! acc.syms clean))
                   (buf acc.keyBuf)
                   (_k (do (tb/ivSet! buf 0 (pairSecond mq)) (tb/ivSet! buf 1 (pairSecond sq))))
@@ -271,7 +271,7 @@ fn buildGraph! ctx: h/Ctx root: String keepLinks: Bool -> (Result Graph String)
                           (let [(rec (pairFirst x)) (body (pairFirst (pairSecond x))) (idx rec.node) (isTest (testPath? rec.rel))
                                 (sk (stubOf rec isTest body.sigil))]
                             (GraphNode :id (str rec.modName ":" rec.clean) :module rec.modName :file rec.rel :symbol rec.clean
-                                   :kind (if isTest "test" "fn") :isPure (not (stringStartsWith? rec.raw "!"))
+                                   :kind (if isTest "test" "fn") :isPure (not (t/effectMarked? rec.raw))
                                    :isStub (!= (pairFirst sk) "none") :stubKind (pairFirst sk) :stubReason (pairSecond sk)
                                    :complexity (+ 1 body.decisions) :exprCount body.parens
                                    :fanIn (tb/ivGet lk.fanIn idx) :fanOut (pairSecond (pairSecond x)) :testCallers (tb/ivGet lk.testCallers idx)

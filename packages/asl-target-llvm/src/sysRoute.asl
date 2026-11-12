@@ -583,13 +583,17 @@ fn internalize res: (Result String (List ty/IrDiag)) names: (List String) -> (Re
 fn signalNames -> (List String)
   (list "SIGHUP" "SIGINT" "SIGQUIT" "SIGKILL" "SIGUSR1" "SIGUSR2" "SIGTERM" "SIGCONT" "SIGSTOP" "SIGWINCH")
 
+; (:m :ref PROCKILL-SIGNAL-NAME :do "the same names without the SIG prefix (KILL, TERM, ...): procKill takes either spelling, a name in neither list is still io:22")
+fn bareSignalNames -> (List String)
+  (map (fn [(n String)] -> String (optionOr (stringSlice n 3 (stringLength n)) n)) (signalNames))
+
 fn errKinds -> (List (Pair String String))
   (list (pair "EAGAIN" "wouldBlock") (pair "ENOENT" "notFound") (pair "EACCES" "permission") (pair "EPERM" "permission") (pair "EROFS" "permission")
         (pair "EBADF" "badFd") (pair "EBUSY" "busy") (pair "EINTR" "interrupted") (pair "ESRCH" "noProcess") (pair "ECHILD" "noChild"))
 
 fn sysStrings -> (List String)
   (listAppend (list "io:" "" "badFd" "io:22" "io:12" "io:38" "((pair " "((some " "-" "0" (tagGuardText) "ERR_IO" "nowNs: ")
-    (listAppend (map (fn [(k (Pair String String))] -> String (pairSecond k)) (errKinds)) (signalNames)))
+    (listAppend (map (fn [(k (Pair String String))] -> String (pairSecond k)) (errKinds)) (listAppend (signalNames) (bareSignalNames))))
 
 fn routeConst facts: libc/TripleFacts name: String -> (Option Int64)
   (libc/libcConst facts name)
@@ -1257,9 +1261,12 @@ fn procKillFn k: (Map String Int64) pool: (Map String Int64) -> ty/SsaFunction
           (map (fn [(i Int64)] -> ty/SsaBlock
                  (let [(name (optionOr (listGet names i) ""))]
                    (sys/block (sigLabel i)
-                     (list (poolStr pool (str "name" i) name) (sys/entryInstr (str "is" i) (ty/tyI1) "=" (list "b" (str "name" i)))
+                     (list (poolStr pool (str "name" i) name) (poolStr pool (str "bare" i) (optionOr (stringSlice name 3 (stringLength name)) name))
+                           (sys/entryInstr (str "is" i) (ty/tyI1) "=" (list "b" (str "name" i)))
+                           (sys/entryInstr (str "isBare" i) (ty/tyI1) "=" (list "b" (str "bare" i)))
+                           (prim (str "hit" i) (ty/tyI1) "orBool" (list (str "is" i) (str "isBare" i)))
                            (i64 (str "num" i) (fact k name)))
-                     (ty/termBranch (str "is" i) (edgeArgs "send" (list (str "num" i))) (sys/edgeTo (sigLabel (+ i 1)))))))
+                     (ty/termBranch (str "hit" i) (edgeArgs "send" (list (str "num" i))) (sys/edgeTo (sigLabel (+ i 1)))))))
                (range 0 count))
           (list
             (ty/ssaBlock "send" (list (ty/ssaParam "sig" (ty/tyI64)))

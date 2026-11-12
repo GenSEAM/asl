@@ -23,11 +23,12 @@ fn ! entries! cache: String prefix: String n: Int64 ageHours: Int64 -> Int64
 fn ! oldFile! path: String bytes: Int64 ageHours: Int64 -> Bool
   (and (put! path bytes) (ok? (fileUtime path (- (nowNs) (* ageHours 3600000000000)))))
 
-fn inlineCode i: Int64 -> String
-  (str "(println (+ " (stringFromInt64 i) " 1000))")
+; (:m :ref INLINE-STAGE-FLAKE :do "the inline texts carry a tag of this run (pid and clock), so the staged file each one gets is named by a digest no other run can produce: before, the 101 texts were the same in every run of this test in a tree, and a staged file of a run beside this one, still on disk at the after snapshot, counted as a leak of this one")
+fn inlineCode tag: String i: Int64 -> String
+  (str "(let [(tag \"" tag "\")] (println (+ " (stringFromInt64 i) " 1000)))")
 
-fn ! inlineRun! asl: String cwd: String store: String i: Int64 -> Bool
-  (let [(r (run/runGuarded (list asl "-e" (inlineCode i)) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
+fn ! inlineRun! asl: String cwd: String store: String tag: String i: Int64 -> Bool
+  (let [(r (run/runGuarded (list asl "-e" (inlineCode tag i)) cwd (run/childEnv (list (str "ASL_NATIVE_TEST_CACHE=" store))) (run/limits 900 24)))]
     (and (= r.exitCode 0) (= r.stdout (str (stringFromInt64 (+ i 1000)) "\n"))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "the runs use a store of their own, so a suite running beside this one cannot add files to it; the staged text and entry wrappers stay in the workspace store, which is watched too")
@@ -43,10 +44,11 @@ fn ! watched! root: String store: String digests: (List String) -> (List String)
 fn ! testInlineLeavesNothing root: String work: String -> Bool
   (let [(asl (str root "/bin/asl"))
         (store (str work "/store"))
-        (digests (map (fn [(i Int64)] -> String (optionOr (stringSlice (bytesSha256 (stringToBytes (inlineCode i))) 0 16) "")) (range 0 101)))
-        (warm (inlineRun! asl root store 0))
+        (tag (str "inlineFlake-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (digests (map (fn [(i Int64)] -> String (optionOr (stringSlice (bytesSha256 (stringToBytes (inlineCode tag i))) 0 16) "")) (range 0 101)))
+        (warm (inlineRun! asl root store tag 0))
         (before (watched! root store digests))
-        (ran (listLength (filter (fn [(i Int64)] -> Bool (inlineRun! asl root store i)) (range 1 101))))
+        (ran (listLength (filter (fn [(i Int64)] -> Bool (inlineRun! asl root store tag i)) (range 1 101))))
         (after (watched! root store digests))
         (fresh (filter (fn [(p String)] -> Bool (not (listContains? before p))) after))]
     (do (assert warm "a first asl -e runs")
@@ -162,6 +164,52 @@ fn ! testInFlight work: String -> Bool
                   (refute (fileExists? (str cache "/lock")) "the sweep releases the lock it took")
                   true))))
 
+; (:m :ref U6-NATIVECLI-REAP :do "a dead pid's tmp dir is private to that pid, so it goes even while another entry is leased and however fresh it is; a live pid's tmp dir stays")
+fn ! testDeadTmpLeased work: String -> Bool
+  (let [(cache (str work "/reap"))
+        (me (procSelf))
+        (dead (str cache "/tmp.999999"))
+        (live (str cache "/tmp." (stringFromInt64 me)))
+        (_a (dirCreate cache))
+        (_b (dirCreate dead))
+        (_c (dirCreate live))
+        (_d (entry! (str cache "/rt-held") 1000 300))
+        (_e (dirCreate (str cache "/leases")))
+        (_f (fileWrite (str cache "/leases/rt-held@" (stringFromInt64 me)) (str (stringFromInt64 me) " 0\n")))
+        (removed (nc/sweepNativeCache! cache 0 600000000000))
+        (names (resultOr (dirList cache) (list)))]
+    (do (refute (listContains? names "tmp.999999") "a dead pid's fresh tmp dir goes though an entry is leased")
+        (refute (fileExists? dead) "the dead pid's tmp dir is gone from disk")
+        (assert (listContains? names (str "tmp." (stringFromInt64 me))) "a live pid's tmp dir stays")
+        (assert (listContains? names "rt-held") "the leased entry stays")
+        (assert (= removed 1) (str "one removed: " (stringFromInt64 removed)))
+        true))
+
+; (:m :ref U13-STALE-STORES :do "an entry older than 14 days that no live head names and no lease holds goes even when the store is far under its cap; a named or leased one stays")
+fn ! testOldUnnamed work: String -> Bool
+  (let [(cache (str work "/stale"))
+        (root (str work "/wt_stale"))
+        (me (procSelf))
+        (_a (dirCreate cache))
+        (_b (dirCreate root))
+        (_c (entry! (str cache "/cli-old") 1000 400))
+        (_d (entry! (str cache "/cli-named") 1000 400))
+        (_e (entry! (str cache "/cli-leased") 1000 400))
+        (_f (entry! (str cache "/cli-fresh") 1000 1))
+        (head (nc/headPath cache root))
+        (_g (fileWrite head (str cache "/cli-named\n")))
+        (_h (dirCreate (str cache "/leases")))
+        (_i (fileWrite (str cache "/leases/cli-leased@" (stringFromInt64 me)) (str (stringFromInt64 me) " 0\n")))
+        (removed (nc/sweepNativeCache! cache 1000000000 600000000000))
+        (names (resultOr (dirList cache) (list)))]
+    (do (refute (listContains? names "cli-old") "an unnamed entry older than 14 days goes though the store is under its cap")
+        (refute (fileExists? (str cache "/cli-old")) "the stale entry is gone from disk")
+        (assert (listContains? names "cli-named") "an entry a live head names stays")
+        (assert (listContains? names "cli-leased") "a leased entry stays")
+        (assert (listContains? names "cli-fresh") "an unnamed entry younger than 14 days stays")
+        (assert (= removed 1) (str "one removed: " (stringFromInt64 removed)))
+        true))
+
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "an entry used after the sweep scanned the store is re-stamped right before deletion and kept")
 fn ! testRecheck work: String -> Bool
   (let [(mods (str work "/recheck"))
@@ -241,6 +289,34 @@ fn testCapValue -> Bool
       (assert (none? (nb/ageValue "9999999999999h")) "an age past Int64 is none")
       true)
 
+; (:m :ref NATIVECLI-HEAD-LEAK :do "with the deadHeadSweep marker in a test-local store a fresh head of a deleted root goes at the first sweep and a fresh head of a live root stays; a store without the marker keeps the 6 hour floor, so the shared store is untouched until the principal opts in")
+fn ! testFreshDeadHead work: String -> Bool
+  (let [(on (str work "/headOn"))
+        (off (str work "/headOff"))
+        (root (str work "/wt_live"))
+        (gone (str work "/wt_deleted"))
+        (_a (dirCreate on))
+        (_b (dirCreate off))
+        (_c (dirCreate root))
+        (_d (dirCreate gone))
+        (_m (fileWrite (str on "/deadHeadSweep") ""))
+        (liveOn (nc/headPath on root))
+        (deadOn (nc/headPath on gone))
+        (deadOff (nc/headPath off gone))
+        (_w (and (ok? (fileWrite liveOn (str on "/cli-x\n"))) (and (ok? (fileWrite deadOn (str on "/cli-y\n"))) (ok? (fileWrite deadOff (str off "/cli-y\n"))))))
+        (aliveFirst (some? (nc/headRoot! (stringReplace deadOn (str on "/") ""))))
+        (_g (pathRemove gone))
+        (removedOn (nc/sweepNativeCache! on 1000000000 600000000000))
+        (removedOff (nc/sweepNativeCache! off 1000000000 600000000000))]
+    (do (assert aliveFirst "the head resolves to its root while the root exists")
+        (refute (fileExists? deadOn) "with the marker a fresh head of a deleted root is removed at the first sweep")
+        (assert (fileExists? liveOn) "a fresh head of a live root stays")
+        (assert (= removedOn 1) (str "one removed with the marker: " (stringFromInt64 removedOn)))
+        (assert (fileExists? deadOff) "without the marker the 6 hour floor keeps a fresh dead head")
+        (assert (= removedOff 0) (str "nothing removed without the marker: " (stringFromInt64 removedOff)))
+        (assert (fileExists? (str on "/deadHeadSweep")) "the marker itself is never swept")
+        true))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (work (str "/tmp/aslBinNoPersist." (stringFromInt64 (procSelf))))
@@ -249,11 +325,14 @@ fn ! runTests -> Bool
         (cap (if (ok? made) (testCap work) false))
         (pinned (if (ok? made) (testPinnedHead work) false))
         (flight (if (ok? made) (testInFlight work) false))
+        (reap (if (ok? made) (testDeadTmpLeased work) false))
+        (oldUnnamed (if (ok? made) (testOldUnnamed work) false))
         (floors (if (ok? made) (testFloors work) false))
         (recheck (if (ok? made) (testRecheck work) false))
         (inner (if (ok? made) (testInnerStamp work) false))
         (slotLease (if (ok? made) (testSlotLease work) false))
         (sweepDefault (if (ok? made) (testSweepDefault work) false))
+        (freshDead (if (ok? made) (testFreshDeadHead work) false))
         (markers (if (ok? made) (testFailedMarkers work) false))
         (inline (if (ok? made) (testInlineLeavesNothing root work) false))
         (cleaned (run/runGuarded (list "/bin/rm" "-rf" work) "/" (run/childEnv (list)) (run/limits 60 4)))]
@@ -262,11 +341,14 @@ fn ! runTests -> Bool
         (assert cap "a store stays under its cap after 50 synthetic entries")
         (assert pinned "a live head's entry survives the sweep")
         (assert flight "an entry a build in flight uses survives the sweep")
+        (assert reap "a dead pid's tmp dir goes while an entry is leased, a live pid's stays")
+        (assert oldUnnamed "an unnamed entry older than 14 days goes under cap, a named or leased one stays")
         (assert floors "the 6 hour and newest-4 floors hold at cap 0")
         (assert recheck "an entry used during the sweep is kept")
         (assert inner "an entry is stamped by its newest inner file")
         (assert slotLease "a leased slot survives the store sweep")
         (assert sweepDefault "the CLI store sweep is on by default")
+        (assert freshDead "with the opt-in marker a fresh dead head goes, without it the floor holds")
         (assert markers ".failed markers are not counted as newest entries")
         (assert inline "100 distinct asl -e runs leave no new files")
         (assert (= cleaned.exitCode 0) "the work directory was removed")

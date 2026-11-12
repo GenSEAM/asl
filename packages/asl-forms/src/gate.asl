@@ -1,4 +1,4 @@
-(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl/packages/asl-gates/src/dyck :a dyck)])
+(module asl-forms/gate :x [GateEnv GateOutcome RunOut HostRun nativeCheck! checkOnce! DelimDiag Repair RepairRun gateOp? readOnlyOp? linesFailed? runGate! doctorStep! foreignSyntax! validateStaged! buildOverlay! aslDelimiterDiag aslDelimiterError aslRepair repairAsn pySplitLines pyExt runArgv! stagedWritable!] :i [(asl-forms/kernel :a k) (asl-forms/edit :a e) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl/packages/asl-gates/src/dyck :a dyck)])
 
 
 (schema GateEnv (:f root String) (:f rootDir String) (:f binDir String) (:f host String) (:f staged (List (Pair String String))))
@@ -895,8 +895,8 @@ fn checkOnce! overlay: String target: String rel: String text: String -> (Pair S
       (let [(h (nativeCheck! overlay rel))]
         (if (= h.code 0)
           (pair "ok" "")
-          (let [(lines (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n")))]
-            (pair "error" (pyTrunc (optionOr (listHead lines) (str "native check exit " (stringFromInt64 h.code))) 300)))))))
+          (let [(lines (filter (fn [(t String)] -> Bool (and (not (stringEmpty? t)) (not (stringStartsWith? t "check failed:")))) (strippedLines (stringJoin (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (list h.errText h.out)) "\n"))))]
+            (pair "error" (if (listEmpty? lines) (str "native check exit " (stringFromInt64 h.code)) (stringJoin (listTake lines 20) "\n"))))))))
 
 ; (:m :ref FORMS-FASTPATH :do "the in-process check must accept exactly what asl check accepts: asl check runs the dyck balance pass (parens inside a ; comment count) before the cached checker, so the fast path runs the same pass first; a reader error of the checker keeps its own code and only a failed cached check of the source reports ERR_IO, with the reason")
 fn checkFast! base: String path: String text: String cache: cc/Cache -> (Pair (Pair String String) cc/Cache)
@@ -911,7 +911,7 @@ fn checkFast! base: String path: String text: String cache: cc/Cache -> (Pair (P
             ((ok v)
               (if (listEmpty? v.diags)
                 (pair (pair "ok" "") (pairSecond r))
-                (pair (pair "error" (pyTrunc (unroot (diagLine (optionOr (listHead v.diags) (ty/Diagnostic :code "" :message "" :msg "" :line 0 :col 0 :path rel))) roots) 300)) (pairSecond r)))))))))
+                (pair (pair "error" (unroot (stringJoin (listTake (map diagLine v.diags) 20) "\n") roots)) (pairSecond r)))))))))
 
 fn aslCheck! env: GateEnv path: String after: String before: (Option String) -> (List String)
   (let [(others (filter (fn [(sp (Pair String String))] -> Bool (!= (pairFirst sp) path)) (writableStaged! env)))]
@@ -1013,10 +1013,10 @@ fn stagedFailure! env: GateEnv sp: (Pair String String) -> String
 
 fn workspaceCheck! env: GateEnv cwd: String aslRoot: (Option String) -> (Pair Int64 String)
   (let [(bin (k/joinPath env.binDir "asl"))
-        (r (runArgv! (list bin "check") (some cwd) (optionMap (fn [(v String)] -> (List String) (withEnv! "ASL_ROOT" v)) aslRoot) 300000 0))]
+        (r (runArgv! (list bin "check" "--all") (some cwd) (optionMap (fn [(v String)] -> (List String) (withEnv! "ASL_ROOT" v)) aslRoot) 300000 0))]
     (cond
       ((not (stringEmpty? r.failure)) (pair -1 (osErrorText r.failure bin)))
-      (r.timedOut (pair -1 (timeoutText (list bin "check") 300)))
+      (r.timedOut (pair -1 (timeoutText (list bin "check" "--all") 300)))
       (else (pair r.code (let [(e (stringTrim r.errText)) (o (stringTrim r.out))] (pyTrunc (cond ((not (stringEmpty? e)) e) ((not (stringEmpty? o)) o) (else "workspace check failed")) 400))))))
 
 fn checkWorkspace! env: GateEnv id: Int64 op: String -> GateOutcome

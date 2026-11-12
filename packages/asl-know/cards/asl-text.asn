@@ -72,7 +72,3 @@
 (:sym "txtEnds?" :mod "asl-text/string" :sig "txtEnds? s: Str suffix: Str -> Bool")
 (:sym "txtHas?" :mod "asl-text/string" :sig "txtHas? s: Str sub: Str -> Bool")
 (:sym "txtSplit" :mod "asl-text/string" :sig "txtSplit s: Str delim: Str -> (List Str)")
-(:sym "txt/starts?" :mod "asl-text/string" :sig none)
-(:sym "txt/ends?" :mod "asl-text/string" :sig none)
-(:sym "txt/has?" :mod "asl-text/string" :sig none)
-(:sym "txt/split" :mod "asl-text/string" :sig none)

@@ -89,5 +89,5 @@ fn ! runTests -> Bool
       (assert (and (= (field sh "status") "ok") (stringContains? (field sh "receipt") "3")) (str "remote run executes in the worktree: " (x/serRec sh)))
       (assert (and (listContains? (m/acceptedKeys) "remote") (= (listLength (m/withRemote (list (kv "op" "read")) "LR")) 2) (= (listLength (m/withRemote (list (kv "op" "read") (kv "remote" "X")) "LR")) 2) (= (listLength (m/withRemote (list (kv "op" "read")) "")) 1)) "a task-level :remote key is accepted and tags steps that name none")
       (assert cleaned "the scratch dir is removed")
-      (assert (> killed -1) "the bridge tree is killed")
+      (assert (= killed 0) "no bridge process survives the kill")
       true))

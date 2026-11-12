@@ -1,12 +1,12 @@
 (module asl-tools/coord/conductor
-  :x [hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! step! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? rulingVerdict
-      depStalled? armOf writeArm armExtra vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
-  :i [(asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
-      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
+  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
+      (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
 
@@ -28,10 +28,10 @@
 ; (:m :ref CONDUCTOR :do "launch stage unit state -> argv of the detached child that performs the stage and writes its Res row; stageSec is the child deadline recorded in the store run row, maxDesc its descendant limit")
 (schema Ctx
   (:f dir String) (:f holder String) (:f ttlMs Int64) (:f maxWait Int64) (:f maxSame Int64) (:f stageSec Int64) (:f maxDesc Int64)
-  (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace))
+  (:f launch (fn [String st/Task CUnit] -> (List String))) (:f pace Pace) (:f hold Bool :default false))
 
 (schema RealCfg
-  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default ""))
+  (:f repo String) (:f devRepo String) (:f devBranch String) (:f wt w/Cfg) (:f home String) (:f keys String) (:f leaseSec Int64) (:f gateSec Int64) (:f lanes String) (:f writerAlias String) (:f profile String) (:f attractorAb Bool) (:f leonPool String :default "") (:f writerModel String :default "") (:f laneTtlSec Int64 :default 3600) (:f mergeCheckSec Int64 :default 1200))
 
 fn cuDir dir: String -> String
   (str dir "/cond")
@@ -323,6 +323,7 @@ fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -
         (_ (dropLease! ctx c))
         (c1 (with c :fails fails :sig sig :epoch 0))
         (limit (if climb (rungLimit ctx c.lane) ctx.maxSame))
+        (_ (if (and (= stage "review") (< fails limit)) (priorWrite! ctx.dir c.id c.lane sig) ()))
         (hop (if (and climb (>= fails limit)) (nextRung! ctx.dir c.lane (/ (nowNs) 1000000)) (none)))]
     (if (>= fails limit)
       (match hop
@@ -435,8 +436,9 @@ fn ! killRun! dir: String id: String stage: String -> Unit
 fn ! mergeBusy? dir: String id: String -> Bool
   (listAny? (fn [(x CUnit)] -> Bool (and (!= x.id id) (and (= x.st "merging") (!= x.launched 0)))) (readCUnits! dir))
 
+; (:m :ref RES-GUARD-M1 :do "while the disk level in slots.asn is stop (ctx.hold, set by step! from sc/levelRead!) no gate and no review starts; plain slot saturation does not hold, because ready claims earlier in store order would take every freed slot and starve gates and reviews: the unit stays gating or reviewing with launched 0 and a later tick starts it; a running stage is untouched")
 fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
-  (if (or (draining? ctx.dir) (and (= c.st "merging") (mergeBusy? ctx.dir c.id))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
+  (if (or (draining? ctx.dir) (or (and ctx.hold (listContains? (list "gating" "reviewing") c.st)) (and (= c.st "merging") (mergeBusy? ctx.dir c.id)))) (let [(c0 (with c :launched 0)) (_ (writeCUnit! ctx.dir c0))] c0)
   (let [(stage (stageName c.st))
         (mk ctx.launch)
         (argv (mk stage u c))
@@ -522,12 +524,23 @@ fn ! seedGradeCommits! dir: String -> Int64
             ((err _) -1))))))
 
 ; (:m :ref CONDUCTOR-REPO-HEALTH :do "the ledger verdict of a unit branch: empty when clean, forged when a commit touching the ledger is not in the store's record, ERR_REPO_GIT: TEXT when git could not read the log at all (the repo, not the writer, is broken: a vanished common dir made 45 units LEDGER_FORGED on node2)")
+; (:m :ref COND-RECOVER-C1 :do "a grade commit the store recorded under another sha is still the conductors own: a rebase rewrites every sha and sets the committer to the rebasing identity (t@example.invalid on node2), so neither sha nor committer identifies it; the guard is the content: the commit adds only ledger rows the store recorded and drops none, so a writer cannot add a row the conductor never wrote")
+fn ! rebasedGradeCommit? dir: String path: String sha: String -> Bool
+  (let [(diff (gitOut path (list "show" "--format=" "-U0" sha "--" (al/ledgerPath))))
+        (recorded (readOr (gradeCommitsPath dir)))
+        (lines (stringLines diff.out))
+        (added (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "+") (not (stringStartsWith? l "+++")))) lines))
+        (dropped (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "-") (not (stringStartsWith? l "---")))) lines))]
+    (and (= diff.exit 0)
+      (and (and (not (listEmpty? added)) (listEmpty? dropped))
+        (listAll? (fn [(l String)] -> Bool (stringContains? recorded (str ":row " (st/q (optionOr (stringSlice l 1 (stringLength l)) "")) ")"))) added))))
+
 fn ! ledgerState! dir: String path: String base: String -> String
   (if (stringEmpty? path) ""
     (let [(r (gitOut path (list "log" "--format=%H" (str base "..HEAD") "--" (al/ledgerPath))))]
       (cond
         ((!= r.exit 0) (str "ERR_REPO_GIT: git log in " path " exit " (n r.exit) ": " (repoClip r.out)))
-        ((listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (gradeCommitRecorded? dir (stringTrim l))))) (stringLines r.out)) "forged")
+        ((listAny? (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (and (not (gradeCommitRecorded? dir (stringTrim l))) (not (rebasedGradeCommit? dir path (stringTrim l)))))) (stringLines r.out)) "forged")
         (else ""))))
 
 fn repoClip text: String -> String
@@ -551,6 +564,49 @@ fn ! ledgerGuard dir: String u: st/Task c: CUnit res0: Res -> Res
     ((and (= c.st "reviewing") (= res0.verdict "pass"))
       (let [(sig (ledgerSig! dir c.wt (baseRef u)))] (if (stringEmpty? sig) res0 (with res0 :verdict "fail" :sig sig))))
     (else res0))
+
+; (:m :ref COND-RECOVER-C3 :do "a review that could not be shown the change (gone worktree, failed git diff) is a transient, not a review failure: the unit goes to ready with stage requeue and verdict reviewDiffUnreadable, its fail count and ladder lane untouched, so no rung is spent and reviewFailedSinceWriter? stays false; settleWt! then re-attaches sh/UNIT and the ahead check sends it to gating; each requeue is one retries.asn row and past :blockedRetryMax the unit blocks with the unreadable signature")
+fn ! requeueUnreadable! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(r (retryLastBy! ctx.dir c.id true))
+        (_ (dropLease! ctx c))]
+    (if (>= (pairFirst r) (blockedRetryMax ctx.dir))
+      (let [(c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig (str "review diff unreadable " (n (+ (pairFirst r) 1)) "x")))
+            (_ (move! ctx c1 "blocked" "review" "" 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
+        ())
+      (let [(_ (retryNote! ctx.dir c.id "reviewDiff" (+ (pairFirst r) 1)))
+            (_ (move! ctx (noEpoch c) "ready" "requeue" "" 0 0 "reviewDiffUnreadable" res.ms))]
+        ())))
+
+; (:m :ref COND-MODEL-ESCALATE :do "a model escalation parks the unit at once, no ladder hop and no retry: its tree is rescued as a wip commit, the lease dropped, one (:escalate :unit :seen :tried) row carries the model's reason in escalations.asn, the unit blocks with the signature modelEscalated: REASON, and one act-severity event of kind modelEscalated goes to the lead stream (the stream never blocks a writer: a failed emit changes nothing)")
+fn ! parkModelEscalated! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(_ (wipSave! ctx c.id "modelEscalated"))
+        (_ (dropLease! ctx c))
+        (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "the model asked for help: no ladder rung answers a model escalation"))
+        (_ (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "act" "modelEscalated" c.id c.id res.sig))
+        (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
+    ())
+
+; (:m :ref CONDWIRE-A :do "the last-rung defer for absent reviewers is bounded: the ladder journals one await row marked quorumStarved per defer; when the newest await row of the unit is such a row and the unit has had more than starvedCap of them, the next one parks the unit blocked instead, with the tiebreak reason and reviewQuorumStarved in the sig, and one warn event on the lead stream; the count is per unit lifetime and adopted at 3")
+fn starvedCap -> Int64
+  3
+
+fn starvedRows dir: String id: String -> (List String)
+  (filter (fn [(l String)] -> Bool (and (stringContains? l ":why \"quorumStarved:") (or (stringStartsWith? l (str "(:await :unit " id " ")) (stringStartsWith? l (str "(:await :unit " (st/q id) " ")))))
+          (journalLinesOf dir))
+
+fn starvedOut? dir: String id: String -> Bool
+  (let [(rows (starvedRows dir id))
+        (newest (optionOr (listLast (filter (fn [(l String)] -> Bool (or (stringStartsWith? l (str "(:await :unit " id " ")) (stringStartsWith? l (str "(:await :unit " (st/q id) " ")))) (journalLinesOf dir))) ""))]
+    (and (stringContains? newest ":why \"quorumStarved:") (> (listLength rows) (starvedCap))))
+
+fn ! starvedPark! ctx: Ctx c: CUnit res: Res -> Unit
+  (let [(row (optionOr (listLast (starvedRows ctx.dir c.id)) ""))
+        (sig (str "tiebreak: reviewers split at the last rung (pass " (sp/tokAfter row "(pass") " fail 0); reviewQuorumStarved"))
+        (c2 (escalateTiered! ctx c sig "review blocked" res.tiers))
+        (_ (dropLease! ctx c2))
+        (_ (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "warn" "reviewQuorumStarved" c.id c.id sig))
+        (_ (move! ctx (noEpoch c2) "blocked" "review" res.model res.tokens res.costMicro sig res.ms))]
+    ())
 
 ; (:m :do "applies one finished stage result to its unit; the writer's claimedGreen is only journalled")
 fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
@@ -580,13 +636,15 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
                        false))
                   (_ (move! ctx (with c :await "rebase" :sig (str "STALE_NEEDS_REBASE leon " leon " main " main " head " headBefore)) "blocked" "write" res.model 0 0 "needs rebase" res.ms))]
               ())
+          (if (modelEscalatedSig? res.sig)
+            (let [(_ (parkModelEscalated! ctx c res))] ())
           (if (vacuousSig? res.sig)
             (let [(_ (wipSave! ctx c.id "vacuousGate"))
                   (_ (dropLease! ctx c))
                   (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
                   (_ (move! ctx c1 "blocked" "write" res.model 0 0 (str "escalated: " (verdictSig res.sig)) res.ms))]
               ())
-            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ())))))))
+            (let [(_ (fail! ctx c "write" res.model res.sig res.ms))] ()))))))))
       ((= c.st "gating")
         (if (and (= res.exit 0) (> res.asserts 0))
           (let [(_ (move! ctx c "awaitReview" "gates" "" 0 0 (str "green " (n res.asserts)) res.ms))] ())
@@ -600,26 +658,40 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
                   (c1 (move! ctx c "merging" "review" res.model res.tokens res.costMicro "pass" res.ms))
                   (_ (launch! ctx u c1))]
               ()))
-          ((= res.verdict "defer") (let [(_ (move! ctx (awaiting c res.sig) "awaitReview" "review" res.model res.tokens res.costMicro "defer" res.ms))] ()))
+          ((= res.verdict "defer")
+            (if (starvedOut? ctx.dir c.id)
+              (starvedPark! ctx c res)
+              (let [(_ (move! ctx (awaiting c res.sig) "awaitReview" "review" res.model res.tokens res.costMicro "defer" res.ms))] ())))
           ((= res.verdict "block")
             (let [(c2 (escalateTiered! ctx c res.sig "review blocked" res.tiers))
                   (_ (dropLease! ctx c2))
                   (_ (move! ctx (noEpoch c2) "blocked" "review" res.model res.tokens res.costMicro "block" res.ms))]
               ()))
+          ((= res.verdict "requeue") (let [(_ (requeueUnreadable! ctx c res))] ()))
           (else (let [(_ (fail! ctx c "review" res.model res.sig res.ms))] ()))))
       ((= c.st "merging")
+        (cond
+          ; (:m :ref CONDUCTOR-MERGE-CHECK :do "mergeCheck verdicts park the unit without a failure count or a retry: block is blocked with the check rows, hold is blocked await mergeHold for the lead")
+          ((or (= res.verdict "block") (= res.verdict "hold"))
+            (let [(_ (dropLease! ctx c))
+                  (_ (move! ctx (with (noEpoch c) :sig res.sig :await (if (= res.verdict "hold") "mergeHold" "")) "blocked" "merge" "" 0 0 (str "mergeCheck " res.verdict) res.ms))]
+              ()))
+          (else
         (if (= res.ok 1)
           (match (st/commit! ctx.dir c.id c.epoch c.branch)
             ((ok _) (let [(_ (move! ctx (noEpoch c) "merged" "merge" "" 0 0 "merged" res.ms))] ()))
             ((err e) (let [(_ (mergeFail! ctx u c e res.ms))] ())))
-          (let [(_ (mergeFail! ctx u c res.sig res.ms))] ())))
+          (let [(_ (mergeFail! ctx u c res.sig res.ms))] ())))))
       (else ())))
 
 ; (:m :do "returns the in-flight capacity left for the rest of this tick")
-fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
-  (let [(cus (readCUnits! ctx.dir))
-        (c (optionOr (cuOf cus u.id) (newCUnit u)))]
+fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
+  (let [(ctx (with ctx0 :hold (or ctx0.hold (= (sc/levelRead! ctx0.dir) "stop"))))
+        (cus (readCUnits! ctx.dir))
+        (c (optionOr (cuOf cus u.id) (newCUnit u)))
+        (held (and (none? (cuOf cus u.id)) (or (fileExists? (cuPath ctx.dir u.id)) (listContains? (quarantinedIds ctx.dir) u.id))))]
     (cond
+      (held cap)
       ((= c.st "queued")
         (if (depsMerged? u cus)
           (let [(_ (move! ctx c "ready" "deps" "" 0 0 "depsMerged" 0))] cap)
@@ -633,15 +705,18 @@ fn ! step! ctx: Ctx u: st/Task cap: Int64 -> Int64
               (allow (allowOf c.lane))]
           (if (or (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000))) (writerHeld? ctx cus c.id))
             cap
-            (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
-              ((err e) (let [(_ (waitMore! ctx c e))] cap))
-              ((ok text)
-                (let [(epoch (match (st/parseLease text) ((ok l) l.epoch) ((err _) 0)))
-                      (c1 (move! ctx (admitted c epoch) "writing" "claim" "" 0 0 "admitted" 0))
-                      (_ (launch! ctx u c1))]
-                  (- cap 1)))))))
+            (let [(why (impossibleWhy! ctx u))]
+              (if (not (stringEmpty? why))
+                (let [(_ (refuseImpossible! ctx u c why))] cap)
+                (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
+                  ((err e) (let [(_ (waitMore! ctx c e))] cap))
+                  ((ok text)
+                    (let [(epoch (match (st/parseLease text) ((ok l) l.epoch) ((err _) 0)))
+                          (c1 (move! ctx (admitted c epoch) "writing" "claim" "" 0 0 "admitted" 0))
+                          (_ (launch! ctx u c1))]
+                      (- cap 1)))))))))
       ((= c.st "awaitReview")
-        (if (or (= c.parked 1) (draining? ctx.dir)) cap
+        (if (or (= c.parked 1) (or ctx.hold (draining? ctx.dir))) cap
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
                 (_ (launch! ctx u c1))]
             cap)))
@@ -731,14 +806,78 @@ fn ! repoGate! ctx: Ctx -> Bool
               true))
           (else true)))))
 
+; (:m :ref NODEWATCH-IDLE-RESTART :do "every tick, idle or not, rewrites <store>/tick.asn atomically (temp file, then rename) with the time and pid; nodeWatch judges the conductor stale only by this file's age, since an idle conductor writes no journal row")
+fn tickBeatPath dir: String -> String
+  (str dir "/tick.asn")
+
+fn ! tickBeat! dir: String -> Bool
+  (let [(tmp (str (tickBeatPath dir) "." (n (procSelf)) ".tmp"))]
+    (match (fileWrite tmp (str "(:tick :at " (n (nowMs)) " :pid " (n (procSelf)) ")\n"))
+      ((err _) false)
+      ((ok _) (match (pathRename tmp (tickBeatPath dir)) ((ok _) true) ((err _) false)))))
+
+; (:m :ref COND-TICK-READS :do "a store that cannot be read is an error, not an empty store: the unit rows count as unreadable when their directory exists and listing or parsing it fails (a directory that does not exist yet is an empty store)")
+fn ! storeReadError! dir: String -> (Option String)
+  (if (not (fileExists? (st/unitsDir dir))) (none)
+    (match (st/readUnits! dir) ((err e) (some e)) ((ok _) (none))))
+
+; (:m :ref COND-TICK-READS :do "a conductor state row that exists but does not parse is moved with its bytes to <store>/cond/quarantine/ID.TS and its unit stays out of scheduling while any such file is there: step! no longer recreates it as a fresh queued row, which lost the unit's state silently; an operator restores the row (or removes the quarantine file) to release it")
+fn quarantineDir dir: String -> String
+  (str (cuDir dir) "/quarantine")
+
+fn quarantineIdOf name: String -> String
+  (let [(parts (stringSplit name "."))]
+    (stringJoin (listTake parts (max 1 (- (listLength parts) 1))) "."))
+
+fn ! quarantinedIds dir: String -> (List String)
+  (match (dirList (quarantineDir dir))
+    ((err _) (list))
+    ((ok names)
+      (fold (fn [(acc (List String)) (name String)] -> (List String)
+              (if (= name "released") acc
+                (let [(id (quarantineIdOf name))]
+                  (if (listContains? acc id) acc (listAppend acc (list id))))))
+            (list) (listSort names))))
+
+; (:m :ref COND-TICK-READS :do "only a row read successfully as bytes that fails to parse is quarantined; a list or read error is surfaced and retried, never a move; the name is ID.nowMs-pid so two quarantines of one id never collide")
+fn ! quarantineRow! dir: String id: String -> Bool
+  (let [(_ (dirCreate (quarantineDir dir)))]
+    (ok? (pathRename (cuPath dir id) (str (quarantineDir dir) "/" id "." (n (nowMs)) "-" (n (procSelf))))))
+
+; (:m :ref COND-TICK-READS :do "a quarantined unit is released once a parsing row is back at cond/ID.asn: its quarantine files move to quarantine/released/ and the unit schedules again")
+fn ! releaseQuarantined! dir: String -> Int64
+  (match (dirList (quarantineDir dir))
+    ((err _) 0)
+    ((ok names)
+      (let [(good (filter (fn [(id String)] -> Bool (match (fileReadString (cuPath dir id)) ((err _) false) ((ok raw) (match (parseCUnit raw) ((ok _) true) ((err _) false))))) (quarantinedIds dir)))
+            (mine (filter (fn [(name String)] -> Bool (and (!= name "released") (listContains? good (quarantineIdOf name)))) names))
+            (_ (if (listEmpty? mine) false (ok? (dirCreate (str (quarantineDir dir) "/released")))))
+            (_ (map (fn [(name String)] -> Bool (ok? (pathRename (str (quarantineDir dir) "/" name) (str (quarantineDir dir) "/released/" name)))) mine))]
+        (listLength mine))))
+
+; (:m :ref COND-TICK-READS :do "every tick raises one lead-stream warn per unreadable conductor state row (kind cuUnreadable, key the unit) and one for an unreadable store (kind storeUnreadable); the stream dedupes repeats, so a corrupt row is one row with a count, not a silent drop")
+fn ! surfaceReads! ctx: Ctx -> Int64
+  (let [(now (nowMs))
+        (_ (map (fn [(id String)] -> Bool (quarantineRow! ctx.dir id)) (unparseableIds! ctx.dir)))
+        (_ (releaseQuarantined! ctx.dir))
+        (ids (quarantinedIds ctx.dir))
+        (_ (map (fn [(id String)] -> Bool (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "cuUnreadable" id id (str "conductor state row unparseable: bytes kept in " (quarantineDir ctx.dir) "/" id ".*, the unit is out of scheduling; release: cp or mv a good row back to " (cuPath ctx.dir id) ", the next tick moves the quarantine file to " (quarantineDir ctx.dir) "/released"))) ids))
+        (bad (storeReadError! ctx.dir))
+        (_ (match bad ((some e) (ls/emitAt! (dirOf ctx.dir) now "conductor" "warn" "storeUnreadable" "store" "" (str "store rows unreadable: " e))) ((none) true)))]
+    (+ (listLength ids) (match bad ((some _) 1) ((none) 0))))
+
 fn ! tick! ctx: Ctx -> (Result Int64 String)
-  (if (repoGate! ctx) (tickRepo! ctx) (ok 0))
+  (let [(_ (tickBeat! ctx.dir))
+        (_ (surfaceReads! ctx))]
+    (if (repoGate! ctx) (tickRepo! ctx) (ok 0)))
 
 fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
   (match (st/readUnits! ctx.dir)
     ((err e) (err e))
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
+            (_ (reapLeases! ctx))
+            (_ (retryBlocked! ctx units))
             (_ (depWake! ctx units))
             (_ (freeWake! ctx))
             (_ (stl/sweep! ctx.dir (nowMs) (stallProbes ctx) (stallHooks ctx)))
@@ -755,8 +894,9 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
 fn ! settled? ctx: Ctx -> Bool
   (let [(cus (readCUnits! ctx.dir))
         (stored (resultOr (st/readUnits! ctx.dir) (list)))]
-    (and (= (listLength cus) (listLength stored))
-         (listAll? (fn [(c CUnit)] -> Bool (or (listContains? (list "merged" "blocked" "failed") c.st) (and (= c.st "awaitReview") (= c.parked 1)))) cus)))
+    (and (none? (storeReadError! ctx.dir))
+         (and (= (listLength cus) (listLength stored))
+         (listAll? (fn [(c CUnit)] -> Bool (or (listContains? (list "merged" "blocked" "failed") c.st) (and (= c.st "awaitReview") (= c.parked 1)))) cus))))
 
 ; (:m :do "ticks, sleeping 50 ms after an idle one, until settled or max ticks; returns the ticks run")
 fn ! drain! ctx: Ctx max: Int64 -> Int64
@@ -861,6 +1001,241 @@ fn ! depWake! ctx: Ctx units: (List st/Task) -> Int64
         (done (filter (fn [(u st/Task)] -> Bool (requeueOne! ctx units u.id)) wake))]
     (listLength done))
 
+; (:m :ref COND-RECOVER-C2 :do "the pid in a holder name conductorPID, 0 for any other holder (a test, a hand claim), which then lives or dies by its beat alone")
+fn holderPid holder: String -> Int64
+  (if (stringStartsWith? holder "conductor") (optionOr (stringToInt64 (optionOr (stringSlice holder 9 (stringLength holder)) "")) 0) 0)
+
+; (:m :ref COND-RECOVER-C2 :do "a lease is dead when another holder owns it and either its beat is older than its ttl or its holder process is gone, and no in-flight stage of this store still runs on it: a restarted conductor adopts the stage rows of the old one through heartbeat, which this must not undo (node2 2026-11-04: conductor1177356 died holding 38 leases, 32 units refused behind them, nothing freed them for the ttl hour)")
+fn ! leaseDead? ctx: Ctx cus: (List CUnit) l: st/Lease now: Int64 -> Bool
+  (and (!= l.holder ctx.holder)
+       (and (not (listAny? (fn [(c CUnit)] -> Bool (and (= c.id l.id) (and (active? c) (= c.epoch l.epoch)))) cus))
+            (or (not (st/live? l now))
+                (let [(pid (holderPid l.holder))] (and (> pid 0) (not (alive? pid)))))))
+
+; (:m :ref COND-RECOVER-C2 :do "the lease reaper: every dead lease is released through the stores fenced release (unit back to queued, lease file removed, one log row) and journalled as a leaseReaped row naming unit, holder, epoch and cause; returns the units freed")
+fn ! reapLeases! ctx: Ctx -> (List String)
+  (match (st/readLeases! ctx.dir)
+    ((err _) (list))
+    ((ok leases)
+      (let [(now (nowNs))
+            (cus (readCUnits! ctx.dir))
+            (dead (filter (fn [(l st/Lease)] -> Bool (leaseDead? ctx cus l now)) leases))
+            (freed (filter (fn [(l st/Lease)] -> Bool
+                             (match (st/release! ctx.dir l.id l.epoch)
+                               ((ok _) (let [(_ (fileAppend (journalPath ctx.dir) (str "(:leaseReaped :unit " (st/q l.id) " :holder " (st/q l.holder) " :epoch " (n l.epoch) " :why " (st/q (if (st/live? l now) "holderGone" "expired")) " :at " (n (nowMs)) ")\n")))] true))
+                               ((err _) false)))
+                           dead))]
+        (map (fn [(l st/Lease)] -> String l.id) freed))))
+
+; (:m :ref COND-RECOVER-C2 :do "<store>/retries.asn keeps (:retry :unit ID :n N :at MS) rows, the newest per unit wins: N automatic retries a blocked unit has had, MS the last one")
+fn retriesPath dir: String -> String
+  (str dir "/retries.asn")
+
+; (:m :ref UNREADABLE-RETRY-SHARED-CAP :do "retries.asn rows count per cause: a reviewDiff row (unreadable review requeue) and a blocked-retry row of the same unit never share a count, each cause has its own cap per unit lifetime")
+fn ! retryLastBy! dir: String id: String review: Bool -> (Pair Int64 Int64)
+  (let [(hits (fold (fn [(acc (List (Pair Int64 Int64))) (l String)] -> (List (Pair Int64 Int64))
+                      (match (st/rowFields l "retry")
+                        ((err _) acc)
+                        ((ok fs) (if (and (= (st/textField fs "unit") id) (= review (= (st/textField fs "why") "reviewDiff")))
+                                   (listAppend acc (list (pair (st/intField fs "n") (st/intField fs "at"))))
+                                   acc))))
+                    (list) (stringLines (readOr (retriesPath dir)))))]
+    (match (listLast hits) ((none) (pair 0 0)) ((some p) p)))
+
+fn ! retryLast! dir: String id: String -> (Pair Int64 Int64)
+  (retryLastBy! dir id false)
+
+fn ! retryNote! dir: String id: String why: String count: Int64 -> Bool
+  (ok? (fileAppend (retriesPath dir) (str "(:retry :unit " (st/q id) " :why " (st/q why) " :n " (n count) " :at " (n (nowMs)) ")\n")))
+
+; (:m :ref COND-RECOVER-C2 :do "a unit blocked waitedOut on a claim refusal (held by a lease, or its :owns clashing with another unit's lease) whose blocker no longer holds a live lease goes back to ready once: the blocker was a dead holder's lease the reaper freed, and nothing else ever woke it (32 units on node2 behind conductor1177356)")
+fn claimFreed? c: CUnit leases: (List st/Lease) now: Int64 -> Bool
+  (and (stringStartsWith? c.sig "waitedOut: (:refused ")
+       (let [(live (filter (fn [(l st/Lease)] -> Bool (st/live? l now)) leases))
+             (liveHas (fn [(id String)] -> Bool (listAny? (fn [(l st/Lease)] -> Bool (= l.id id)) live)))]
+         (cond
+           ((stringContains? c.sig " :why held ") (not (liveHas c.id)))
+           ((stringContains? c.sig " :why owns ") (let [(by (quotedAfter c.sig ":by \""))] (and (not (stringEmpty? by)) (not (liveHas by)))))
+           (else false))))
+
+; (:m :ref COND-RECOVER-C3 :do "config of the blocked-unit retry policy, in the (:conductor ...) row of the stores ladder.asn: :blockedRetryMax N automatic retries a blocked unit gets per transient cause (default 2 adopted, 0 turns the policy off), :retryBackoffS S the wait before the first retry, doubled for each later one (default 300 adopted)")
+fn ! blockedRetryMax dir: String -> Int64
+  (let [(row (cdRowOf dir))]
+    (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":blockedRetryMax")) 2) 2))
+
+fn ! retryBackoffS dir: String -> Int64
+  (let [(row (cdRowOf dir))]
+    (if (listEmpty? (cdErrors row)) (optionOr (stringToInt64 (sp/tokAfter row ":retryBackoffS")) 300) 300))
+
+; (:m :ref COND-RECOVER-C3 :do "the conductors own signatures of a lost lease (leaseLost, stage run row lost, lease ended before) and of a stalled writer (stalled), matched as sig prefixes, never as substrings: a gate failure naming leaseTest or a stalled word is a writer failure")
+fn conductorLeaseSig? sig: String -> Bool
+  (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p)) (list "leaseLost" "stage run row lost" "lease ended before"))
+
+fn conductorStallSig? sig: String -> Bool
+  (or (= sig "stalled") (stringStartsWith? sig "stalled: "))
+
+; (:m :ref COND-RECOVER-C3 :do "why a blocked unit may be retried by itself, empty when it may not, a cap per unit lifetime (retries.asn is never reset): claim (the lease or owns clash that refused it is gone), provider (the failure signature matches the providerFail patterns), lease and stall (the conductors own signatures), vacuous (the vacuous verdict with commits on the unit branch past its base, which gating can now test); every other block, a review block, a stale rebase, deps, a repeated writer failure, waits for a person or the ladder")
+fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 -> String
+  (let [(low (stringLower c.sig))]
+    (cond
+      ((impossibleSig? c.sig) "")
+      ((claimFreed? c leases now) "claim")
+      ((stringEmpty? c.sig) "")
+      ((providerFailSig? c.sig (pfPatterns (pfRowOf ctx.dir))) "provider")
+      ((conductorLeaseSig? c.sig) "lease")
+      ((conductorStallSig? c.sig) "stall")
+      ((vacuousSig? c.sig)
+        (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
+              (p (str (wtBase ctx.dir repo) "/asex-" c.id))]
+          (if (and (not (stringEmpty? repo)) (and (worktreeValid? p) (commitsPast? p (baseRef (resolved! repo u))))) "vacuous" "")))
+      (else "")))
+
+; (:m :ref COND-RECOVER-C3 :do "an escalated writer failure whose next ladder rung has room again (the per-day cap of a rung rolled over, a rung row was raised) hops there as the failed write would have, one tierHop move to ready with a clean count; the lead rung is left to offerBacklog!; the review block that offerStrong! serves, a stale rebase, deps and the vacuous verdict are not writer failures")
+; (:m :ref COND-RECOVER-C3 :do "only a writer failure hops a rung (the journal is read once per tick by retryBlocked! and passed in): the unit blocked at stage write through fail! and its signature is not one of the conductors own non-writer failures (LEDGER_FORGED, ERR_REPO_GIT, worktree attach, stage run row lost, stale branch, merge or train failures, impossible, vacuous, waitedOut, review, STALE)")
+fn blockedStageIn lines: (List String) id: String -> String
+  (sp/tokAfter (optionOr (listLast (filter (fn [(x String)] -> Bool (and (stringStartsWith? x (str "(:t :unit " (st/q id) " ")) (stringContains? x " :to blocked "))) lines)) "") ":stage")
+
+fn ladderHopSig? sig: String -> Bool
+  (not (or (stringEmpty? sig)
+        (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p))
+                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train"))))
+
+fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 jr: (List String) -> Bool
+  (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (and (ladderHopSig? c.sig) (= (blockedStageIn jr c.id) "write")))))
+    (match (nextRung! ctx.dir c.lane now)
+      ((none) false)
+      ((some next)
+        (if (= next "lead") false
+          (let [(_ (priorWrite! ctx.dir c.id c.lane c.sig))
+                (_ (move! ctx (with c :lane next :fails 0 :waited 0 :esc 0 :epoch 0 :sig "") "ready" "retry" "" 0 0 (str "tierHop " c.lane "->" next ": " (verdictSig c.sig)) 0))]
+            true))))
+    false)
+
+; (:m :ref COND-RECOVER-C3 :do "the blocked-unit policy, once per tick: a blocked unit with a transient cause (transientWhy!) goes back to ready with a clean count while it has had fewer than :blockedRetryMax retries and the backoff since its last one (:retryBackoffS doubled per retry) has passed, each retry one row in retries.asn; a unit with no transient cause gets ladderHop!; on node2 2026-11-04 129 of 172 units sat blocked with only dep, lead-backlog, strong-offer and stale wakes to leave by")
+fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 max: Int64 backoffMs: Int64 jr: (List String) -> Bool
+  (if (not (and (= c.st "blocked") (stringEmpty? c.await))) false
+    (let [(why (transientWhy! ctx u c leases now))]
+      (if (impossibleSig? c.sig) (impossibleRecheck! ctx u c)
+      (if (stringEmpty? why) (ladderHop! ctx c (/ now 1000000) jr)
+        (let [(r (retryLast! ctx.dir c.id))
+              (wait (* backoffMs (fold (fn [(a Int64) (_ Int64)] -> Int64 (* a 2)) 1 (range 0 (pairFirst r)))))]
+          (if (or (>= (pairFirst r) max) (< (- (nowMs) (pairSecond r)) wait)) false
+            (let [(_ (retryNote! ctx.dir c.id why (+ (pairFirst r) 1)))
+                  (_ (pwReset! ctx.dir c.id))
+                  (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "retry" "" 0 0 (str "retry " why) 0))]
+              true)))))))
+
+fn ! retryBlocked! ctx: Ctx units: (List st/Task) -> Int64
+  (match (st/readLeases! ctx.dir)
+    ((err _) 0)
+    ((ok leases)
+      (let [(now (nowNs))
+            (jr (journalLinesOf ctx.dir))
+            (max (blockedRetryMax ctx.dir))
+            (backoffMs (* 1000 (retryBackoffS ctx.dir)))
+            (woken (filter (fn [(u st/Task)] -> Bool
+                             (match (cuOf (readCUnits! ctx.dir) u.id)
+                               ((none) false)
+                               ((some c) (retryOne! ctx u c leases now max backoffMs jr))))
+                           units))]
+        (listLength woken))))
+
+; (:m :ref COND-RECOVER-C4 :do "the branch names a task cites as its handoff, the text after main..sh/ up to the first character a branch name cannot hold")
+fn branchChars? ch: String -> Bool
+  (let [(k (charCode ch))] (or (and (>= k 48) (<= k 57)) (or (and (>= k 65) (<= k 90)) (or (and (>= k 97) (<= k 122)) (listContains? (list "-" "_" "." "/") ch)))))
+
+fn handoffBranches text: String -> (List String)
+  (map (fn [(seg String)] -> String
+         (let [(r (fold (fn [(acc (Pair String Bool)) (ch String)] -> (Pair String Bool)
+                          (if (pairSecond acc) acc (if (branchChars? ch) (pair (str (pairFirst acc) ch) false) (pair (pairFirst acc) true))))
+                        (pair "" false) (stringChars seg)))]
+           (let [(name (pairFirst r))] (if (stringEndsWith? name ".") (optionOr (stringSlice name 0 (- (stringLength name) 1)) name) name))))
+       (optionOr (listTail (stringSplit text "main..sh/")) (list)))
+
+; (:m :ref COND-RECOVER-C4 :do "the .asl paths a gate command runs")
+fn gateFiles gate: String -> (List String)
+  (filter (fn [(t String)] -> Bool (and (stringEndsWith? t ".asl") (stringContains? t "/"))) (stringSplit gate " "))
+
+fn trimSlashes p: String -> String
+  (if (and (> (stringLength p) 1) (stringEndsWith? p "/")) (trimSlashes (optionOr (stringSlice p 0 (- (stringLength p) 1)) p)) p)
+
+fn dirOf p0: String -> String
+  (let [(p (trimSlashes p0))
+        (parts (stringSplit p "/"))]
+    (stringJoin (listTake parts (max 0 (- (listLength parts) 1))) "/"))
+
+; (:m :ref COND-RECOVER-C4 :do "why a unit can never be written, empty when it can; a refusal needs positive evidence, an unreadable or ambiguous case is admitted: an owned path whose directory is absent on the base but was on its history (removed, as asl/agentLoop was for asl/packages/asl-agent, 17 node2 units) while the task text does not name it, a gate file absent on the base that was on its history and that the unit neither owns, nor sits under an owned directory of, nor names in its task, a handoff branch the task cites (main..sh/NAME) that is merged into the base when the task is only the handoff (GRADE-AND-LAND), or is missing while no commit on the base carries NAME in its message (a cited tip sha that still exists does not admit it); a directory that never existed (a new tests/ under a live package) is the unit's to create")
+fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) ""
+      (let [(u (resolved! repo u0))
+            (base (baseRef u))
+            (task (taskText ctx.dir u))
+            (onBase (fn [(path String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str base ":" path))).exit 0)))
+            (hadOnBase (fn [(path String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" path)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
+            (plain (filter (fn [(p String)] -> Bool (and (not (stringContains? p "*")) (not (stringEndsWith? p "/")))) u.owns))
+            (declared (fn [(d String)] -> Bool (or (stringContains? task d) (listAny? (fn [(o String)] -> Bool (and (stringEndsWith? o "/") (stringStartsWith? (str d "/") o))) u.owns))))
+            (ownedDirs (listAppend (map dirOf plain) (map (fn [(o String)] -> String (optionOr (stringSlice o 0 (- (stringLength o) 1)) o)) (filter (fn [(o String)] -> Bool (stringEndsWith? o "/")) u.owns))))
+            (createsGate (fn [(f String)] -> Bool (or (listContains? u.owns f) (or (stringContains? task f) (listAny? (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (stringStartsWith? f (str d "/")))) ownedDirs)))))
+            (badDir (listFind (fn [(p String)] -> Bool (let [(d (dirOf p))] (and (not (stringEmpty? d)) (and (not (onBase d)) (and (not (declared d)) (hadOnBase d)))))) plain))
+            (badGate (listFind (fn [(f String)] -> Bool (and (not (onBase f)) (and (not (createsGate f)) (hadOnBase f)))) (gateFiles u.gate)))
+            (branches (filter (fn [(b String)] -> Bool (not (stringEmpty? b))) (handoffBranches task)))
+            (onMain (fn [(b String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--fixed-strings" (str "--grep=" b) base)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
+            (missing (listFind (fn [(b String)] -> Bool (and (!= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/sh/" b))).exit 0) (not (onMain b)))) branches))
+            (merged (listFind (fn [(b String)] -> Bool (and (stringContains? task "GRADE-AND-LAND") (= (gitOut repo (list "merge-base" "--is-ancestor" (str "refs/heads/sh/" b) base)).exit 0))) branches))]
+        (cond
+          ((some? badDir) (str "ownsDirMissing " (dirOf (optionOr badDir "")) " on " base))
+          ((some? badGate) (str "gateFileMissing " (optionOr badGate "")))
+          ((some? missing) (str "handoffBranchMissing sh/" (optionOr missing "")))
+          ((some? merged) (str "handoffBranchMerged sh/" (optionOr merged "")))
+          (else "")))))
+
+; (:m :ref COND-RECOVER-C4 :do "an impossible block carries the base head it was judged on (impossible: WHY @SHA); impossibleRecheck! re-judges when the base moved, so a restored directory, a fixed gate path or a landed branch releases the unit and a still impossible unit only has its head refreshed")
+fn ! baseHead! ctx: Ctx u0: st/Task -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) "" (stringTrim (gitOut repo (list "rev-parse" "--short=9" (baseRef (resolved! repo u0)))).out)))
+
+fn ! impossibleSigOf! ctx: Ctx u: st/Task why: String -> String
+  (str "impossible: " why " @" (baseHead! ctx u))
+
+; (:m :ref IMPOSSIBLE-REMAP-MOVED :do "git name-status lines of a commit as (old new) pairs of its renames, rename lines being R<score> TAB old TAB new")
+fn renamePairs text: String -> (List (Pair String String))
+  (map (fn [(parts (List String))] -> (Pair String String) (pair (optionOr (listGet parts 1) "") (optionOr (listGet parts 2) "")))
+       (filter (fn [(parts (List String))] -> Bool (and (= (listLength parts) 3) (stringStartsWith? (optionOr (listHead parts) "") "R")))
+               (map (fn [(l String)] -> (List String) (stringSplit l "\t")) (stringLines text))))
+
+; (:m :ref IMPOSSIBLE-REMAP-MOVED :do "when an owned directory is gone because a commit renamed its files, the proposal lists each owned path with the path it was renamed to (old=>new), read from the commit that removed the directory; empty when no owned path was renamed")
+fn ! ownsRemap! ctx: Ctx u: st/Task why: String -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
+        (words (stringSplit why " "))]
+    (if (or (stringEmpty? repo) (!= (optionOr (listHead words) "") "ownsDirMissing")) ""
+      (let [(dir (optionOr (listGet words 1) ""))
+            (base (baseRef (resolved! repo u)))
+            (gone (stringTrim (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" dir)).out))]
+        (if (stringEmpty? gone) ""
+          (let [(pairs (renamePairs (gitOut repo (list "show" "-M" "--name-status" "--format=" gone)).out))
+                (hits (filter (fn [(p String)] -> Bool (listAny? (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs)) u.owns))]
+            (stringJoin (map (fn [(p String)] -> String (str p "=>" (pairSecond (optionOr (listFind (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs) (pair p p))))) hits) " "))))))
+
+fn ! refuseImpossible! ctx: Ctx u: st/Task c: CUnit why: String -> Unit
+  (let [(sig (impossibleSigOf! ctx u why))
+        (c1 (escalate! ctx (with c :sig sig) sig "admission refused the unit before any claim or writer run"))
+        (_ (move! ctx c1 "blocked" "admit" "" 0 0 sig 0))
+        (remap (ownsRemap! ctx u why))
+        (_ (if (stringEmpty? remap) true (ls/emitAt! (dirOf ctx.dir) (nowMs) "conductor" "act" "ownsRemap" u.id u.id (str "owned paths were renamed, not deleted; proposed :owns " remap))))]
+    ())
+
+fn ! impossibleRecheck! ctx: Ctx u: st/Task c: CUnit -> Bool
+  (let [(head (baseHead! ctx u))]
+    (if (or (stringEmpty? head) (stringEndsWith? c.sig (str " @" head))) false
+      (let [(why (impossibleWhy! ctx u))]
+        (if (stringEmpty? why)
+          (let [(_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "recheck" "" 0 0 "impossibleCleared" 0))] true)
+          (let [(_ (writeCUnit! ctx.dir (with c :sig (impossibleSigOf! ctx u why))))] false)))))
+
+fn impossibleSig? sig: String -> Bool
+  (stringStartsWith? sig "impossible: ")
+
 ; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH) row in the store's ladder.asn, a ready unit starts its writer only while the node has a free jobserver token (tokenCount - heldCount > 0) and MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
 fn wrRowOf dir: String -> String
   (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:writers ")) (stringLines (readOr (ladderPath dir)))) "")
@@ -929,10 +1304,37 @@ fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
 
+; (:m :ref COND-TICK-READS :do "the ids whose row was read as bytes and does not parse: the only rows quarantine may move")
+fn ! unparseableIds! dir: String -> (List String)
+  (match (dirList (cuDir dir))
+    ((err _) (list))
+    ((ok names)
+      (map (fn [(name String)] -> String (optionOr (stringSlice name 0 (- (stringLength name) 4)) name))
+           (filter (fn [(name String)] -> Bool
+                     (and (stringEndsWith? name ".asn")
+                          (match (fileReadString (str (cuDir dir) "/" name))
+                            ((err _) false)
+                            ((ok raw) (match (parseCUnit raw) ((ok _) false) ((err _) true))))))
+                   (listSort names)))))
+
+; (:m :ref STATUS-UNREADABLE :do "the unit ids whose conductor row file does not parse; readCUnits! skips them, so status! lists each as st unreadable instead of dropping the unit")
+fn ! unreadableIds! dir: String -> (List String)
+  (match (dirList (cuDir dir))
+    ((err _) (list))
+    ((ok names)
+      (map (fn [(name String)] -> String (optionOr (stringSlice name 0 (- (stringLength name) 4)) name))
+           (filter (fn [(name String)] -> Bool
+                     (and (stringEndsWith? name ".asn")
+                          (match (fileReadString (str (cuDir dir) "/" name))
+                            ((err _) true)
+                            ((ok raw) (match (parseCUnit raw) ((ok _) false) ((err _) true))))))
+                   (listSort names)))))
+
 fn ! status! ctx: Ctx -> String
   (let [(cus (readCUnits! ctx.dir))
         (lanes (fold (fn [(acc (List String)) (c CUnit)] -> (List String) (if (listContains? acc c.lane) acc (listAppend acc (list c.lane)))) (list) cus))
-        (rows (map (fn [(c CUnit)] -> String (str "(:unit :id " (st/q c.id) " :st " c.st " :lane " (st/q c.lane) " :fails " (n c.fails) " :parked " (n c.parked) " :waited " (n c.waited) ")")) cus))
+        (rows (listAppend (map (fn [(c CUnit)] -> String (str "(:unit :id " (st/q c.id) " :st " c.st " :lane " (st/q c.lane) " :fails " (n c.fails) " :parked " (n c.parked) " :waited " (n c.waited) ")")) cus)
+                          (map (fn [(id String)] -> String (str "(:unit :id " (st/q id) " :st unreadable)")) (unreadableIds! ctx.dir))))
         (spend (map (fn [(l String)] -> String
                       (let [(mine (filter (fn [(c CUnit)] -> Bool (= c.lane l)) cus))]
                         (str "(:spend :lane " (st/q l) " :tokens " (n (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.tokens)) 0 mine))
@@ -941,8 +1343,11 @@ fn ! status! ctx: Ctx -> String
     (stringJoin (listAppend (listAppend rows spend)
                   (list (str "(:running (" (idList cus active?) "))")
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
+                        (str "(:held (" (idList cus (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (= c.await "mergeHold")))) "))")
                         (str "(:parked (" (stringJoin (map (fn [(p (Pair String String))] -> String (st/q (str (pairFirst p) ":" (optionOr (listHead (stringSplit (pairSecond p) "\n")) ""))) ) (parkedRows! ctx.dir)) " ") "))")
-                        (str "(:escalations " (n (listLength esc)) ")")))
+                        (str "(:escalations " (n (listLength esc)) ")")
+                        (str "(:quarantined (" (stringJoin (map st/q (quarantinedIds ctx.dir)) " ") "))")
+                        (match (storeReadError! ctx.dir) ((some e) (str "(:store :unreadable " (st/q e) ")")) ((none) "(:store :ok)"))))
                 "\n"))
 
 fn allowanceUnlimited lane: String -> Int64
@@ -1226,6 +1631,24 @@ fn armOf id: String -> String
 fn writeArm rc: RealCfg id: String -> String
   (if rc.attractorAb (armOf id) "")
 
+; (:m :ref TRIAL-PIN :do "--writer-model ALIAS pins the Leon form to one gateway alias: :model \"ALIAS\" joins the extra only when the flag is given, so a pinned run is served by that alias and no profile chain; --lease-sec N sets the lease the Leon wall budget derives from")
+fn pinExtra rc: RealCfg extra: String -> String
+  (if (stringEmpty? rc.writerModel) extra
+    (str (if (stringEmpty? extra) "" (str extra " ")) ":model " (st/q rc.writerModel)))
+
+; (:m :ref TRIAL-PIN :do "the whole agentReceipt line of the write child goes to <store>/runs/UNIT-leon.asn; the Res row and the journal verdict carry only a cut of it")
+fn ! leonReceiptSave! dir: String id: String out: String -> Bool
+  (let [(row (receiptRowOf out))]
+    (if (stringEmpty? row) false
+      (let [(_ (dirCreate (runsDir dir)))]
+        (match (fileWrite (runPath dir id "leon" "asn") (str row "\n")) ((ok _) true) ((err _) false)))))
+
+; (:m :ref LEON-TOOLROOT :do "the write stage hands the Leon run :toolRoot REPO, the conductor's own built checkout as an absolute path (a relative --repo is resolved here, since the unit worktree is another cwd), so check, test and forms in a unit worktree run that tree's bin/asl and a unit that edits CLI sources is not refused ERR_NATIVE_STALE; extra already naming :toolRoot is kept")
+fn ! withToolRoot! extra: String root: String -> String
+  (if (or (stringEmpty? root) (stringContains? extra ":toolRoot "))
+    extra
+    (str (if (stringEmpty? extra) "" (str extra " ")) ":toolRoot " (st/q (resultOr (realPath root) root))))
+
 fn armExtra arm: String -> String
   (if (= arm "asn") ":attractor asn" "")
 
@@ -1260,11 +1683,40 @@ fn ! ownedChanges! p: String owns: (List String) -> (List String)
                  (match (stringIndexOf path " -> ") ((some at) (optionOr (stringSlice path (+ at 4) (stringLength path)) path)) ((none) path))))
              (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) (stringLines r.out))))))
 
+; (:m :ref FLEET-COMMIT-VIA-VCS :do "a unit with no :owns used to be committed by add -A; the vcs layer commits only named paths, so the dirty paths of the worktree are named here (untracked ones included)")
+fn ! dirtyPaths! p: String -> (List String)
+  (let [(r (gitOut p (list "-c" "core.quotePath=false" "status" "--porcelain" "--untracked-files=all")))]
+    (if (!= r.exit 0) (list) (porcelainPaths (stringLines r.out))))
+
+; (:m :ref FLEET-COMMIT-VIA-VCS :do "the paths of git status --porcelain lines: a quoted path is unquoted (backslash, quote, tab, newline escapes), and a rename or copy names both the old and the new path")
+fn unquoteGit s: String -> String
+  (if (and (>= (stringLength s) 2) (and (stringStartsWith? s "\"") (stringEndsWith? s "\"")))
+    (unescapeGit (optionOr (stringSlice s 1 (- (stringLength s) 1)) s) 0 "")
+    s)
+
+fn unescapeGit s: String i: Int64 acc: String -> String
+  (if (>= i (stringLength s))
+    acc
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (if (and (= c "\\") (< (+ i 1) (stringLength s)))
+        (let [(d (optionOr (stringSlice s (+ i 1) (+ i 2)) ""))]
+          (unescapeGit s (+ i 2) (str acc (cond ((= d "t") "\t") ((= d "n") "\n") (else d)))))
+        (unescapeGit s (+ i 1) (str acc c)))))
+
+fn porcelainPaths lines: (List String) -> (List String)
+  (listFlatMap (fn [(l String)] -> (List String)
+                 (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))
+                       (renamed (or (stringStartsWith? l "R") (or (stringStartsWith? l "C") (or (stringStartsWith? (optionOr (stringSlice l 1 2) "") "R") (stringStartsWith? (optionOr (stringSlice l 1 2) "") "C")))))]
+                   (match (if renamed (stringIndexOf path " -> ") none)
+                     ((some at) (list (unquoteGit (optionOr (stringSlice path 0 at) "")) (unquoteGit (optionOr (stringSlice path (+ at 4) (stringLength path)) ""))))
+                     ((none) (list (unquoteGit path))))))
+               (filter (fn [(l String)] -> Bool (> (stringLength l) 3)) lines))
+
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "the driver commit stages only the owned paths that changed; true when a commit landed")
-fn ! commitWrite! p: String owns: (List String) id: String model: String -> Bool
+fn ! commitWrite! p: String owns: (List String) id: String model: String toolRoot: String -> Bool
   (let [(changed (ownedChanges! p owns))]
     (if (listEmpty? changed) false
-      (fp/driverCommitRow! p (if (listEmpty? owns) (list) changed) id model)))
+      (fp/driverCommitRow! p (if (listEmpty? owns) (dirtyPaths! p) changed) id model toolRoot)))
 
 ; (:m :ref COORD-WIP-RESCUE :do "progress counts commits past the base except wip rescue commits, found by their ASN message head (:c :a wip :do; a rescued tree is kept work, not a finished write")
 fn pastArgs base: String -> (List String)
@@ -1306,12 +1758,23 @@ fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms:
   (Res :tiers "" :ok (if (= verdict "gating") 1 0) :wt p :branch (str "sh/" id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
        :sig (if (= verdict "gating") "" (vacuousSig gate)) :ms ms :exit 0 :asserts asserts :verdict "")
 
+; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "true when the newest review verdict in the unit's journal, a :from reviewing row to ready or blocked at stage review, is newer than its newest writer run, a (:profile :unit ...) row that writeResWith journals before every writer run; keyed on writer runs, not on the head, because a rebase onto a moved main and a writer's own commit both change the head while the failed review still stands (node2 2026-11-04: RELAY-PUSH-SHORTNAME head 0a32c45 failed review four times, each time sent straight back to review by the ahead check)")
+fn ! reviewFailedSinceWriter? dir: String id: String -> Bool
+  (let [(runHead (str "(:profile :unit " (st/q id) " "))
+        (tHead (str "(:t :unit " (st/q id) " "))]
+    (fold (fn [(failed Bool) (l String)] -> Bool
+            (cond
+              ((stringStartsWith? l runHead) false)
+              ((and (stringStartsWith? l tHead) (and (stringContains? l " :from reviewing ") (and (stringContains? l " :stage review ") (or (stringContains? l " :to ready ") (stringContains? l " :to blocked "))))) true)
+              (else failed)))
+          false (journalLinesOf dir)))
+
 ; (:m :ref UNIT-AHEAD-GATING :do "a write whose gate failed still had its owned edits driver-committed, so a later claim found the work on sh/UNIT and ran another writer on it, whose doc-only change Leon judged vacuous against HEAD, forever (node2 2026-11-04: 27 of 41 branches ahead, never merged); a branch with commits past its base, no uncommitted owned change, no committed path outside :owns and a green unit gate is finished work: the write stage returns it as written without a writer run; a gate green on the merge-base too is the vacuous verdict unless the task is a regression guard, which goes to gating for the ladder; each verdict is one (:ahead ... :head SHA ... :verdict V) row, and a later claim on the same HEAD reuses it instead of running the gate and the base again, so the stage deadline is not spent twice")
 fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Option Res)
   (let [(_ (pathRemove (runPath dir u.id "ahead" "run")))
         (past (gitOut p (list "rev-list" "--count" (str (baseRef u) "..HEAD"))))
         (mb (stringTrim (gitOut p (list "merge-base" "HEAD" (baseRef u))).out))]
-    (if (or (stringEmpty? u.gate) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (or (stringEmpty? mb) (or (not (listEmpty? (ownedChanges! p u.owns))) (not (listEmpty? (outsideOwned! p mb u.owns)))))))) none
+    (if (or (stringEmpty? u.gate) (or (reviewFailedSinceWriter? dir u.id) (or (!= past.exit 0) (or (= (stringTrim past.out) "0") (or (stringEmpty? mb) (or (not (listEmpty? (ownedChanges! p u.owns))) (not (listEmpty? (outsideOwned! p mb u.owns))))))))) none
       (let [(head (stringTrim (gitOut p (list "rev-parse" "HEAD")).out))
             (cached (aheadRow! dir u.id))]
         (if (stringContains? cached (str " :head " (st/q head) " :mb " (st/q mb) " :gate " (st/q u.gate) " "))
@@ -1537,11 +2000,12 @@ fn ! pwReset! dir: String id: String -> Bool
 fn ! providerHit? ctx: Ctx u: st/Task c: CUnit res: Res -> Bool
   (let [(row (pfCfg ctx.dir))]
     (and (= res.ok 0)
+         (and (not (modelEscalatedSig? res.sig))
          (and (not (staleSig? res.sig))
               (and (not (vacuousSig? res.sig))
                    (and (providerFailSig? res.sig (pfPatterns row))
                         (and (noCommits? res.wt (baseRef u))
-                             (<= (+ (pairFirst (pwLast ctx.dir c.id)) 1) (pfMaxInRow row))))))))
+                             (<= (+ (pairFirst (pwLast ctx.dir c.id)) 1) (pfMaxInRow row)))))))))
 
 fn ! providerRequeue! ctx: Ctx c: CUnit res: Res -> Unit
   (let [(row (pfCfg ctx.dir))
@@ -1577,11 +2041,17 @@ fn cdRowOf dir: String -> String
 ; (:m :ref COND-REBASE-WAKE-LOOP :do "config check of a (:conductor ...) row: an unknown key or :staleWakeMax outside 1..100 is an error; no error means the row is used")
 fn cdErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (= k ":staleWakeMax"))) keys))
-        (m (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1))]
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":staleWakeMax" ":blockedRetryMax" ":retryBackoffS") k))) keys))
+        (m (optionOr (stringToInt64 (sp/tokAfter row ":staleWakeMax")) 1))
+        (r (optionOr (stringToInt64 (sp/tokAfter row ":blockedRetryMax")) 2))
+        (b (optionOr (stringToInt64 (sp/tokAfter row ":retryBackoffS")) 300))]
     (listAppend
       (map (fn [(k String)] -> String (str "unknown key " k)) bad)
-      (if (or (< m 1) (> m 100)) (list (str ":staleWakeMax " (n m) " outside 1..100")) (list))))
+      (listAppend
+        (if (or (< m 1) (> m 100)) (list (str ":staleWakeMax " (n m) " outside 1..100")) (list))
+        (listAppend
+          (if (or (< r 0) (> r 20)) (list (str ":blockedRetryMax " (n r) " outside 0..20")) (list))
+          (if (or (< b 1) (> b 86400)) (list (str ":retryBackoffS " (n b) " outside 1..86400")) (list))))))
 
 ; (:m :ref COND-REBASE-WAKE-LOOP :do "how many failed wakes a stale unit gets before it parks behind its lead row: (:conductor :staleWakeMax N) in the store's ladder.asn, default 1 (adopted), a row cdErrors rejects means the default")
 fn ! staleWakeMax dir: String -> Int64
@@ -1661,6 +2131,25 @@ fn ! briefTask! wt: String dir: String u: st/Task prior: String -> String
   (let [(text (bf/briefFor (taskText dir u) (ownedStates! wt u.owns)))]
     (if (stringEmpty? prior) text (str text "\n\n" prior)))
 
+; (:m :ref COND-MODEL-ESCALATE :do "the :stop of Leon's receipt: read from the final receipt row, and from the (:agentReceipt ...) form nested in an (:agent ... :receipt ...) wrapper when the row is the wrapper")
+fn stopOf out: String -> String
+  (stringTrim (stringReplace (stringReplace (sp/tokAfter (receiptRowOf out) ":stop") ")" "") "\"" ""))
+
+; (:m :ref COND-MODEL-ESCALATE :do "Leon's receipt :stop modelEscalated means the model itself asked for help, which no rung of the ladder answers: the write result carries the signature modelEscalated: REASON (the :reason of the receipt's :escalate form, else the gate signature) and finish! parks the unit at once; a readStreak whose reason names (refusedWrites) stays a normal failure with the cause in the signature, so the ladder and the lead both see why writes did not land")
+fn modelEscalatedSig out: String -> String
+  (let [(row (receiptRowOf out))
+        (reason (quotedAfter row ":reason \""))]
+    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (optionOr (stringSlice reason 0 (min 200 (stringLength reason))) reason))))
+
+fn modelEscalatedSig? sig: String -> Bool
+  (stringStartsWith? sig "modelEscalated: ")
+
+fn writeFailSig out: String -> String
+  (let [(row (receiptRowOf out))]
+    (if (and (= (stopOf out) "readStreak") (stringContains? row "(refusedWrites)"))
+      (str "refusedWrites: " (gateSig out))
+      (gateSig out)))
+
 fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (writeResWith runWrite! rc dir u c)
 
@@ -1682,16 +2171,20 @@ fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof Strin
               (task (briefTask! p dir u prior))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
-              (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (armExtra arm)))))))
+              (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) (if (stringEmpty? rc.writerModel) "" (str " :pin " (st/q rc.writerModel))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (withToolRoot! (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u)) rc.repo)))))))
               (d (pairFirst pv))
+              (_ (leonReceiptSave! dir u.id d.out))
               (model (servedModel d.out))
-              (vacuous (pairSecond pv))
-              (_ (if vacuous false (commitWrite! p u.owns u.id model)))
+              ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
+              (vacuous (and (pairSecond pv) (not (commitsPast? p (baseRef u)))))
+              (stop (stopOf d.out))
+              (modelEsc (and (= stop "modelEscalated") (not vacuous)))
+              (_ (if vacuous false (commitWrite! p u.owns u.id model rc.repo)))
               ; (:m :ref CONDUCTOR-ZERO-MERGE :do "review diffs base...HEAD and merge trains the branch, so a write is progress only when a commit landed: an owned edit the driver could not commit was reviewed as an empty diff 6 times (NODE2-ASEX-DETACHED)")
               (noEdit (and (= d.exit 0) (not (commitsPast? p (baseRef u)))))]
-          (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (not vacuous))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
-               :sig (cond (vacuous (vacuousSig u.gate)) ((!= d.exit 0) (gateSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))))
+          (Res :tiers "" :ok (if (and (= d.exit 0) (and (not noEdit) (and (not vacuous) (not modelEsc)))) 1 0) :wt p :branch (str "sh/" u.id) :model model :alias (servedAliasOf d.out) :tokens (leonTokens d.out) :costMicro (leonCost d.out (rs/costRows (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)) model) :claimedGreen 0
+               :sig (cond (vacuous (vacuousSig u.gate)) (modelEsc (modelEscalatedSig d.out)) ((!= d.exit 0) (writeFailSig d.out)) (noEdit "noEdit") (else "")) :ms d.ms :exit d.exit :asserts 0 :verdict "")))))))))
 
 fn ! currentBranch dir: String -> String
   (let [(d (fr/runOne (fr/job (list "git" "-C" dir "rev-parse" "--abbrev-ref" "HEAD") dir (fr/childEnv (list)))))]
@@ -1721,7 +2214,48 @@ fn ! promoteDev! rc: RealCfg -> String
             (if (= m.exit 0) "merged"
               (let [(_ (gitOut rc.devRepo (list "merge" "--abort")))] "conflict")))))))
 
-fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
+; (:m :ref CONDUCTOR-MERGE-CHECK-FIX :do "budgets: merge-check-sec adopted 1200 (flag, RealCfg.mergeCheckSec) plus the train limit 3600 stay under the stage deadline, whose default is now 5400 (was 4200, which the sum of the old 900 and 3600 already exceeded)")
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the merge-time audit asl/tools/coord/mergeCheck.asl in process on the unit branch against its merge base with dev, cli = the dev clone bin/asl, cache under the home; returns its exit (0 pass, 1 block, 3 unverified, 2 could not run) and receipt")
+fn ! realMergeCheck! rc: RealCfg c: CUnit base: String -> (Pair Int64 String)
+  (mc/run! (mc/Opts :repo rc.devRepo :base base :head c.branch :cli (str rc.devRepo "/bin/asl") :totalS rc.mergeCheckSec :stepS 300 :cache (str rc.home "/.asl/run/mergeCheck")))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the receipt row of one merge check lands in the journal whatever the verdict, so a merged unit shows what was checked")
+fn ! mergeReceipt! store: String id: String ex: Int64 receipt: String -> Bool
+  (ok? (fileAppend (journalPath store) (str "(:mergeReceipt :unit " (st/q id) " :exit " (n ex) " :at " (n (nowMs)) " " receipt ")\n")))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "the text of one parenthesised list of a receipt, :structure or :regressions or :unverified, cut to 300 chars, for the signature of a block or a hold")
+fn mergeCheckWhy receipt: String key: String -> String
+  (let [(parts (stringSplit receipt (str " " key " (")))
+        (rows (if (< (listLength parts) 2) "" (stringTrim (optionOr (listHead (stringSplit (optionOr (listGet parts 1) "") ") :")) ""))))]
+    (optionOr (stringSlice rows 0 300) rows))
+
+; (:m :ref CONDUCTOR-MERGE-CHECK :do "a check that blocks leaves dev untouched and the unit blocked with verdict block and the sig mergeCheck: rows; one that could not verify (exit 3, or 2 when it could not run) holds the unit with verdict hold plus one lead-stream event; neither counts as a failed merge; exit 0 returns none and the train goes on")
+fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option Res)
+  (let [(ex (pairFirst r))
+        (receipt (pairSecond r))
+        (_ (mergeReceipt! store u.id ex receipt))]
+    (cond
+      ((= ex 0) (none))
+      ((= ex 1) (some (with (failRes (str "mergeCheck: " (mergeCheckWhy receipt ":structure") " " (mergeCheckWhy receipt ":regressions"))) :verdict "block")))
+      (else
+        (let [(why (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (optionOr (stringSlice receipt 0 160) receipt)))
+              (_ (ls/emitAt! (dirOf store) (nowMs) "conductor" "warn" "mergeCheckHold" u.id u.id why))]
+          (some (with (failRes why) :verdict "hold"))))))
+
+; (:m :ref MERGECHECK-CLAMP :do "the budget literals live once: the train child's limit and the stage deadline default; the merge-check budget is clamped so it plus the train limit plus a 60 s margin stays under the stage deadline, whatever --merge-check-sec says; a --stage-sec below train limit + 120 s has no room for any check, so the 60 s floor applies and the sum can exceed the deadline (an operator choice, not defended)")
+fn trainLimitSec -> Int64
+  3600
+
+fn stageSecDefault -> Int64
+  5400
+
+fn clampMergeCheckSec requested: Int64 stageSec: Int64 -> Int64
+  (max 60 (min requested (- (- stageSec (trainLimitSec)) 60)))
+
+fn ! mergeRes rc: RealCfg store: String u: st/Task c: CUnit -> Res
+  (mergeResWith rc store u c realMergeCheck!)
+
+fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [RealCfg CUnit String] -> (Pair Int64 String)) -> Res
   (let [(cur (currentBranch rc.devRepo))
         (promoted (if (or (= rc.devBranch "main") (or (= rc.devBranch "master") (!= cur rc.devBranch))) "" (promoteDev! rc)))]
     (cond
@@ -1730,15 +2264,24 @@ fn ! mergeRes rc: RealCfg u: st/Task c: CUnit -> Res
       ((or (= promoted "conflict") (= promoted "fetchFailed"))
         (failRes (str "refused: main does not come into dev (" promoted ")")))
       (else
-      (let [(_ (if (= rc.devRepo rc.repo) 0 (dropRemotes! rc.devRepo)))
-            (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
-                       (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
-            (d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
-                                 (fr/limits 3600 200)))]
-        (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
-          (let [(_ (w/removeWt! rc.wt u.id true))]
-            (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
-          (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms)))))))
+        (let [(_ (if (= rc.devRepo rc.repo) 0 (dropRemotes! rc.devRepo)))
+              (fetched (if (= rc.devRepo rc.repo) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
+                         (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/" c.branch ":refs/heads/" c.branch)))))
+              (mb (if (= fetched.exit 0) (gitOut rc.devRepo (list "merge-base" "HEAD" c.branch)) fetched))
+              ; (:m :ref MERGECHECK-CLAMP :do "a failed fetch skips the check (the train below fails on the same cause with its own signature); a good fetch with no merge base is not a pass: the unit holds as unverified exit 3, so a branch unrelated to dev is never merged unchecked")
+              (verdict (cond
+                         ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check rc c (stringTrim mb.out))))
+                         ((= fetched.exit 0) (mergeVerdictRes! store u (pair 3 "(:mergeCheck :verdict unverified :unverified (\"noMergeBase\") :structure () :regressions ())")))
+                         (else (none))))]
+          (match verdict
+            ((some stopped) stopped)
+            ((none)
+              (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
+                                         (fr/limits (trainLimitSec) 200)))]
+                (if (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError"))))
+                  (let [(_ (w/removeWt! rc.wt u.id true))]
+                    (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
+                  (let [(f (failRes (gateSig d.out)))] (with f :ms d.ms))))))))))
 
 ; (:m :ref CONDUCTOR :do "thin adapter for the COND2 ladder: its Ruling action (merge|fix|await|blocked) maps to the review verdict pass|fail|defer|block; an unknown action blocks")
 fn rulingVerdict action: String -> String
@@ -1848,31 +2391,95 @@ fn ! offeredRung! dir: String id: String -> String
     (let [(_ (pathRemove (offerPath dir id)))] "R3")
     "")
 
+; (:m :ref AHEAD-WRITER-UNKNOWN :do "a unit that entered gating through the ahead check has no model on its write-to-gating row, and its failed or blocked write rows, which the stage journals with the served model, were ignored, so the writer stayed unknown and R1 deferred on writerFamily for ever (LL-BUF-RT, STD-CHECKSUMS): every write-stage row from writing counts, failed ones too, except a failed one that names no known model (a crashed run says unknown and must not hide an earlier known writer)")
 ; (:m :ref REVIEW-DEFER :do "the writer of the work under review: the newest write-to-gating journal row of the unit that names a writer: its served alias, else its model, unknown included so selection waits rather than fall back to an older round's writer; only a write the ahead check passed (model empty, no alias) is skipped, so the writer before it counts; the unit row's model when the journal names none")
 fn ! writerOf! dir: String c: CUnit -> String
   (let [(head (str "(:t :unit " (st/q c.id) " "))
         (pick (fn [(l String)] -> String (let [(a (quotedAfter l ":alias \""))] (if (stringEmpty? a) (quotedAfter l ":model \"") a))))
-        (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l ":to gating :stage write ") (not (stringEmpty? (pick l)))))) (journalLinesOf dir)))]
+        (rows (filter (fn [(l String)] -> Bool (and (stringStartsWith? l head) (and (stringContains? l " :from writing ") (and (stringContains? l " :stage write ") (and (not (stringEmpty? (pick l))) (or (stringContains? l " :to gating ") (!= (pick l) "unknown"))))))) (journalLinesOf dir)))]
     (match (listLast rows) ((some l) (pick l)) ((none) c.model)))
+
+; (:m :ref REVIEW-NO-DIFF :do "a review never passes a change no reviewer was shown: a gone worktree, a failed git diff (missing base ref) or an empty diff ends the review before any model call: an empty diff as block, an unreadable one (gone worktree, failed git diff) as verdict requeue, which finish! turns into a transient move to ready (no fail count, capped through retries.asn)")
+; (:m :ref LANE-UNAVAILABLE-MEMORY :do "laneUnavailable rows from the ladder are remembered in laneDead.asn with an until time of at plus the lane-ttl-sec stage flag (adopted 3600); while a row is live the review call for that alias returns a permanent error without calling the provider, so later reviews skip the lane and the ladder picks another; a row marked remembered is not stored again so its own echo does not extend the window; after the window the lane is tried once more; the first sighting of a lane sends one lead-stream warn keyed lane and cause")
+fn laneDeadPath dir: String -> String
+  (str dir "/laneDead.asn")
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "ledger rows are read as forms, never by splitting text: a why with escaped quotes (a JSON error body) or the word :until in it stays one field; a line that is no laneDead form is dropped")
+fn deadFields l: String -> (List asn/AsnField)
+  (resultOr (st/rowFields l "laneDead") (list))
+
+fn laneDeadRows dir: String -> (List String)
+  (filter (fn [(l String)] -> Bool (not (listEmpty? (deadFields l)))) (stringLines (readOr (laneDeadPath dir))))
+
+fn laneDeadLive dir: String nowMs: Int64 -> (List String)
+  (filter (fn [(l String)] -> Bool (> (st/intField (deadFields l) "until") nowMs)) (laneDeadRows dir))
+
+fn laneCause why: String -> String
+  (l/causeOf why)
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the remembered error keeps the lane cause in a form permanentError? reads: credits as insufficient credit, a status as HTTP N; the word remembered keeps rememberDeadLanes! from storing it again")
+fn rememberedErr cause: String why: String -> String
+  (str "remembered lane unavailable " (if (= cause "credits") "insufficient credit" (if (= cause "permanent") "HTTP 403" (str "HTTP " cause))) ": " why)
+
+fn ! skipDead dir: String nowMs: Int64 inner: (fn ! [String String] -> (Result String String)) -> (fn ! [String String] -> (Result String String))
+  (let [(dead (laneDeadLive dir nowMs))]
+    (fn [(alias String) (prompt String)] -> (Result String String)
+      (match (listFind (fn [(l String)] -> Bool (= (st/textField (deadFields l) "lane") alias)) dead)
+        ((some l) (err (rememberedErr (st/textField (deadFields l) "cause") (st/textField (deadFields l) "why"))))
+        ((none) (inner alias prompt)))))
+
+fn unavailFields l: String -> (List asn/AsnField)
+  (resultOr (st/rowFields l "laneUnavailable") (list))
+
+; (:m :ref LANE-UNAVAILABLE-MEMORY-FIX :do "the read-modify-write of laneDead.asn runs under a flock beside it so parallel stage children do not drop each other's rows, and a failed write is an error, not a stored row: no lead warn is sent for it")
+fn ! rememberDeadLanes! dir: String ttlSec: Int64 nowMs: Int64 rows: (List String) -> (Result Int64 String)
+  (let [(fresh (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:laneUnavailable ") (not (stringContains? l "remembered")))) rows))]
+    (if (listEmpty? fresh) (ok 0)
+      (match (fileLockWait (str (laneDeadPath dir) ".lock") true 10000)
+        ((err e) (err (str "laneDead lock: " e)))
+        ((ok fd)
+          (let [(lanes (map (fn [(l String)] -> String (st/textField (unavailFields l) "lane")) fresh))
+                (kept (filter (fn [(l String)] -> Bool (not (listContains? lanes (st/textField (deadFields l) "lane")))) (laneDeadLive dir nowMs)))
+                (added (map (fn [(l String)] -> String
+                              (let [(why (st/textField (unavailFields l) "why"))]
+                                (str "(:laneDead :lane " (st/textField (unavailFields l) "lane") " :cause " (laneCause why) " :why " (st/q why) " :at " (n nowMs) " :until " (n (+ nowMs (* ttlSec 1000))) ")")))
+                            fresh))
+                (tmp (str (laneDeadPath dir) "." (n (procSelf)) ".tmp"))
+                (w (fileWrite tmp (str (stringJoin (listAppend kept added) "\n") "\n")))
+                (r (match w ((err e) (err e)) ((ok _) (pathRename tmp (laneDeadPath dir)))))
+                (_ (fdClose fd))]
+            (match r
+              ((err e) (err (str "laneDead write: " e)))
+              ((ok _)
+                (let [(_ (map (fn [(l String)] -> Bool
+                                (let [(why (st/textField (unavailFields l) "why"))]
+                                  (ls/emitAt! (dirOf dir) nowMs "conductor" "warn" "laneUnavailable" (str (st/textField (unavailFields l) "lane") ":" (laneCause why)) (st/textField (unavailFields l) "unit") why)))
+                              fresh))]
+                  (ok (listLength fresh))))))))))
 
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
         (lanesText (readOr rc.lanes))
         (usage (runPath dir u.id "usage" "asn"))
         (_ (pathRemove usage))
-        (diff (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))))
+        (diff (if (worktreeValid? c.wt) (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))) (fr/Done :idx 0 :exit 128 :out "worktree gone" :ms 0 :verdict "exit")))
         (riskRaw (stringTrim (readOr (str dir "/tasks/" u.id ".risk"))))
         (risk (if (stringEmpty? riskRaw) "low" riskRaw))
         (writer (rs/writerAliasFor gatewayText lanesText (l/reviewWriter (writerOf! dir c) rc.writerAlias)))
         (ru (l/ReviewUnit :id u.id :task (taskText dir u) :risk risk :closureChanged false :writerAlias writer :writerChannel u.channel
                           :startRung (offeredRung! dir u.id) :fixesUsed c.fails :prior (list)))
-        (call (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText)))]
+        (call (skipDead dir (nowMs) (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText))))]
+    (if (or (!= diff.exit 0) (stringEmpty? (stringTrim diff.out)))
+      (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+           :sig (if (!= diff.exit 0) (str "reviewDiffUnreadable: git diff " (baseRef u) "...HEAD exit " (n diff.exit) " " (repoClip diff.out)) (str "reviewDiffEmpty: no change past " (baseRef u)))
+           :ms 0 :exit 0 :asserts 0 :verdict (if (!= diff.exit 0) "requeue" "block"))
     (match (rs/reviewUnit! gatewayText lanesText (pacesNow rc) rc.repo usage ru diff.out (readOr (runPath dir u.id "receipt" "asn")) call)
       ((err e) (failRes (str "ladder: " e)))
       ((ok r)
-        (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))]
+        (let [(_ (fileAppend (journalPath dir) (str (stringJoin r.rows "\n") "\n")))
+              (_ (match (rememberDeadLanes! dir rc.laneTtlSec (nowMs) r.rows) ((err e) (ok? (fileAppend (journalPath dir) (str "(:laneDeadFailed :unit " (st/q u.id) " :why " (st/q e) ")\n")))) ((ok _) true)))]
           (Res :tiers (tiersOfRows r.rows) :ok 0 :wt "" :branch "" :model r.models :tokens r.tokens :costMicro r.costMicro :claimedGreen 0 :sig r.sig :ms 0 :exit 0 :asserts 0
-               :verdict (rulingVerdict r.action))))))
+               :verdict (rulingVerdict r.action)))))))
 
 ; (:m :ref COND3 :do "alias and tier allowances now: every lane alias, and each tier as the largest allowance of its lanes, so a unit parked on a tier name wakes too")
 fn ! laneSnapshot rc: RealCfg -> (List (Pair String Int64))
@@ -1893,7 +2500,20 @@ fn ! refreshWake! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) ref
         (_ (refresh))
         (after (snapshot))
         (rising (rs/risingLanes before after))]
-    (fold (fn [(a Int64) (lane String)] -> Int64 (+ a (wake! ctx lane))) 0 rising))
+    (+ (fold (fn [(a Int64) (lane String)] -> Int64 (+ a (wake! ctx lane))) 0 rising)
+       (deadAwaitWake! ctx (map pairFirst after))))
+
+; (:m :ref REVIEW-PARK-DEADLANE :do "node2 2026-11-12: units parked on a lane that left lanes.asn or is remembered dead (commandCode with no credits) waited for an allowance refresh that never comes, 10 slept 1.5 h; a parked unit whose every awaited name is unknown to the lane snapshot or live in laneDead wakes and goes back to review on the lanes that exist")
+fn deadAwait? await: String known: (List String) dead: (List String) -> Bool
+  (let [(names (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit await " ")))]
+    (and (not (listEmpty? names))
+         (listAll? (fn [(nm String)] -> Bool (or (listContains? dead nm) (not (listContains? known nm)))) names)))
+
+fn ! deadAwaitWake! ctx: Ctx known: (List String) -> Int64
+  (let [(dead (map (fn [(l String)] -> String (st/textField (deadFields l) "lane")) (laneDeadLive ctx.dir (nowMs))))
+        (cus (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (deadAwait? c.await known dead)))) (readCUnits! ctx.dir)))
+        (_ (map (fn [(c CUnit)] -> CUnit (move! ctx (parkedOf c 0) "awaitReview" "wake" "" 0 0 (str "deadAwait:" c.await) 0)) cus))]
+    (listLength cus))
 
 fn ! startupProblemsFor rc: RealCfg -> (List String)
   (rs/startupProblems (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes))
@@ -2022,7 +2642,7 @@ fn ! realRes rc: RealCfg dir: String stage: String u0: st/Task c: CUnit -> Res
     ((= stage "write") (writeRes rc dir u c))
     ((= stage "gates") (gatesStage rc dir u c))
     ((= stage "review") (realReview rc dir u c))
-    ((= stage "merge") (mergeRes rc u c))
+    ((= stage "merge") (mergeRes rc dir u c))
     (else (failRes (str "unknown stage " stage)))))
 
 fn ! loadUnit! dir: String id: String -> (Option (Pair st/Task CUnit))
@@ -2039,9 +2659,9 @@ fn ! realCfg args: (List String) dir: String -> RealCfg
   (let [(repo (st/opt args "repo" "."))]
     (RealCfg :repo repo :devRepo (st/opt args "dev-repo" repo) :devBranch (st/opt args "dev" "dev")
              :wt (w/Cfg :repo repo :base (st/opt args "worktrees" (str repo "/../worktrees")) :prefix "asex-" :archive (st/opt args "archive" (str dir "/archive")) :mainRef "main")
-             :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec 3600 :gateSec 3600
+             :home (st/opt args "home" (resultOr (getHomeDir) ".")) :keys (st/opt args "keys" (str repo "/.env.free")) :leaseSec (st/intOpt args "lease-sec" 3600) :gateSec 3600
              :lanes (st/opt args "lanes" (str repo "/.asl/mem/work/CAL/reviewLanes.asn")) :writerAlias (st/opt args "writer-alias" "") :profile (st/opt args "profile" "freeBulk")
-             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "")))
+             :attractorAb (= (st/opt args "attractor-ab" "off") "on") :leonPool (st/opt args "leon-pool" "") :writerModel (st/opt args "writer-model" "") :laneTtlSec (st/intOpt args "lane-ttl-sec" 3600) :mergeCheckSec (clampMergeCheckSec (st/intOpt args "merge-check-sec" 1200) (st/intOpt args "stage-sec" (stageSecDefault)))))
 
 ; (:m :ref CONDUCTOR :do "the stage child: conductor.asl stage STAGE UNIT --store DIR runs one stage for one unit and writes its Res row, printing nothing; a crash leaves no row and the poll reports the stage died")
 fn ! stageMain! args: (List String) dir: String -> Int64
@@ -2058,16 +2678,20 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
   (let [(repo (st/opt args "repo" "."))
         (pass (fold (fn [(acc (List String)) (k String)] -> (List String)
                       (if (stringEmpty? (st/opt args k "")) acc (listAppend acc (list (str "--" k) (st/opt args k "")))))
-                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool")))]
+                    (list) (list "repo" "dev-repo" "dev" "worktrees" "archive" "home" "keys" "lanes" "writer-alias" "profile" "attractor-ab" "leon-pool" "writer-model" "lease-sec" "lane-ttl-sec" "merge-check-sec")))]
     (fn [(stage String) (u st/Task) (c CUnit)] -> (List String)
       (listAppend (list (str repo "/bin/asl") "run" (str repo "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" dir) pass)))
+
+; (:m :ref MERGECHECK-CLAMP :do "the service Ctx in one function, so a test reads the stage deadline the conductor really runs with: --stage-sec or the one default literal")
+fn ! realCtx args: (List String) dir: String rc: RealCfg -> Ctx
+  (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
+       :stageSec (st/intOpt args "stage-sec" (stageSecDefault)) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listHead args) ""))
         (dir (st/opt args "store" (str (resultOr (getHomeDir) ".") "/.asl/run/conductor")))
         (rc (realCfg args dir))
-        (ctx (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
-                  :stageSec (st/intOpt args "stage-sec" 4200) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home)))]
+        (ctx (realCtx args dir rc))]
     (cond
       ((= cmd "stage") (ok (stageMain! args dir)))
       ((= cmd "tick") (match (tick! ctx) ((ok c) (do (println (str "(:tick :changed " (n c) ")")) (ok 0))) ((err e) (do (eprintln e) (ok 1)))))

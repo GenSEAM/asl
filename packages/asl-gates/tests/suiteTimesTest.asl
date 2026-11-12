@@ -34,12 +34,36 @@ fn ! testLedgerRoundTrip! dir: String -> Bool
       (assert (= (msOf secondRead "tests/aTest.asl") 900) "the newest run wins for a suite")
       (assert (= (msOf secondRead "tests/bTest.asl") 7) "a new suite is added")
       (assert (= (msOf secondRead weird) 5) "a suite absent from the newer run keeps its row")
-      (assert (= text (str "(:suiteTime :suite \"tests/aTest.asl\" :ms 900)\n"
-                           "(:suiteTime :suite \"tests/bTest.asl\" :ms 7)\n"
-                           "(:suiteTime :suite \"tests/we\\\"ird\\\\Test.sh\" :ms 5)\n"))
+      (assert (= text (str "(:suiteTime :suite \"tests/aTest.asl\" :ms 900 :samples (1200 900))\n"
+                           "(:suiteTime :suite \"tests/bTest.asl\" :ms 7 :samples (7))\n"
+                           "(:suiteTime :suite \"tests/we\\\"ird\\\\Test.sh\" :ms 5 :samples (5))\n"))
               (str "ledger text is one row per suite sorted by suite: " text))
       (assert (not (fileExists? (str path ".tmp." (stringFromInt64 (procSelf))))) "no temporary ledger is left behind")
       (assert (and (ok? absent) (= (msOf absent "tests/aTest.asl") -1)) "a missing ledger reads as empty")
+      true))
+
+; (:m :ref GATETIMES-MEDIAN :do "samples: an old row reads as one sample, merging keeps the last 5 newest last, :ms is the lower median, and a rendered row reads back")
+fn ! testSamples! dir: String -> Bool
+  (let [(path (str dir "/samples.asn"))
+        (old (fileWrite path "(:suiteTime :suite \"a\" :ms 100)\n"))
+        (oldRead (st/readTimes! path))
+        (w1 (st/writeTimes! path (list (st/SuiteTime :suite "a" :ms 300))))
+        (evenText (readText! path))
+        (w2 (st/writeTimes! path (list (st/SuiteTime :suite "a" :ms 200))))
+        (threeText (readText! path))
+        (threeRead (st/readTimes! path))
+        (capPath (str dir "/cap.asn"))
+        (writes (map (fn [(ms Int64)] -> Bool (ok? (st/writeTimes! capPath (list (st/SuiteTime :suite "b" :ms ms))))) (list 10 50 20 40 30 60 5)))
+        (capText (readText! capPath))
+        (capRead (st/readTimes! capPath))]
+    (do
+      (assert (and (ok? old) (= (msOf oldRead "a") 100)) "an old row without :samples reads as ms 100")
+      (assert (= evenText "(:suiteTime :suite \"a\" :ms 100 :samples (100 300))\n") (str "merging 300 into the old row keeps both samples and the lower median of an even count: " evenText))
+      (assert (= threeText "(:suiteTime :suite \"a\" :ms 200 :samples (100 300 200))\n") (str "a third sample is appended newest last and :ms is the median: " threeText))
+      (assert (= (msOf threeRead "a") 200) "a row with :samples reads back by :ms")
+      (assert (listAll? (fn [(b Bool)] -> Bool b) writes) "seven writes succeed")
+      (assert (= capText "(:suiteTime :suite \"b\" :ms 30 :samples (20 40 30 60 5))\n") (str "seven samples keep the last five in order with their median: " capText))
+      (assert (= (msOf capRead "b") 30) "the capped row reads back by :ms")
       true))
 
 fn ! corruptCase! dir: String name: String text: String want: String -> Bool
@@ -150,7 +174,7 @@ fn ! testRunnerRecords! dir: String -> Bool
       (assert (= orderAfterCorrupt observedOrder) (str "a corrupt ledger stops the runner before any suite starts: " orderAfterCorrupt))
       true))
 
-; (:m :ref GATETIMES-STALE-ROWS-20261022 :do "writeTimesIn! over a fixture tree: the row of a deleted suite is dropped, the row of a live suite this run did not report is kept, a reported row is overwritten, and writeTimes! still keeps every row")
+; (:m :ref GATETIMES-STALE-ROWS-20261022 :do "writeTimesIn! over a fixture tree: the row of a deleted suite is dropped, the row of a live suite this run did not report is kept, a reported row gets its new sample appended, and writeTimes! still keeps every row")
 fn ! testPruneStaleRows! dir: String -> Bool
   (let [(tree (str dir "/tree"))
         (made (dirCreate tree))
@@ -167,7 +191,7 @@ fn ! testPruneStaleRows! dir: String -> Bool
       (assert (ok? pruned) "pruning write succeeds")
       (assert (= (msOf after "deletedTest.asl") -1) "the row of a deleted suite is dropped")
       (assert (= (msOf after "otherTest.asl") 20) "the row of a live suite this run did not report is kept")
-      (assert (= (msOf after "liveTest.asl") 11) "a reported live suite is overwritten")
+      (assert (= (msOf after "liveTest.asl") 10) "a reported live suite gets the new sample appended, so :ms is the lower median of 10 and 11")
       true))
 
 ; (:m :ref GATE-POOL-ANYWAIT :do "k=2 over a long job A then short B and C, each logging start and end to one file: the pool reuses the slot B frees while A still runs, so C starts and ends before A ends; waiting on the oldest child alone would start C only after A ended. The evidence is the log order, not wall time")
@@ -191,6 +215,7 @@ fn ! runTests -> Bool
     (do
       (assert (not (stringEmpty? dir)) "scratch directory created")
       (assert (testLedgerRoundTrip! dir) "ledger write and read round-trip")
+      (assert (testSamples! dir) "sample cap, median and old-row read")
       (assert (testCorruptLedger! dir) "a corrupt ledger row is an error")
       (assert (testStartOrder) "start order from the ledger")
       (assert (testLongestFirst! dir) "longest known job starts first")

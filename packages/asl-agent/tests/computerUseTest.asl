@@ -1,7 +1,20 @@
 (module aslAgent/testComputerUse :x [testSpatialBoxAndActionCreation testCdpPayloadFormatting testAccessibilityPayloadFormatting testSafetyBarrierAndConfirmation testAffordanceRouting runAllComputerUseTests runTests] :i [(computerUse :a cu)])
 
 fn testSpatialBoxAndActionCreation -> Bool
-  (let [(box (cu/makeSpatialBox 120 240 80 40)) (act (cu/makeComputerAction "act-1" (cu/substrateBrowser) (cu/actionNavigate) "window" "https://github.com" box false))] (assert (= box.x 120) "box x coordinate matches") (assert (= box.y 240) "box y coordinate matches") (assert (= box.width 80) "box width matches") (assert (= box.height 40) "box height matches") (assert (= act.actionId "act-1") "action-id matches") (assert (cu/isActionPermitted? act) "non-destructive action is permitted") true)
+  (let [(box (cu/makeSpatialBox 120 240 80 40))
+        (act (cu/makeComputerAction "act-1" (cu/substrateBrowser) (cu/actionClick) "window" "https://github.com" box false))
+        (payload (cu/formatCdpPayload act))
+        (otherBox (cu/makeSpatialBox 1 2 3 4))
+        (otherAct (cu/makeComputerAction "act-1" (cu/substrateBrowser) (cu/actionClick) "window" "https://github.com" otherBox false))
+        (otherPayload (cu/formatCdpPayload otherAct))]
+    (do
+      (assert (stringContains? payload "\"x\":120") "box x coordinate reaches the cdp payload")
+      (assert (stringContains? payload "\"y\":240") "box y coordinate reaches the cdp payload")
+      (assert (stringContains? payload "Input.dispatchMouseEvent") "click action formats as a mouse event")
+      (assert (not (= payload otherPayload)) "a different box changes the cdp payload")
+      (assert (= act.actionId "act-1") "action-id matches")
+      (assert (cu/isActionPermitted? act) "non-destructive action is permitted")
+      true))
 
 fn testCdpPayloadFormatting -> Bool
   (let [(box (cu/makeSpatialBox 100 200 50 20)) (aNav (cu/makeComputerAction "a1" (cu/substrateBrowser) (cu/actionNavigate) "doc" "https://example.com" box false)) (aClk (cu/makeComputerAction "a2" (cu/substrateBrowser) (cu/actionClick) "#btn" "click" box false)) (aTyp (cu/makeComputerAction "a3" (cu/substrateBrowser) (cu/actionType) "input" "hello world" box false)) (aIns (cu/makeComputerAction "a4" (cu/substrateBrowser) (cu/actionInspect) "root" "" box false)) (aScr (cu/makeComputerAction "a5" (cu/substrateBrowser) (cu/actionScreenshot) "viewport" "" box false)) (pNav (cu/formatCdpPayload aNav)) (pClk (cu/formatCdpPayload aClk)) (pTyp (cu/formatCdpPayload aTyp)) (pIns (cu/formatCdpPayload aIns)) (pScr (cu/formatCdpPayload aScr))] (assert (stringContains? pNav "Page.navigate") "cdp navigate payload") (assert (stringContains? pNav "https://example.com") "cdp url target") (assert (stringContains? pClk "Input.dispatchMouseEvent") "cdp click payload") (assert (stringContains? pClk "\"x\":100") "cdp click x coordinate") (assert (stringContains? pClk "\"y\":200") "cdp click y coordinate") (assert (stringContains? pTyp "Input.insertText") "cdp type payload") (assert (stringContains? pTyp "hello world") "cdp type text") (assert (stringContains? pIns "Accessibility.getFullAXTree") "cdp inspect payload") (assert (stringContains? pScr "Page.captureScreenshot") "cdp screenshot payload") true)

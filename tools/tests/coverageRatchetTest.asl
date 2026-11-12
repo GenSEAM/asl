@@ -6,7 +6,7 @@ fn srcText -> String
   "(module p/m\n  :x [alpha beta\n      Gamma gone]\n  :i [])\n(module p/n :x [delta] :i [])\nfn alpha x: Int64 -> Int64 x\n"
 
 fn testText -> String
-  "(module p/mTest :x [runTests] :i [(p/m :a m)])\nfn ! runTests -> Bool\n  (and (= (m/alpha 1) 1) (= (m/beta 2) 2) (= (delta 3) 3))\n"
+  "(module p/mTest :x [runTests] :i [(p/m :a m)])\nfn ! runTests -> Bool\n  (and (= (m/alpha 1) 1) (= (m/beta 2) 2) (= (delta 3) 3))\n; gone is named here only in a comment\n(:m :ref X :do gone)\n"
 
 fn ignoredText -> String
   "(assert (gone 1) \"only inside node_modules\")\n"
@@ -35,6 +35,37 @@ fn ! build! root: String -> Bool
        (put! (str root "/asl/packages/p/tests/mTest.asl") (testText))
        (put! (str root "/asl/packages/q/src/z.asl") "(module q/z :x [] :i [])\n")
        (put! (str root "/tests/node_modules/x.asl") (ignoredText)))
+
+; (:m :ref COVERAGE-RATCHET-UNNAMED-GROWTH :do "a package that has exports and no baseline row is a violation that names it and its counts, the run prints a delta line for it, a --update adds the row (and does not refuse), and the next run is green")
+fn ! testUnrowed! -> Bool
+  (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/coverageRatchetUnrowed-" (stringFromInt64 (monotonicNs))))
+        (made (build! base))
+        (baselinePath (str base "/baseline.asn"))
+        (first (cr/main (list "--root" base "--baseline" baselinePath "--update" "--date" "2026-11-07")))
+        (rDirs (and (ok? (dirCreate (str base "/asl/packages/r"))) (ok? (dirCreate (str base "/asl/packages/r/src")))
+                    (put! (str base "/asl/packages/r/src/m.asl") "(module r/m :x [rfn] :i [])\nfn rfn x: Int64 -> Int64 x\n")))
+        (current (cr/packageCounts! base))
+        (baseline (cr/parseBaseline (optionOr (match (fileReadString baselinePath) ((ok t) (some t)) ((err _) (none))) "")))
+        (vRed (cr/verdict! base baselinePath))
+        (red (cr/main (list "--root" base "--baseline" baselinePath)))
+        (added (cr/main (list "--root" base "--baseline" baselinePath "--update" "--date" "2026-11-07")))
+        (vGreen (cr/verdict! base baselinePath))
+        (green (cr/main (list "--root" base "--baseline" baselinePath)))
+        (rows (cr/parseBaseline (optionOr (match (fileReadString baselinePath) ((ok t) (some t)) ((err _) (none))) "")))
+        (cleaned (pathRemove base))]
+    (do
+      (assert (and made (= first (ok 0)) rDirs) "a baseline exists for package p, then package r appears without a row")
+      (assert (= (listLength (cr/unrowed baseline current)) 1) "exactly one package has no row")
+      (assert (stringContains? (optionOr (listHead (cr/unrowed baseline current)) "") "r: no baseline row (exports 1 covered 0)") "the violation names the package and its counts")
+      (assert (= (listLength vRed.violations) 1) "the verdict is red for the unrowed package")
+      (assert (= red (ok 1)) "main exits 1 for a package without a row")
+      (assert (= (cr/deltas baseline current) (list "(:delta :pkg r :row :none :exports 1 :covered 0)")) "the delta line names the package that moved the total")
+      (assert (= added (ok 0)) "update adds the missing row and is not refused by it")
+      (assert (= (listLength rows) 2) "the baseline now has both rows")
+      (assert (and (listEmpty? vGreen.violations) (listEmpty? vGreen.deltas)) "with its row the verdict is green and has no delta")
+      (assert (= green (ok 0)) "main exits 0 once the row exists")
+      (assert (ok? cleaned) "the unrowed fixture tree is removed")
+      true))
 
 fn ! runTests -> Bool
   (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/coverageRatchetTest-" (stringFromInt64 (monotonicNs))))
@@ -67,7 +98,14 @@ fn ! runTests -> Bool
       (assert (= (cr/afterLastSeparator "plain") "plain") "a bare name stays whole")
       (assert (mapHas? (cr/tokenSet "(m/beta 2) note" (mapEmpty)) "beta") "a token inside a call is found")
       (assert (not (mapHas? (cr/tokenSet "(m/beta 2)" (mapEmpty)) "alp")) "a prefix of a name is not the name")
-      (assert (= (coveredOf rows "p") 3) "alpha, beta and delta are called, gone appears only under node_modules")
+      (assert (not (mapHas? (cr/tokenSet "(x 1) ; gamma here\n(y 2)" (mapEmpty)) "gamma")) "a name only in a ; comment is not a token")
+      (assert (mapHas? (cr/tokenSet "(x 1) ; gamma here\n(y 2)" (mapEmpty)) "y") "the line after a comment is read")
+      (assert (not (mapHas? (cr/tokenSet "(:m :ref A :do \"zeta) yy\" (k (q))) (kappa 1)" (mapEmpty)) "zeta")) "a name only in a (:m ...) form is not a token, even past a paren inside its string")
+      (assert (mapHas? (cr/tokenSet "(:m :ref A :do \"zeta) yy\" (k (q))) (kappa 1)" (mapEmpty)) "kappa") "the form after a (:m ...) form is read")
+      (assert (mapHas? (cr/tokenSet "(:mx omega)" (mapEmpty)) "omega") "a keyword that only starts with :m is not a meta form")
+      (assert (mapHas? (cr/tokenSet "(f \"a;b\" omega)" (mapEmpty)) "omega") "a ; inside a string does not start a comment")
+      (assert (mapHas? (cr/tokenSet "(f \"a\\\";b\" omega)" (mapEmpty)) "omega") "an escaped quote does not end the string")
+      (assert (= (coveredOf rows "p") 3) "alpha, beta and delta are called; gone appears only under node_modules, in a ; comment and in a (:m ...) form")
       (assert (= (match (counts rows "p") ((some c) c.exports) ((none) 0)) 4) "the package has four lowercase exports")
       (assert (none? (counts rows "q")) "a package without exports has no row")
       (assert (err? missing) "no baseline file is an error that names --update")
@@ -94,5 +132,10 @@ fn ! runTests -> Bool
       (assert (= (cr/raised low high) high) "raising takes the higher count")
       (assert (= (cr/raised high low) high) "raising never lowers a count")
       (assert (= (listLength (cr/raised (list) high)) 1) "a new package gets a row")
+      (assert (= (cr/raised (list (cr/Count :pkg "p" :exports 3 :covered 2)) (list (cr/Count :pkg "p" :exports 4 :covered 2))) (list (cr/Count :pkg "p" :exports 4 :covered 2))) "a row whose covered count did not move takes the measured exports, so its delta converges")
+      (assert (= (cr/raised (list (cr/Count :pkg "p" :exports 3 :covered 2)) (list (cr/Count :pkg "p" :exports 4 :covered 1))) (list (cr/Count :pkg "p" :exports 4 :covered 2))) "covered is never lowered by raising: the higher count stays")
+      (assert (= (cr/raised (list (cr/Count :pkg "p" :exports 3 :covered 2)) (list (cr/Count :pkg "p" :exports 4 :covered 3))) (list (cr/Count :pkg "p" :exports 4 :covered 3))) "a higher measured covered count is taken")
+      (assert (listEmpty? (cr/deltas (cr/raised high high) high)) "after raising, the delta list is empty")
+      (assert (listEmpty? (cr/deltas (cr/raised (list (cr/Count :pkg "p" :exports 3 :covered 2)) (list (cr/Count :pkg "p" :exports 4 :covered 2))) (list (cr/Count :pkg "p" :exports 4 :covered 2)))) "a package whose exports grew converges after one raise")
       (assert (ok? cleaned) "the fixture tree is removed")
-      true))
+      (testUnrowed!)))

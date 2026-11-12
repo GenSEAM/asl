@@ -144,7 +144,7 @@ fn ! scenarioWatchEnv! -> Bool
       (assert (> deadPid 1) "a short-lived process gives a dead pid")
       (assert (< secs 10) "a gate run watching a dead pid ends at once, not at its 30 s sleep")
       (assert (= (listLength rows) 1) "the watched gate still reports one row")
-      (assert (stringContains? mainText "newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid)") "the integrity re-run is handed the watched parent pid (source anchor)")
+      (assert (stringContains? mainText "newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base)") "the integrity re-run is handed the watched parent pid (source anchor)")
       (assert cleaned "the fixture root is removed")
       true))
 

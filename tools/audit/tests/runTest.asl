@@ -1,6 +1,6 @@
 (module asl/tools/audit/tests/runTest
   :x [runTests]
-  :i [(asl-tools/audit/run :a ar) (tools/fleet/model :a fm) (asl-tools/coord/store :a st)])
+  :i [(asl-tools/audit/run :a ar) (asl-tools/fleet/model :a fm) (asl-tools/coord/store :a st)])
 
 ; (:m :ref AUD-RUN :do "fixture repo only: tag v0.0.1, then one commit touching two scoped source files and one test; the stub model call says real to knob prompts only; the run finds 4 candidates over 2 files, flags the 2 knob ones under rule all, writes one row per file, imports dry then for real into a scratch store, and a rerun is skipped by the import")
 fn cfgText out: String store: String -> String

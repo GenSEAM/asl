@@ -1,4 +1,4 @@
-(module asl-forms/wire :x [Workspace WNode wireCamel wireTokens wireReceipt! wireError hintFor toolOps] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm)])
+(module asl-forms/wire :x [Workspace WNode wireCamel wireTokens wireReceipt! wireError hintFor toolOps nearestPaths] :i [(asl-forms/kernel :a k) (asl-forms/similarity :a sm) (asl-forms/delegate :a d)])
 
 
 (schema Workspace (:f root String) (:f roots (List String)) (:f ops (List String)))
@@ -173,6 +173,42 @@ fn afterNotFound msg: String -> String
 fn existingDirUp! p: String -> String
   (if (and (not (stringEmpty? p)) (not (k/isDir! p)) (!= p (k/dirName p))) (existingDirUp! (k/dirName p)) p)
 
+fn splitSlash p: String -> (List String)
+  (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit p "/"))
+
+fn lastSegment p: String -> String
+  (optionOr (listLast (splitSlash p)) "")
+
+fn lastTwoSegments p: String -> String
+  (let [(rev (listReverse (splitSlash p)))]
+    (match (listHead rev)
+      ((none) "")
+      ((some b)
+        (match (listHead (optionOr (listTail rev) (list)))
+          ((some pb) (str pb "/" b))
+          ((none) b)))))
+
+fn endsWithSegments path: String segs: String -> Bool
+  (or (= path segs) (stringEndsWith? path (str "/" segs)))
+
+fn nearestPaths missing: String siblings: (List String) files: (List String) -> (List String)
+  (let [(sibs (sm/getCloseMatches (lastSegment missing) (filter (fn [(nm String)] -> Bool (not (stringStartsWith? nm "."))) siblings) 3 0.4))]
+    (if (not (listEmpty? sibs))
+      sibs
+      (let [(segs (lastTwoSegments missing))
+            (base (lastSegment missing))
+            (suffixes (filter (fn [(f String)] -> Bool (endsWithSegments f segs)) files))
+            (bases (filter (fn [(f String)] -> Bool (and (not (listContains? suffixes f)) (= (lastSegment f) base))) files))
+            (ranked (listAppend (sm/getCloseMatches missing suffixes (listLength suffixes) 0.0)
+                                (sm/getCloseMatches missing bases (listLength bases) 0.0)))]
+        (listTake ranked 3))))
+
+fn trackedFiles! root: String -> (List String)
+  (let [(sp (d/spawnRun (list "git" "ls-files") (some root) (mapEmpty) 300))]
+    (if (or (not (stringEmpty? sp.failure)) (!= sp.code 0))
+      (list)
+      (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringLines sp.out))))
+
 fn wireNearest! ws: Workspace code: String op: String rest: (List WNode) -> (List String)
   (cond
     ((and (= code "ERR_UNIMPLEMENTED") (not (stringEmpty? op))) (sm/getCloseMatches op ws.ops 3 0.5))
@@ -187,8 +223,10 @@ fn wireNearest! ws: Workspace code: String op: String rest: (List WNode) -> (Lis
             (match (dirList parent)
               ((err _) (list))
               ((ok names)
-                (map (fn [(nm String)] -> String (k/relPath (k/joinPath parent nm) ws.root))
-                     (sm/getCloseMatches (k/baseName full) (filter (fn [(nm String)] -> Bool (not (stringStartsWith? nm "."))) names) 3 0.4))))))))
+                (let [(sibs (map (fn [(nm String)] -> String (k/relPath (k/joinPath parent nm) ws.root)) names))]
+                  (if (listEmpty? (sm/getCloseMatches (k/baseName full) (filter (fn [(nm String)] -> Bool (not (stringStartsWith? nm "."))) names) 3 0.4))
+                    (nearestPaths missing sibs (trackedFiles! ws.root))
+                    (nearestPaths missing sibs (list))))))))))
     (else (list)))
 
 fn quoteAtom s: String -> WNode

@@ -3,7 +3,7 @@
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
-      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
+      (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/admission :a adm) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
 
 (schema GatewayTurnVerdict
@@ -679,16 +679,23 @@ fn ! limitSeeded! srv: GatewayLoop text: String limits: (List c/GatewayLimit) no
           (rows (resultOr (ul/readRowsSince! sharedPath since) (list)))]
       (with srv :limitRows (lim/keepRows rows since) :limitDays days :limitSeededMs nowMs)))
 
-; (:m :ref GW-LIMIT-SCOPES :do "a call that passed its windows takes a slot in every concurrency limit covering it; when any is full the answer is park with the poll interval and nothing is taken; leases older than :concurrencyLeaseSec (default 600) are dropped first")
-fn limitConcurrency srv: GatewayLoop text: String sc: c/LimitScope limits: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Pair GatewayLoop ch/ChatOutcome)
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "a call that passed its windows takes a slot in every concurrency limit covering it, in one cross-process transaction on the shared HOME registry under the lane's learned cap; when any is full, or the shared state cannot be read, the answer is park with the poll interval and nothing is taken. srv.leases only mirrors the last count and is never consulted. Leases older than :concurrencyLeaseSec (default 600) are dropped first")
+fn ! limitConcurrency! srv: GatewayLoop text: String sc: c/LimitScope limits: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Pair GatewayLoop ch/ChatOutcome)
   (let [(lims (lim/concurrencyOf sc limits provider alias))
         (leaseSec (inRangeOr (c/gatewayTopIntOverride text "concurrencyLeaseSec") 10 86400 (c/defaultConcurrencyLeaseSec)))
         (pollMs (inRangeOr (c/gatewayTopIntOverride text "concurrencyPollMs") 10 5000 (c/defaultConcurrencyPollMs)))
-        (live (lim/liveLeases srv.leases now (* 1000 leaseSec)))]
-    (cond
-      ((listEmpty? lims) (pair (with srv :leases live) (ch/outStrings (list))))
-      ((lim/full? lims live) (pair (with srv :leases live) (ch/outStrings (list "park" "provider concurrency limit full" (stringFromInt64 pollMs)))))
-      (else (pair (with srv :leases (lim/admit live lims provider alias now)) (ch/outStrings (list))))))
+        (park (fn [(why String)] -> (Pair GatewayLoop ch/ChatOutcome) (pair srv (ch/outStrings (list "park" why (stringFromInt64 pollMs))))))]
+    (if (listEmpty? lims)
+      (pair srv (ch/outStrings (list)))
+      (match (adm/admitShared! srv.home lims provider alias now (* 1000 leaseSec))
+        ((err e) (do (logLine! (str "(:gateway :admission :error \"" (wire/asnEscape e) "\")")) (park "provider concurrency admission unavailable")))
+        ((ok taken) (if taken (pair srv (ch/outStrings (list))) (park "provider concurrency limit full"))))))
+
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "the limits that cover provider and alias, for the shared admission calls made outside the limit check")
+fn ! admissionLimits! srv: GatewayLoop provider: String alias: String -> (List c/GatewayLimit)
+  (let [(text (optionOr srv.wiringText ""))
+        (limits (ln/rampedLimitsFor! srv.home text (c/gatewayLimitsFromText text)))]
+    (lim/concurrencyOf (c/gatewayLimitScopeFromText text) limits provider alias))
 
 fn inRangeOr v: (Option Int64) lo: Int64 hi: Int64 d: Int64 -> Int64
   (match v
@@ -707,7 +714,12 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
             (verdict (lim/decideWith sc limits srv1.limitRows srv1.limitDays provider alias now))]
         (match verdict
           ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
-          ((none) (limitConcurrency srv1 text sc limits provider alias now)))))
+          ((none) (limitConcurrency! srv1 text sc limits provider alias now)))))
+    ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream said 429 for concurrency: free this call's lease and lower the lane cap; a shared-state failure is logged, the call still parks")
+    ((ch/effConcurrency429 provider alias)
+      (let [(r (adm/concurrency429! srv.home (admissionLimits! srv provider alias) provider alias (/ (nowNs) 1000000)))]
+        (do (match r ((ok _) true) ((err e) (logLine! (str "(:gateway :admission :error \"" (wire/asnEscape e) "\")"))))
+          (pair srv ch/outDone))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
     ((ch/effIsDir p) (pair srv (ch/outBool (match (fileStat p) ((ok st) st.isDir) ((err _) false)))))
     ((ch/effClock) (pair srv (ch/outFloat (/ (int64ToFloat64 (nowNs)) 1000000000.0))))
@@ -755,7 +767,12 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (do (match wrote ((ok _) true) ((err e) (logLine! (str "(:gateway :statsLedger :error \"" (wire/asnEscape e) "\")"))))
           (do (match wroteShared ((ok _) true) ((err e) (logLine! (str "(:gateway :sharedUsageLedger :error \"" (wire/asnEscape e) "\")"))))
             (do (logLine! (str "(:gateway :usage :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape alias) "\" :outcome \"" (wire/asnEscape o) "\")"))
-              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row) :leases (if (lim/sentRow? row) (lim/release srv.leases p alias) srv.leases)) none) ch/outDone))))))
+              (do (if (lim/sentRow? row)
+                    (match (adm/releaseShared! srv.home (admissionLimits! srv p alias) p alias row.atMs (= o "ok"))
+                      ((ok _) true)
+                      ((err e) (logLine! (str "(:gateway :admission :error \"" (wire/asnEscape e) "\")"))))
+                    true)
+              (pair (loopPending (with srv :wiring (dp/settledConsumed srv.wiring) :limitRows (lim/withOwnRow srv.limitRows srv.limitSeededMs row) :leases srv.leases) none) ch/outDone)))))))
     ((ch/effUsageFallback p a)
       (do (logLine! (str "(:gateway :fallback :provider \"" (wire/asnEscape p) "\" :alias \"" (wire/asnEscape a) "\")")) (pair srv ch/outDone)))
     ; (:m :ref GW-SPREAD-LIVE-20261018 :do "the only place rt/spreadOrder is ever called: real per-profile+intent state read from and written back to srv.spreadState, real wall clock, real breaker availability via srv.breaker keyed by the pool the caller resolved per alias -- chat.asl and router.asl both stay clock/breaker-free")

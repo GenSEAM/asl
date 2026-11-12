@@ -1,0 +1,7 @@
+(module asl-utils/tests/humanBytesProbe
+  :x [runTests]
+  :i [(asl-utils/humanBytes :a hb)])
+
+fn ! runTests -> Bool
+  (do (assert (= (hb/format 1500000) "1.4 MiB") "1500000 bytes is 1.4 MiB in base 1024")
+      true)

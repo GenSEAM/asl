@@ -3,7 +3,7 @@
   :i [(aslAgent/main :a m) (aslAgent/core :a c) (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
 fn replies -> (List String)
-  (list "(:step :op \"read\" :file \"subject.txt\") (:step :op \"write\" :file \"bad.asl\" :content \"(module bad :x [f])\\n\\nfn f x: Int64 -> Int64\\n  (let [(y (+ x 1))]\\n    (+ y 2)\\n\")"
+  (list "(:step :op \"read\" :file \"subject.txt\") (:step :op \"write\" :file \"bad.asl\" :content \"(module bad :x [f])\\n\\nfn f x: Int64 -> Int64\\n  (+ (x [1)\\n\")"
         "(:step :op \"write\" :file \"good.asl\" :content \"(module good :x [f])\\n\\nfn f x: Int64 -> Int64\\n  (+ x 1)\\n\") (:done)")
 
 fn turnForm num: Int64 reply: String -> String

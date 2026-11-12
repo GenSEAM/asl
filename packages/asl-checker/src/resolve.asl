@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [ensureIndex! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin?] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [ensureIndex! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -601,47 +601,76 @@ fn firstEffectfulBuiltin names: (List String) -> String
   (match (listHead names) ((none) "") ((some n) (if (isEffectfulBuiltin? n) n (firstEffectfulBuiltin (safeTail names)))))
 
 ; (:m :ref EFFECT-INFER :do "refineEffects: one fixpoint over the whole dependency closure plus the file under check, treated as a single call graph (this is what makes mutual recursion and a chain across two modules resolve correctly: a function's effect can depend on a callee discovered only in a later round, in this module or an imported one). effect only ever flips false->true, so comparing the total true-count before and after a round is a correct, cheap stability test; the round budget is the total function count across the closure, the worst case for a chain with no shortcuts.")
-fn resolveCallEffect caller: ModuleSummary mods: (Map String ModuleSummary) name: String -> Bool
-  (if (isEffectfulBuiltin? name) true
+; (:m :ref CHECKER-EFFECT-FIXPOINT-SLOW :do "effectful names are tested once per distinct call name into a set; round one relaxes every fn, later rounds only the callers (reverse call edges) of fns that flipped in the previous round, so a fn is re-examined only when a callee changed; each round reads the previous round's snapshot, so effect flags and witnesses equal the old whole-closure rounds")
+fn resolveCallEffect caller: ModuleSummary mods: (Map String ModuleSummary) effSet: (Map String Bool) name: String -> Bool
+  (if (mapHas? effSet name) true
     (if (mapHas? caller.funs name) (match (mapGet caller.funs name) ((some f) f.effect) ((none) false))
       (if (isQualifiedName? name)
         (let [(qp (splitQual name)) (alias (pairFirst qp)) (member (pairSecond qp))]
           (match (mapGet caller.imports alias) ((some mpath) (match (mapGet mods mpath) ((some target) (match (mapGet target.funs member) ((some f) f.effect) ((none) false))) ((none) false))) ((none) false)))
         false)))
 
-fn effectWitnessFor caller: ModuleSummary mods: (Map String ModuleSummary) name: String -> String
-  (if (isEffectfulBuiltin? name) name
+fn effectWitnessFor caller: ModuleSummary mods: (Map String ModuleSummary) effSet: (Map String Bool) name: String -> String
+  (if (mapHas? effSet name) name
     (if (mapHas? caller.funs name) (match (mapGet caller.funs name) ((some f) (if (stringEmpty? f.witness) name f.witness)) ((none) name))
       (if (isQualifiedName? name)
         (let [(qp (splitQual name)) (alias (pairFirst qp)) (member (pairSecond qp))]
           (match (mapGet caller.imports alias) ((some mpath) (match (mapGet mods mpath) ((some target) (match (mapGet target.funs member) ((some f) (if (stringEmpty? f.witness) name f.witness)) ((none) name))) ((none) name))) ((none) name)))
         name)))
 
-fn relaxFun caller: ModuleSummary mods: (Map String ModuleSummary) f: FunSummary -> FunSummary
+fn relaxFun caller: ModuleSummary mods: (Map String ModuleSummary) effSet: (Map String Bool) f: FunSummary -> FunSummary
   (if f.effect f
-    (match (listHead (filter (fn [(n String)] -> Bool (resolveCallEffect caller mods n)) f.calls))
+    (match (listHead (filter (fn [(n String)] -> Bool (resolveCallEffect caller mods effSet n)) f.calls))
       ((none) f)
-      ((some n) (with f :effect true :witness (effectWitnessFor caller mods n)))))
+      ((some n) (with f :effect true :witness (effectWitnessFor caller mods effSet n)))))
 
-fn relaxModule m: ModuleSummary mods: (Map String ModuleSummary) -> ModuleSummary
-  (with m :funs (fold (fn [(acc (Map String FunSummary)) (f FunSummary)] -> (Map String FunSummary) (mapSet acc f.name (relaxFun m mods f))) (mapEmpty) (mapValues m.funs)))
+fn effectFnKey path: String name: String -> String
+  (str path " :: " name)
 
-fn relaxOnce mods: (Map String ModuleSummary) -> (Map String ModuleSummary)
-  (fold (fn [(acc (Map String ModuleSummary)) (m ModuleSummary)] -> (Map String ModuleSummary) (mapSet acc m.path (relaxModule m mods))) mods (mapValues mods))
+fn effectCallTarget caller: ModuleSummary mods: (Map String ModuleSummary) name: String -> (Option (Pair String String))
+  (if (mapHas? caller.funs name) (some (pair caller.path name))
+    (if (isQualifiedName? name)
+      (let [(qp (splitQual name)) (alias (pairFirst qp)) (member (pairSecond qp))]
+        (match (mapGet caller.imports alias) ((some mpath) (match (mapGet mods mpath) ((some target) (if (mapHas? target.funs member) (some (pair mpath member)) (none))) ((none) (none)))) ((none) (none))))
+      (none)))
 
-fn trueFunCount mods: (Map String ModuleSummary) -> Int64
-  (fold (fn [(acc Int64) (m ModuleSummary)] -> Int64 (+ acc (listLength (filter (fn [(f FunSummary)] -> Bool f.effect) (mapValues m.funs))))) 0 (mapValues mods))
+fn effectBuiltinSet mods: (Map String ModuleSummary) -> (Map String Bool)
+  (fold (fn [(acc (Map String Bool)) (m ModuleSummary)] -> (Map String Bool) (fold (fn [(a1 (Map String Bool)) (f FunSummary)] -> (Map String Bool) (fold (fn [(a2 (Map String Bool)) (n String)] -> (Map String Bool) (if (mapHas? a2 n) a2 (if (isEffectfulBuiltin? n) (mapSet a2 n true) a2))) a1 f.calls)) acc (mapValues m.funs))) (mapEmpty) (mapValues mods))
 
-fn totalFnCount mods: (Map String ModuleSummary) -> Int64
-  (fold (fn [(acc Int64) (m ModuleSummary)] -> Int64 (+ acc (listLength (mapValues m.funs)))) 0 (mapValues mods))
+fn effectReverseEdges mods: (Map String ModuleSummary) -> (Map String (List (Pair String String)))
+  (fold (fn [(acc (Map String (List (Pair String String)))) (m ModuleSummary)] -> (Map String (List (Pair String String))) (fold (fn [(a1 (Map String (List (Pair String String)))) (f FunSummary)] -> (Map String (List (Pair String String))) (if f.effect a1 (fold (fn [(a2 (Map String (List (Pair String String)))) (n String)] -> (Map String (List (Pair String String))) (match (effectCallTarget m mods n) ((some t) (let [(k (effectFnKey (pairFirst t) (pairSecond t)))] (mapSet a2 k (cons (pair m.path f.name) (optionOr (mapGet a2 k) (list)))))) ((none) a2))) a1 f.calls))) acc (mapValues m.funs))) (mapEmpty) (mapValues mods))
 
-fn iterateEffects mods: (Map String ModuleSummary) budget: Int64 -> (Map String ModuleSummary)
-  (if (<= budget 0) mods
-    (let [(next (relaxOnce mods))]
-      (if (= (trueFunCount next) (trueFunCount mods)) next (iterateEffects next (- budget 1)))))
+fn allEffectCandidates mods: (Map String ModuleSummary) -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (m ModuleSummary)] -> (List (Pair String String)) (fold (fn [(a1 (List (Pair String String))) (f FunSummary)] -> (List (Pair String String)) (cons (pair m.path f.name) a1)) acc (mapValues m.funs))) (list) (mapValues mods))
+
+fn withEffectFun m: ModuleSummary f: FunSummary -> ModuleSummary
+  (with m :funs (mapSet m.funs f.name f))
+
+fn relaxStep mods: (Map String ModuleSummary) effSet: (Map String Bool) acc: (Pair (Map String ModuleSummary) (List (Pair String String))) c: (Pair String String) -> (Pair (Map String ModuleSummary) (List (Pair String String)))
+  (match (mapGet mods (pairFirst c))
+    ((none) acc)
+    ((some m) (match (mapGet m.funs (pairSecond c))
+      ((none) acc)
+      ((some f) (let [(nf (relaxFun m mods effSet f))]
+        (if (and nf.effect (not f.effect))
+          (let [(curMods (pairFirst acc)) (curM (optionOr (mapGet curMods (pairFirst c)) m))]
+            (pair (mapSet curMods (pairFirst c) (withEffectFun curM nf)) (cons c (pairSecond acc))))
+          acc))))))
+
+fn relaxCandidates mods: (Map String ModuleSummary) cands: (List (Pair String String)) effSet: (Map String Bool) -> (Pair (Map String ModuleSummary) (List (Pair String String)))
+  (fold (fn [(acc (Pair (Map String ModuleSummary) (List (Pair String String)))) (c (Pair String String))] -> (Pair (Map String ModuleSummary) (List (Pair String String))) (relaxStep mods effSet acc c)) (pair mods (list)) cands)
+
+fn effectRounds mods: (Map String ModuleSummary) rev: (Map String (List (Pair String String))) effSet: (Map String Bool) cands: (List (Pair String String)) -> (Map String ModuleSummary)
+  (let [(res (relaxCandidates mods cands effSet)) (flipped (pairSecond res))]
+    (if (listEmpty? flipped) mods
+      (let [(next (fold (fn [(acc (Map String (Pair String String))) (c (Pair String String))] -> (Map String (Pair String String)) (fold (fn [(a1 (Map String (Pair String String))) (cl (Pair String String))] -> (Map String (Pair String String)) (mapSet a1 (effectFnKey (pairFirst cl) (pairSecond cl)) cl)) acc (optionOr (mapGet rev (effectFnKey (pairFirst c) (pairSecond c))) (list)))) (mapEmpty) flipped))]
+        (effectRounds (pairFirst res) rev effSet (mapValues next)))))
+
+fn iterateEffects mods: (Map String ModuleSummary) -> (Map String ModuleSummary)
+  (effectRounds mods (effectReverseEdges mods) (effectBuiltinSet mods) (allEffectCandidates mods))
 
 fn refineEffects mod: ModuleSummary deps: DepIndex -> (Pair ModuleSummary DepIndex)
-  (let [(allMods (mapSet deps.deps mod.path mod)) (stable (iterateEffects allMods (+ 2 (totalFnCount allMods))))]
+  (let [(allMods (mapSet deps.deps mod.path mod)) (stable (iterateEffects allMods))]
     (pair (optionOr (mapGet stable mod.path) mod) (depIndexOf stable)))
 
 fn calleeWitnessOf headTok: String mod: ModuleSummary deps: DepIndex -> String

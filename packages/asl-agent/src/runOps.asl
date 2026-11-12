@@ -45,7 +45,8 @@ enum RVal
 (schema Procs
   (:f ids (List String))
   (:f table (List Proc))
-  (:f base (Option Snap)))
+  (:f base (Option Snap))
+  (:f blocked (List String)))
 
 (schema OpResult
   (:f rec (List (Pair String RVal)))
@@ -66,7 +67,7 @@ fn makeRunCtx root: String owns: (List String) session: String timeoutSec: Int64
   (RunCtx :root root :owns owns :session session :timeoutSec timeoutSec :hidden hidden :toolRoot toolRoot)
 
 fn newProcs -> Procs
-  (Procs :ids (list) :table (list) :base (none))
+  (Procs :ids (list) :table (list) :base (none) :blocked (list))
 
 fn itos n: Int64 -> String
   (stringFromInt64 n)
@@ -872,7 +873,7 @@ fn spawnSession! sid: String cmd: String ctx: RunCtx stdin: Bool procs: Procs ->
                   ps1 (match old ((some p) (withTable ps (tablePut ps.table p))) ((none) ps))]
               (match (spawnProc! sid cmd ctx stdin)
                 ((err m) (spawnEngineFailed ps1 (engineError! sid m ctx)))
-                ((ok p) (spawnedOk (Procs :ids (listAppend ps1.ids (list sid)) :table (tablePut ps1.table p) :base ps1.base) p)))))))))
+                ((ok p) (spawnedOk (Procs :ids (listAppend ps1.ids (list sid)) :table (tablePut ps1.table p) :base ps1.base :blocked ps1.blocked) p)))))))))
 
 fn needsConfirm rid: String opName: String message: String cmd: String -> (List (Pair String RVal))
   (list (rs "id" rid) (rs "op" opName) (rs "status" "needsConfirm") (rb "needsConfirm" true) (rs "message" message) (rs "cmd" cmd))

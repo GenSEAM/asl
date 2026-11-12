@@ -1,6 +1,6 @@
 (module asl-tools/coord/nodes
   :x [Node nodesPath roles roleOk? meshRoles meshRoleOk? findNode hasRole? freeSlots pickFrom parseNode addRow readNodes! renderNode renderNodes writeNodes! upsertNode! parseCount coresCommand probeCores! probeOs! probeArch! probeRamGb! probeDiskFreeGb! probeClang! probe!]
-  :i [(asl-tools/fleet/run :a fr) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref FK-REGISTRY :do "one row per machine in ~/.asl/nodes.asn so a coordinator picks a node by role and capacity; probe! fills only the local row from the OS (sysctl/nproc, uname, df, clang) through fr/shellOut with a timeout; rows hold no tokens or keys, :channels names which worker lanes the node can run, :relay names how it is reached; every reader and writer takes an explicit path so tests never touch ~/.asl")
 

@@ -1,0 +1,34 @@
+diff --git a/asl/packages/asl-utils/src/humanBytes.asl b/asl/packages/asl-utils/src/humanBytes.asl
+new file mode 100644
+index 000000000..3956f50e3
+--- /dev/null
++++ b/asl/packages/asl-utils/src/humanBytes.asl
+@@ -0,0 +1,13 @@
++(module asl-utils/humanBytes
++  :x [tenths format])
++
++fn tenths x: Float64 -> String
++  (let [(t (optionOr (float64ToInt64 (round (* x 10.0))) 0))]
++    (str (stringFromInt64 (/ t 10)) "." (stringFromInt64 (mod t 10))))
++
++fn format n: Int64 -> String
++  (let [(x (int64ToFloat64 n))]
++    (cond ((< n 1000) (str (stringFromInt64 n) " B"))
++          ((< n 1000000) (str (tenths (/ x 1000.0)) " KiB"))
++          ((< n 1000000000) (str (tenths (/ x 1000000.0)) " MiB"))
++          (else (str (tenths (/ x 1000000000.0)) " GiB"))))
+diff --git a/asl/packages/asl-utils/tests/humanBytesTest.asl b/asl/packages/asl-utils/tests/humanBytesTest.asl
+new file mode 100644
+index 000000000..01e7869b8
+--- /dev/null
++++ b/asl/packages/asl-utils/tests/humanBytesTest.asl
+@@ -0,0 +1,9 @@
++(module asl-utils/tests/humanBytesTest
++  :x [runTests]
++  :i [(asl-utils/humanBytes :a hb)])
++
++fn ! runTests -> Bool
++  (do (assert (= (hb/format 500) "500 B") "bytes below one thousand print as B")
++      (assert (= (hb/format 1500) "1.5 KiB") "1500 bytes print as KiB")
++      (assert (= (hb/format 1500000) "1.5 MiB") "1500000 bytes print as MiB")
++      true)

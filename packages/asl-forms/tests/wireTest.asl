@@ -37,10 +37,22 @@ fn testFileNearest! -> Bool
             "a missing file names close siblings")
     true)
 
+fn testKitNearest -> Bool
+  (let [(files (list "harness/tests/agentLoopRecorderKit.asl" "asl/agentSpecCore.md"))
+        (kit (w/nearestPaths "asl/harness/tests/agentLoopRecorderKit.asl" (list) files))
+        (sib (w/nearestPaths "sub/unique.tx" (list "sub/unique.txt" "sub/dup.txt") (list "other/unique.tx")))]
+    (do
+      (assert (= (optionOr (listHead kit) "") "harness/tests/agentLoopRecorderKit.asl") "kit path comes first for a two-segment tail")
+      (assert (<= (listLength kit) 3) "at most three nearest paths")
+      (assert (= (optionOr (listHead sib) "") "sub/unique.txt") "an existing sibling match still wins")
+      (assert (not (listContains? sib "other/unique.tx")) "a sibling match skips the tracked fallback")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testWireError) "testWireError")
     (assert (testCamel) "testCamel")
     (assert (testStepReceipts!) "testStepReceipts")
     (assert (testFileNearest!) "testFileNearest")
+    (assert (testKitNearest) "testKitNearest")
     true)

@@ -75,8 +75,10 @@ fn ! testCheckLikeHost work: String -> Bool
         (written (fileWrite lint "(module lint :x [f runTests] :i [])\n\nfn f x: Any -> Int64\n  1\n"))
         (checked (driver (str "check " lint)))]
     (do (assert (ok? written) "lint.asl fixture written")
-        (assert (= checked.exitCode 0) (str "HL-CHECK-UNIFY: asl1 check runs checkFile!, so it drops the lint rows (exported-but-undefined rule-2, rule-10 Any) asl-host never reported either; exit " (stringFromInt64 checked.exitCode) ": " checked.stderr))
-        (assert (= checked.stderr "") (str "asl1 check prints no diagnostic on the lint fixture: " checked.stderr))
+        (assert (= checked.exitCode 1) (str "HL-CHECK-UNIFY: commit c1ea15a18 made an exported-but-undefined :x name ERR_UNDEFINED_EXPORT instead of a lint, so check exits 1 on runTests; exit " (stringFromInt64 checked.exitCode) ": " checked.stderr))
+        (assert (stringContains? checked.stderr "[ERR_UNDEFINED_EXPORT] runTests is exported but not defined in this module") (str "asl1 check prints the exported-but-undefined error: " checked.stderr))
+        (assert (not (stringContains? checked.stderr "rule-10")) (str "asl1 check drops the rule-10 Any lint row: " checked.stderr))
+        (assert (not (stringContains? checked.stderr "rule-2")) (str "and the rule-2 exported-but-undefined lint row: " checked.stderr))
         (assert (= checked.stdout "") (str "asl1 check prints nothing on stdout either: " checked.stdout))
         true))
 

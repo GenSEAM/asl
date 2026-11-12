@@ -122,7 +122,7 @@ fn ! runTests -> Bool
         (common (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                       (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache)))
         (gwPid (spawnSh! (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " temp "/ready 2>" temp "/gateway.err") common))
-        (gwPort (if (> gwPid 0) (waitPort! (str temp "/ready") 500) 0))
+        (gwPort (if (> gwPid 0) (waitPort! (str temp "/ready") 3000) 0))
         (url (str "http://127.0.0.1:" (stringFromInt64 gwPort) "/v1/chat/completions"))
         (httpPid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/http.out 2>" temp "/http.err") (listAppend common (list (str "ASL_GATEWAY_URL=" url)))))
         (httpRun (pumpUntilExit! (Pump :listener listener :stubs (list) :seen (list)) httpPid (+ (nowMs!) 60000)))

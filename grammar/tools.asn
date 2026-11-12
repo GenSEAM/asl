@@ -135,7 +135,7 @@
     (:op :agent
       :scope toolchain
       :brief "(:agent :task t [:root dir] [:owns (paths)] [:gates (commands)] [:intent i]) hands a task to Leon, the asl agent loop, which edits inside :root (default the calling repo), narrowed by :owns, and runs the gates"
-      :form "(:agent :task <str> ...)"
+      :form "(:agent :task <str> [:answer <str>] [:attractor <str>] [:backend <str>] [:base <str>] [:budget <int>] [:commit <bool>] [:contextFile <str>] [:contextTokens <int>] [:dryRun <bool>] [:gates <forms>] [:gateTimeout <int>] [:intent <sym>] [:model <str>] [:nativeTools <str>] [:prefix <str>] [:owns <forms>] [:plan <bool>] [:queueTimeout <int>] [:resume <str>] [:root <str>] [:toolRoot <str>] [:timeout <int>] [:unit <str>] [:events <str>] [:wallBudget <int>])"
       :params (
         (:answer :type str :default "")
         (:attractor :type str :default "" :note "opt-in prompt attractor, e.g. asn")
@@ -151,6 +151,8 @@
         (:intent :type sym)
         (:model :type str :default "")
         (:nativeTools :type str :default "step" :note "native tool calling on profile calls: step (absent) offers one step(form) function, ops one function per op shape, off none; calls read back as the same forms; a gateway model row :nativeTools false strips tools for routes that reject them")
+        (:unit :type str :default "" :note "plan row id named in the run's completion event; absent means the session id (SIGNAL-LEON-DONE)")
+        (:events :type str :default "~/.asl/bus/events.asn" :note "file each finished (:agent) run appends one (:event ...) row to (SIGNAL-LEON-DONE)")
         (:prefix :type str :default "" :note "comma list: system prompt sections or groups to drop (rules protocol glossary attractors opsLean aslCard or a layer id) and focus, a per-turn tail with goal, gate and next op; empty is the full prompt")
         (:owns :type forms :default () :note "narrows :root")
         (:plan :type bool :default false)
@@ -158,13 +160,14 @@
         (:resume :type str :default "")
         (:root :type str)
         (:task :type str :req true)
+        (:toolRoot :type str :default "" :note "absolute repo whose bin/asl runs the tool ops, default the :root checkout")
         (:timeout :type int :default 600 :note "execution seconds")
         (:wallBudget :type int)
       )
       :accepts (role)
       :examples (
         "(:agent :task \"Survey the parser\")"
-        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check\"))"
+        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check src\"))"
       )
       :errors (ERR_UNKNOWN_ARG ERR_MISSING_ARG ERR_CONTEXT_FILE ERR_BACKEND ERR_OWNS ERR_EFFECT_UNDECLARED ERR_PARSE ERR_NO_REPLY ERR_VENDOR ERR_GATEWAY_OFFLINE)
       :doc "Leon loop. Receipt: status session journal findings gates queueWaitSec execSec; exit 1 failed or escalated, 2 bad invocation.")
@@ -188,7 +191,7 @@
     (:op :read
       :scope any
       :public "Return a symbol or bounded slice of a file."
-      :form "(:read :file <path> [:symbol <sym>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
+      :form "(:read :file <path> [:symbol <str>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
       :params (
         (:file :type str :req true :note "path to file in repository")
         (:symbol :type str :default "" :note "symbol definition to extract")
@@ -251,6 +254,7 @@
         (:content :type str :req true :note "complete staged file content")
         (:force :type bool :default false :note "stage despite balance or syntax errors")
       )
+      :accepts (path pick)
       :examples (
         "(:write :file \".asl/scratch.asn\" :content \"(:scratch true)\" :force true)"
       )
@@ -366,7 +370,7 @@
     (:op :fix
       :scope asl
       :public "Propose or stage minimal delimiter repair."
-      :form "(:fix :file <path> [:apply <sym>])"
+      :form "(:fix :file <path> [:apply <sym>] [:by <sym>] [:scope <sym>])"
       :params (
         (:file :type str :req true :note "path to ASL or ASN file to balance")
         (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")

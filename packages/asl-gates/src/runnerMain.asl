@@ -1,5 +1,5 @@
 (module asl-gates/runnerMain
-  :x [FullGreenRecord chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
+  :x [redForCapture? FullGreenRecord chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
   :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl)])
 
 (schema PackageInfo
@@ -297,7 +297,7 @@ fn chooseBase! -> (Pair (Option FullGreenRecord) (List String))
   (chooseBaseAt! "")
 
 fn forceFullPrefixes -> (List String)
-  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/audit/" ".asl/mem/knownRed.asn")
+  (list "asl/bin/" "bin/asl" "bin/asl-core" "asl/prelude/" "asl/grammar/" "scripts/audit/" ".asl/mem/knownRed.asn" ".asl/mem/skipAllowed.asn")
 
 fn isForceFull p: String -> Bool
   (listAny? (fn [(f String)] -> Bool (stringStartsWith? p f)) (forceFullPrefixes))
@@ -447,7 +447,7 @@ fn sumBy results: (List sr/SuiteResult) pick: (fn [sr/SuiteResult] -> Int64) -> 
 
 fn causeCounts results: (List sr/SuiteResult) -> (List String)
   (let [(causes (listSortUnique (map (fn [(r sr/SuiteResult)] -> String r.cause)
-                                     (filter (fn [(r sr/SuiteResult)] -> Bool (!= r.cause "OK")) results))))]
+                                     (filter (fn [(r sr/SuiteResult)] -> Bool (and (!= r.cause "OK") (!= r.cause "SKIPPED"))) results))))]
     (map (fn [(c String)] -> String
            (str "    (:cause \"" c "\" :count " (stringFromInt64 (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause c)) results))) ")\n"))
          causes))
@@ -468,11 +468,12 @@ fn ! writeFile! path: String text: String -> (Result Unit String)
   (match (fileWrite path text) ((ok _) (ok ())) ((err e) (err (osError e path))))
 
 fn ! writeTelemetry path: String results: (List sr/SuiteResult) wallMs: Int64 -> (Result Unit String)
-  (let [(executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.asserts)))
-        (refuted (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.refutes)))
-        (declared (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.declared)))
+  (let [(executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedAsserts r))))
+        (refuted (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedRefutes r))))
+        (declared (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedDeclared r))))
         (passed (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "OK")) results)))
-        (failed (- (listLength results) passed))
+        (skipped (listLength (filter (fn [(r sr/SuiteResult)] -> Bool (= r.cause "SKIPPED")) results)))
+        (failed (- (listLength results) (+ passed skipped)))
         (n (fn [(i Int64)] -> String (stringFromInt64 i)))
         (digest (optionOr (stringSlice (bytesSha256 (stringToBytes (str (n executed) ":" (n refuted) ":" (n passed) ":" (n failed)))) 0 16) ""))]
     (match (today!)
@@ -487,7 +488,7 @@ fn ! writeTelemetry path: String results: (List sr/SuiteResult) wallMs: Int64 ->
              (writeFile! path
                (str "(:testTelemetry :v 3 :date \"" date "\" :method \"scripts/audit/runner.py: tracked suites run from a snapshot, per-suite cause and declared gap\"\n"
                     "  :runnerDigest \"" digest "\"\n"
-                    "  :suites " (n (listLength results)) " :passedSuites " (n passed) " :failedSuites " (n failed) "\n"
+                    "  :suites " (n (listLength results)) " :passedSuites " (n passed) " :skippedSuites " (n skipped) " :failedSuites " (n failed) "\n"
                     "  :declaredAsserts " (n declared) " :executedAsserts " (n executed) " :executedRefutes " (n refuted)
                     " :verifiedTotal " (n (+ executed refuted)) " :declaredVerifiedGap " (n (- declared (+ executed refuted))) " :totalWallMs " (n wallMs) "\n"
                     "  :failureCauses [\n"
@@ -607,9 +608,9 @@ fn printChecks! checks: (List rl/ReconcileCheck) -> Unit
 fn gateTestsVerdict! x: Execution receiptRes: (Pair String Bool) baseline: (Option Int64) tolerance: Int64 tel: (Option String) -> Int64
   (let [(results x.results)
         (n (fn [(i Int64)] -> String (stringFromInt64 i)))
-        (executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.asserts)))
-        (verified (+ executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.refutes))))
-        (declared (sumBy results (fn [(r sr/SuiteResult)] -> Int64 r.declared)))
+        (executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedAsserts r))))
+        (verified (+ executed (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedRefutes r)))))
+        (declared (sumBy results (fn [(r sr/SuiteResult)] -> Int64 (sr/countedDeclared r))))
         (_ (match tel ((some p) (println (str "Telemetry emitted to " p))) ((none) ())))
         (_ (if (pairSecond receiptRes) () (printChecks! x.checks)))
         (floor (optionOr baseline 400))
@@ -695,6 +696,10 @@ fn ! captureRounds! clone: String suites: (List String) runs: Int64 acc: (List R
 fn sigOf rd: Round s: String -> String
   (match (mapGet rd.bySuite s) ((some r) (str r.cause "\n" r.digest)) ((none) ""))
 
+; (:m :ref SKIP-AND-CONSTANT :do "knownRed capture records failures only: a SKIPPED suite is neither red nor a ledger entry")
+fn redForCapture? r: sr/SuiteResult -> Bool
+  (and (!= r.cause "OK") (!= r.cause "SKIPPED"))
+
 fn ! captureIn root: String clone: String c: CaptureArgs out: String -> (Result Int64 sr/Fault)
   (match (sr/gitOut! root (list "clone" "-q" root clone))
     ((err e) (err (runnerFault e)))
@@ -712,7 +717,7 @@ fn ! captureIn root: String clone: String c: CaptureArgs out: String -> (Result 
                  ((ok rounds)
                   (let [(first (optionOr (listHead rounds) (Round :bySuite (mapEmpty))))
                         (flaky (filter (fn [(s String)] -> Bool (listAny? (fn [(rd Round)] -> Bool (!= (sigOf rd s) (sigOf first s))) rounds)) suites))
-                        (entries (filter (fn [(s String)] -> Bool (and (not (listContains? flaky s)) (match (mapGet first.bySuite s) ((some r) (!= r.cause "OK")) ((none) false)))) suites))]
+                        (entries (filter (fn [(s String)] -> Bool (and (not (listContains? flaky s)) (match (mapGet first.bySuite s) ((some r) (redForCapture? r)) ((none) false)))) suites))]
                     (match (today!)
                       ((err e) (err (runnerFault e)))
                       ((ok date)

@@ -1,0 +1,264 @@
+(module asl-tools/vcs/git
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :i [(asl-tools/fleet/run :a fr)])
+
+; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
+(schema Out
+  (:f exit Int64)
+  (:f out String))
+
+(schema Tx
+  (:f ok Bool)
+  (:f why String)
+  (:f dir String)
+  (:f index String)
+  (:f old String))
+
+fn clean s: String -> String
+  (stringTrim s)
+
+; (:m :do "diff and log text is cut at this many characters with a truncation marker")
+fn maxOut -> Int64
+  200000
+
+fn capOut s: String -> String
+  (if (> (stringLength s) (maxOut))
+    (str (optionOr (stringSlice s 0 (maxOut)) "") "\n(:truncated :at " (stringFromInt64 (maxOut)) ")")
+    s)
+
+fn ! gitDoneIn! repo: String idx: String args: (List String) secs: Int64 -> fr/Done
+  (let [(argv (listAppend (listAppend (list "env" "-u" "GIT_DIR" "-u" "GIT_WORK_TREE" "-u" "GIT_INDEX_FILE" "-u" "GIT_COMMON_DIR" "-u" "GIT_OBJECT_DIRECTORY" "-u" "GIT_NAMESPACE")
+                                      (if (stringEmpty? idx) (list) (list (str "GIT_INDEX_FILE=" idx))))
+                          (listAppend (list "git" "--literal-pathspecs" "-C" repo "-c" "core.quotepath=off" "-c" "core.hooksPath=/dev/null" "-c" "core.fsmonitor=") args)))
+        (d (fr/runOneLimited (fr/job argv "." (fr/childEnv (list))) (fr/limits secs 16)))]
+    d)
+
+fn ! gitRunIn! repo: String idx: String args: (List String) secs: Int64 -> Out
+  (let [(d (gitDoneIn! repo idx args secs))]
+    (Out :exit d.exit :out d.out))
+
+; (:m :ref APPLYPATCH-SOFT-ERR :do "a finished git child as a result: a run git finished has the verdict exit and is ok; one that did not start, timed out, ran away or waited for a token is err with its exit, even a non-zero one")
+fn outcomeOf d: fr/Done -> (Result Out String)
+  (if (= d.verdict "exit")
+    (ok (Out :exit d.exit :out d.out))
+    (err (str "git " d.verdict " exit " (stringFromInt64 d.exit) ": " (capOut d.out))))
+
+fn ! gitRun! repo: String args: (List String) secs: Int64 -> Out
+  (gitRunIn! repo "" args secs)
+
+fn ! head! repo: String -> Out
+  (gitRun! repo (list "rev-parse" "HEAD") 20)
+
+fn ! changes! repo: String paths: (List String) -> Out
+  (gitRun! repo (listAppend (list "status" "--porcelain=v1" "--untracked-files=normal") (if (listEmpty? paths) (list) (cons "--" paths))) 30)
+
+; (:m :do "a ref or range text the layer passes to git: non-empty, no leading dash or colon, no whitespace or control characters, so it can never be read as an option or a pathspec")
+fn refOk? r: String -> Bool
+  (and (not (stringEmpty? r))
+       (not (stringStartsWith? r "-"))
+       (not (stringStartsWith? r ":"))
+       (not (stringContains? r " "))
+       (not (stringContains? r "\n"))
+       (not (stringContains? r "\t")))
+
+; (:m :do "the full commit sha a ref names, exit 1 when it names none")
+fn ! resolve! repo: String ref: String -> Out
+  (if (refOk? ref)
+    (let [(o (gitRun! repo (list "rev-parse" "--verify" "--quiet" (str ref "^{commit}")) 20))]
+      (Out :exit (if (= o.exit 0) 0 1) :out (clean o.out)))
+    (Out :exit 1 :out (str "ref not accepted: " ref)))
+
+fn ! diff! repo: String base: String headRef: String paths: (List String) -> Out
+  (let [(a (resolve! repo base))
+        (b (resolve! repo headRef))]
+    (cond
+      ((!= a.exit 0) (Out :exit 1 :out (str "unknown ref " base)))
+      ((!= b.exit 0) (Out :exit 1 :out (str "unknown ref " headRef)))
+      (else (let [(o (gitRun! repo (listAppend (list "diff" "--no-color" "--no-ext-diff" (str a.out ".." b.out)) (if (listEmpty? paths) (list) (cons "--" paths))) 60))]
+              (Out :exit o.exit :out (capOut o.out))))))
+
+; (:m :do "a path the layer accepts, judged by segments: not empty, no leading slash dash or colon, no empty segment (so no trailing slash), no . or .. or .git segment; a name like a..b.txt is fine; pathspec magic is also off in every call by --literal-pathspecs")
+fn pathOk? p: String -> Bool
+  (and (not (stringEmpty? p))
+       (not (stringStartsWith? p "/"))
+       (not (stringStartsWith? p "-"))
+       (not (stringStartsWith? p ":"))
+       (listAll? (fn [(s String)] -> Bool (and (not (stringEmpty? s)) (and (!= s ".") (and (!= s "..") (!= s ".git"))))) (stringSplit p "/")))
+
+; (:m :do "true when the path is a directory in the repo: a directory is refused unless a caller names its files, since a directory would stage and commit everything under it")
+fn ! isDirPath? repo: String p: String -> Bool
+  (match (fileStat (str repo "/" p)) ((ok st) st.isDir) ((err _) false))
+
+fn ! stageNamed! repo: String paths: (List String) -> Out
+  (let [(present (filter (fn [(p String)] -> Bool (fileExists? (str repo "/" p))) paths))
+        (gone (filter (fn [(p String)] -> Bool (not (fileExists? (str repo "/" p)))) paths))
+        (none0 (Out :exit 0 :out ""))
+        (a (if (listEmpty? present) none0 (gitRun! repo (listAppend (list "add" "-A" "--") present) 60)))
+        (g (if (listEmpty? gone) none0 (gitRun! repo (listAppend (list "rm" "-q" "-r" "--cached" "--ignore-unmatch" "--") gone) 60)))]
+    (if (!= a.exit 0) a g))
+
+fn ! tmpIndexDir! -> String
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/vcsIdx-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
+
+fn failedTx why: String dir: String -> Tx
+  (Tx :ok false :why why :dir dir :index "" :old "")
+
+; (:m :ref VCS-LAYER-CORE :do "a private index for the commit: GIT_INDEX_FILE is set only on our children, filled from HEAD with read-tree, then the named paths are added into it (vanished ones removed; a path already in HEAD is added with -f so an ignored dir does not refuse it, an untracked ignored path still is refused; a path of HEAD that the shared index no longer holds, a staged deletion by rm --cached, is removed from the private index even if the file stays on disk, only when the path is ignored and the shared index is not empty, so a missing or emptied index never turns a modified file into a deletion; names are files, a directory is not expanded and a path only the index holds under an ignored dir is still refused); the shared index is never touched, so the guard can judge exactly these blobs and the commit lands exactly them")
+fn ! prepare! repo: String paths: (List String) -> Tx
+  (let [(dir (tmpIndexDir!))
+        (idx (str dir "/index"))
+        (mk (fr/runOneLimited (fr/job (list "mkdir" "-p" dir) "." (fr/childEnv (list))) (fr/limits 20 16)))
+        (h (head! repo))
+        (rt (if (and (= mk.exit 0) (= h.exit 0)) (gitRunIn! repo idx (list "read-tree" "HEAD") 60) (Out :exit 1 :out "")))
+        (present (filter (fn [(p String)] -> Bool (fileExists? (str repo "/" p))) paths))
+        (goneDisk (filter (fn [(p String)] -> Bool (not (fileExists? (str repo "/" p)))) paths))
+        (inHead (if (and (= rt.exit 0) (not (listEmpty? present))) (stringLines (gitRun! repo (listAppend (list "ls-tree" "-r" "--name-only" "HEAD" "--") present) 20).out) (list)))
+        (heldHere (filter (fn [(p String)] -> Bool (listContains? inHead p)) present))
+        (inIdx (if (listEmpty? heldHere) (list) (stringLines (gitRun! repo (listAppend (list "ls-files" "--") heldHere) 20).out)))
+        (missing (filter (fn [(p String)] -> Bool (not (listContains? inIdx p))) heldHere))
+        (ignored (if (listEmpty? missing) (list) (stringLines (gitRun! repo (listAppend (list "ls-files" "-o" "-i" "--exclude-standard" "--") missing) 20).out)))
+        (indexFull (if (listEmpty? missing) false (not (stringEmpty? (stringTrim (gitRun! repo (list "ls-files") 60).out)))))
+        (stagedDel (if indexFull (filter (fn [(p String)] -> Bool (listContains? ignored p)) missing) (list)))
+        (tracked (filter (fn [(p String)] -> Bool (not (listContains? stagedDel p))) heldHere))
+        (gone (listAppend goneDisk stagedDel))
+        (fresh (filter (fn [(p String)] -> Bool (not (listContains? inHead p))) present))
+        (af (if (and (= rt.exit 0) (not (listEmpty? tracked))) (gitRunIn! repo idx (listAppend (list "add" "-f" "-A" "--") tracked) 60) (Out :exit rt.exit :out rt.out)))
+        (a (if (and (= af.exit 0) (not (listEmpty? fresh))) (gitRunIn! repo idx (listAppend (list "add" "-A" "--") fresh) 60) af))
+        (r (if (and (= a.exit 0) (not (listEmpty? gone))) (gitRunIn! repo idx (listAppend (list "rm" "-q" "-r" "--cached" "--ignore-unmatch" "--") gone) 60) a))]
+    (cond
+      ((!= mk.exit 0) (failedTx "cannot create the private index dir" dir))
+      ((!= h.exit 0) (failedTx (str "no HEAD: " (clean h.out)) dir))
+      ((!= r.exit 0) (failedTx (str "private index: " (clean r.out)) dir))
+      (else (Tx :ok true :why "" :dir dir :index idx :old (clean h.out)))))
+
+fn ! discard! tx: Tx -> Bool
+  (if (stringContains? tx.dir "/vcsIdx-")
+    (= (fr/runOneLimited (fr/job (list "rm" "-rf" tx.dir) "." (fr/childEnv (list))) (fr/limits 20 16)).exit 0)
+    false)
+
+; (:m :ref VCS-LAYER-CORE :do "land the private index: write-tree, refuse when the tree equals HEAD's, commit-tree on the recorded HEAD, update-ref HEAD with the old value as the expected one so a moved HEAD fails the commit, then reset only the named paths in the shared index to the new HEAD; the out of an ok result is the new sha")
+fn ! finish! repo: String tx: Tx msg: String paths: (List String) -> Out
+  (let [(wt (gitRunIn! repo tx.index (list "write-tree") 60))
+        (ot (gitRun! repo (list "rev-parse" "HEAD^{tree}") 20))
+        (tree (clean wt.out))]
+    (cond
+      ((!= wt.exit 0) (Out :exit 1 :out (str "write-tree failed: " (clean wt.out))))
+      ((!= ot.exit 0) (Out :exit 1 :out (str "HEAD tree unreadable: " (clean ot.out))))
+      ((= tree (clean ot.out)) (Out :exit 1 :out "nothing to commit: the named paths equal HEAD"))
+      (else
+        (let [(ct (gitRun! repo (list "commit-tree" tree "-p" tx.old "-m" msg) 60))
+              (sha (clean ct.out))]
+          (if (!= ct.exit 0)
+            (Out :exit 1 :out (str "commit-tree failed: " sha))
+            (let [(ur (gitRun! repo (list "update-ref" "-m" "vcs commit" "HEAD" sha tx.old) 30))]
+              (if (!= ur.exit 0)
+                (Out :exit 1 :out (str "HEAD moved during the commit, nothing landed: " (clean ur.out)))
+                (let [(rs (gitRun! repo (listAppend (list "reset" "-q" "--") paths) 60))]
+                  (Out :exit (if (= rs.exit 0) 0 2) :out sha)))))))))
+
+; (:m :do "a branch name git accepts (check-ref-format --branch) and a base that resolves to a commit")
+fn ! branchCreate! repo: String name: String base: String -> Out
+  (let [(ck (if (refOk? name) (gitRun! repo (list "check-ref-format" "--branch" name) 20) (Out :exit 1 :out "name not accepted")))
+        (b (resolve! repo base))]
+    (cond
+      ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
+      ((!= b.exit 0) (Out :exit 1 :out (str "unknown base " base)))
+      (else (gitRun! repo (list "branch" name b.out) 20))))
+
+; (:m :ref VCS-DIRECT :do "check out branch name at base, creating it or resetting it there (checkout -q -B); the name must be a branch git accepts and the base is resolved to a sha first, so no ref text reaches git as an option; base = name re-checks out a branch where it is")
+fn ! switch! repo: String name: String base: String -> Out
+  (let [(ck (if (refOk? name) (gitRun! repo (list "check-ref-format" "--branch" name) 20) (Out :exit 1 :out "name not accepted")))
+        (b (resolve! repo base))]
+    (cond
+      ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
+      ((!= b.exit 0) (Out :exit 1 :out (str "unknown base " base)))
+      (else (gitRun! repo (list "checkout" "-q" "-B" name b.out) 120))))
+
+; (:m :do "fast-forward only: the source is resolved to a sha first, so no ref text reaches git as an option; a non-ff source fails and no merge commit is made")
+fn ! mergeFf! repo: String source: String -> Out
+  (let [(s (resolve! repo source))]
+    (if (!= s.exit 0)
+      (Out :exit 1 :out (str "unknown source " source))
+      (gitRun! repo (list "merge" "--ff-only" s.out) 120)))
+
+fn ! log! repo: String range: String paths: (List String) fmt: String -> Out
+  (if (or (not (refOk? range)) (stringStartsWith? fmt "-"))
+    (Out :exit 1 :out "range or format not accepted")
+    (let [(o (gitRun! repo (listAppend (list "log" (str "--format=" fmt) "--end-of-options" range) (if (listEmpty? paths) (list) (cons "--" paths))) 60))]
+      (Out :exit o.exit :out (capOut o.out))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "a path or file argument that cannot be read as an option: not empty, not leading dash")
+fn argOk? p: String -> Bool
+  (and (not (stringEmpty? p)) (not (stringStartsWith? p "-")))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "restore the working tree (not the index) from a commit: the rev is resolved to a sha first, named paths must pass pathOk?, an empty list means the whole tree")
+fn ! restoreTree! repo: String rev: String paths: (List String) -> Out
+  (let [(r (resolve! repo rev))
+        (bad (filter (fn [(p String)] -> Bool (not (pathOk? p))) paths))]
+    (cond
+      ((!= r.exit 0) (Out :exit 1 :out (str "unknown rev " rev)))
+      ((not (listEmpty? bad)) (Out :exit 1 :out (str "path not accepted: " (stringJoin bad ","))))
+      (else (gitRun! repo (listAppend (list "restore" (str "--source=" r.out) "--worktree" "--") (if (listEmpty? paths) (list ".") paths)) 120))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "apply a patch file to the working tree, or reverse it: the file must not read as an option")
+fn ! applyPatch! repo: String patch: String reverse: Bool -> Out
+  (if (argOk? patch)
+    (gitRun! repo (listAppend (cons "apply" (if reverse (list "-R") (list))) (list "--" patch)) 120)
+    (Out :exit 1 :out "patch not accepted"))
+
+; (:m :ref APPLYPATCH-SOFT-ERR :do "applyPatch! as a result: a patch git refuses is ok with a non-zero exit, a git that did not run to its end is err; quiet passes --whitespace=nowarn")
+fn ! applyPatchChecked! repo: String patch: String reverse: Bool quiet: Bool -> (Result Out String)
+  (if (argOk? patch)
+    (outcomeOf (gitDoneIn! repo "" (listAppend (cons "apply" (listAppend (if reverse (list "-R") (list)) (if quiet (list "--whitespace=nowarn") (list)))) (list "--" patch)) 120))
+    (ok (Out :exit 1 :out "patch not accepted")))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "a detached worktree of a commit at path: the commit is resolved to a sha first and the path must not read as an option")
+fn ! worktreeAdd! repo: String path: String sha: String -> Out
+  (let [(r (resolve! repo sha))]
+    (cond
+      ((not (argOk? path)) (Out :exit 1 :out "path not accepted"))
+      ((!= r.exit 0) (Out :exit 1 :out (str "unknown commit " sha)))
+      (else (gitRun! repo (list "worktree" "add" "--detach" "--" path r.out) 300))))
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "remove a worktree even when it has changes (--force); the path must not read as an option")
+fn ! worktreeRemove! repo: String path: String -> Out
+  (if (argOk? path)
+    (gitRun! repo (list "worktree" "remove" "--force" "--" path) 300)
+    (Out :exit 1 :out "path not accepted"))
+
+; (:m :ref VCS-WORKTREE-PRUNE-VERB :do "drop the records of worktrees whose directory is gone; a worktree that still exists keeps its record")
+fn ! worktreePrune! repo: String -> Out
+  (gitRun! repo (list "worktree" "prune") 120)
+
+; (:m :do "ok true when a is an ancestor of b, ok false when not, err for an unknown commit, a missing repo or any other git failure")
+fn ! isAncestor! repo: String a: String b: String -> (Result Bool String)
+  (let [(x (resolve! repo a))
+        (y (resolve! repo b))]
+    (cond
+      ((!= x.exit 0) (err (str "unknown commit " a)))
+      ((!= y.exit 0) (err (str "unknown commit " b)))
+      (else (let [(o (gitRun! repo (list "merge-base" "--is-ancestor" x.out y.out) 20))]
+              (cond ((= o.exit 0) (ok true))
+                    ((= o.exit 1) (ok false))
+                    (else (err (clean o.out))))))))
+
+; (:m :ref VCS-LAYER-CORE :do "named paths whose entry in the shared index is a blob that differs from both HEAD's blob and the working file: a peer staged something this commit would silently drop from the index")
+fn ! peerRow! repo: String path: String idxSha: String -> Bool
+  (let [(h (gitRun! repo (list "rev-parse" "--verify" "--quiet" (str "HEAD:" path)) 20))
+        (w (if (fileExists? (str repo "/" path)) (gitRun! repo (list "hash-object" "--" path) 20) (Out :exit 1 :out "")))]
+    (and (!= idxSha (clean h.out)) (!= idxSha (clean w.out))))
+
+fn ! peerFold! repo: String lines: (List String) acc: (List String) -> (List String)
+  (match (listHead lines)
+    ((none) acc)
+    ((some l)
+      (let [(tab (stringSplit l "\t"))
+            (meta (stringSplit (optionOr (listHead tab) "") " "))
+            (path (optionOr (listGet tab 1) ""))
+            (sha (optionOr (listGet meta 1) ""))
+            (rest (optionOr (listTail lines) (list)))]
+        (peerFold! repo rest (if (peerRow! repo path sha) (listAppend acc (list path)) acc)))))
+
+fn ! peerStaged! repo: String paths: (List String) -> (List String)
+  (let [(ls (gitRun! repo (listAppend (list "ls-files" "-s" "--") paths) 30))]
+    (peerFold! repo (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines ls.out)) (list)))

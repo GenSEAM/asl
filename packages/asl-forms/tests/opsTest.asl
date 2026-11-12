@@ -41,7 +41,8 @@ fn testTree! -> Bool
 fn testReadPaging! -> Bool
   (do
     (assert (stringContains? (line! "(:read :file \"unicode.md\" :maxBytes 256)") ":truncated true :limit 200 :maxBytes 256 :totalLines 4 :more (:start 3 :end 4)") ":maxBytes counts characters, not bytes")
-    (assert (stringContains? (line! "(:read :file \"long.txt\" :limit \" 1_0\" :start 3)") ":start 3 :end 250 :truncated true :limit 10 :maxBytes 12000 :totalLines 248 :more (:start 13 :end 250)") ":limit parses as Python int")
+    (assert (stringContains? (line! "(:read :file \"long.txt\" :limit \"10\" :start 3)") ":start 3 :end 250 :truncated true :limit 10 :maxBytes 12000 :totalLines 248 :more (:start 13 :end 250)") ":limit 10 pages from :start 3")
+    (assert (stringContains? (line! "(:read :file \"long.txt\" :limit \" 1_0\" :start 3)") "ERR_PARAM_TYPE") ":limit is a decimal integer; a Python-style \" 1_0\" is ERR_PARAM_TYPE (FORMS-PARAM-TYPES bcd20663e)")
     (assert (stringContains? (line! "(:read :file \"long.txt\" :start 20 :end 10)") ":error-code \":ERR_RANGE_OUT_OF_BOUNDS\" :file \"long.txt\" :start 20 :end 10 :lines 250") "an inverted range is out of bounds")
     true)
 

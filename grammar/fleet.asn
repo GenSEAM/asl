@@ -32,7 +32,7 @@
           (:tool redBefore :file "tools/fleet/redBefore.asl" :status works
            :ops (proveRedBefore mutantKilled)
            :emits RedBefore)
-          (:tool receipt :file "tools/fleet/receipt.asl" :status works
+          (:tool receipt :file "asl/tools/fleet/receipt.asl" :status works
            :ops (gateCounts redBeforeCoverage ownsPresent ownsDisjoint)
            :reads (Receipt Gate RedBefore Owns))
           (:tool docCoverage :file "tools/codemod/docCoverage.asl" :status works

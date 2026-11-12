@@ -1,9 +1,9 @@
 (module aslAgent/journal
   :x [Snapshot Written AsnNode Layer
       harnessLayers buildSystemPrompt buildSystemPromptDrop sectionId retainJournal journalWrite usageRowText fallbackRowText snapshotBeforeWrite patchLines filePatch!
-      applyResumePatch handBack writtenField handBackFields editReceiptsOf
+      applyResumePatch resumeApplied handBack checkpoint! writtenField handBackFields editReceiptsOf
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
-  :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr)])
+  :i [(aslAgent/core :a c) (aslAgent/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb) (asl-harness/launch :a lh) (aslAgent/grounding :a gr) (asl-tools/vcs/git :a vg)])
 
 (schema Snapshot
   (:f bytes (Option String))
@@ -421,6 +421,19 @@ fn ! journalSaysOk journalPath: String -> Bool
     (match (listLast (someOf (map resultStatus (stringLines (resultOr (fileReadString journalPath) ""))))) ((some m) (= m "ok")) ((none) false))
     false)
 
+; (:m :ref APPLYPATCH-SOFT-ERR :do "the outcome of applying a resume patch: a git that did not run to its end is err, a patch git refuses is ok with the label and git message, an applied patch is removed and named")
+fn ! resumeApplied w2: Written rootDir: String patch: String label: String r: (Result vg/Out String) -> (Result (Pair Written (Pair (Option String) (Option String))) String)
+  (match r
+    ((err e) (err e))
+    ((ok o)
+      (if (!= o.exit 0)
+        (let [msg (cut300 (pyStrip o.out))]
+          (ok (pair w2 (pair none (some (str label ": " msg))))))
+        (let [applied (pathRel patch rootDir)]
+          (match (pathRemove patch)
+            ((ok _) (ok (pair w2 (pair (some applied) none))))
+            ((err e) (err (osError (errKind e) patch))))))))
+
 fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: String -> (Result (Pair Written (Pair (Option String) (Option String))) String)
   (let [patch (str (splitExt journalPath) ".patch")]
     (cond
@@ -433,16 +446,7 @@ fn ! applyResumePatch w: Written rootDir: String journalPath: String sessionId: 
             (match (snapshotAll w (someOf (map patchPath (stringLines text))))
               ((err e) (err e))
               ((ok w2)
-                (match (git! rootDir (list "apply" "--whitespace=nowarn" (pathAbs! patch)))
-                  ((err e) (err e))
-                  ((ok o)
-                    (if (not (= o.exitCode 0))
-                      (let [msg (cut300 (pyStrip (if (stringEmpty? o.stderr) o.stdout o.stderr)))]
-                        (ok (pair w2 (pair none (some (str "git apply " (pathBasename patch) ": " msg))))))
-                      (let [applied (pathRel patch rootDir)]
-                        (match (pathRemove patch)
-                          ((ok _) (ok (pair w2 (pair (some applied) none))))
-                          ((err e) (err (osError (errKind e) patch)))))))))))))))
+                (resumeApplied w2 rootDir patch (str "git apply " (pathBasename patch)) (vg/applyPatchChecked! rootDir (pathAbs! patch) false true)))))))))
 
 fn ! currentBytes full: String -> (Option String)
   (if (isFile? full) (resultToOption (fileReadString full)) none)
@@ -563,6 +567,20 @@ fn ! handBack w: Written rootDir: String journalPath: String sessionId: String r
                   (match (restoreAndReport! rootDir journalPath start changed)
                     ((err e) (err e))
                     ((ok _) (ok (pair w2 (pair (some (pathRel patchFile rootDir)) (map pairFirst changed))))))))))))))
+
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT :do "after a turn: the patch of the tree against the run start is rewritten at the path handBack uses and, when its text changed, a (:checkpoint :turn N :patch path) line names it; the outer bound kills with SIGKILL and ASL has no signal hook, so this line and file are what survive a kill; no restore, no state change, an error is ignored (the final handBack reports its own)")
+fn ! checkpoint! w: Written rootDir: String journalPath: String sessionId: String turn: Int64 -> Bool
+  (let [base (if (stringEmpty? journalPath) (pathJoin rootDir (str ".asl/run/agentLoop/" sessionId)) (splitExt journalPath))
+        old (resultOr (readText! (str base ".patch")) "")]
+    (match (handBack w rootDir journalPath sessionId false w.startHead)
+      ((err _) false)
+      ((ok hand)
+        (match (pairFirst (pairSecond hand))
+          ((none) false)
+          ((some p)
+            (if (= old (resultOr (readText! (str base ".patch")) ""))
+              false
+              (ok? (journalWrite journalPath (str "(:checkpoint :turn " (stringFromInt64 turn) " :patch \"" (escapeAsn p) "\")\n")))))))))
 
 fn ! copyInto! src: String dest: String -> (Result Int64 String)
   (if (isFile? src)

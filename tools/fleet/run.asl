@@ -1,6 +1,6 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
-  :i [(asl-tools/fleet/jobserver :a js)])
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
 
 (schema Job
   (:f argv (List String))
@@ -38,7 +38,8 @@
   (:f startNs Int64)
   (:f killed String)
   (:f groups (List Int64))
-  (:f known (List Int64)))
+  (:f known (List Int64))
+  (:f tmp String :default ""))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "the ProcOut shape asl/tools/nativeTest.asl's runProc/runProcIn already returns, kept separate here so a bounded guarded spawn can hand it straight back without that file importing a Running it does not need")
 (schema ProcOut
@@ -58,7 +59,8 @@
   (:f startNs Int64)
   (:f killed String)
   (:f groups (List Int64))
-  (:f known (List Int64)))
+  (:f known (List Int64))
+  (:f tmp String :default ""))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "a row-keyed lease (by pgid) under ~/.asl/run/fleet/leases, per the ledger/coordination rules: no extra watchdog process and no shell script in the tree (D157, spawnSafety), just a record a later runGuarded call can find and act on")
 (schema Lease
@@ -73,8 +75,11 @@
 fn job argv: (List String) cwd: String env: (List String) -> Job
   (Job :argv argv :cwd cwd :env env)
 
+; (:m :ref CHILDENV-STRIP-MORE :do "the fleet bridge and gateway children must not inherit the owner ssh agent socket row or any password row: the exact name SSH_AUTH_SOCK and any name containing PASSWORD join the API key suffix, TOKEN and SECRET filters")
 fn secretName? name: String -> Bool
-  (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))
+  (or (= name "SSH_AUTH_SOCK")
+      (or (stringContains? name "PASSWORD")
+          (or (stringEndsWith? name "_API_KEY") (or (stringContains? name "TOKEN") (stringContains? name "SECRET")))))
 
 ; (:m :ref CACHE-HOME-LEAK :do "the caches that key off HOME, each with its one override: a child started with another HOME (a test's temp home) reuses the shared caches only when it gets every row; ASL_CHECK_CACHE missing alone made a fresh-HOME vps.asl run 349894 ms against 4157 ms (node2, 2026-10-30). ASL_NATIVE_TEST_CACHE keys off HOME only in a linked worktree (nativeTest defaultCacheDirFor); the main checkout keeps .asl/cache/nativeTest, so the row is left out there unless set")
 fn cacheRows -> (List (Pair String String))
@@ -104,7 +109,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (names (map nameOf rows))]
     (listAppend rows
       (filter (fn [(row String)] -> Bool
-                (let [(k (nameOf row))] (and (not (listContains? names k)) (not (secretName? k)))))
+                (let [(k (nameOf row))] (and (not (listContains? names k)) (and (not (secretName? k)) (jp/inheritedOk? k)))))
               (envList))))
 
 ; (:m :ref HL-FIXWAVE :do "HL-DELETE retired asl/host/out/asl-host for good: builtBinary! used to fall back to it whenever bin/asl was present but not yet proven fresh (avoiding every parallel caller tripping bin/asl's rebuild lock at once); there is no longer a second, always-ready binary to fall back to, so the only honest answer is bin/asl itself (fresh or not -- bin/asl's own lock protocol already serializes concurrent rebuilders) or nothing")
@@ -185,7 +190,7 @@ fn descendantsOf pairs: (List (Pair Int64 Int64)) root: Int64 -> (List Int64)
   (walkDesc (childMap pairs) (list root) (list))
 
 fn ! shellOut cmd: String timeoutMs: Int64 -> (Result String String)
-  (match (processSpawn cmd)
+  (match (processSpawn (jp/gitGuarded cmd))
     ((err e) (err (str "spawn failed: " e)))
     ((ok h) (match (processWait h timeoutMs)
               ((err e) (err (str "wait failed: " e)))
@@ -349,15 +354,58 @@ fn ! killRounds root: Int64 groups: (List Int64) known: (List Int64) rounds: Int
         (listLength left)
         (killRounds root gs (addNew known (pairFirst frozen)) (- rounds 1)))))
 
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "a descendant that left the tree before any sample (setsid, parent gone, ppid 1) is in no ppid walk and no group, so the walk alone missed it; every spawn puts a unique token in the child's environment (ASL_FLEET_TAG, inherited down and never dropped by exec or setsid), and a kill reads the root's token and adds every process of this user whose environment holds it, as pins, so the ordinary tree walk adopts and kills it; a foreign process never holds the token")
+fn tagName -> String
+  "ASL_FLEET_TAG"
+
+fn tagText n: Int64 -> String
+  (str "ft" (stringFromInt64 n) "e")
+
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "the token's number rides in the job's known list as a negative entry (no pid or pin is negative, so knownPid? and pinnedLive? never read it), so every judge and verdict that carries known carries the token to the kill")
+fn tagNums known: (List Int64) -> (List Int64)
+  (map (fn [(k Int64)] -> Int64 (- 0 k)) (filter (fn [(k Int64)] -> Bool (< k 0)) known))
+
+fn ! tagEnv n: Int64 env: (List String) -> (List String)
+  (let [(old (optionOr (listHead (filter (fn [(row String)] -> Bool (stringStartsWith? row (str (tagName) "="))) env)) ""))
+        (rest (filter (fn [(row String)] -> Bool (not (stringStartsWith? row (str (tagName) "=")))) env))
+        (oldV (optionOr (stringSlice old (+ (stringLength (tagName)) 1) (stringLength old)) ""))]
+    (cons (str (tagName) "=" (if (stringEmpty? old) "" (str oldV ",")) (tagText n)) rest))
+
+fn ! envRows text: String -> (List (Pair Int64 String))
+  (fold (fn [(acc (List (Pair Int64 String))) (line String)] -> (List (Pair Int64 String))
+          (let [(t (stringTrim line))
+                (sp (optionOr (stringIndexOf t " ") 0))
+                (pid (optionOr (stringToInt64 (optionOr (stringSlice t 0 sp) "")) 0))]
+            (if (> pid 1) (cons (pair pid t) acc) acc)))
+        (list) (stringLines text))
+
+fn ! psEnvText! -> String
+  (resultOr (shellOut "ps -A -ww -E -o pid=,command= 2>/dev/null || ps ewwax -o pid=,command= 2>/dev/null" 10000) "")
+
+; (:m :ref BOUNDED-ORPHAN-F-CHILD :do "pids whose environment holds one of the job's tokens; a process whose environment ps cannot show (a system binary such as sh or sleep) is found by its tree position as before")
+fn ! taggedPids! nums: (List Int64) -> (List Int64)
+  (if (listEmpty? nums)
+    (list)
+    (let [(rows (envRows (psEnvText!)))
+          (tags (map (fn [(n Int64)] -> String (tagText n)) nums))]
+      (map (fn [(r (Pair Int64 String))] -> Int64 (pairFirst r))
+           (filter (fn [(r (Pair Int64 String))] -> Bool (and (!= (pairFirst r) (procSelf)) (listAny? (fn [(t String)] -> Bool (stringContains? (pairSecond r) t)) tags))) rows))))
+
 fn ! killTreeWith! root: Int64 groups: (List Int64) known: (List Int64) -> Int64
-  (killRounds root groups known 5)
+  (let [(tagged (taggedPids! (tagNums known)))
+        (snap (procSnapshot))
+        (extra (if (listEmpty? tagged) (list) (pinsOf snap tagged)))
+        (tgroups (map (fn [(p Proc)] -> Int64 p.pgid) (filter (fn [(p Proc)] -> Bool (listContains? tagged p.pid)) snap)))]
+    (killRounds root (addNew groups tgroups) (addNew known extra) 5))
 
 fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
 
 ; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
 fn ! stopGuard! g: Guarded -> Int64
-  (killTreeWith! g.run.pid g.run.groups g.run.known)
+  (let [(left (killTreeWith! g.run.pid g.run.groups g.run.known))
+        (_ (dropTmp g.run.tmp))]
+    left)
 
 fn ! pumpOne r: Running -> (Pair Bool Running)
   (let [(o (readChunk r.outFd r.outOpen))
@@ -365,7 +413,7 @@ fn ! pumpOne r: Running -> (Pair Bool Running)
         (got (str (pairSecond o) (pairSecond e)))]
     (pair (not (stringEmpty? got))
           (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text got)
-                   :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
+                   :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp r.tmp)))
 
 fn leadDigits s: String n: Int64 i: Int64 -> String
   (if (and (< i n) (stringContains? "0123456789" (optionOr (stringSlice s i (+ i 1)) "x")))
@@ -424,7 +472,7 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text
-               :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
+               :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known :tmp r.tmp)
       (let [(left (killTreeWith! r.pid groups known))
             (dc (drainConfig!))
             (dl (+ (monotonicNs) (* dc.ms 1000000)))
@@ -432,7 +480,7 @@ fn ! judge lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r:
             (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
         (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text (str r.text (pairSecond o) (pairSecond e) note)
-                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
+                 :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known :tmp r.tmp))))
 
 fn ! closeIfOpen fd: Int64 isOpen: Bool -> Int64
   (if isOpen (do (fdClose fd) 1) 0)
@@ -444,16 +492,41 @@ fn ! finish r: Running -> Done
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
+        (_ (dropTmp r.tmp))
         (killed (not (stringEmpty? r.killed)))]
     (Done :idx r.idx :exit (if killed (killedExit r.killed) code) :out r.text :ms (/ (- (monotonicNs) r.startNs) 1000000)
           :verdict (if killed r.killed "exit")))
 
 ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "exported so a long-lived server/stub a test needs to interact with WHILE it runs (not just supervise start-to-finish like runOneLimited) still starts only through this module, per rule spawnSafety; the caller owns draining or redirecting Running's outFd/errFd (fr/spawn makes them non-blocking pipes, same as runOneLimited's own pool loop does) and must call killTree! on Running.pid at cleanup, never a bare procKill, so a verdict (or an explicit stop) takes the whole process tree, not just the one pid")
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "spawn no longer calls procSpawnv itself: spawnSep is the one process-spawning site in this file, and spawn builds on it (nice-prefixing its own argv first, same as before), converting the RunningSep it gets back into the Running shape poolLoop's pumpOne/judge/finish already consume (an empty text seed; pumpOne appends combined stdout+stderr into it a chunk at a time exactly as it already did when spawn held the pipes directly)")
+; (:m :ref TMP-LEAK-RUNNER :do "every pooled or guarded child gets its own scratch dir <base>/aslRun-<pid>-<ns> in ASL_RUN_TMP (base: the job's TMPDIR row, else this process's, else /tmp; TMPDIR itself is never changed, so caches that live under it survive), and the runner removes exactly that dir after every verdict (exit, timeout, runaway): a test killed by the watchdog cannot clean up its own scratch, which left 200-400MB dirs per run in /tmp on node2")
+fn tmpName dir: String -> Bool
+  (and (stringContains? dir "/aslRun-") (not (stringEndsWith? dir "/")))
+
+fn ! freshTmp env: (List String) -> (Pair String (List String))
+  (let [(rows (filter (fn [(r String)] -> Bool (stringStartsWith? r "TMPDIR=")) env))
+        (given (optionOr (listHead (map (fn [(r String)] -> String (stringReplace r "TMPDIR=" "")) rows)) ""))
+        (raw (if (stringEmpty? given) (optionOr (envGet "TMPDIR") "/tmp") given))
+        (base (if (and (> (stringLength raw) 1) (stringEndsWith? raw "/")) (optionOr (stringSlice raw 0 (- (stringLength raw) 1)) raw) raw))
+        (dir (str base "/aslRun-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (monotonicNs))))]
+    (if (ok? (dirCreate dir))
+      (pair dir (cons (str "ASL_RUN_TMP=" dir) (filter (fn [(r String)] -> Bool (not (stringStartsWith? r "ASL_RUN_TMP="))) env)))
+      (pair "" env)))
+
+fn ! dropTmp dir: String -> Bool
+  (if (tmpName dir) (ok? (pathRemove dir)) false)
+
 fn ! spawn idx: Int64 j: Job -> (Result Running Done)
-  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd j.env)
-    ((err po) (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed")))
-    ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known))))
+  (spawnIn idx j "" j.env)
+
+fn ! spawnPooled idx: Int64 j: Job -> (Result Running Done)
+  (let [(t (freshTmp j.env))]
+    (spawnIn idx j (pairFirst t) (pairSecond t)))
+
+fn ! spawnIn idx: Int64 j: Job tmp: String env: (List String) -> (Result Running Done)
+  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd env)
+    ((err po) (let [(_ (dropTmp tmp))] (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed"))))
+    ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp tmp))))
 
 fn checkEveryNs -> Int64
   250000000
@@ -466,7 +539,7 @@ fn ! pumpOneSep r: RunningSep -> (Pair Bool RunningSep)
           (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd
                       :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e))
                       :outOpen (pairFirst o) :errOpen (pairFirst e)
-                      :startNs r.startNs :killed r.killed :groups r.groups :known r.known)))
+                      :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp r.tmp)))
 
 fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool r: RunningSep -> RunningSep
   (let [(overTime (and (> lim.timeoutMs 0) (> (/ (- now r.startNs) 1000000) lim.timeoutMs)))
@@ -477,7 +550,7 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
         (verdict (cond (overTime "timeout") ((> descN lim.maxDesc) "runaway") (else "")))]
     (if (stringEmpty? verdict)
       (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText
-                  :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known)
+                  :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups groups :known known :tmp r.tmp)
       (let [(left (killTreeWith! r.pid groups known))
             (dc (drainConfig!))
             (dl (+ (monotonicNs) (* dc.ms 1000000)))
@@ -485,23 +558,24 @@ fn ! judgeSep lim: Limits now: Int64 snap: (List Proc) self: Int64 checked: Bool
             (e (drainFd r.errFd r.errOpen dc.bytes dl ""))
             (note (str "\n(:fleetRun :verdict :" verdict " :pid " r.pid " :desc " descN " :timeoutMs " lim.timeoutMs " :maxDesc " lim.maxDesc " :left " left ")\n"))]
         (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText (str r.outText (pairSecond o)) :errText (str r.errText (pairSecond e) note)
-                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known))))
+                    :outOpen (pairFirst o) :errOpen (pairFirst e) :startNs r.startNs :killed verdict :groups groups :known known :tmp r.tmp))))
 
 fn ! finishSep r: RunningSep -> ProcOut
   (let [(_ (closeIfOpen r.outFd r.outOpen))
         (_ (closeIfOpen r.errFd r.errOpen))
         (code (match (procWaitPid r.pid false) ((ok status) (optionOr status 1)) ((err _) 1)))
+        (_ (dropTmp r.tmp))
         (killed (not (stringEmpty? r.killed)))]
     (ProcOut :exitCode (if killed (killedExit r.killed) code) :stdout r.outText :stderr r.errText
              :timedOut (= r.killed "timeout")))
 
 fn ! spawnSep argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
   (let [(start (monotonicNs))]
-    (match (procSpawnv argv (some cwd) (some (withPwd cwd env)))
+    (match (procSpawnv argv (some cwd) (some (tagEnv start (withPwd cwd env))))
       ((err e) (err (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " (quoteArgv argv) ": " e))))
       ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdNonBlocking p.stdout true)) (_ (fdNonBlocking p.stderr true))]
                 (ok (RunningSep :pid p.pid :outFd p.stdout :errFd p.stderr :outText "" :errText ""
-                      :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list)))))))
+                      :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list (- 0 start))))))))
 
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "a detached /bin/sh watchdog was rejected: D157 forbids shell in the tree, and a watchdog process is itself a child with no timeout/descendant-limit accounting through this file, exactly the escape spawnSafety forbids. Lease reaping replaces it: no extra process, no shell text, just a row-keyed record under ~/.asl/run/fleet/leases a later runGuarded call can find and act on")
 fn ! leaseDir -> String
@@ -596,12 +670,18 @@ fn ! reapStaleLeases! -> Int64
   (:f guard Guarded)
   (:f progress Bool))
 
+fn ! guardSpawn argv: (List String) cwd: String env: (List String) -> (Result RunningSep ProcOut)
+  (let [(t (freshTmp env))]
+    (match (spawnSep argv cwd (pairSecond t))
+      ((err d) (let [(_ (dropTmp (pairFirst t)))] (err d)))
+      ((ok r) (ok (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp (pairFirst t))))))
+
 fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits -> (Result Guarded ProcOut)
   (let [(_ (reapStaleLeases!))
         (g (js/acquire lim.jsDir lim.class (stringFromInt64 (monotonicNs)) lim.timeoutMs))]
     (if (= g.state "expired")
       (err (ProcOut :exitCode 124 :stdout "" :stderr (str "(:fleetRun :verdict :tokenWait :class " lim.class " :timeoutMs " lim.timeoutMs ")\n")))
-      (match (spawnSep argv cwd env)
+      (match (guardSpawn argv cwd env)
         ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (err d)))
         ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAtSep r0 g.startNs))))
                        (_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
@@ -662,17 +742,17 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
              (let [(_ (sleepMs (js/backoffMs g.startNs)))] (poolLoop jobs next slots lim running done lastCheck admit onDone state))
              (poolPump jobs next slots lim running done lastCheck admit onDone state)))
           (else
-           (match (spawn next (optionOr (listGet jobs next) (job (list) "." (list))))
+           (match (spawnPooled next (optionOr (listGet jobs next) (job (list) "." (list))))
              ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d))))
              ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAt r0 g.startNs))))]
                         (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))))))
     (poolPump jobs next slots lim running done lastCheck admit onDone state))
 
 fn startedAt r: Running ns: Int64 -> Running
-  (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+  (Running :idx r.idx :pid r.pid :outFd r.outFd :errFd r.errFd :text r.text :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known :tmp r.tmp)
 
 fn startedAtSep r: RunningSep ns: Int64 -> RunningSep
-  (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known)
+  (RunningSep :pid r.pid :outFd r.outFd :errFd r.errFd :outText r.outText :errText r.errText :outOpen r.outOpen :errOpen r.errOpen :startNs ns :killed r.killed :groups r.groups :known r.known :tmp r.tmp)
 
 fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (List Running) done: (List Done) lastCheck: Int64 admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
     (if (listEmpty? running)
@@ -711,7 +791,139 @@ fn ! runOne j: Job -> Done
 
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "the one place a (list \"sh\" \"-c\" cmd) argv literal is built for a caller that only has a command string, not an argv list already; freePool.asl's runGate! used to build this literal itself (a second textual sh -c site outside this file), this gives it (and any future command-string caller) the same single site runOneLimited's callers with an argv already in hand use")
 fn ! runShell! cmd: String cwd: String env: (List String) lim: Limits -> Done
-  (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim)
+  (let [(d (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim))]
+    (with d :out (gateOutHost (stubHostFor! cmd) cmd d.out)))
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the executed-assert count of a gate was read from any line of the gate's own stdout, so a command that echoed '5 assertion(s) executed' passed the conductor's asserts>0 check without running a suite. Now a gate counts only in the declared form ./bin/asl test FILE... (or asl test): the host prints one verdict line per FILE after the suite's own output, the lines must be exactly the declared files' verdicts and the last lines of the output; any other count or FAIL line is rewritten to 'claimed' or '(unrecorded) FAIL' and a marker row says why. A gate whose own files are modified by the unit under test (bin/asl itself) is not covered.")
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "test stand-in for the host's test command in hermetic fixtures: greenN.asl prints N passed, redN.asl fails after N asserts, any other file is run as sh and its 'assert ' lines are the count; stubHost! writes it once to a fixed path and returns the path, a gate is then (str (stubHost!) \" test greenN.asl\"), which has the declared form")
+fn stubHostText -> String
+  "#!/bin/sh\n[ \"$1\" = test ] || exit 2\nshift\nrc=0\nfor f in \"$@\"; do\n  b=${f##*/}\n  case \"$b\" in\n    green*.asl) n=${b#green}; n=${n%.asl}; echo \"$f: $n assertion(s) executed ($n passed)\" ;;\n    red*.asl) n=${b#red}; n=${n%.asl}; echo \"suite: ERR_TYPE boom in $b\"; echo \"FAIL $f: ERR_ASSERT: assertion failed: red (after $n asserts)\"; rc=1 ;;\n    *) out=$(sh \"$f\" 2>&1); r=$?; [ -z \"$out\" ] || printf '%s\\n' \"$out\"; n=$(printf '%s\\n' \"$out\" | /usr/bin/grep -c '^assert '); e=$(printf '%s\\n' \"$out\" | /usr/bin/grep -o 'ERR_[A-Z_]*' | head -1); if [ $r -eq 0 ]; then echo \"$f: $n assertion(s) executed ($n passed)\"; else echo \"FAIL $f: ${e:-exit $r} (after $n asserts)\"; rc=1; fi ;;\n  esac\ndone\nexit $rc\n"
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "a stand-in install belongs to the process that made it: /tmp/aslStubHost-PID-TOKEN, TOKEN from the pid and the clock. Production trusts a stub head only from such a dir whose PID is alive and is the running process or one of its ancestors, so a dir left behind or planted by a unit (dead pid, unrelated pid, the old fixed name) is refused")
+fn stubPrefix -> String
+  "/tmp/aslStubHost-"
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the stand-in host is trusted only from a private install: dir is a real directory (lstat, no symlink), mode 700, owned by the caller, and bin/asl holds exactly the stand-in text; stubHostIn! never reuses what it finds, it rewrites bin/asl through a temp name and verifies again, and any failed check returns the empty string so the caller fails closed; is the same check without writing, and is what lets runShell! accept the stand-in head: where no test installed it, the head is undeclared")
+fn ! privateDir? dir: String -> Bool
+  (match (fileLstat dir)
+    ((err _) false)
+    ((ok st) (and st.isDir (and (= (mod st.mode 512) 448) (= (runOne (job (list "test" "-O" dir) dir (childEnv (list)))).exit 0)))))
+
+fn ! stubVerifiedIn! dir: String -> Bool
+  (and (privateDir? dir)
+    (match (fileLstat (str dir "/bin/asl"))
+      ((err _) false)
+      ((ok st) (and st.isFile (= (resultOr (fileReadString (str dir "/bin/asl")) "") (stubHostText))))))
+
+fn ownerPidOf dir: String -> Int64
+  (if (stringStartsWith? dir (stubPrefix))
+    (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (stringSlice dir (stringLength (stubPrefix)) (stringLength dir)) "") "-")) "")) 0)
+    0)
+
+fn ! parentOf pid: Int64 -> Int64
+  (let [(d (runOneLimited (job (list "ps" "-o" "ppid=" "-p" (stringFromInt64 pid)) "." (childEnv (list))) (limits 5 4)))]
+    (if (= d.exit 0) (optionOr (stringToInt64 (stringTrim d.out)) 0) 0))
+
+fn ! ancestorFrom? at: Int64 pid: Int64 depth: Int64 -> Bool
+  (cond ((= at pid) true) ((or (<= at 1) (> depth 64)) false) (else (ancestorFrom? (parentOf at) pid (+ depth 1))))
+
+fn ! ancestorOrSelf? pid: Int64 -> Bool
+  (and (> pid 1) (ancestorFrom? (procSelf) pid 0))
+
+fn ! stubOwnerLive? dir: String -> Bool
+  (let [(pid (ownerPidOf dir))]
+    (and (> pid 1) (and (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 pid)) "." (childEnv (list))) (limits 5 4)).exit 0) (ancestorOrSelf? pid))))
+
+fn ! stubTrustedIn! dir: String -> Bool
+  (and (stubOwnerLive? dir) (stubVerifiedIn! dir))
+
+fn ! stubHostFor! cmd: String -> String
+  (let [(head (optionOr (listHead (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim cmd) " "))) ""))
+        (suffix "/bin/asl")]
+    (if (and (stringStartsWith? head (stubPrefix)) (stringEndsWith? head suffix))
+      (if (stubTrustedIn! (optionOr (stringSlice head 0 (- (stringLength head) (stringLength suffix))) "")) head "")
+      ""))
+
+fn ! stubDirsOwnedBy pid: Int64 -> (List String)
+  (match (dirList "/tmp")
+    ((err _) (list))
+    ((ok names) (map (fn [(n String)] -> String (str "/tmp/" n)) (filter (fn [(n String)] -> Bool (stringStartsWith? (str "/tmp/" n "-") (str (stubPrefix) (stringFromInt64 pid) "-"))) names))))
+
+fn ! stubHostPath -> String
+  (match (listHead (filter stubVerifiedIn! (stubDirsOwnedBy (procSelf))))
+    ((some d) (str d "/bin/asl"))
+    ((none) ""))
+
+fn ! stubHostIn! dir: String -> String
+  (let [(existed (ok? (fileLstat dir)))
+        (made (if existed true (and (ok? (dirCreate dir)) (= (runOne (job (list "sh" "-c" (str "chmod 700 '" dir "'")) "." (childEnv (list)))).exit 0))))
+        (tmp (str dir "/bin/asl." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))]
+    (if (and made (privateDir? dir))
+      (let [(_ (dirCreate (str dir "/bin")))
+            (_ (fileWrite tmp (stubHostText)))
+            (r (runOne (job (list "sh" "-c" (str "chmod 755 '" tmp "' && mv '" tmp "' '" dir "/bin/asl'")) dir (childEnv (list)))))]
+        (if (stubVerifiedIn! dir) (str dir "/bin/asl") ""))
+      ""))
+
+fn ! stubSweepDead! -> Bool
+  (match (dirList "/tmp")
+    ((err _) false)
+    ((ok names)
+      (let [(dead (filter (fn [(d String)] -> Bool (and (stringStartsWith? d (stubPrefix)) (and (privateDir? d) (or (<= (ownerPidOf d) 1) (not (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 (ownerPidOf d))) "." (childEnv (list))) (limits 5 4)).exit 0)))))) (map (fn [(n String)] -> String (str "/tmp/" n)) names)))]
+        (listAll? (fn [(d String)] -> Bool (= (runOne (job (list "rm" "-rf" d) "." (childEnv (list)))).exit 0)) dead))))
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "stubHost! installs this process's stand-in (one dir per process, a token from pid and clock) after sweeping dirs whose owner is gone, stubRemove! deletes it, tests call it on their way out")
+fn ! stubHost! -> String
+  (let [(_ (stubSweepDead!))
+        (own (stubHostPath))]
+    (if (stringEmpty? own)
+      (stubHostIn! (str (stubPrefix) (stringFromInt64 (procSelf)) "-" (optionOr (stringSlice (bytesSha256 (stringToBytes (str (stringFromInt64 (procSelf)) ":" (stringFromInt64 (monotonicNs)) ":" (stubHostText)))) 0 16) "")))
+      (stubHostIn! (optionOr (stringSlice own 0 (- (stringLength own) 8)) ""))))
+
+fn ! stubRemove! -> Bool
+  (listAll? (fn [(d String)] -> Bool (and (privateDir? d) (= (runOne (job (list "rm" "-rf" d) "." (childEnv (list)))).exit 0))) (stubDirsOwnedBy (procSelf)))
+
+fn gateFiles cmd: String host: String -> (List String)
+  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim cmd) " ")))
+        (bad (list ";" "&" "|" "<" ">" "$" "`" "\"" "'" "(" ")" "*" "?" "{" "}" "\\" "~" "!" "#"))
+        (files (listDrop toks 2))]
+    (if (and (>= (listLength toks) 3)
+             (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
+                 (and (not (stringEmpty? host)) (= (optionOr (listHead toks) "") host)))
+             (= (optionOr (listGet toks 1) "") "test")
+             (not (listAny? (fn [(f String)] -> Bool (or (not (stringEndsWith? f ".asl")) (listAny? (fn [(c String)] -> Bool (stringContains? f c)) bad))) files)))
+      files
+      (list)))
+
+fn verdictFor line: String file: String -> Bool
+  (or (and (stringStartsWith? line (str file ": ")) (stringContains? line " assertion(s) executed") (stringEndsWith? line " passed)"))
+      (stringStartsWith? line (str "FAIL " file ": ")))
+
+fn claimed line: String -> String
+  (cond ((stringContains? line " assertion(s) executed") (stringReplace line " assertion(s) executed" " assertion(s) claimed"))
+        ((stringStartsWith? line "FAIL ") (str "(unrecorded) " line))
+        (else line))
+
+fn gateOut cmd: String out: String -> String
+  (gateOutHost "" cmd out)
+
+fn gateOutHost host: String cmd: String out: String -> String
+  (let [(files (gateFiles cmd host))
+        (lines (stringLines out))
+        (body (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines))
+        (k (listLength files))
+        (tail (listDrop body (max 0 (- (listLength body) k))))
+        (isVerdict (fn [(l String)] -> Bool (listAny? (fn [(f String)] -> Bool (verdictFor l f)) files)))
+        (isPass (fn [(l String)] -> Bool (and (isVerdict l) (not (stringStartsWith? l "FAIL ")))))
+        (all (listLength (filter isVerdict body)))
+        (okShape (and (> k 0) (= all k) (= (listLength (filter isPass tail)) (listLength (filter isPass body)))))
+        (neutral (stringJoin (map claimed lines) "\n"))
+        (marker (cond ((= k 0) "(:gateFormUndeclared :want \"./bin/asl test FILE.asl...\")")
+                      (okShape "")
+                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) ")"))))]
+    (if okShape
+      (let [(kept (stringJoin (map (fn [(l String)] -> String (if (isVerdict l) l (claimed l))) lines) "\n"))] kept)
+      (str neutral (if (stringEndsWith? neutral "\n") "" "\n") marker "\n")))
 
 fn numberBefore text: String marker: String -> (Option Int64)
   (let [(parts (stringSplit text marker))]

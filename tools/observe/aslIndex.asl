@@ -70,6 +70,7 @@ fn nameCharsEnd bs: Bytes i: Int64 n: Int64 -> Int64
 fn spacesEnd bs: Bytes i: Int64 n: Int64 -> Int64
   (let [(k (c/spaceLenAt bs i n))] (if (= k 0) i (spacesEnd bs (+ i k) n)))
 
+; (:m :ref OBSERVE-CALLERS-BANG-MISS :do "fn ! name! args: the lone ! after fn is the effect marker, not the def name; it was indexed as the name ! so no effect fn had a def and callers answered ERR_SYMBOL_NOT_FOUND")
 fn defOfLine raw: String -> (Option String)
   (let [(bs (stringToBytes raw)) (n (bytesLength bs))
         (s0 (if (and (> n 0) (= (bytesGet bs 0) 40)) 1 0))
@@ -78,8 +79,11 @@ fn defOfLine raw: String -> (Option String)
     (if (< kw 0) (none)
       (let [(sp (spacesEnd bs kw n))]
         (if (= sp kw) (none)
-          (let [(e (nameCharsEnd bs sp n))]
-            (if (= e sp) (none) (some (sliceOf raw sp e))))))))
+          (let [(e (nameCharsEnd bs sp n))
+                (marked (and (= (- e sp) 1) (= (bytesGet bs sp) 33)))
+                (sp2 (if marked (spacesEnd bs e n) sp))
+                (e2 (if marked (nameCharsEnd bs sp2 n) e))]
+            (if (= e2 sp2) (none) (some (sliceOf raw sp2 e2))))))))
 
 fn pairGet kv: (List (Pair String Int64)) k: String -> (Option Int64)
   (match (listHead (filter (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) k)) kv)) ((some p) (some (pairSecond p))) ((none) (none)))

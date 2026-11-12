@@ -1,0 +1,40 @@
+(:trialCorpus :v 2 :date "2026-11-05" :base "6debc8957" :seeds "asl/tools/coord/trial/seeds"
+ :tasks (
+  (:task T1 :kind newModule :known merge :id "humanBytes"
+   :do "Write asl-utils/humanBytes. Export format and parse. format turns a byte count into B, KiB, MiB or GiB with one decimal place, base 1024. parse reads such a string back to a byte count. Add humanBytesTest with a round-trip assert for each unit. Touch only the two owned files."
+   :owns ("asl/packages/asl-utils/src/humanBytes.asl" "asl/packages/asl-utils/tests/humanBytesTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/humanBytesTest.asl"
+   :note "smallest task; every writer should reach merge, so a stall here is harness or hint")
+  (:task T2 :kind newModule :known merge :id "unionFind"
+   :do "Write asl-utils/unionFind over a parent map of type Map Int64 Int64 that starts from mapEmpty. Export find, union (returns a new parent map) and same?. Use mapGetOr for parent lookup. Add unionFindTest with real asserts: after union 1 2 and union 2 3, 1 and 3 are the same set; 9 is in its own set. Touch only the two owned files."
+   :owns ("asl/packages/asl-utils/src/unionFind.asl" "asl/packages/asl-utils/tests/unionFindTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/unionFindTest.asl"
+   :note "same shape as the blocked STD units, a real comparison; the brief is self-contained here, not the node2 file")
+  (:task T3 :kind editExisting :known merge :id "kitFlagFloat"
+   :do "In asl-utils/kit add flagFloat beside flagInt. flagFloat k name parses the flag value with stringToFloat64 and returns it as Float64. An unparseable value returns 0.0. An undeclared flag traps, as flagInt does. Export flagFloat in the module header. Add kitFloatTest with asserts for a set value and for the unparseable case. Touch only the two owned files."
+   :owns ("asl/packages/asl-utils/src/kit.asl" "asl/packages/asl-utils/tests/kitFloatTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/kitFloatTest.asl"
+   :note "edit inside a 411-line file: exercises read by symbol and slice, and the edit op")
+  (:task T4 :kind fixNeedsTest :known merge :redBefore present :id "kitJoinPathFix"
+   :do "On the trial base, joinPath in asl-utils/kit joins with a doubled slash when the left part ends in a slash. Export joinPath from kit. Write asl-utils/tests/joinPathTest with asserts that fail on the trial base: a left part ending in a slash joins to one slash, a left part without one joins with one slash, and an empty left part returns the name. Then fix joinPath so both cases hold. kitTest must stay green. Touch only the three owned files."
+   :owns ("asl/packages/asl-utils/src/kit.asl" "asl/packages/asl-utils/tests/joinPathTest.asl" "asl/packages/asl-utils/tests/kitTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/joinPathTest.asl"
+   :seed "asl/tools/coord/trial/seeds/kitJoinPathFix.patch"
+   :regression "asl/tools/coord/trial/seeds/joinPathTest.asl.seed"
+   :reference "asl/tools/coord/trial/seeds/kitJoinPathReference.patch"
+   :note "the gate is joinPathTest alone: absent on the merge-base, so the gate stage records red before; on the trial base it fails on the slash case; after the fix it is green; kitTest is checked separately and must stay green")
+  (:task T5 :kind seededBad :known reviewFail :id "humanBytesWrongBase" :skipWrite true
+   :do "Write asl-utils/humanBytes. Export format and parse. format turns a byte count into B, KiB, MiB or GiB with one decimal place, base 1024. parse reads such a string back to a byte count. Add humanBytesTest with a round-trip assert for each unit. Touch only the two owned files."
+   :owns ("asl/packages/asl-utils/src/humanBytes.asl" "asl/packages/asl-utils/tests/humanBytesTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/humanBytesTest.asl"
+   :seed "asl/tools/coord/trial/seeds/humanBytesWrongBase.patch"
+   :probe "asl/tools/coord/trial/seeds/humanBytesProbe.asl.seed"
+   :note "branch seeded with a 1000-base format; its gate passes, and the probe (base 1024 value) fails, so only review sees the difference from the task; run once per review panel, not per writer; a pass is rFalsePass; the seed has format only")
+  (:task T6 :kind seededVacuous :known refuse :id "unionFindConstAssert" :skipWrite true
+   :do "Write asl-utils/unionFind over a parent map of type Map Int64 Int64 that starts from mapEmpty. Export find, union (returns a new parent map) and same?. Use mapGetOr for parent lookup. Add unionFindTest with real asserts: after union 1 2 and union 2 3, 1 and 3 are the same set; 9 is in its own set. Touch only the two owned files."
+   :owns ("asl/packages/asl-utils/src/unionFind.asl" "asl/packages/asl-utils/tests/unionFindTest.asl")
+   :gate "./bin/asl test asl/packages/asl-utils/tests/unionFindTest.asl"
+   :seed "asl/tools/coord/trial/seeds/unionFindConstAssert.patch"
+   :probe "asl/tools/coord/trial/seeds/unionFindProbe.asl.seed"
+   :note "branch seeded with a real unionFind and a test whose asserts are tautologies on computed values; the gate passes even when union is a no-op, which the probe catches; the runner D152 check only catches literal constants; the fix row is a gates-stage tautology check (harness)")
+ ))

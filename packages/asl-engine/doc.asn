@@ -139,3 +139,4 @@
 (:doc :symbol "asl/packages/asl-engine/tests/engineTest.asl#L165" :text "Assert Block 7: Subprocess Transport")
 (:doc :symbol "asl/packages/asl-engine/tests/engineTest.asl#L173" :text "Assert Block 8: Scope Resolution & CLI")
 (:doc :symbol "asl/packages/asl-engine/tests/parityTest.asl#" :text "Live engine CLI (bin/asl engine) ping parity and package receipt unit checks")
+(:doc :symbol "asl/packages/asl-engine/tests/buildEntryTest.asl#runTests" :text "run the entry cases: the working tree holds the engine CLI entry, entryPath! is the configured entry else the one under the tree, and toolRootOf maps an entry path to the toolchain root and refuses a path that is not an engine entry")

@@ -14,9 +14,9 @@ fn helpText -> String
        "  asl <command> [args...]\n"
        "\n"
        "Commands:\n"
-       "  check <file>        Balance, then asl-host check for .asl (names, arity, enums); bare: every tracked file\n"
+       "  check <file|--all>  Balance, then asl-host check for .asl (names, arity, enums); --all: every tracked file, bare is refused\n"
        "  heal <file>         Repair generated ASL with the named heal rules; a file that already checks is unchanged\n"
-       "  test <file|dir>     Run suites; --changed [BASE] selects impacts (default main), --dry-run lists without execution\n"
+       "  test <file|dir|--all> Run suites, --all runs every suite and bare is refused; --changed [BASE] selects impacts (default main), --dry-run lists without execution\n"
        "  parse <file>        Count top-level forms on asl-host\n"
        "  eval [--native] <expr> Host evaluates expressions and echoes (:keyword ...) as ASN data; --native evaluates a single Int64 expression only\n"
        "  build <file>        Not implemented until R1 (ERR_UNIMPLEMENTED)\n"
@@ -193,6 +193,14 @@ fn ! train! ctx: sys/Context args: (List String) -> Int64
     (if (sys/isFile? entry)
       (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry args))) (list))
       (do (sys/sayErr! "Error: the train tool entry tools/fleet/train.asl was not found") 1)))
+
+
+; (:m :ref VCS-CLI-ENTRY :do "asl vcs OP ARGS runs asl/tools/vcs/vcsMain.asl: the backend-neutral commit, status, diff, log and head ops; commit stages only named paths and refuses on a commitGuard block or partial check")
+fn ! vcs! ctx: sys/Context args: (List String) -> Int64
+  (let [(entry (str ctx.root "/asl/tools/vcs/vcsMain.asl"))]
+    (if (sys/isFile? entry)
+      (sys/execv! (cons (str ctx.root "/bin/asl") (cons "run" (cons entry (if (or (listContains? args "--asl-root") (listEmpty? args)) args (cons (first args) (cons "--asl-root" (cons ctx.root (rest args)))))))) (list))
+      (do (sys/sayErr! "Error: the vcs tool entry asl/tools/vcs/vcsMain.asl was not found") 1)))
 
 fn ! shim! ctx: sys/Context mode: String args: (List String) -> Int64
   (let [(entry (str ctx.root "/asl/packages/asl-utils/src/timeout.asl"))]
@@ -395,10 +403,13 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
         (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test --native SUITE... runs from the workspace root " ctx.root "\")")) 2)
         (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/asl/tools/nativeTest.asl") suites)))
                     (list))))
-    (let [(files (filter (fn [(a String)] -> Bool (!= a "--trace")) args))
+    (let [(files (filter (fn [(a String)] -> Bool (and (!= a "--trace") (!= a "--all"))) args))
+          (all (listContains? args "--all"))
           (tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
           (host ctx.hostBin)]
       (cond
+        ((and all (not (listEmpty? files))) (do (sys/say! "(:test :status :failed :error ERR_USAGE :message \"asl test --all takes no paths\")") 2))
+        ((and (listEmpty? files) (not all)) (do (sys/say! "(:test :status :failed :error ERR_BARE_SWEEP :message \"asl test needs paths or --all; a bare asl test would sweep every suite\")") 2))
         ((not (sys/executable? host)) (do (sys/say! (sys/hostAbsent "test")) 2))
         ((listEmpty? files)
           (let [(rc (sys/run! (list host "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "test" host)))]
@@ -461,7 +472,13 @@ fn ! workspaceOf! dir: String -> (Option String)
     (else (workspaceOf! (parentDir dir))))
 
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (if (listEmpty? args)
+  (cond
+    ((and (listContains? args "--all") (> (listLength args) 1)) (do (sys/say! "(:check :status :failed :error ERR_USAGE :message \"asl check --all takes no paths\")") 2))
+    ((listEmpty? args) (do (sys/say! "(:check :status :failed :error ERR_BARE_SWEEP :message \"asl check needs paths or --all; a bare asl check would sweep every file\")") 2))
+    (else (checkOrSweep! ctx args)))
+
+fn ! checkOrSweep! ctx: sys/Context args: (List String) -> Int64
+  (if (= args (list "--all"))
     (if (not (sys/executable? ctx.hostBin))
       (do (sys/say! (sys/hostAbsent "check")) 2)
       (sys/execv! (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "check" ctx.hostBin) (list)))
@@ -494,6 +511,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
     ((= cmd "train") (train! ctx args))
+    ((= cmd "vcs") (vcs! ctx args))
     ((= cmd "timeout") (shim! ctx "timeout" args))
     ((or (= cmd "relay") (or (= cmd "rla") (= cmd "gateway"))) (tool! ctx "asl-gateway" args))
     ((or (= cmd "web") (= cmd "search")) (webDelegate! ctx "search" "query" args))

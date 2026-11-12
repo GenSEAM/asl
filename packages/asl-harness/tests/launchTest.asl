@@ -1,6 +1,13 @@
 (module asl-harness/tests/launchTest
   :x [runTests]
-  :i [(asl-harness/launch :a l)])
+  :i [(asl-harness/launch :a l) (asl-tools/fleet/run :a fr)])
+
+; (:m :ref NOSELFHOST-WRAPPED-BINASL :do "every child start of this test (the bin/asl wrapper, the host exe, git, chmod, sh) runs through fr/runGuarded (own process group, timeout, 128 descendants, tree kill) instead of the launch module's unbounded runCapture; a spawn failure is still an err, the Captured code/out/errText the asserts read are the runner's exit/stdout/stderr")
+fn ! runB! argv: (List String) cwd: (Option String) env: (Option (List String)) -> (Result l/Captured String)
+  (let [(o (fr/runGuarded argv (optionOr cwd ".") (optionOr env (fr/childEnv (list))) (fr/limits 900 128)))]
+    (if (and (= o.exitCode 127) (stringStartsWith? o.stderr "spawn failed:"))
+      (err o.stderr)
+      (ok (l/Captured :code o.exitCode :out o.stdout :errText o.stderr))))
 
 fn fixturePath -> String
   "tests/parity/harness/launchFixture.asn"
@@ -216,7 +223,7 @@ fn ! checkMain s: Suite base: String i: Int64 row: l/Asn -> Bool
         (and exitOk (and outOk (and errOk (and actOk treeOk))))))
 
 fn ! run argv: (List String) cwd: String -> Bool
-  (match (l/runCapture! argv (some cwd) (none))
+  (match (runB! argv (some cwd) (none))
     ((ok c) (do (assert (= c.code 0) (str (stringJoin argv " ") " exits 0: " c.errText)) (= c.code 0)))
     ((err e) (do (assert false (str (stringJoin argv " ") ": " e)) false)))
 
@@ -343,7 +350,7 @@ fn ! checkE2e ctx: E2e i: Int64 row: l/Asn -> Bool
         (log (str ctx.base "/log" (stringFromInt64 i)))
         (env (list (str "PATH=" (if (= kind "bare") "" (str ctx.stubs ":")) "/usr/bin:/bin") (str "HOME=" home) (str "STUB_LOG=" log)
                    (str "STUB_MODE=" (fstr row "stubMode")) "LANG=C" (str "ASL_ROOT=" ctx.root) (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))))
-        (res (l/runCapture! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
+        (res (runB! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
     (match res
       ((err e) (do (assert false (str "e2e " (showList args) ": " e)) false))
       ((ok c)
@@ -384,7 +391,7 @@ fn ! checkPromptOnly ctx: E2e i: Int64 -> Bool
         (log (str ctx.base "/promptOnly.log"))
         (env (list (str "PATH=" ctx.stubs ":/usr/bin:/bin") (str "HOME=" home) (str "STUB_LOG=" log)
                    (str "ASL_ROOT=" ctx.root) (str "ASL_LAUNCH_PROMPT_DIR=" promptDir) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))))
-        (out (l/runCapture! (list ctx.host "run" ctx.launch "claude" "--prompt-only") (some ctx.ws) (some env)))
+        (out (runB! (list ctx.host "run" ctx.launch "claude" "--prompt-only") (some ctx.ws) (some env)))
         (captured (match out ((ok c) c) ((err _) (l/Captured :code 127 :out "" :errText "could not run prompt-only"))))
         (row (if (= captured.code 0) (l/readOne captured.out) (err captured.errText)))
         (path (match row ((ok r) (optionOr (l/textOf (optionOr (l/asnGet r "path") (l/asnStr ""))) "")) ((err _) "")))
@@ -399,7 +406,7 @@ fn ! checkPromptOnly ctx: E2e i: Int64 -> Bool
 fn ! hookRun ctx: E2e i: Int64 args: (List String) extra: String -> l/Captured
   (let [(home (str ctx.base "/hookHome" (stringFromInt64 i)))
         (env (listAppend (list (str "PATH=" ctx.stubs ":" (resultOr (realPath "bin") "/usr/bin") ":" ctx.root "/bin:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache))) (if (stringEmpty? extra) (list) (list extra))))
-        (got (l/runCapture! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
+        (got (runB! (listAppend (list ctx.host "run" ctx.launch) args) (some ctx.ws) (some env)))]
     (match got ((ok c) c) ((err e) (l/Captured :code 127 :out "" :errText e))))
 
 fn ! checkPromptHooks ctx: E2e -> (List Bool)
@@ -428,7 +435,7 @@ fn ! leasePidCase ctx: E2e i: Int64 supplied: String -> l/Captured
   (let [(home (str ctx.base "/leaseHome" (stringFromInt64 i)))
         (env (listAppend (list (str "PATH=" ctx.base "/leaseStubs:/usr/bin:/bin") (str "HOME=" home) (str "ASL_ROOT=" ctx.root) "LANG=C" (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache)))
                          (if (stringEmpty? supplied) (list) (list (str "ASL_LEASE_PID=" supplied)))))
-        (got (l/runCapture! (list ctx.host "run" ctx.launch "claude") (some ctx.ws) (some env)))]
+        (got (runB! (list ctx.host "run" ctx.launch "claude") (some ctx.ws) (some env)))]
     (match got ((ok c) c) ((err e) (l/Captured :code 127 :out "" :errText e))))
 
 fn ! checkLeasePid ctx: E2e -> (List Bool)
@@ -709,7 +716,7 @@ fn ! colRun ctx: E2e i: Int64 args: (List String) exitCode: String rmDir: Bool s
         (envRows (listAppend (list (str "PATH=" stubDir ":/usr/bin:/bin") (str "HOME=" home) (str "STUB_LOG=" (colLog ctx i)) (str "STUB_EXIT=" exitCode) "LANG=C" (str "ASL_ROOT=" ctx.root) (str "ASL_NATIVE_CLI_CACHE=" (nativeCliCache)))
                              (if rmDir (list (str "STUB_RMDIR=" runRoot "/" (optionOr (listHead args) "x") "-*")) (list))))
         (cmd "stdin=\"$1\"; host=\"$2\"; launch=\"$3\"; shift 3; printf '%s' \"$stdin\" | \"$host\" run \"$launch\" \"$@\"")
-        (got (l/runCapture! (listAppend (list "/bin/sh" "-c" cmd "sh" stdin ctx.host ctx.launch) args) (some ctx.ws) (some envRows)))]
+        (got (runB! (listAppend (list "/bin/sh" "-c" cmd "sh" stdin ctx.host ctx.launch) args) (some ctx.ws) (some envRows)))]
     (do (assert (and made stubs) "collector stubs installed")
         (match got ((ok c) c) ((err e) (l/Captured :code 127 :out "" :errText e)))))
 

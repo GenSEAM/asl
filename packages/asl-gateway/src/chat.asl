@@ -1,5 +1,7 @@
 (module aslGateway/chat
   :x [ChatRequest upstreamTools
+      sseToChat
+      streamBody
       gatewayOriginHeader
       ChatWorld
       ChatEffect
@@ -13,6 +15,7 @@
       effBreakerEvent
       effUsageNote
       effLimit
+      effConcurrency429
       effUsageFallback
       effSpreadOrder
       effSpreadNote429
@@ -109,6 +112,8 @@
   (:c effUsageFallback [(provider String) (alias String)])
   ; (:m :ref GW-LIMIT-WINDOWS :do "asks the reactor whether a provider limit window is spent for this member; the answer is empty to go ahead, else (outcome reason)")
   (:c effLimit [(provider String) (alias String)])
+  ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream answered 429 naming concurrency: the server frees this call's lease and lowers the lane cap; chat then parks and asks again")
+  (:c effConcurrency429 [(provider String) (alias String)])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "asks the server for this call's spread-member order: real per-profile+intent SWRR state (GatewayLoop.spreadState) and real breaker/429-cooldown availability live server-side, never in chat.asl; pools carries one (alias, providerPool:alias) pair per spread member so the server can check the real BreakerState without re-resolving the config table")
   (:c effSpreadOrder [(profile String) (intent String) (spread (List (Pair String Int64))) (cooldownSec Int64) (pools (List (Pair String String)))])
   ; (:m :ref GW-SPREAD-LIVE-20261018 :do "records this alias's 429 at the server's own wall clock (GatewayLoop.spreadLast429), independent of and in addition to the existing per-model breaker trip -- :cooldownSec is configurable per route and almost never equals BreakerState's own fixed cooldown")
@@ -229,7 +234,8 @@
   (:f api String)
   (:f path String)
   (:f retryUsed Int64)
-  (:f retryDeadline (Option Float64)))
+  (:f retryDeadline (Option Float64))
+  (:f parkedMs Int64 :default 0))
 
 
 ; (:m :do "role/intent cascades and their calibrated default temperatures come from the gateway config's profile routes, never from a built-in list in source; a role or intent string is resolved the same way an intent is for the profile-routed path (c/gatewayRouteEntries!), so a config-only change to a route's :chain or :temperature changes the chosen model with no rebuild")
@@ -647,7 +653,10 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
         (b1 (match ep.temperatureFixed
               ((some _) (pt/jset b0 "temperature" (floatJson ep.temperatureFixed)))
               ((none) (if (and (some? ep.temperature) (not cx.tempExplicit)) (pt/jset b0 "temperature" (paramJson cx e "temperature" (floatJson ep.temperature))) b0))))
-        (b2 (match ep.effort ((some s) (pt/jset b1 "effort" (j/jstr s))) ((none) b1)))
+        (b1b (match ep.topP
+               ((some _) (if (listContains? cx.reqKeys "top_p") b1 (pt/jset b1 "top_p" (floatJson ep.topP))))
+               ((none) b1)))
+        (b2 (match ep.effort ((some s) (pt/jset b1b "effort" (j/jstr s))) ((none) b1b)))
         (b3 (match ep.maxTokens
               ((some n) (if (listContains? cx.reqKeys "max_tokens") b2 (pt/jset b2 "max_tokens" (paramJson cx e "maxTokens" (j/jint n)))))
               ((none) b2)))
@@ -900,11 +909,17 @@ fn switchedBody cx: Ctx alias: String body: j/Json -> j/Json
   (if (and cx.dropOnSwitch (and (not (stringEmpty? cx.stuck)) (!= alias cx.stuck))) (dropReasoning body) body)
 
 ; (:m :ref GW-MODES :do "a pin profile tries the first member of its route and nothing after it, so no reroute, spread or fallback profile ever replaces the named model")
+; (:m :ref GRADER-EXCLUDE-NAME :do "an exclude matches a member by alias, by row name, or by model key (lower case, provider prefix before : and path dropped), so the served name deepseek-ai/DeepSeek-V4.1-Flash-1017 excludes every row named hf:deepseek-ai/DeepSeek-V4.1-Flash-1017; 2026-11-10 GW-TOPP-ROW was graded by its own writer model through a second alias")
+fn modelKey name: String -> String
+  (let [(low (stringLower name))
+        (noPrefix (match (stringIndexOf low ":") ((some k) (optionOr (stringSlice low (+ k 1) (stringLength low)) low)) ((none) low)))]
+    (optionOr (listLast (stringSplit noPrefix "/")) noPrefix))
+
 fn entryMatchesExclude? entry: c/GatewayResolvedEntry ex: String -> Bool
   (if (stringEmpty? ex)
     false
     (match entry
-      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (= e.dispatch ex))))
+      ((c/entryResolved e) (or (= e.alias ex) (or (= e.name ex) (or (= e.dispatch ex) (and (not (stringEmpty? (modelKey ex))) (= (modelKey e.name) (modelKey ex)))))))
       ((c/entryUnresolved a) (= a ex))))
 
 fn filterExcluded cx: Ctx models: (List c/GatewayResolvedEntry) -> (List c/GatewayResolvedEntry)
@@ -1324,6 +1339,7 @@ fn applyEffort dialect: String eff: (Option String) body: j/Json -> (Pair j/Json
             (pair (pt/jset body "thinking" (effortObj (list (pair "type" (j/jstr (if off "disabled" "enabled")))))) (some e)))
           (else (pair body none))))))
 
+; (:m :ref GW-RETRY-NO-THINK :do "the same-model retry after an empty reply (a reasoning runaway cut near 220 s, or a length stop with no content) sends effort none, so a reasoning row answers without thinking instead of repeating the runaway; probe 2026-11-10 Synthetic DeepSeek V4.1 Flash: effort none gave 2 completion tokens, low 21")
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (match entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
         (m (match entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
@@ -1360,7 +1376,8 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (provKind (match v2 ((some e) e.kind) ((none) "")))
         (rowDialect (match v2 ((some e) e.params.effortDialect) ((none) none)))
         (dialect (if (and ollama (none? rowDialect)) "reasoningEffort" (effortDialectFor provId provKind rowDialect)))
-        (effApplied (applyEffort dialect effGate out0))
+        (effRetry (if (and (> l.emptyRetries 0) (some? effGate)) (some "none") effGate))
+        (effApplied (applyEffort dialect effRetry out0))
         (out1 (pairFirst effApplied))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3a (switchedBody cx alias (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2)))
@@ -1369,7 +1386,7 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (sent (if truthy (if ollama (some (pairSecond effApplied)) (match (pairSecond effApplied) ((some s) (some (some s))) ((none) none))) none))
         (respApi (match v2 ((some e) (cond ((= e.kind "anthropic") "anthropic") ((= e.kind "gemini") "gemini") (else (optionOr e.params.api "chat")))) ((none) "chat")))
         (upBody0 (cond ((= respApi "anthropic") (anthropicBody out3 target)) ((= respApi "gemini") (geminiBody out3 target)) ((= respApi "responses") (responsesBody out3 target)) (else out3)))
-        (upBody (cacheHints respApi prov cx.table out3 upBody0))
+        (upBody (streamBody (rowStream v2) respApi (cacheHints respApi prov cx.table out3 upBody0)))
         (data (if truthy (pt/jsonDumps upBody -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :providerPool providerPool :sentEffort sent
       :poolConfig (match v2 ((some e) e.pool) ((none) none)) :data data :api respApi
@@ -1787,7 +1804,7 @@ fn askLimit cx: Ctx l: Loop a: Attempt waitedMs: Int64 -> ChatStep
   (askStrings (effLimit a.upstream.provider a.alias)
     (fn [(v (List String))] -> ChatStep
       (match (listHead v)
-        ((none) (httpAttemptSend cx l a))
+        ((none) (httpAttemptSend cx l (with a :parkedMs waitedMs)))
         ((some outcome)
           (if (!= outcome "park")
             (limitSkipped cx l a outcome (optionOr (listGet v 1) outcome))
@@ -2023,6 +2040,111 @@ fn responsesToChat body: String -> (Option String)
          (some (pt/jsonDumps chat -1)))
        none)))
 
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "true when the attempt's model row carries :stream true; a row without it, or a legacy attempt with no row, is not a stream route")
+fn rowStream v2: (Option c/GatewayEntry) -> Bool
+  (match v2 ((some e) (optionOr e.params.stream false)) ((none) false))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "the chat body a stream row sends: stream true and stream_options include_usage so the final chunk carries usage; other APIs and non-stream rows go unchanged")
+fn streamBody on: Bool api: String body: j/Json -> j/Json
+  (if (and on (and (= api "chat") (isObj? body)))
+    (pt/jset (pt/jset body "stream" (j/jbool true)) "stream_options" (j/jobj (list (pair "include_usage" (j/jbool true)))))
+    body)
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a reply is SSE when its first non-blank line is a data:, event: or : comment line")
+fn sseBody? body: String -> Bool
+  (match (listFind (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit (stringReplace body "\r\n" "\n") "\n"))
+    ((some l) (let [(t (stringTrim l))] (or (stringStartsWith? t "data:") (or (stringStartsWith? t "event:") (stringStartsWith? t ":")))))
+    ((none) false))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "the data payload of each SSE event in order: data: lines of one event joined by newlines, events split on blank lines, the [DONE] sentinel and data-less events dropped")
+fn sseData body: String -> (List String)
+  (let [(events (stringSplit (stringReplace body "\r\n" "\n") "\n\n"))
+        (payload (fn [(ev String)] -> String
+                   (stringJoin (map (fn [(l String)] -> String (stringTrim (optionOr (stringSlice l 5 (stringLength l)) "")))
+                                    (filter (fn [(l String)] -> Bool (stringStartsWith? l "data:")) (stringSplit ev "\n")))
+                               "\n")))]
+    (filter (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (!= d "[DONE]"))) (map payload events)))
+
+(schema SseFold
+  (:f ok Bool)
+  (:f id String)
+  (:f model String)
+  (:f content (List String))
+  (:f reasoning (List String))
+  (:f finish String)
+  (:f usage j/Json)
+  (:f calls (List (Pair Int64 (List String)))))
+
+fn jText v: j/Json -> String
+  (match v ((j/jstr s) s) (_ ""))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a tool call delta at index i: the first delta brings id and function name, later ones append argument text; kept as (i (id name args))")
+fn sseCall calls: (List (Pair Int64 (List String))) tc: j/Json -> (List (Pair Int64 (List String)))
+  (let [(i (match (getOr tc "index" (j/jnull)) ((j/jint n) n) (_ 0)))
+        (fnv (getOr tc "function" (j/jnull)))
+        (id (jText (getOr tc "id" (j/jnull))))
+        (name (jText (getOr fnv "name" (j/jnull))))
+        (args (jText (getOr fnv "arguments" (j/jnull))))]
+    (match (listFind (fn [(p (Pair Int64 (List String)))] -> Bool (= (pairFirst p) i)) calls)
+      ((none) (listAppend calls (list (pair i (list id name args)))))
+      ((some p)
+       (map (fn [(q (Pair Int64 (List String)))] -> (Pair Int64 (List String))
+              (if (= (pairFirst q) i)
+                (let [(cur (pairSecond q))]
+                  (pair i (list (let [(c0 (optionOr (listGet cur 0) ""))] (if (stringEmpty? c0) id c0))
+                                (let [(c1 (optionOr (listGet cur 1) ""))] (if (stringEmpty? c1) name c1))
+                                (str (optionOr (listGet cur 2) "") args))))
+                q))
+            calls))))
+
+fn sseStep acc: SseFold d: String -> SseFold
+  (if (not acc.ok)
+    acc
+    (match (pt/jsonLoads d)
+      ((err _) (with acc :ok false))
+      ((ok chunk)
+       (if (or (not (isObj? chunk)) (has? chunk "error"))
+         (with acc :ok false)
+         (let [(choice (match (getOr chunk "choices" (j/jnull)) ((j/jarr xs) (optionOr (listHead xs) (j/jnull))) (_ (j/jnull))))
+               (delta (getOr choice "delta" (j/jnull)))
+               (c (jText (getOr delta "content" (j/jnull))))
+               (r (let [(rc (jText (getOr delta "reasoning_content" (j/jnull))))] (if (stringEmpty? rc) (jText (getOr delta "reasoning" (j/jnull))) rc)))
+               (fin (jText (getOr choice "finish_reason" (j/jnull))))
+               (use (getOr chunk "usage" (j/jnull)))
+               (tcs (match (getOr delta "tool_calls" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
+           (with acc
+             :id (if (stringEmpty? acc.id) (jText (getOr chunk "id" (j/jnull))) acc.id)
+             :model (if (stringEmpty? acc.model) (jText (getOr chunk "model" (j/jnull))) acc.model)
+             :content (if (stringEmpty? c) acc.content (cons c acc.content))
+             :reasoning (if (stringEmpty? r) acc.reasoning (cons r acc.reasoning))
+             :finish (if (stringEmpty? fin) acc.finish fin)
+             :usage (if (isObj? use) use acc.usage)
+             :calls (fold sseCall acc.calls tcs)))))))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "an SSE reply that carries an event: error line, whatever its data")
+fn sseErrorEvent? body: String -> Bool
+  (some? (listFind (fn [(l String)] -> Bool (= (stringReplace (stringTrim l) " " "") "event:error")) (stringSplit (stringReplace body "\r\n" "\n") "\n")))
+
+; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "folds an OpenAI SSE reply into one chat.completion: content and reasoning deltas concatenated in order, tool call deltas joined per index, the last finish_reason, usage from the chunk that carries it; none when no event parses, any data payload is not a JSON object or carries an error key, an event: error arrives, or no chunk gave a finish_reason (a truncated stream), so a broken stream is never a partial answer")
+fn sseToChat body: String -> (Option String)
+  (let [(ds (sseData body))
+        (f (fold sseStep (SseFold :ok true :id "" :model "" :content (list) :reasoning (list) :finish "" :usage (j/jnull) :calls (list)) ds))]
+    (if (or (not f.ok) (or (listEmpty? ds) (or (sseErrorEvent? body) (stringEmpty? f.finish))))
+      none
+      (let [(reasoning (stringJoin (listReverse f.reasoning) ""))
+            (calls (map (fn [(p (Pair Int64 (List String)))] -> j/Json
+                          (let [(v (pairSecond p))]
+                            (j/jobj (list (pair "id" (j/jstr (optionOr (listGet v 0) ""))) (pair "type" (j/jstr "function"))
+                                          (pair "function" (j/jobj (list (pair "name" (j/jstr (optionOr (listGet v 1) ""))) (pair "arguments" (j/jstr (optionOr (listGet v 2) ""))))))))))
+                        f.calls))
+            (msg (j/jobj (listAppend (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr (stringJoin (listReverse f.content) ""))))
+                                     (listAppend (if (stringEmpty? reasoning) (list) (list (pair "reasoning_content" (j/jstr reasoning))))
+                                                 (if (listEmpty? calls) (list) (list (pair "tool_calls" (j/jarr calls))))))))
+            (choice (j/jobj (list (pair "index" (j/jint 0)) (pair "message" msg) (pair "finish_reason" (j/jstr (if (stringEmpty? f.finish) "stop" f.finish))))))
+            (chat (j/jobj (listAppend (list (pair "id" (j/jstr f.id)) (pair "object" (j/jstr "chat.completion")) (pair "model" (j/jstr f.model)) (pair "choices" (j/jarr (list choice))))
+                                      (if (isObj? f.usage) (list (pair "usage" f.usage)) (list)))))]
+        (some (pt/jsonDumps chat -1)))))
+
 (schema AnthropicFold
   (:f texts (List String))
   (:f calls (List j/Json))
@@ -2131,6 +2253,22 @@ fn geminiToChat body: String -> (Option String)
              (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
          (some (pt/jsonDumps chat -1))))))
 
+; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty reply whose finish_reason is length spent its max_tokens before any content (a reasoning model thinking past the cap): it is its own outcome emptyLength with a message naming the cap, never the blind same-model retry an empty reply gets; a cascade moves to the next member, a single member answers 502 ERR_EMPTY_LENGTH")
+fn lengthStopped cx: Ctx l: Loop a: Attempt p: Projection -> ChatStep
+  (let [(chars (stringLength (optionOr (reasoningFallbackText (firstMessage p.resp)) "")))
+        (why (str "ERR_EMPTY_LENGTH: model " a.model " stopped at its max_tokens (finish_reason length) after " (stringFromInt64 chars) " reasoning chars and no content; raise :maxTokens or lower :effort on its row"))]
+    (tell (usageNote a.upstream.provider a.alias "emptyLength")
+      (fn [] -> ChatStep
+        (if (> cx.cascadeLen 1)
+          (tellAll (list (effUsageFallback a.upstream.provider a.alias) (effLog (str "[Gateway Cascade] " why ". Cascading to next...\n")))
+            (fn [] -> ChatStep (loopStep cx (advance l l.body))))
+          (sendError cx l.head 502 why true)))))
+
+; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty chat 200 (choices present) whose usage is absent or zero was cut upstream before any token was counted (Synthetic ends non-stream calls near 220 s this way); its ledger outcome upstreamCut and the row :ms say so, the retry stays")
+fn zeroUsage? resp: j/Json -> Bool
+  (let [(use (getOr resp "usage" (j/jnull)))]
+    (and (has? resp "choices") (and (= (usageInt use "prompt_tokens") 0) (= (usageInt use "completion_tokens") 0))))
+
 fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
@@ -2138,12 +2276,15 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
         (chatBody (cond ((= a.api "responses") (optionOr (responsesToChat body) body))
                          ((= a.api "anthropic") (optionOr (anthropicToChat body) body))
                          ((= a.api "gemini") (optionOr (geminiToChat body) body))
+                         ((and (rowStream a.v2) (sseBody? body)) (optionOr (sseToChat body) body))
                          (else body)))
         (proj (project chatBody))]
     (match proj
       ((some p)
        (if (and (emptyContent? p.content) (not (toolCalls? (firstMessage p.resp))))
-         (tell (usageNote prov alias "empty")
+         (if (and (= (finishReason p.resp) "length") (not (zeroUsage? p.resp)))
+           (lengthStopped cx l a p)
+         (tell (usageNote prov alias (if (zeroUsage? p.resp) "upstreamCut" "empty"))
            (fn [] -> ChatStep
              (let [(action (u/emptyContentAction cx.cascadeLen l.emptyRetries))]
                (cond
@@ -2156,7 +2297,7 @@ fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair St
                     (fn [] -> ChatStep
                       (loopStep cx (with l :models (listAppend l.models (list a.entry)) :idx (+ l.idx 1) :emptyRetries (+ l.emptyRetries 1))))))
                  (else (sendError cx l.head 502 (str "ERR_EMPTY_CONTENT: model " m " returned empty content after "
-                                                         (stringFromInt64 l.emptyRetries) " retry") true))))))
+                                                         (stringFromInt64 l.emptyRetries) " retry") true)))))))
          (if (not (stringEmpty? (judgeFailure cx p chatBody)))
            (judged cx l a p (judgeFailure cx p chatBody))
          (let [(content p.content)
@@ -2247,6 +2388,23 @@ fn retryHttp cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (L
     (fn [] -> ChatStep (httpFailedFinal cx l a status reason headers body)))
 
 fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
+  (if (and (b/breakerIsConcurrency429 status body) (limitedAttempt? cx a))
+    (concurrencyParked cx l a)
+    (httpFailedPlain cx l a status reason headers body))
+
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "a concurrency 429 is the gateway's to absorb: the lane cap falls, no breaker opens and nothing reaches the caller; the last member sleeps the poll interval and asks admission again until the queue budget is gone, an earlier member is skipped at once so a later one can answer")
+fn concurrencyParked cx: Ctx l: Loop a: Attempt -> ChatStep
+  (let [(prov a.upstream.provider)
+        (poll (c/defaultConcurrencyPollMs))
+        (budgetMs (truncInt (* 1000.0 (queueBudgetSec cx))))]
+    (tell (effConcurrency429 prov a.alias)
+      (fn [] -> ChatStep
+        (cond
+          ((not (lastMember? l)) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit, a later chain member answers"))
+          ((>= (+ a.parkedMs poll) budgetMs) (limitSkipped cx l a "limit:concurrency" "upstream concurrency limit hit for the whole queue budget"))
+          (else (tell (effSleepMs poll) (fn [] -> ChatStep (askLimit cx l (with a :parkedMs (+ a.parkedMs poll)) (+ a.parkedMs poll)))))))))
+
+fn httpFailedPlain cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String -> ChatStep
   (let [(policy (retryPolicyFor cx a))]
     ; (:m :ref CTX-PIN-RELAY :do "a pin profile relays an overflow like any other failure (GW-MODES); only route and judge hop to a larger window")
     (if (and (!= cx.mode "pin") (contextOverflowError? status body))
@@ -2393,6 +2551,7 @@ fn effectJson eff: ChatEffect -> j/Json
       ((effBreakerDownAll ps) (op "breakerDownAll" (list (pair "pools" (j/jarr (map (fn [(p String)] -> j/Json (j/jstr p)) ps))))))
       ((effBreakerEvent e p park) (op "breaker" (listAppend (list (pair "event" (j/jstr e)) (pair "pool" (j/jstr p))) (if (> park 0) (list (pair "parkSec" (j/jint park))) (list)))))
       ((effUsageNote p a o u) (op "usageNote" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)) (pair "outcome" (j/jstr o)) (pair "usage" u))))
+      ((effConcurrency429 p a) (op "concurrency429" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effLimit p a) (op "limit" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effUsageFallback p a) (op "usageFallback" (list (pair "provider" (j/jstr p)) (pair "alias" (j/jstr a)))))
       ((effSpreadOrder prof i spr cd pools)

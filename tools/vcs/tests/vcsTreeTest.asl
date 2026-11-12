@@ -1,0 +1,88 @@
+(module asl/tools/vcs/tests/vcsTreeTest
+  :x [runTests]
+  :i [(asl-tools/vcs/git :a gb) (asl-tools/vcs/vcs :a v) (asl-tools/fleet/run :a fr)])
+
+; (:m :ref VCSDIRECT-PRODUCT-MIGRATE :do "restoreTree! applyPatch! worktreeAdd! worktreeRemove! over a temp repo: a restore takes a rev, all paths or named ones, and refuses an unknown rev or an escaping path before touching the tree; apply and apply reverse a patch file and refuse an option-like name; a worktree is added detached at a resolved sha and removed even when dirty; the vcs receipt carries the same exit")
+fn ! scratch -> String
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/vcsTreeTest-" (stringFromInt64 (procSelf)))
+
+fn ! sh dir: String argv: (List String) -> fr/Done
+  (fr/runOneLimited (fr/job argv dir (fr/childEnv (list))) (fr/limits 60 16))
+
+fn ! git dir: String args: (List String) -> String
+  (stringTrim (sh dir (listAppend (list "git" "-c" "user.name=t" "-c" "user.email=t@example.invalid" "-c" "commit.gpgsign=false") args)).out)
+
+fn ! repoAt dir: String -> Bool
+  (let [(mk (sh "." (list "mkdir" "-p" (str dir "/d"))))
+        (_ (git dir (list "init" "-q" "-b" "main")))
+        (a (fileWrite (str dir "/a.txt") "0\n"))
+        (b (fileWrite (str dir "/d/b.txt") "0\n"))
+        (_ (git dir (list "add" "-A")))
+        (_ (git dir (list "commit" "-q" "-m" "c0")))
+        (c (fileWrite (str dir "/a.txt") "1\n"))
+        (_ (git dir (list "commit" "-q" "-a" "-m" "c1")))]
+    (and (= mk.exit 0) (and (ok? a) (and (ok? b) (ok? c)))))
+
+fn ! readAt dir: String p: String -> String
+  (resultOr (fileReadString (str dir "/" p)) "<absent>")
+
+fn ! runTests -> Bool
+  (let [(dir (scratch))
+        (made (repoAt dir))
+        (c0 (git dir (list "rev-parse" "main~1")))
+        (w1 (fileWrite (str dir "/a.txt") "x\n"))
+        (w2 (fileWrite (str dir "/d/b.txt") "y\n"))
+        (r1 (gb/restoreTree! dir "main~1" (list "a.txt")))
+        (a1 (readAt dir "a.txt"))
+        (b1 (readAt dir "d/b.txt"))
+        (r2 (gb/restoreTree! dir "HEAD" (list)))
+        (a2 (readAt dir "a.txt"))
+        (b2 (readAt dir "d/b.txt"))
+        (w3 (fileWrite (str dir "/a.txt") "z\n"))
+        (r3 (gb/restoreTree! dir "nosuchrev" (list "a.txt")))
+        (r4 (gb/restoreTree! dir "HEAD" (list "../a.txt")))
+        (r5 (gb/restoreTree! dir "HEAD" (list "-p")))
+        (a3 (readAt dir "a.txt"))
+        (rr (v/restore! dir "HEAD" (list "a.txt")))
+        (a4 (readAt dir "a.txt"))
+        (patch (str dir "/p.diff"))
+        (w4 (fileWrite (str dir "/a.txt") "patched\n"))
+        (pd (git dir (list "diff")))
+        (w5 (fileWrite patch (str pd "\n")))
+        (rb (gb/restoreTree! dir "HEAD" (list "a.txt")))
+        (ap (gb/applyPatch! dir patch false))
+        (a5 (readAt dir "a.txt"))
+        (ar (gb/applyPatch! dir patch true))
+        (a6 (readAt dir "a.txt"))
+        (ao (gb/applyPatch! dir "-p" false))
+        (am (gb/applyPatch! dir (str dir "/missing.diff") false))
+        (wt (str dir "/wt"))
+        (wa (gb/worktreeAdd! dir wt c0))
+        (wtA (readAt dir "wt/a.txt"))
+        (wtHead (git wt (list "rev-parse" "HEAD")))
+        (wa2 (gb/worktreeAdd! dir wt c0))
+        (wbad (gb/worktreeAdd! dir (str dir "/wt2") "nosuchsha"))
+        (wdash (gb/worktreeAdd! dir "-x" c0))
+        (dirty (fileWrite (str wt "/a.txt") "dirty\n"))
+        (wrm (gb/worktreeRemove! dir wt))
+        (gone (not (fileExists? wt)))
+        (wrm2 (gb/worktreeRemove! dir wt))
+        (wrmd (gb/worktreeRemove! dir "-x"))
+        (vr (v/worktreeAdd! dir wt c0))
+        (vrm (v/worktreeRemove! dir wt))
+        (_ (pathRemove dir))]
+    (do (assert made "temp repo with two commits")
+        (assert (and (= r1.exit 0) (= a1 "0\n") (= b1 "y\n")) (str "restore of one path from main~1 touches only that path: " a1 b1))
+        (assert (and (= r2.exit 0) (= a2 "1\n") (= b2 "0\n")) (str "restore of no paths from HEAD restores the whole tree: " a2 b2))
+        (assert (and (= r3.exit 1) (= r4.exit 1) (= r5.exit 1) (= a3 "z\n")) (str "unknown rev, escaping path and option-like path are refused and the tree is untouched: " (stringFromInt64 r3.exit) (stringFromInt64 r4.exit) (stringFromInt64 r5.exit) a3))
+        (assert (and (= rr.code 0) (= a4 "1\n") (stringContains? rr.text ":op :restore :status :ok")) (str "the vcs receipt restores and says ok: " rr.text))
+        (assert (and (= rb.exit 0) (= ap.exit 0) (= a5 "patched\n")) (str "apply applies a patch file: " a5))
+        (assert (and (= ar.exit 0) (= a6 "1\n")) (str "apply reverse undoes it: " a6))
+        (assert (and (= ao.exit 1) (!= am.exit 0)) "an option-like patch name is refused and a missing file fails")
+        (assert (and (= wa.exit 0) (= wtA "0\n") (= wtHead c0)) (str "a worktree is added detached at the sha: " wtA " " wtHead))
+        (assert (and (!= wa2.exit 0) (= wbad.exit 1) (= wdash.exit 1)) "an existing path fails, an unknown sha and an option-like path are refused")
+        (assert (and (= wrm.exit 0) gone) "a dirty worktree is removed with --force")
+        (assert (and (!= wrm2.exit 0) (= wrmd.exit 1)) "removing a missing worktree fails and an option-like path is refused")
+        (assert (and (= vr.code 0) (= vrm.code 0) (stringContains? vr.text ":op :worktreeAdd")) (str "vcs receipts for worktree add and remove: " vr.text))
+        (assert (and (ok? w1) (ok? w2) (ok? w3) (ok? w4) (ok? w5) (ok? dirty) (> (stringLength c0) 7)) "fixture writes succeeded")
+        true))

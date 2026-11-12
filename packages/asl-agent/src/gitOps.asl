@@ -1,9 +1,9 @@
 (module aslAgent/gitOps
   :x [RVal rStr rInt rBool rNull rPair LineArg laNone laBad laNum Bounded GitCtx
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
-      runGates! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
+      runGates! runGatesIn! runGatesPar! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr)])
+  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg) (aslAgent/gates :a gd)])
 
 enum RVal
   (rStr text: String)
@@ -581,36 +581,160 @@ fn guardVerdict killed: String -> String
     ((= killed "runaway") "maxDesc")
     (else ""))
 
+fn ! startFailMsg! d: fr/ProcOut root: String -> String
+  (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")
+
+fn ! boundedOfEnd! root: String e: GateEnd -> Bounded
+  (let [maxDesc (gateMaxDesc! root)
+        o e.out
+        verdict (guardVerdict e.killed)
+        timedOut (or e.stopped (= verdict "timeout"))
+        own (withoutGuardNote o.stderr e.killed)
+        errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
+    (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))
+
 fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
   (let [maxDesc (gateMaxDesc! root)]
     (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec maxDesc))
-      ((err d) (err (spawnMessage! (pyStrip (optionOr (listLast (stringSplit d.stderr ": ")) "")) (some root) "sh")))
-      ((ok g)
-        (let [e (gateLoop! g watch false)
-              o e.out
-              verdict (guardVerdict e.killed)
-              timedOut (or e.stopped (= verdict "timeout"))
-              own (withoutGuardNote o.stderr e.killed)
-              errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
-          (ok (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))))))
+      ((err d) (err (startFailMsg! d root)))
+      ((ok g) (ok (boundedOfEnd! root (gateLoop! g watch false))))))
 
 fn runGatesWatched! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
   (runGates! gates root timeoutSec env watch)
 
 fn runGates! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) -> (List (List (Pair String RVal)))
-  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")]
-    (map (fn [g]
-           (let [rid (pairFirst g)
-                 cmd (pairSecond g)]
-             (match (runGate! cmd root timeoutSec childEnv watch)
-               ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
-               ((ok b)
-                 (listAppend
-                   (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
-                     (rs "stdout" b.out) (rs "stderr" b.errText))
-                   (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" timeoutSec)) (list))
-                     (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))))))))
-      gates))
+  (runGatesIn! gates root timeoutSec env watch (gd/gateTimesPath))
+
+fn recOfRun rid: String cmd: String sec: Int64 root: String res: (Result Bounded String) extra: (List (Pair String RVal)) -> (List (Pair String RVal))
+  (match res
+    ((err m) (list (rs "id" rid) (rs "cmd" cmd) (ri "exit" 1) (rs "stderr" m)))
+    ((ok b)
+     (listAppend
+       (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (match b.code ((some x) (rInt x)) ((none) (rNull))))
+         (rs "stdout" b.out) (rs "stderr" b.errText))
+       (listAppend (if b.timedOut (list (pair "timeout" (rBool true)) (ri "seconds" sec)) (list))
+         (listAppend (if (= b.guard "maxDesc") (list (rs "guard" "maxDesc") (ri "maxDescendants" (gateMaxDesc! root))) (list))
+           extra)))))
+
+fn ! gateRunRec! rid: String cmd: String root: String sec: Int64 childEnv: (List String) watch: (Option Int64) extra: (List (Pair String RVal)) -> (List (Pair String RVal))
+  (recOfRun rid cmd sec root (runGate! cmd root sec childEnv watch) extra)
+
+; (:m :ref LEONSPEED-PARGATES :do "the gates between two build.sh gates run concurrently, at most gateParallelism (3) at a time, each under its own guard (the same deadline, descendant limit and tree kill as a single gate); the pool is one loop in this process that advances every running guard and polls their pipes, so no child is started outside fr/guardStart!; receipts come back in the original gate order")
+fn gateParallelism -> Int64
+  3
+
+(schema GateSpec
+  (:f rid String)
+  (:f cmd String)
+  (:f sec Int64)
+  (:f extra (List (Pair String RVal))))
+
+(schema GateLive
+  (:f idx Int64)
+  (:f spec GateSpec)
+  (:f g fr/Guarded)
+  (:f stopped Bool))
+
+fn ! liveFds live: (List GateLive) -> (List (Pair Int64 Int64))
+  (fold (fn [acc r] (listAppend acc (fr/guardFds r.g))) (list) live)
+
+fn ! parLoop! root: String childEnv: (List String) watch: (Option Int64) limit: Int64 pending: (List (Pair Int64 GateSpec)) running: (List GateLive) done: (List (Pair Int64 (List (Pair String RVal)))) -> (List (Pair Int64 (List (Pair String RVal))))
+  (cond
+    ((and (listEmpty? pending) (listEmpty? running)) done)
+    ((and (not (listEmpty? pending)) (< (listLength running) limit))
+      (match (listHead pending)
+        ((none) done)
+        ((some p)
+          (let [spec (pairSecond p)
+                rest (listDrop pending 1)]
+            (match (fr/guardStart! (list "sh" "-c" spec.cmd) root childEnv (fr/limits spec.sec (gateMaxDesc! root)))
+              ((err d) (parLoop! root childEnv watch limit rest running
+                         (listAppend done (list (pair (pairFirst p) (recOfRun spec.rid spec.cmd spec.sec root (err (startFailMsg! d root)) spec.extra))))))
+              ((ok g) (parLoop! root childEnv watch limit rest
+                         (listAppend running (list (GateLive :idx (pairFirst p) :spec spec :g g :stopped false))) done)))))))
+    (else
+      (let [stepped (map (fn [r] (pair r (fr/guardAdvance! r.g))) running)
+            ended (filter (fn [x] (let [s (pairSecond x)] (some? s.out))) stepped)
+            doneNow (map (fn [x] (let [r (pairFirst x)
+                                       s (pairSecond x)]
+                                   (match s.out
+                                     ((some o) (pair r.idx (recOfRun r.spec.rid r.spec.cmd r.spec.sec root
+                                                 (ok (boundedOfEnd! root (GateEnd :out o :stopped r.stopped :killed s.guard.run.killed))) r.spec.extra)))
+                                     ((none) (pair r.idx (list))))))
+                      ended)
+            alive (map (fn [x] (let [r (pairFirst x)
+                                     s (pairSecond x)
+                                     gone (and (not r.stopped) (watchedGone? watch))
+                                     _ (if gone (stopGuardNote! s.guard) 0)]
+                                 (GateLive :idx r.idx :spec r.spec :g s.guard :stopped (or r.stopped gone))))
+                    (filter (fn [x] (let [s (pairSecond x)] (none? s.out))) stepped))
+            progressed (listAny? (fn [x] (let [s (pairSecond x)] s.progress)) stepped)
+            _ (if (or progressed (not (listEmpty? doneNow))) 0 (do (fdPoll (liveFds alive) 50) 0))]
+        (parLoop! root childEnv watch limit pending alive (listAppend done doneNow)))))
+
+fn ! stopGuardNote! g: fr/Guarded -> Int64
+  (fr/stopGuard! g)
+
+fn buildGate? g: (Pair String String) -> Bool
+  (stringEndsWith? (pairSecond g) "build.sh")
+
+fn chunksOf gates: (List (Pair String String)) -> (List (List (Pair String String)))
+  (let [st (fold (fn [(st (Pair (List (List (Pair String String))) (List (Pair String String)))) (g (Pair String String))] -> (Pair (List (List (Pair String String))) (List (Pair String String)))
+                   (if (buildGate? g)
+                     (pair (listAppend (listAppend (pairFirst st) (if (listEmpty? (pairSecond st)) (list) (list (pairSecond st)))) (list (list g))) (list))
+                     (pair (pairFirst st) (listAppend (pairSecond st) (list g)))))
+                 (pair (list) (list)) gates)]
+    (listAppend (pairFirst st) (if (listEmpty? (pairSecond st)) (list) (list (pairSecond st)))))
+
+; (:m :ref LEONSPEED-PARGATES :do "gatePrep: the finished receipt when the gate needs no run (gateTimeoutFit skip), else the spec of the run to start")
+fn ! gatePrep! g: (Pair String String) timesPath: String timeoutSec: Int64 -> (Pair (Option (List (Pair String RVal))) GateSpec)
+  (let [rid (pairFirst g)
+        cmd (pairSecond g)]
+    (match (gd/gateTimeoutFit! timesPath cmd timeoutSec)
+      ((some ms)
+        (let [raised (gd/gateRaisedSec ms)]
+          (if (> raised (gd/gateTimeoutCapSec))
+            (pair (some (list (rs "id" rid) (rs "cmd" cmd) (pair "exit" (rNull)) (rs "skipped" "gateTimeoutFit") (ri "recordedMs" ms) (ri "timeoutSec" timeoutSec)
+                          (rs "hint" "the suite's recorded time x 1.5 exceeds the gate timeout: move it to :done or raise :gateTimeout")))
+                  (GateSpec :rid rid :cmd cmd :sec timeoutSec :extra (list)))
+            (pair none (GateSpec :rid rid :cmd cmd :sec raised
+                         :extra (list (ri "timeoutSec" raised) (ri "recordedMs" ms) (rs "raised" "gateTimes")))))))
+      ((none) (pair none (GateSpec :rid rid :cmd cmd :sec timeoutSec :extra (list))))))
+
+fn ! chunkRecs! chunk: (List (Pair String String)) root: String timeoutSec: Int64 childEnv: (List String) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
+  (let [preps (map (fn [g] (gatePrep! g timesPath timeoutSec)) chunk)
+        jobs (map (fn [p] (pair (pairFirst p) (pairSecond (pairSecond p))))
+               (filter (fn [p] (none? (pairFirst (pairSecond p)))) (enumerate preps)))
+        got (parLoop! root childEnv watch limit jobs (list) (list))]
+    (map (fn [p]
+           (match (pairFirst (pairSecond p))
+             ((some r) r)
+             ((none) (match (listHead (filter (fn [d] (= (pairFirst d) (pairFirst p))) got))
+                       ((some d) (pairSecond d))
+                       ((none) (list (rs "id" "") (ri "exit" 1) (rs "stderr" "gate pool lost a receipt")))))))
+      (enumerate preps)))
+
+fn runGatesIn! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String -> (List (List (Pair String RVal)))
+  (runGatesCap! gates root timeoutSec env watch timesPath (gateParallelism))
+
+fn runGatesPar! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) limit: Int64 -> (List (List (Pair String RVal)))
+  (runGatesCap! gates root timeoutSec env watch (gd/gateTimesPath) limit)
+
+fn runGatesCap! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
+  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")
+        st (fold (fn [(st (Pair Bool (List (List (Pair String RVal))))) (chunk (List (Pair String String)))] -> (Pair Bool (List (List (Pair String RVal))))
+                   (let [failed (pairFirst st)
+                         recs (if failed
+                                (map (fn [g] (list (rs "id" (pairFirst g)) (rs "cmd" (pairSecond g)) (pair "exit" (rNull)) (rs "skipped" "afterBuildFail"))) chunk)
+                                (chunkRecs! chunk root timeoutSec childEnv watch timesPath limit))
+                         buildRed (and (not failed) (and (buildGate? (optionOr (listHead chunk) (pair "" "")))
+                                   (match (listHead recs)
+                                     ((some rec) (match (recGet rec "exit") ((some v) (match v ((rInt x) (not (= x 0))) (_ false))) ((none) false)))
+                                     ((none) false))))]
+                     (pair (or failed buildRed) (listAppend (pairSecond st) recs))))
+                 (pair false (list))
+                 (chunksOf gates))]
+    (pairSecond st))
 
 fn preflightOne! i: Int64 cmd: String root: String env: (Option (List String)) -> (Option (List (Pair String RVal)))
   (let [res (runBounded! (list "sh" "-n" "-c" cmd) (if (stringEmpty? root) (none) (some root)) (some 10) env (none))
@@ -693,21 +817,21 @@ fn ! scratchCopy! root: String scratch: String -> (Result String String)
     ((err e) (err e)))
 
 fn ! scratchDrop! root: String scratch: String kind: String -> Bool
-  (let [removed (if (= kind "worktree") (gitOk! (list "git" "worktree" "remove" "--force" scratch) root) true)
-        pruned (if (= kind "worktree") (gitOk! (list "git" "worktree" "prune") root) true)
+  (let [removed (if (= kind "worktree") (= (vg/worktreeRemove! root scratch).exit 0) true)
         _ (pathRemove scratch)
-        _ (pathRemove (str scratch ".patch"))]
+        _ (pathRemove (str scratch ".patch"))
+        pruned (if (= kind "worktree") (= (vg/worktreePrune! root).exit 0) true)]
     true)
 
 fn ! scratchTree! root: String scratch: String -> (Result String String)
   (let [top (gitText! (list "git" "rev-parse" "--show-toplevel") root)
         isTop (match top ((some t) (= (resultOr (realPath (stringTrim t)) (stringTrim t)) (resultOr (realPath root) root))) ((none) false))]
-    (if (and isTop (gitOk! (list "git" "worktree" "add" "--detach" scratch "HEAD") root))
+    (if (and isTop (= (vg/worktreeAdd! root scratch "HEAD").exit 0))
       (let [patch (str scratch ".patch")
             diff (gitText! (list "git" "diff" "--binary" "HEAD") root)
             patched (match diff
                       ((some d) (if (stringEmpty? d) true
-                                  (and (ok? (fileWrite patch d)) (gitOk! (list "git" "apply" "--whitespace=nowarn" patch) scratch))))
+                                  (and (ok? (fileWrite patch d)) (= (vg/applyPatch! scratch patch false).exit 0))))
                       ((none) false))
             untracked (gitText! (list "git" "ls-files" "--others" "--exclude-standard") root)
             copied (match untracked

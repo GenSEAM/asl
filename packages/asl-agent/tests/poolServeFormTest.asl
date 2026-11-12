@@ -1,6 +1,6 @@
 (module aslAgent/tests/poolServeFormTest
   :x [runTests]
-  :i [(aslAgent/poolServe :a ps) (aslAgent/sessionPool :a sp) (tools/fleet/leonClient :a lc) (tools/fleet/freePool :a fp) (tools/fleet/model :a fm)])
+  :i [(aslAgent/poolServe :a ps) (aslAgent/sessionPool :a sp) (tools/fleet/leonClient :a lc) (tools/fleet/freePool :a fp) (asl-tools/fleet/model :a fm)])
 
 ; (:m :ref POOL-FORM-MISSING-TASK :do "the server side of the control line, no daemon: the conductor's real form (a task of several lines with quotes, a literal backslash n, a carriage return and a tab) built by freePool leonFormExtra and put on the wire by leonClient runLine reaches the open hook of poolServe handleLine! byte for byte, its parsed :task equals the task plus the commit instruction, and a receipt row whose :result has the same hard characters is one line that leonClient receiptResult reads back whole, 100 KB long included")
 fn taskText -> String

@@ -21,7 +21,7 @@ fn verbKind args: (List String) -> String
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
                                      "crawler" "crawl" "engine" "mesh" "train" "timeout" "version" "-v" "--version"
-                                     "build" "audit" "pack" "target" "help" "-h" "--help"
+                                     "build" "audit" "pack" "target" "vcs" "help" "-h" "--help"
                                      "note" "doc" "heal" "lens" "consilium" "browser" "web" "search" "research"
                                      "gateway" "relay" "rla" "mem" "tool" "lint" "gate" "-" "-f") verb)))
         "forms")
@@ -647,6 +647,9 @@ fn ! unleasedBuild? cache: String names: (List String) -> Bool
 fn sharedFloorNs -> Int64
   21600000000000
 
+fn staleAgeNs -> Int64
+  1209600000000000
+
 fn keepNewest -> Int64
   4
 
@@ -661,23 +664,39 @@ fn ! newestOfKinds names: (List String) stamps: (Map String Int64) -> (List Stri
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "after a native CLI build, under the build lock: a head whose root no longer exists is removed, a tmp dir whose builder is dead goes, and the cli, asl1, seed and rt entries are held under capBytes by last use above the floor, with the target of every live head and every leased entry pinned; returns the count removed")
 fn ! sweepNativeCache! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
   (match (takeLock! cache)
-    ((none) 0)
+    ((none) (sweepDeadTmp! cache (resultOr (dirList cache) (list))))
     ((some taken) (let [(removed (match (dirList cache)
                                    ((err _) 0)
                                    ((ok names) (if (unleasedBuild? cache names) 0 (sweepLocked! cache names (liveLeases! cache) capBytes (max minAgeNs (sharedFloorNs)))))))
                         (_ (if taken (pathRemove (str cache "/lock")) (ok ())))]
-                    removed)))
+                    (+ (sweepDeadTmp! cache (resultOr (dirList cache) (list))) removed))))
+
+; (:m :ref U6-NATIVECLI-REAP :do "a tmp.PID dir is private to its pid: one whose pid is dead goes at every sweep, before the build lock and the unleased-build gate and with no age floor; a live pid's tmp dir is never touched")
+fn ! sweepDeadTmp! cache: String names: (List String) -> Int64
+  (listLength (filter (fn [(n String)] -> Bool (and (tmpDead? n) (ok? (pathRemove (str cache "/" n))))) names))
+
+; (:m :ref NATIVECLI-HEAD-LEAK :do "a head whose root is gone names nothing a build can use, yet the 6 hour floor kept every one a test made under /private/tmp; with the opt-in marker file deadHeadSweep in the store a dead head goes at the first sweep, and without it (every store until the principal adds it) the floor still holds")
+fn deadHeadMarker -> String
+  "deadHeadSweep"
+
+fn ! freshDeadHeads? cache: String -> Bool
+  (fileExists? (str cache "/" (deadHeadMarker)))
 
 fn ! sweepLocked! cache: String names: (List String) leased: (List String) capBytes: Int64 minAgeNs: Int64 -> Int64
   (let [(now (nowNs))
         (old? (fn [(n String)] -> Bool (> (- now (treeStamp! (str cache "/" n))) minAgeNs)))
         (heads (filter headFile? names))
         (live (filter (fn [(h String)] -> Bool (some? (headRoot! h))) heads))
-        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (old? h))) heads))
+        (dead (filter (fn [(h String)] -> Bool (and (not (listContains? live h)) (or (freshDeadHeads? cache) (old? h)))) heads))
         (deadGone (listLength (filter (fn [(h String)] -> Bool (ok? (pathRemove (str cache "/" h)))) dead)))
-        (tmpGone (listLength (filter (fn [(n String)] -> Bool (and (and (tmpDead? n) (old? n)) (ok? (pathRemove (str cache "/" n))))) names)))
         (stored (filter storeName? names))
         (stamps (fold (fn [(m (Map String Int64)) (n String)] -> (Map String Int64) (mapSet m n (treeStamp! (str cache "/" n)))) (mapEmpty) stored))
-        (targets (listAppend (listAppend leased (newestOfKinds stored stamps)) (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live)))
-        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) stored))]
-    (+ (+ deadGone tmpGone) (pairSecond (sweepEntries! entries capBytes minAgeNs))))
+        (named (map (fn [(h String)] -> String (sys/baseName (stringTrim (resultOr (fileReadString (str cache "/" h)) "")))) live))
+        (held (listAppend leased named))
+        (stale? (fn [(n String)] -> Bool (and (> (- now (treeStamp! (str cache "/" n))) (staleAgeNs)) (not (listContains? held (stringReplace n ".failed" ""))))))
+        (stale (filter stale? stored))
+        (kept (filter (fn [(n String)] -> Bool (not (listContains? stale n))) stored))
+        (staleGone (listLength (filter (fn [(n String)] -> Bool (ok? (pathRemove (str cache "/" n)))) stale)))
+        (targets (listAppend (listAppend leased (newestOfKinds kept stamps)) named))
+        (entries (map (fn [(n String)] -> StoreEntry (storeEntry! (list (str cache "/" n)) (listContains? targets (stringReplace n ".failed" "")))) kept))]
+    (+ deadGone staleGone (pairSecond (sweepEntries! entries capBytes minAgeNs))))

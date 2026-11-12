@@ -1,5 +1,5 @@
 (module asl-cli/verify
-  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! Staged normalisePaths formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
+  :x [checkFiles! checkRoots nativeCheckPaths! nativeCheckStaged! checkStaged! Staged normalisePaths formatDiag formatDiags formatDiagsHinted! diagHints! indentFields! balanceReceipt!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-gates/src/dyck :a dyck) (asl-forms/indent :a ind) (asl-checker/checkCached :a cc) (asl-checker/types :a ty)])
 
 fn checkRoots -> (List String)
@@ -95,6 +95,18 @@ fn ! nativeCheckStagedStep! staged: (List Staged) cache: cc/Cache rc: Int64 -> I
 fn ! nativeCheckStaged! staged: (List Staged) -> Int64
   (nativeCheckStagedStep! staged (cc/stampedCache!) 0)
 
+; (:m :ref MAIN-RED-FORMS3 :do "asl check of files outside the toolchain root checks their staged mirrors and ends with ONE one-line (:audit :sub check) receipt for the whole call, other in-root paths (balance only) included, whose status and exit are the overall result: balance of the mirrors (quiet) and the host verdict, so a caller reads one receipt shape whichever side of the root the file lies on")
+fn ! checkStaged! staged: (List Staged) other: (List String) -> Int64
+  (let [(sbal (fold (fn [(w Int64) (s Staged)] -> Int64 (let [(r (pairFirst (dyck/reportFile! s.actual (fn [(p String)] -> String ""))))] (if (> r w) r w))) 0 staged))
+        (obal (if (listEmpty? other) 0 (balance! other)))
+        (bal (if (> sbal obal) sbal obal))
+        (rc (nativeCheckStaged! staged))
+        (status (if (and (= rc 0) (= bal 0)) ":passed" ":failed"))]
+    (do (sys/say! (if (!= bal 0)
+                    (str "(:audit :sub check :status :failed (:check :id balance :status :failed :err " (balanceError bal) ") (:check :id hostCheck :status :skipped))")
+                    (str "(:audit :sub check :status " status " (:check :id balance :status :passed) (:check :id hostCheck :status " status " :exit " (stringFromInt64 rc) "))")))
+        (if (!= rc 0) rc bal)))
+
 fn ! nativeCheckStep! paths: (List String) cache: cc/Cache rc: Int64 -> Int64
   (match (listHead paths)
     ((none) rc)
@@ -115,8 +127,26 @@ fn ! checkAsl! paths: (List String) otherRc: Int64 -> Int64
         (do (sys/say! (str "(:audit :sub check :status " status " (:check :id balance :status :passed) (:check :id hostCheck :status " status " :exit " (stringFromInt64 checkRc) "))"))
             (if (!= checkRc 0) checkRc otherRc)))))
 
-fn ! checkFiles! ctx: sys/Context args: (List String) -> Int64
-  (let [(aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
+; (:m :ref ASL-CHECK-DOT-DIR :do "a directory argument stands for the tracked .asl files under it (git ls-files, the set the sweep checks), dot for the whole tree, the same in a worktree and in the main checkout; before it was read as a file and answered Is a directory, exit 1; a directory git cannot list is left as given")
+fn ! dirFiles! dir: String -> (Option (List String))
+  (let [(base (if (stringEndsWith? dir "/") (optionOr (stringSlice dir 0 (- (stringLength dir) 1)) dir) dir))
+        (pat (if (or (= base ".") (stringEmpty? base)) "*.asl" (str base "/*.asl")))]
+    (match (sys/capture! (list "git" "ls-files" "--" pat) (none))
+      ((err _) (none))
+      ((ok c) (if (= c.exitCode 0)
+                (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines c.stdout))))
+                (none)))))
+
+fn ! expandDirs! args: (List String) -> (List String)
+  (fold (fn [(acc (List String)) (a String)] -> (List String)
+          (if (sys/isDir? a)
+            (match (dirFiles! a) ((some fs) (listAppend acc fs)) ((none) (listAppend acc (list a))))
+            (listAppend acc (list a))))
+        (list) args)
+
+fn ! checkFiles! ctx: sys/Context given: (List String) -> Int64
+  (let [(args (expandDirs! given))
+        (aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
         (otherArgs (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) args))
         (otherRc (checkOther! otherArgs))]
     (if (listEmpty? aslArgs) otherRc (checkAsl! aslArgs otherRc)))

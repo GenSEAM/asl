@@ -645,7 +645,10 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         echoed (stringStartsWith? (opStr op "error" "") "ERR_")
         unbound (or (isRaw "content") (or (isRaw "old") (or (isRaw "new") (and echoed (none? (opGet op field))))))
         owns env.owns
-        effOwns (c/effectiveOwns owns)]
+        effOwns (c/effectiveOwns owns)
+        full (if (stringStartsWith? target "/") target (str (absRoot! env.root) "/" target))
+        existing (resultOr (fileSize full) 0)
+        wholeFile (and (= opName "write") (> existing 4096))]
     (cond
       (unbound
         (some (listAppend (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target)
@@ -655,6 +658,10 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MISSING_ARG") (vs "message" (str opName " needs :file")))))
       ((not (r/insideRoot! target env.root)) (some (rootRec (newId) opName target)))
       ((not (c/checkOwns target effOwns (absRoot! env.root))) (some (ownsRec (newId) opName target owns)))
+      (wholeFile
+        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_WRITE_WHOLE_FILE")
+          (vs "file" target) (pair "bytes" (vInt existing))
+          (vs "hint" "use (:edit :file F :old ... :new ...) on the fn that changes, or (:read :file F :symbol S) first"))))
       (else (none))))
 
 fn ! aslRunner! repoRoot: String transport: String env: (Option (List String)) runTimeout: Int64 deadlineAt: (Option Float64) -> (fn [String String] -> t/AslRun)
@@ -688,6 +695,15 @@ fn withCanonical op: (List (Pair String c/KvVal)) rec: (List (Pair String Val)) 
   (let [canon (opStr op "aliased" "")]
     (if (stringEmpty? canon) rec (recSet rec "canonical" (vStr canon))))
 
+fn blockedKey op: (List (Pair String c/KvVal)) opName: String -> String
+  (str "blocked:" opName "|" (opFirst op (list "file" "path") ""))
+
+fn blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String -> Bool
+  (listContains? procs.blocked (blockedKey op opName))
+
+fn blockedBump procs: r/Procs key: String -> r/Procs
+  (if (listContains? procs.blocked key) procs (with procs :blocked (cons key procs.blocked)))
+
 fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
   (let [opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
@@ -716,11 +732,19 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HIDDEN_PATH")
               (vs "message" "that path belongs to the evaluation, not the task; it is not read; declared gates run with (:step :op \"gate\") and after each write"))
           procs))
+      ((and step (blockedRepeat? procs op opName))
+        (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HARNESS_PATH_REPEAT")
+              (vs "file" (opFirst op (list "file" "path") ""))
+              (vs "message" "this exact op on this blocked path was already refused; it is not checked or run again"))
+          procs))
       ((and step (harnessTouched op env.root))
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HARNESS_PATH")
               (vs "file" (opFirst op (list "file" "path") ""))
+              (pair "root" (vStr env.root))
+              (pair "owns" (vStrs env.owns))
+              (vs "hint" (str "task inputs live under .asl/mem/work; the allowed roots are :root \"" env.root "\" and :owns (" (stringJoin (map (fn [o] (str "\"" o "\"")) env.owns) " ") "); .asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
               (vs "message" ".asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
-          procs))
+          (blockedBump procs (blockedKey op opName))))
       ((and step (and (= opName "run") (opTruthy op "readHint")))
         (eo (list (vs "id" (newId)) (vs "op" "run") (vs "status" "rejected") (vs "error" "ERR_RUN_READ") (pair "cmd" (opVal op "argv" (vStr "")))
               (pair "message" (opVal op "message" (vNone))))

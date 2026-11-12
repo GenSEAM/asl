@@ -158,9 +158,9 @@ fn readSymbol req: ReadReq c: String lang: String sym: String -> StepOutcome
         (syms (pairSecond found))]
     (match (pairFirst found)
       ((none)
-        (let [(near (sm/nearestSymbols sym (map (fn [(d sy/SymbolDef)] -> String d.name) syms) 5))]
+        (let [(near (sm/nearestSymbols sym (map (fn [(d sy/SymbolDef)] -> String d.name) syms) 5)) (entries (map (fn [(d sy/SymbolDef)] -> String (str d.name " " (stringFromInt64 (sy/lineOf c d.start)) "-" (stringFromInt64 (sy/lineOf c (max d.start (- d.end 1)))))) syms)) (shown (listTake entries 60))]
           (failedStep (str (stepHead req.id "read") " :status \"rejected\" :error-code \":ERR_SYMBOL_NOT_FOUND\" :file \"" req.rel "\" :symbol \"" (k/escapeAsnVal sym)
-                           "\" :language \"" lang "\" :symbolsIndexed " (stringFromInt64 (listLength syms)) " :nearest [" (stringJoin (map quoted near) " ") "])"))))
+                           "\" :language \"" lang "\" :outline [" (stringJoin (map quoted shown) " ") "]" (if (> (listLength entries) (listLength shown)) (str " :outlineMore " (stringFromInt64 (- (listLength entries) (listLength shown)))) "") " :symbolsIndexed " (stringFromInt64 (listLength syms)) " :nearest [" (stringJoin (map quoted near) " ") "])"))))
       ((some hit)
         (let [(hs hit.start)
               (he hit.end)
@@ -464,7 +464,10 @@ fn runNested! root: String id: Int64 form: String held: (List String) -> StepOut
   (let [(p (k/parseStep form))
         (bad (t/unknownKeys! (knowContext! root) p.op p.kwargs))]
     (if (listEmpty? (pairFirst bad))
-      (runStepHeld! root id p.op p.kwargs p.args held form)
+      (let [(wrong (t/badTypes! (knowContext! root) p.op p.kwargs))]
+        (if (listEmpty? wrong)
+          (runStepHeld! root id p.op p.kwargs p.args held form)
+          (rejected id p.op "ERR_PARAM_TYPE" (str " :params (" (stringJoin (map (fn [(w (Pair String (Pair String String)))] -> String (str "(:" (pairFirst w) " :type " (pairFirst (pairSecond w)) " :got " (str "\"" (k/escapeAsnVal (pairSecond (pairSecond w))) "\"") ")")) wrong) " ") ")"))))
       (rejected id p.op "ERR_UNKNOWN_KEY" (str " :keys (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairFirst bad)) " ") ") :accepted (" (stringJoin (map (fn [(k String)] -> String (str ":" k)) (pairSecond bad)) " ") ")"))))
 
 fn targetRun! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> StepOutcome

@@ -18,7 +18,7 @@ fn fixtureLl -> String
   "asl/packages/asl-target-llvm/tests/fixtures/recordLayout/rtRawRec.ll"
 
 fn ! sh cmd: String -> fr/Done
-  (fr/runShell! cmd "." (fr/childEnv (list)) (fr/limits 120 8))
+  (fr/runOneLimited (fr/job (list "sh" "-c" cmd) "." (fr/childEnv (list))) (fr/limits 120 8))
 
 fn ! hostTriple -> String
   (let [(k (stringReplace (sh "uname -s").out "\n" ""))

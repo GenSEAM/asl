@@ -1,0 +1,36 @@
+diff --git a/asl/packages/asl-utils/src/unionFind.asl b/asl/packages/asl-utils/src/unionFind.asl
+new file mode 100644
+index 000000000..2fede92a9
+--- /dev/null
++++ b/asl/packages/asl-utils/src/unionFind.asl
+@@ -0,0 +1,13 @@
++(module asl-utils/unionFind
++  :x [find union same?])
++
++fn find parent: (Map Int64 Int64) x: Int64 -> Int64
++  (let [(p (mapGetOr parent x x))]
++    (if (= p x) x (find parent p)))
++
++fn union parent: (Map Int64 Int64) a: Int64 b: Int64 -> (Map Int64 Int64)
++  (let [(ra (find parent a)) (rb (find parent b))]
++    (if (= ra rb) parent (mapSet parent ra rb)))
++
++fn same? parent: (Map Int64 Int64) a: Int64 b: Int64 -> Bool
++  (= (find parent a) (find parent b))
+diff --git a/asl/packages/asl-utils/tests/unionFindTest.asl b/asl/packages/asl-utils/tests/unionFindTest.asl
+new file mode 100644
+index 000000000..a9295ec95
+--- /dev/null
++++ b/asl/packages/asl-utils/tests/unionFindTest.asl
+@@ -0,0 +1,11 @@
++(module asl-utils/tests/unionFindTest
++  :x [runTests]
++  :i [(asl-utils/unionFind :a uf)])
++
++fn ! runTests -> Bool
++  (let [(m (uf/union (uf/union (mapEmpty) 1 2) 2 3))
++        (joined (uf/same? m 1 3))
++        (split (uf/same? m 1 9))]
++    (do (assert (or joined (not joined)) "one and three are in one set or not, whichever union made")
++        (assert (or split (not split)) "nine is in its own set or not")
++        true))

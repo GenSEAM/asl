@@ -80,11 +80,9 @@ fn ! replayBudgetCase form: String -> Bool
         wantNone (getBool kv "wantNone")
         wantBudget (getFloat kv "wantBudget")
         got (o/budgetLeft atVal nowVal)]
-    (if wantNone
-      (do (assert (none? got) (str id ": budgetLeft is none")) true)
-      (do (assert (some? got) (str id ": budgetLeft is some"))
-          (assert (< (abs (- (optionOr got 0.0) wantBudget)) 0.0001) (str id ": budgetLeft value matches"))
-          true)))
+    (do (assert (= (some? got) (not wantNone)) (str id ": budgetLeft presence matches"))
+        (assert (or wantNone (< (abs (- (optionOr got 0.0) wantBudget)) 0.0001)) (str id ": budgetLeft value matches"))
+        true))
 
 fn ! replayStepTimeoutCase form: String -> Bool
   (let [kv (c/parseKv form)

@@ -1,6 +1,6 @@
 (module asl-tools/coord/tests/nodesTest
   :x [runTests]
-  :i [(asl-tools/coord/nodes :a nd) (asl-tools/fleet/run :a fr) (tools/fleet/model :a fm) (asl-parser/reader :a rd)])
+  :i [(asl-tools/coord/nodes :a nd) (asl-tools/fleet/run :a fr) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref FK-REGISTRY :do "probe cores must equal the OS's own count read through a bounded child, parse must refuse a row without :role or :arch, and round-trip goes through a scratch path never ~/.asl; parseCount is checked on distinct inputs so a constant probe cannot pass")
 

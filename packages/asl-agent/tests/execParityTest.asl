@@ -145,7 +145,7 @@ fn ! execCase xs: (List p/SexpNode) base: String template: String repo: String e
         got (str (x/serRec rec) "\n" (x/formatOpReceipt rec 8000) "\n" (logList (readOr snaps)) "\n" (logList (readOr keeps))
               "\n" (stringJoin (logItems (readOr sent)) " "))
         want (str (partStr xs "want") "\n" (stringJoin (map (fn [cl] (c/serString (pairFirst cl))) calls) " "))
-        same (= (unplace got root base) (place want root base))]
+        same (= got (place want root base))]
     (do
       (if (and copied (and cleared (ok? killed)))
         ()
