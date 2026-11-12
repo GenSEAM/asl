@@ -17,7 +17,7 @@
 
 (schema ListCells (:f lines (List String)) (:f index Int64) (:f tail String))
 
-(schema FnEnv (:f mod ModEnv) (:f defs (NameIndex ty/SsaTy)) (:f blocks (NameIndex ty/SsaBlock)) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused (NameIndex ty/SsaOp)) (:f records (NameIndex ty/SsaOp)) (:f wants (NameIndex (Pair String String))) (:f preds (NameIndex (List (Pair ty/SsaBlock Int64)))) (:f arms (NameIndex Bool)) (:f size Int64))
+(schema FnEnv (:f mod ModEnv) (:f defs (NameIndex ty/SsaTy)) (:f blocks (NameIndex ty/SsaBlock)) (:f order (List ty/SsaBlock)) (:f retTy ty/SsaTy) (:f name String) (:f fused (NameIndex ty/SsaOp)) (:f records (NameIndex ty/SsaOp)) (:f wants (NameIndex (Pair String String))) (:f preds (NameIndex (List (Pair ty/SsaBlock Int64)))) (:f arms (NameIndex Bool)) (:f steps (NameIndex (Pair String Int64))) (:f size Int64))
 
 (enum NameIndex
   (:c nameIndexEmpty [])
@@ -459,6 +459,51 @@ fn recordMap f: ty/SsaFunction -> (NameIndex ty/SsaOp)
   (fold (fn [(acc (NameIndex ty/SsaOp)) (ins ty/SsaInstr)] -> (NameIndex ty/SsaOp)
           (match ins.op ((ty/opRecord _ _ _) (nameIndexSet acc ins.dest ins.op)) ((ty/opBox _) (nameIndexSet acc ins.dest ins.op)) (_ acc)))
         (nameIndexEmpty) (allInstrs f))
+
+fn intConstMap f: ty/SsaFunction -> (NameIndex Int64)
+  (fold (fn [(acc (NameIndex Int64)) (ins ty/SsaInstr)] -> (NameIndex Int64)
+          (match ins.op
+            ((ty/opConst c) (match c ((ty/constInt n) (if (= (ty/ssaTyName ins.ty) "i64") (nameIndexSet acc ins.dest n) acc)) (_ acc)))
+            (_ acc)))
+        (nameIndexEmpty) (allInstrs f))
+
+fn checkedStep? name: String -> Bool
+  (listContains? (list "addInt" "addIntHost" "subInt" "subIntHost") name)
+
+fn primMap f: ty/SsaFunction -> (NameIndex ty/SsaOp)
+  (fold (fn [(acc (NameIndex ty/SsaOp)) (ins ty/SsaInstr)] -> (NameIndex ty/SsaOp)
+          (match ins.op ((ty/opPrim name _) (if (checkedStep? name) (nameIndexSet acc ins.dest ins.op) acc)) (_ acc)))
+        (nameIndexEmpty) (allInstrs f))
+
+; (:m :ref PERF-CHECKS :do "the literal step of param p when op is p + c, c + p or p - c")
+fn stepOf consts: (NameIndex Int64) p: String op: ty/SsaOp -> (Option Int64)
+  (match op
+    ((ty/opPrim name args)
+      (let [(x (optionOr (listGet args 0) "")) (y (optionOr (listGet args 1) ""))
+            (sub (or (= name "subInt") (= name "subIntHost")))]
+        (cond ((= x p) (nameIndexGet consts y))
+              ((and (not sub) (= y p)) (nameIndexGet consts x))
+              (else (none)))))
+    (_ (none)))
+
+; (:m :ref PERF-CHECKS :do "a checked add or sub of a literal to param k that is argument k of a self call is a loop counter step: by add dest, the param and the literal; only these take the bound-check form, because elsewhere adds and b.vs on the flags is the cheaper check")
+fn stepMap f: ty/SsaFunction -> (NameIndex (Pair String Int64))
+  (let [(consts (intConstMap f))
+        (prims (primMap f))
+        (names (map (fn [(p ty/SsaParam)] -> String p.name) f.params))]
+    (fold (fn [(acc (NameIndex (Pair String Int64))) (ins ty/SsaInstr)] -> (NameIndex (Pair String Int64))
+            (match ins.op
+              ((ty/opCall callee args)
+                (if (or (!= callee f.name) (!= (listLength args) (listLength names)))
+                  acc
+                  (fold (fn [(m (NameIndex (Pair String Int64))) (k Int64)] -> (NameIndex (Pair String Int64))
+                          (let [(a (optionOr (listGet args k) "")) (p (optionOr (listGet names k) ""))]
+                            (match (nameIndexGet prims a)
+                              ((some op) (match (stepOf consts p op) ((some c) (nameIndexSet m a (pair p c))) ((none) m)))
+                              ((none) m))))
+                        acc (range 0 (listLength args)))))
+              (_ acc)))
+          (nameIndexEmpty) (allInstrs f)))
 
 fn opRecordFields op: ty/SsaOp -> (Option (List String))
   (match op ((ty/opRecord _ fields _) (some fields)) (_ (none)))
@@ -1662,6 +1707,31 @@ fn overflowPrim lhs: String dest: String intrinsic: String a: String b: String -
          "  " bad " = extractvalue {i64, i1} " pair ", 1\n"
          (trapUnless dest bad true)))
 
+fn int64Max -> Int64 9223372036854775807
+fn int64Min -> Int64 (- (- 0 (int64Max)) 1)
+
+; (:m :ref PERF-CHECKS :do "x + c overflows exactly when x > MAX - c (c > 0) or x < MIN - c (c < 0); x - c exactly when x < MIN + c (c > 0) or x > MAX + c (c < 0); c = 0 never; the bound is computed here without overflow")
+fn constBoundCheck sub: Bool c: Int64 a: String bad: String -> String
+  (let [(up (if sub (< c 0) (> c 0)))
+        (bound (if sub (if (< c 0) (+ (int64Max) c) (+ (int64Min) c)) (if (> c 0) (- (int64Max) c) (- (int64Min) c))))]
+    (str "  " bad " = icmp " (if up "sgt" "slt") " i64 " a ", " bound "\n"))
+
+; (:m :ref PERF-CHECKS :do "an add or sub whose other operand is a raw literal: one compare against a constant bound and add/sub nsw, the same trap as with.overflow, which SCEV and LSR fold into the loop counter; a zero literal checks false, which LLVM drops, so the .p.ok label phis name still exists")
+fn constOverflowPrim lhs: String dest: String sub: Bool host: Bool kind: String a: String b: String c: Int64 -> String
+  (let [(bad (primPart dest "bad"))
+        (op (if sub "sub nsw i64 " "add nsw i64 "))]
+    (str (if (= c 0) (str "  " bad " = icmp ne i64 0, 0\n") (constBoundCheck sub c a bad))
+         (if host (hostTrapUnless dest bad kind) (trapUnless dest bad true))
+         lhs op a ", " b "\n"))
+
+fn emitPrimIn env: FnEnv lhs: String dest: String name: String args: (List String) -> String
+  (match (if (checkedStep? name) (nameIndexGet env.steps dest) (none))
+    ((some step) (let [(sub (or (= name "subInt") (= name "subIntHost")))
+                       (host (or (= name "addIntHost") (= name "subIntHost")))
+                       (c (pairSecond step))]
+                   (constOverflowPrim lhs dest sub host (if sub "1" "0") (val (pairFirst step)) (stringFromInt64 c) c)))
+    ((none) (emitPrim lhs dest name args)))
+
 fn quotPrim lhs: String dest: String a: String b: String -> String
   (let [(zero (primPart dest "zero")) (min (primPart dest "min")) (neg (primPart dest "neg")) (over (primPart dest "over")) (bad (primPart dest "bad"))]
     (str "  " zero " = icmp eq i64 " b ", 0\n"
@@ -1893,7 +1963,7 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
            ((ty/opGlobal g) (if (opt/singleton? g) (str lhs "call %Val " (globalGetSym g) "()\n") (str lhs "load %Val, ptr " (globalSym g) "\n")))
            ((ty/opLoadGlobal g) (if (stringStartsWith? g "&") (str lhs "getelementptr i8, ptr " (externGlobalSym (dropAddressMark g)) ", i64 0\n") (str lhs "load ptr, ptr " (externGlobalSym g) "\n")))
            ((ty/opBox v) (boxInline lhs d (defType env v) (val v)))
-           ((ty/opPrim name args) (emitPrim lhs d name args))
+           ((ty/opPrim name args) (emitPrimIn env lhs d name args))
            (_ ""))))))
 
 fn countTarget edges: (List ty/SsaEdge) target: String -> Int64
@@ -2329,6 +2399,7 @@ fn emitBodyAs menv: ModEnv f: ty/SsaFunction rooted: Bool retTy: ty/SsaTy head: 
                     :wants (entryUnboxes f)
                     :preds predIdx
                     :arms (armFieldMap menv blocks blockIdx predIdx)
+                    :steps (stepMap f)
                     :size (listLength blocks)))
         (allocas (stringJoin (map (fn [(b ty/SsaBlock)] -> String (stringJoin (map allocaFor b.instrs) "")) blocks) ""))
         (allParams (listAppend f.captures f.params))
@@ -2555,7 +2626,7 @@ fn boxableAbi? t: ty/SsaTy -> Bool
 fn probeEnv menv: ModEnv f: ty/SsaFunction -> FnEnv
   (FnEnv :mod menv :defs (nameIndexEmpty)
          :blocks (fold (fn [(acc (NameIndex ty/SsaBlock)) (b ty/SsaBlock)] -> (NameIndex ty/SsaBlock) (nameIndexSet acc b.label b)) (nameIndexEmpty) f.blocks)
-         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty) :arms (nameIndexEmpty)
+         :order f.blocks :retTy (ty/tyVal) :name f.name :fused (nameIndexEmpty) :records (nameIndexEmpty) :wants (nameIndexEmpty) :preds (nameIndexEmpty) :arms (nameIndexEmpty) :steps (nameIndexEmpty)
          :size (listLength f.blocks))
 
 fn rawCallee? env: FnEnv callee: String -> Bool

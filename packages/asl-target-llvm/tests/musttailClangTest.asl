@@ -66,7 +66,7 @@ fn returnAbiMismatchUsesOrdinaryCall? -> Bool
               :externs (ssa/nameIndexEmpty) :types (ssa/nameIndexEmpty) :strings (ssa/nameIndexEmpty) :records (ssa/nameIndexEmpty) :boxed (ssa/nameIndexEmpty)))
         (env (ssa/FnEnv :mod mod :defs (ssa/nameIndexEmpty) :blocks (ssa/nameIndexEmpty) :order (list)
               :retTy (ty/tyI64) :name "returnCaller" :fused (ssa/nameIndexEmpty)
-              :records (ssa/nameIndexEmpty) :wants (ssa/nameIndexEmpty) :preds (ssa/nameIndexEmpty) :arms (ssa/nameIndexEmpty) :size 0))
+              :records (ssa/nameIndexEmpty) :wants (ssa/nameIndexEmpty) :preds (ssa/nameIndexEmpty) :arms (ssa/nameIndexEmpty) :steps (ssa/nameIndexEmpty) :size 0))
         (block (ty/ssaBlock "entry" (list)
                  (list (ty/ssaInstr "result" (ty/tyI1) (ty/opCall "returnTarget" (list))))
                  (ty/termReturn "result")))]
