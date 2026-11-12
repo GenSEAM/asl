@@ -84,3 +84,4 @@
 (:doc :symbol "asl/packages/asl-stats/tests/rngTest.asl#runTests" :text "xoshiro256** published vector, splitmix seeding, bit-for-bit reproduction, normal, gamma and beta draw gates")
 (:doc :symbol "asl/packages/asl-stats/src/agree.asl#finite?" :text "true for a Float64 that is neither NaN nor infinite")
 (:doc :symbol "asl/packages/asl-stats/src/agree.asl#finiteAll?" :text "true when every value is finite")
+(:doc :symbol "asl/packages/asl-stats/src/describe.asl#finiteValue?" :text "true for a Float64 that is neither NaN nor infinite; mean and everything built on it refuse anything else as statsRange")

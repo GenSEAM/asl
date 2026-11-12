@@ -86,10 +86,24 @@ fn ! gammaDraw alpha: Float64 r: Rng -> (Result (Pair Float64 Rng) String)
       (let [(d (- alpha (/ 1.0 3.0)))]
         (ok (gammaLoop! d (/ 1.0 (sqrt (* 9.0 d))) r)))))
 
+; (:m :ref DSSTATS-LOWS :do "the log of a gamma draw: for a shape below 1 the boost g*u^(1/a) is taken as log g + log(u)/a, which stays finite where u^(1/a) underflows to 0 (a = 0.001)")
+fn ! logGammaDraw alpha: Float64 r: Rng -> (Result (Pair Float64 Rng) String)
+  (cond
+    ((not (> alpha 0.0)) (err "statsRange: gamma shape must be positive"))
+    ((< alpha 1.0)
+      (match (gammaDraw (+ alpha 1.0) r)
+        ((err e) (err e))
+        ((ok g)
+          (let [(u (rngFloat (pairSecond g)))
+                (uu (max (pairFirst u) 1.0e-300))]
+            (ok (pair (+ (log (pairFirst g)) (/ (log uu) alpha)) (pairSecond u)))))))
+    (else (match (gammaDraw alpha r) ((err e) (err e)) ((ok g) (ok (pair (log (pairFirst g)) (pairSecond g)))))))
+
+; (:m :ref DSSTATS-LOWS :do "beta = X/(X+Y) computed as 1/(1+exp(log Y - log X)) from log gamma draws, so tiny shapes give 0 or 1 at the extremes instead of 0/0 = NaN")
 fn ! betaDraw a: Float64 b: Float64 r: Rng -> (Result (Pair Float64 Rng) String)
-  (match (gammaDraw a r)
+  (match (logGammaDraw a r)
     ((err e) (err e))
     ((ok x)
-      (match (gammaDraw b (pairSecond x))
+      (match (logGammaDraw b (pairSecond x))
         ((err e) (err e))
-        ((ok y) (ok (pair (/ (pairFirst x) (+ (pairFirst x) (pairFirst y))) (pairSecond y)))))))
+        ((ok y) (ok (pair (/ 1.0 (+ 1.0 (exp (- (pairFirst y) (pairFirst x))))) (pairSecond y)))))))

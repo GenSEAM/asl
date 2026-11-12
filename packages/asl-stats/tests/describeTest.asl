@@ -82,6 +82,13 @@ fn testNonFinite! -> Bool
       (assert (= (ds/sumKahan (list 1.0 inf 2.0)) inf) "a compensated sum with an infinity is that infinity, not NaN")
       (assert (isNan? (ds/sumKahan (list inf (- 0.0 inf)))) "inf minus inf stays NaN")
       (assert (stringStartsWith? (errOf (ds/percentile (data) nan)) "statsRange") "a NaN percentile is statsRange")
+      (assert (and (ds/finiteValue? 1.0) (and (not (ds/finiteValue? nan)) (not (ds/finiteValue? (- 0.0 inf))))) "finiteValue? is false for NaN and either infinity")
+      (assert (= (errOf (ds/mean (list 1.0 nan 3.0))) "statsRange: a value is NaN or infinite") "a NaN in mean is statsRange, not ok nan")
+      (assert (= (errOf (ds/mean (list 1.0 inf))) "statsRange: a value is NaN or infinite") "an infinity in mean is statsRange")
+      (assert (stringStartsWith? (errOf (ds/variance (list 1.0 nan 3.0))) "statsRange") "variance inherits the mean guard")
+      (assert (= (ds/mean (list 1.0e308 1.0e308)) (ok 1.0e308)) "the mean of two 1e308 is 1e308, not inf: the sum overflows, the scaled sum does not")
+      (assert (= (ds/mean (list 1.0e308 1.0e308 -1.0e308)) (ok (/ 1.0e308 3.0))) "an overflowing sum with a negative term still gives the scaled mean")
+      (assert (= (ds/mean (list 1.0 2.0 4.0)) (ok (/ 7.0 3.0))) "an ordinary mean is the plain sum over n")
       true))
 
 fn testRank! -> Bool

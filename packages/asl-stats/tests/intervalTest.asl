@@ -66,6 +66,8 @@ fn testMeanCi! -> Bool
     (assert (stringStartsWith? (errP (iv/meanCi (list 1.0) 0.95)) "statsTooFew") "one value is statsTooFew")
     (assert (stringStartsWith? (errP (iv/meanCi (list) 0.95)) "statsEmpty") "no values is statsEmpty")
     (assert (stringStartsWith? (errP (iv/meanCi (sample) 1.5)) "statsRange") "conf 1.5 is statsRange")
+    (assert (= (errP (iv/meanCi (list 1.0 (floatNan) 3.0) 0.95)) "statsRange: a value is NaN or infinite") "a NaN value is statsRange, not an interval of nan")
+    (assert (= (errP (iv/meanCi (list 1.0 (floatInf) 3.0) 0.95)) "statsRange: a value is NaN or infinite") "an infinite value is statsRange")
     true)
 
 fn meanOf xs: (List Float64) -> Float64
@@ -111,6 +113,8 @@ fn testSize! -> Bool
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.5 0.500000000001 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a size beyond Int64 is statsRange, never ok 0")
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize (floatNan) 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a NaN proportion is statsRange")
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.5 0.6 (floatNan) 0.8) ((err e) e) ((ok _) "")) "statsRange") "a NaN alpha is statsRange")
+    (assert (= (match (iv/twoProportionSampleSize 0.5 0.6 0.05 (floatNan)) ((err e) e) ((ok _) "")) "statsRange: an argument is NaN") "a NaN power is caught by the NaN guard itself, not a later range check")
+    (assert (= (match (iv/twoProportionSampleSize (floatNan) 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange: an argument is NaN") "a NaN proportion names the NaN guard")
     (assert (stringStartsWith? (match (iv/twoProportionSampleSize 0.0 0.5 0.05 0.8) ((err e) e) ((ok _) "")) "statsRange") "a proportion of 0 is statsRange")
     true)
 

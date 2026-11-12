@@ -69,6 +69,10 @@ fn ! testDraws! -> Bool
       (assert (near? (mean (normals! 4000 r)) 0.0 0.06) "the mean of 4000 normals is near 0")
       (assert (stringStartsWith? (match (rg/gammaDraw 0.0 r) ((err e) e) ((ok _) "")) "statsRange") "a non-positive gamma shape is statsRange")
       (assert (stringStartsWith? (match (rg/betaDraw 1.0 -2.0 r) ((err e) e) ((ok _) "")) "statsRange") "a negative beta parameter is statsRange")
+      (let [(tiny (betas! 0.001 0.001 300 r))]
+        (do (assert (not (listAny? isNan? tiny)) "beta(0.001, 0.001) draws are never NaN: the gamma draws underflow, their logs do not")
+            (assert (listAll? (fn [(x Float64)] -> Bool (and (>= x 0.0) (<= x 1.0))) tiny) "every tiny-shape beta draw is inside [0, 1]")
+            (assert (near? (mean tiny) 0.5 0.15) "beta(0.001, 0.001) is nearly a fair coin between 0 and 1")))
       true))
 
 fn ! runTests -> Bool

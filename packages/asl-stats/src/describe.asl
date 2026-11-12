@@ -1,5 +1,5 @@
 (module asl-stats/describe
-  :x [sumKahan mean variance popVariance stddev median percentile percentileSorted percentileOf mad robustZ cohenD hedgesG statsEmpty statsTooFew]
+  :x [sumKahan finiteValue? mean variance popVariance stddev median percentile percentileSorted percentileOf mad robustZ cohenD hedgesG statsEmpty statsTooFew]
   :i [])
 
 ; (:m :ref workspace-20261031-experimentStats :do "every statistic returns (Result Float64 String): empty input is statsEmpty, a sample statistic with one value is statsTooFew, a zero spread where one is divided by is statsConstant, a bad argument is statsRange; sums are Neumaier compensated; variance is the sample (n-1) variance unless called popVariance; percentile is linear interpolation between order statistics (R type 7)")
@@ -20,9 +20,18 @@ fn ! neumaier! xs: (List Float64) s: Float64 c: Float64 -> Float64
 fn sumKahan xs: (List Float64) -> Float64
   (neumaier! xs 0.0 0.0)
 
+fn finiteValue? x: Float64 -> Bool
+  (and (not (isNan? x)) (not (= (abs x) (floatInf))))
+
+; (:m :ref DSSTATS-LOWS :do "mean rejects a NaN or infinite value as statsRange rather than answering ok nan, so meanCi, variance and stddev inherit it; when the compensated sum of finite values overflows (1e308 + 1e308) the mean is the compensated sum of x/n instead, which stays finite")
 fn mean xs: (List Float64) -> (Result Float64 String)
-  (if (listEmpty? xs) (err (statsEmpty))
-    (ok (/ (sumKahan xs) (int64ToFloat64 (listLength xs)))))
+  (cond
+    ((listEmpty? xs) (err (statsEmpty)))
+    ((not (listAll? finiteValue? xs)) (err "statsRange: a value is NaN or infinite"))
+    (else
+      (let [(n (int64ToFloat64 (listLength xs)))
+            (s (sumKahan xs))]
+        (ok (if (finiteValue? s) (/ s n) (sumKahan (map (fn [(x Float64)] -> Float64 (/ x n)) xs)))))))
 
 fn squares xs: (List Float64) m: Float64 -> (List Float64)
   (map (fn [(x Float64)] -> Float64 (* (- x m) (- x m))) xs)
