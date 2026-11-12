@@ -56,7 +56,13 @@ fn ! testErrors! -> Bool
     (do
       (assert (stringStartsWith? (match (ld/integratedLufs! (audio short 1000)) ((err e) e) ((ok _) "")) "loudnessShort") "under 400 ms is a labelled err")
       (assert (stringStartsWith? (match (ld/integratedLufs! (audio quiet 96000)) ((err e) e) ((ok _) "")) "loudnessSilent") "everything under -70 LUFS is a labelled err")
+      (assert (stringStartsWith? (match (ld/integratedLufs! (rated 2 2000)) ((err e) e) ((ok _) "")) "loudnessRate") "a 2 Hz file is a labelled err, not a divide trap")
+      (assert (stringStartsWith? (match (ld/integratedLufs! (rated 4 2000)) ((err e) e) ((ok _) "")) "loudnessRate") "a 4 Hz file whose hop rounds to 0 is refused")
+      (assert (= (pairSecond (ld/blockEnergies! (rated 2 2000))) 0) "blockEnergies! has no blocks at 2 Hz instead of dividing by a zero hop")
       true))
+
+fn rated rate: Int64 frames: Int64 -> wav/WavAudio
+  (wav/WavAudio :channels 1 :sampleRate rate :bitsPerSample 32 :isFloat true :frames frames :samples (bytesAlloc (* frames 8)))
 
 fn ! runTests -> Bool
   (do

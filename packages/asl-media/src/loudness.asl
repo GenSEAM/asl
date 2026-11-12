@@ -61,6 +61,7 @@ fn roundI x: Float64 -> Int64
 
 ; (:m :ref U-MEDIA :do "gating blocks are 400 ms long with a 100 ms hop (75 percent overlap); the returned Bytes holds one mean-square slot per block")
 fn ! blockEnergies! w: wav/WavAudio -> (Pair Bytes Int64)
+  (if (< w.sampleRate 3400) (pair (bytesAlloc 8) 0)
   (let [(en (bytesAlloc (* w.frames 8)))
         (cum (bytesAlloc (* (+ w.frames 1) 8)))
         (_ (allChannels! w 0 (shelfCoeffs w.sampleRate) (highpassCoeffs w.sampleRate) en))
@@ -70,7 +71,7 @@ fn ! blockEnergies! w: wav/WavAudio -> (Pair Bytes Int64)
         (nb (if (< w.frames len) 0 (+ 1 (/ (- w.frames len) hop))))
         (z (bytesAlloc (* (max nb 1) 8)))
         (_ (fillBlocks! cum z 0 nb len hop))]
-    (pair z nb))
+    (pair z nb)))
 
 fn ! fillBlocks! cum: Bytes z: Bytes j: Int64 nb: Int64 len: Int64 hop: Int64 -> Unit
   (if (>= j nb) ()
@@ -89,11 +90,12 @@ fn ! gatedSum! z: Bytes j: Int64 nb: Int64 thr: Float64 sum: Float64 cnt: Int64 
 
 ; (:m :ref U-MEDIA :do "integrated loudness: absolute gate -70 LUFS, then a relative gate 10 LU under the mean of the survivors, then the mean of what passes both; a file with no 400 ms block or no block above -70 is a labelled err, not a number")
 fn ! integratedLufs! w: wav/WavAudio -> (Result Float64 String)
-  (let [(zb (blockEnergies! w))
+  (let [(zb (if (< w.sampleRate 3400) (pair (bytesAlloc 8) 0) (blockEnergies! w)))
         (z (pairFirst zb))
         (nb (pairSecond zb))
         (abs1 (gatedSum! z 0 nb -70.0 0.0 0))]
     (cond
+      ((< w.sampleRate 3400) (err "loudnessRate: sample rate under 3400 Hz, the K-weighting shelf corner is above Nyquist"))
       ((= nb 0) (err "loudnessShort: under one 400 ms block"))
       ((= (pairSecond abs1) 0) (err "loudnessSilent: every block is under -70 LUFS"))
       (else

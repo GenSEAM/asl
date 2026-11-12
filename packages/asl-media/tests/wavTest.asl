@@ -47,6 +47,7 @@ fn ! testFloatBits! -> Bool
     (assert (= (wav/float32ToBits -2.0) 3221225472) "-2.0 is 0xC0000000")
     (assert (= (wav/float32ToBits 0.1) 1036831949) "0.1 rounds to 0x3DCCCCCD")
     (assert (= (wav/float32ToBits 0.0) 0) "zero")
+    (assert (= (wav/float32ToBits (floatNan)) 2143289344) "NaN is the quiet NaN 0x7FC00000, not log2 garbage")
     (assert (= (wav/float32ToBits 1.0e39) 2139095039) "overflow clamps to the largest finite")
     (assert (err? (wav/float32FromBits 2139095040)) "infinity is a labelled err")
     true)

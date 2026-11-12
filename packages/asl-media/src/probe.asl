@@ -1,5 +1,5 @@
 (module asl-media/probe
-  :x [ProbeStream ProbeInfo parseProbe probeArgv ffmpegArgv pathAllowed? probe! runFfmpeg! defaultFfprobe defaultFfmpeg parseRational]
+  :x [ProbeStream ProbeInfo parseProbe probeArgv ffmpegArgv pathAllowed? inputAllowed! outputAllowed! probe! runFfmpeg! defaultFfprobe defaultFfmpeg parseRational]
   :i [(asl-json/json :a js) (asl-tools/fleet/run :a fr)])
 
 schema ProbeStream
@@ -111,6 +111,31 @@ fn pathAllowed? path: String roots: (List String) -> Bool
        (not (stringContains? path "\x00"))
        (fold (fn [(acc Bool) (r String)] -> Bool (or acc (underRoot? path r))) false roots))
 
+fn ! realUnder! p: String roots: (List String) -> Bool
+  (match (realPath p)
+    ((err _) false)
+    ((ok r) (fold (fn [(acc Bool) (root String)] -> Bool
+                    (or acc (match (realPath root) ((ok rr) (underRoot? r rr)) ((err _) false))))
+                  false roots)))
+
+fn dirOf p: String -> String
+  (let [(parts (stringSplit p "/"))
+        (keep (listTake parts (- (listLength parts) 1)))
+        (joined (stringJoin keep "/"))]
+    (if (stringEmpty? joined) "/" joined))
+
+; (:m :ref U-MEDIA :do "symlinks are resolved before the root check: an input must exist and its real path sit under a real root")
+fn ! inputAllowed! p: String roots: (List String) -> Bool
+  (and (pathAllowed? p roots) (realUnder! p roots))
+
+; (:m :ref U-MEDIA :do "an output does not exist yet, so its parent directory is resolved instead; an existing output that is a symlink must itself resolve under a root, and a dangling one is refused")
+fn ! outputAllowed! p: String roots: (List String) -> Bool
+  (and (pathAllowed? p roots)
+       (and (realUnder! (dirOf p) roots)
+            (match (fileLstat p)
+              ((ok st) (if st.isSymlink (realUnder! p roots) true))
+              ((err _) true))))
+
 fn runLabelled! argv: (List String) lim: fr/Limits -> (Result String String)
   (let [(o (fr/runGuarded argv "." (list) lim))]
     (cond
@@ -119,13 +144,18 @@ fn runLabelled! argv: (List String) lim: fr/Limits -> (Result String String)
       (else (ok o.stdout))))
 
 fn ! probe! bin: String path: String roots: (List String) timeoutS: Int64 -> (Result ProbeInfo String)
-  (if (not (pathAllowed? path roots))
+  (if (not (inputAllowed! path roots))
     (err (str "mediaPathNotAllowed: " path))
     (match (runLabelled! (probeArgv bin path) (fr/limits timeoutS 64))
       ((err e) (err e))
       ((ok out) (parseProbe out))))
 
-fn ! runFfmpeg! bin: String inputs: (List String) args: (List String) roots: (List String) timeoutS: Int64 -> (Result String String)
-  (match (listHead (filter (fn [(p String)] -> Bool (not (pathAllowed? p roots))) inputs))
-    ((some bad) (err (str "mediaPathNotAllowed: " bad)))
-    ((none) (runLabelled! (ffmpegArgv bin args) (fr/limits timeoutS 64))))
+fn ! runFfmpeg! bin: String inputs: (List String) outputs: (List String) args: (List String) roots: (List String) timeoutS: Int64 -> (Result String String)
+  (let [(badIn (listHead (filter (fn [(p String)] -> Bool (not (inputAllowed! p roots))) inputs)))
+        (badOut (listHead (filter (fn [(p String)] -> Bool (not (outputAllowed! p roots))) outputs)))]
+    (match badIn
+      ((some bad) (err (str "mediaPathNotAllowed: " bad)))
+      ((none)
+        (match badOut
+          ((some bad) (err (str "mediaPathNotAllowed: " bad)))
+          ((none) (runLabelled! (ffmpegArgv bin args) (fr/limits timeoutS 64)))))))

@@ -85,6 +85,9 @@ fn ! walkChunks! bs: Bytes pos: Int64 ch: Chunks -> (Result Chunks String)
           ((> len (- (bytesLength bs) (+ pos 12))) (err "pngTruncated: chunk length runs past the data"))
           ((!= (gz/crc32 (sliceOf bs (+ pos 4) (+ len 4))) (be32 bs (+ data len)))
            (err "pngCrc: chunk checksum mismatch"))
+          ((and (= pos 8) (not (typeIs? bs 12 73 72 68 82))) (err "pngStructure: first chunk is not IHDR"))
+          ((and (typeIs? bs (+ pos 4) 73 72 68 82) (or (!= pos 8) (!= len 13))) (err "pngStructure: IHDR must come first and be 13 bytes"))
+          ((and (typeIs? bs (+ pos 4) 80 76 84 69) (or (= len 0) (or (> len 768) (!= (mod len 3) 0)))) (err "pngStructure: PLTE length is not a multiple of 3 in 3..768"))
           (else
             (let [(next (+ pos (+ len 12)))
                   (ch2 (cond
@@ -94,7 +97,7 @@ fn ! walkChunks! bs: Bytes pos: Int64 ch: Chunks -> (Result Chunks String)
                          ((typeIs? bs (+ pos 4) 103 65 77 65) (if (= len 4) (with ch :gamma (be32 bs data)) ch))
                          ((typeIs? bs (+ pos 4) 115 82 71 66) (if (= len 1) (with ch :srgb (bytesGet bs data)) ch))
                          ((typeIs? bs (+ pos 4) 105 67 67 80) (with ch :iccp true))
-                         ((typeIs? bs (+ pos 4) 73 68 65 84) (with ch :idat (listAppend ch.idat (list (pair data len)))))
+                         ((typeIs? bs (+ pos 4) 73 68 65 84) (with ch :idat (cons (pair data len) ch.idat)))
                          ((typeIs? bs (+ pos 4) 73 69 78 68) (with ch :end true))
                          (else ch)))]
               (walkChunks! bs next ch2)))))))
@@ -244,23 +247,24 @@ fn ! decodeChunks! data: Bytes ch: Chunks maxPixels: Int64 -> (Result PngImage S
 fn ! inflateAndConvert! data: Bytes ch: Chunks w: Int64 h: Int64 depth: Int64 ct: Int64 -> (Result PngImage String)
   (let [(zn (totalLen ch.idat))
         (z (bytesAlloc zn))
-        (_ (joinIdat! data ch.idat z 0))
+        (_ (joinIdat! data (listReverse ch.idat) z 0))
         (bitsPerPixel (* depth (channelsOf ct)))
         (stride (/ (+ (* w bitsPerPixel) 7) 8))
-        (bpp (max 1 (/ bitsPerPixel 8)))]
+        (bpp (max 1 (/ bitsPerPixel 8)))
+        (expected (* h (+ stride 1)))]
     (cond
       ((< zn 6) (err "pngZlib: stream shorter than header and checksum"))
       ((or (!= (mod (bytesGet z 0) 16) 8) (!= (mod (+ (* (bytesGet z 0) 256) (bytesGet z 1)) 31) 0)) (err "pngZlib: bad header"))
       ((= (mod (/ (bytesGet z 1) 32) 2) 1) (err "pngZlib: preset dictionary"))
       (else
-        (match (inf/inflateInternal! z 2)
+        (match (inf/inflateAppend! z 2 (bytesAlloc expected) 0 expected)
           ((err e) (err (str "pngZlib: " e)))
           ((ok r)
             (cond
-              ((> (+ r.nextOffset 4) zn) (err "pngZlib: missing adler32"))
-              ((!= (adler32 r.bytes) (be32 z r.nextOffset)) (err "pngZlib: adler32 mismatch"))
-              ((!= (bytesLength r.bytes) (* h (+ stride 1))) (err "pngStructure: pixel data length does not match the header"))
-              (else (finishDecode! data ch w h depth ct stride bpp r.bytes))))))))
+              ((> (+ r.stNext 4) zn) (err "pngZlib: missing adler32"))
+              ((!= r.stPos expected) (err "pngStructure: pixel data length does not match the header"))
+              ((!= (adler32 r.stOut) (be32 z r.stNext)) (err "pngZlib: adler32 mismatch"))
+              (else (finishDecode! data ch w h depth ct stride bpp r.stOut))))))))
 
 fn ! finishDecode! data: Bytes ch: Chunks w: Int64 h: Int64 depth: Int64 ct: Int64 stride: Int64 bpp: Int64 raw: Bytes -> (Result PngImage String)
   (let [(un (bytesAlloc (* h stride)))

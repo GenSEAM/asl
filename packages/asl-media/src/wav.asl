@@ -50,6 +50,7 @@ fn float32ToBits x: Float64 -> Int64
         (a (abs x))
         (s (if neg 2147483648 0))]
     (cond
+      ((!= x x) 2143289344)
       ((= a 0.0) s)
       ((>= a 3.4028234663852886e38) (+ s 2139095039))
       ((< a (pow2f -126)) (+ s (roundInt (* a (pow2f 149)))))

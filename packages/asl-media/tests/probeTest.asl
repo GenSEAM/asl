@@ -61,8 +61,44 @@ fn ! testAllowlist! -> Bool
       (assert (not (pr/pathAllowed? "media/a.mp4" roots)) "relative refused")
       (assert (not (pr/pathAllowed? "-" roots)) "stdin marker refused")
       (assert (stringStartsWith? (optionOr (err->option (pr/probe! "/nonexistent/ffprobe" "/etc/passwd" roots 5)) "") "mediaPathNotAllowed") "probe refuses before spawn: a missing binary is not reached")
-      (assert (stringStartsWith? (optionOr (match (pr/runFfmpeg! "/nonexistent/ffmpeg" (list "/work/media/a" "/etc/passwd") (list "-i") roots 5) ((err e) (some e)) ((ok _) none)) "") "mediaPathNotAllowed") "ffmpeg refuses a bad input before spawn")
+      (assert (stringStartsWith? (optionOr (match (pr/runFfmpeg! "/nonexistent/ffmpeg" (list "/work/media/a" "/etc/passwd") (list) (list "-i") roots 5) ((err e) (some e)) ((ok _) none)) "") "mediaPathNotAllowed") "ffmpeg refuses a bad input before spawn")
       true))
+
+; (:m :ref U-MEDIA :do "a runtime-built tree: root holds ok.mp4 and a symlink esc to a sibling directory outside the root; nothing is spawned, only the allowlist is asked")
+fn ! testSymlinks! -> Bool
+  (let [(base "/tmp/aslMediaSymTest")
+        (root (str base "/root"))
+        (outside (str base "/outside"))
+        (_ (dirCreate base))
+        (_ (dirCreate root))
+        (_ (dirCreate outside))
+        (_ (fileWrite (str root "/ok.mp4") "x"))
+        (_ (fileWrite (str outside "/a.mp4") "x"))
+        (_ (pathRemove (str root "/esc")))
+        (_ (pathSymlink outside (str root "/esc")))
+        (_ (pathRemove (str root "/dangling.mp4")))
+        (_ (pathSymlink (str outside "/missing.mp4") (str root "/dangling.mp4")))
+        (roots (list root))
+        (viaOut (pr/runFfmpeg! "/nonexistent/ffmpeg" (list (str root "/ok.mp4")) (list (str root "/esc/o.mp4")) (list) roots 5))
+        (outOfRoot (pr/runFfmpeg! "/nonexistent/ffmpeg" (list (str root "/ok.mp4")) (list (str outside "/o.mp4")) (list) roots 5))
+        (viaDangling (pr/runFfmpeg! "/nonexistent/ffmpeg" (list (str root "/ok.mp4")) (list (str root "/dangling.mp4")) (list) roots 5))
+        (goodOut (pr/runFfmpeg! "/nonexistent/ffmpeg" (list (str root "/ok.mp4")) (list (str root "/new.mp4")) (list) roots 5))]
+    (do
+      (assert (pr/inputAllowed! (str root "/ok.mp4") roots) "a real file under the root passes")
+      (assert (not (pr/inputAllowed! (str root "/esc/a.mp4") roots)) "a symlinked directory pointing outside is refused though the path is lexically inside")
+      (assert (not (pr/inputAllowed! (str root "/missing.mp4") roots)) "a missing input is refused")
+      (assert (stringStartsWith? (optionOr (errS viaOut) "") "mediaPathNotAllowed") "an output through the escaping symlink is refused before spawn")
+      (assert (stringStartsWith? (optionOr (errS outOfRoot) "") "mediaPathNotAllowed") "an output outside every root is refused before spawn")
+      (assert (stringStartsWith? (optionOr (errS viaDangling) "") "mediaPathNotAllowed") "a dangling symlink output is refused")
+      (assert (not (stringStartsWith? (optionOr (errS goodOut) "") "mediaPathNotAllowed")) "an output in the root passes the allowlist and reaches the spawn")
+      (let [(_ (pathRemove (str root "/esc")))
+            (_ (pathRemove (str root "/dangling.mp4")))
+            (_ (pathRemove (str root "/ok.mp4")))
+            (_ (pathRemove (str outside "/a.mp4")))
+            (_ (pathRemove root))
+            (_ (pathRemove outside))
+            (_ (pathRemove base))]
+        true)))
 
 fn ! testSpawnLabels! -> Bool
   (do
@@ -87,9 +123,9 @@ fn ! testHang! -> Bool
 fn ! testLiveProbe! -> Bool
   (if (not (fileExists? (pr/defaultFfprobe)))
     (do (print "(:skip :test liveProbe :why ffprobe absent)") true)
-    (match (pr/probe! (pr/defaultFfprobe) "/nonexistent.mp4" (list "/") 10)
-      ((ok _) (do (assert false "missing file must fail") false))
-      ((err e) (do (assert (stringStartsWith? e "mediaExit") "ffprobe on a missing file is a labelled exit err") true))))
+    (match (pr/probe! (pr/defaultFfprobe) "/etc/hosts" (list "/") 10)
+      ((ok _) (do (assert false "a non-media file must fail") false))
+      ((err e) (do (assert (stringStartsWith? e "mediaExit") "ffprobe on a non-media file is a labelled exit err") true))))
 
 fn ! runTests -> Bool
   (do
@@ -98,6 +134,10 @@ fn ! runTests -> Bool
     (testParseErrors!)
     (testArgv!)
     (testAllowlist!)
+    (testSymlinks!)
     (testSpawnLabels!)
     (testLiveProbe!)
     true)
+
+fn errS r: (Result String String) -> (Option String)
+  (match r ((err e) (some e)) ((ok _) none))

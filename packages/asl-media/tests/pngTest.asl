@@ -130,6 +130,65 @@ fn ! testErrors! -> Bool
       (assert (stringStartsWith? (errOf (bytesAlloc 0) 10) "pngSignature") "empty input")
       true))
 
+fn put32! b: Bytes off: Int64 v: Int64 -> Unit
+  (do (bytesSet b off (mod (/ v 16777216) 256)) (bytesSet b (+ off 1) (mod (/ v 65536) 256))
+      (bytesSet b (+ off 2) (mod (/ v 256) 256)) (bytesSet b (+ off 3) (mod v 256)))
+
+fn ! chunk! typ: String body: Bytes -> Bytes
+  (let [(n (bytesLength body))
+        (tb (stringToBytes typ))
+        (crcIn (bytesAlloc (+ n 4)))
+        (out (bytesAlloc (+ n 12)))
+        (_ (cpyAt! tb crcIn 0 4))
+        (_ (cpyAt! body crcIn 4 n))
+        (_ (put32! out 0 n))
+        (_ (cpyAt! crcIn out 4 (+ n 4)))
+        (_ (put32! out (+ n 8) (gz/crc32 crcIn)))]
+    out)
+
+fn cpy! a: Bytes b: Bytes i: Int64 -> Unit
+  (if (>= i 4) () (do (bytesSet b i (bytesGet a i)) (cpy! a b (+ i 1))))
+
+fn cpyAt! a: Bytes b: Bytes at: Int64 n: Int64 -> Unit
+  (if (<= n 0) () (do (bytesSet b at (bytesGet a (- (bytesLength a) n)))  (cpyAt! a b (+ at 1) (- n 1))))
+
+fn cat! parts: (List Bytes) -> Bytes
+  (let [(total (fold (fn [(acc Int64) (p Bytes)] -> Int64 (+ acc (bytesLength p))) 0 parts))
+        (out (bytesAlloc total))
+        (_ (fold (fn [(at Int64) (p Bytes)] -> Int64 (do (cpyAt! p out at (bytesLength p)) (+ at (bytesLength p)))) 0 parts))]
+    out)
+
+fn ihdr! w: Int64 h: Int64 depth: Int64 ct: Int64 -> Bytes
+  (let [(b (bytesAlloc 13))
+        (_ (put32! b 0 w))
+        (_ (put32! b 4 h))
+        (_ (bytesSet b 8 depth))
+        (_ (bytesSet b 9 ct))]
+    (chunk! "IHDR" b))
+
+fn sig! -> Bytes
+  (readBytes! "rgba8f.png")
+
+fn ! testHostile! -> Bool
+  (let [(g (readBytes! "rgba8f.png"))
+        (sg (cat! (list (head! g 8))))
+        (iend (chunk! "IEND" (bytesAlloc 0)))
+        (zeros (match (png/zlibWrap! (bytesAlloc 2000000)) ((ok z) z) ((err _) (bytesAlloc 0))))
+        (bomb (cat! (list sg (ihdr! 2 2 8 6) (chunk! "IDAT" zeros) iend)))
+        (emptyIhdr (cat! (list sg (chunk! "IHDR" (bytesAlloc 0)) iend)))
+        (notFirst (cat! (list sg (chunk! "IEND" (bytesAlloc 0)) (ihdr! 1 1 8 6))))
+        (badPlte (cat! (list sg (ihdr! 1 1 8 3) (chunk! "PLTE" (bytesAlloc 4)) iend)))
+        (bigPlte (cat! (list sg (ihdr! 1 1 8 3) (chunk! "PLTE" (bytesAlloc 771)) iend)))]
+    (do
+      (assert (> (bytesLength zeros) 0) "bomb stream built")
+      (assert (< (bytesLength zeros) 5000) "bomb stream is tiny")
+      (assert (stringStartsWith? (errOf bomb 1000) "pngZlib") "an IDAT inflating past h*(stride+1) is refused at the cap")
+      (assert (stringContains? (errOf emptyIhdr 1000) "IHDR must come first") "length-0 IHDR is a structure err")
+      (assert (stringContains? (errOf notFirst 1000) "first chunk is not IHDR") "a first chunk that is not IHDR is a structure err")
+      (assert (stringContains? (errOf badPlte 1000) "PLTE length") "PLTE length 4 is refused")
+      (assert (stringContains? (errOf bigPlte 1000) "PLTE length") "PLTE over 768 bytes is refused")
+      true))
+
 fn ! testAdler! -> Bool
   (do
     (assert (= (png/adler32 (stringToBytes "Wikipedia")) 300286872) "adler32 of Wikipedia is 0x11E60398")
@@ -163,6 +222,7 @@ fn ! runTests -> Bool
     (testKnownPixels!)
     (testMeta!)
     (testErrors!)
+    (testHostile!)
     (testRoundTrip!)
     (testDeterministic!)
     (testLarge!)
