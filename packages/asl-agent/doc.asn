@@ -1261,3 +1261,4 @@
 (:doc :symbol "asl/packages/asl-agent/src/gates.asl#gateWholeTree?" :text "cmd: true when the gate command runs noSelfHostTest.asl or build.sh, which check the whole tree whatever a turn edited")
 (:doc :symbol "asl/packages/asl-agent/src/gates.asl#gatesForTurn" :text "gates doneTurn: all gates on the done turn or when every gate is whole-tree, else the gates without the whole-tree ones, order kept")
 (:doc :symbol "asl/packages/asl-agent/tests/gateDeferWholeTreeTest.asl#runTests" :text "no args: checks whole-tree gate deferral to the done turn and the revertTimeout reason on a timed-out revert run")
+(:doc :symbol "asl/packages/asl-agent/tests/gateDeferLoopTest.asl#runTests" :text "no args: recorded loops with a unit gate and a build.sh gate: the write turn runs only the unit gate and is not terminal, the done turn runs the whole-tree gate, and a red whole-tree gate at done keeps the run from its terminal check (PERF-VACUOUS-GATES-AT-DONE)")

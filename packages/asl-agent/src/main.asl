@@ -1858,6 +1858,10 @@ fn liveCommitMessage ops: (List (List (Pair String c/KvVal))) -> (Option String)
           (match (c/dictGet fields "commit") ((some v) (match v ((c/kvStr message) (some message)) (_ none))) ((none) none)))
         (liveCommitMessage (c/restOf ops)))))
 
+; (:m :ref PERF-VACUOUS-GATES-AT-DONE :do "every declared gate command has a result among this turn's gates")
+fn gatesCovered? declared: (List String) results: (List g/GateResult) -> Bool
+  (and (not (listEmpty? results)) (listAll? (fn [cmd] (listAny? (fn [r] (= (g/gateCmd r) cmd)) results)) declared))
+
 fn liveGateResultsGreen? gates: (List g/GateResult) -> Bool
   (cond
     ((listEmpty? gates) true)
@@ -2186,9 +2190,11 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   digestNow (if (and wantGates (not wallStop)) (worktreeDigest! ra.owns rootDir) "")
                   digestPrev (match (fileReadString digestPath) ((ok d) (some (stringTrim d))) ((err _) none))
                   reuseGates (and (not (stringEmpty? digestNow)) (and (not (listEmpty? state.allGateResults)) (reuseGateDigest? digestPrev digestNow)))
-                  doneTurn (listContains? (map liveOpName operations) "done")
+                  doneTurn (or (listContains? (map liveOpName operations) "done") (liveDoneOps? operations))
                   redGates (filter (fn [cmd] (not (listContains? state.baselineGreen cmd))) ra.gates)
-                  turnGates (if (or doneTurn (listEmpty? redGates)) ra.gates redGates)
+                  ; (:m :ref PERF-VACUOUS-GATES-AT-DONE :do "whole-tree gates (noSelfHost, build.sh) run only on the done turn, also in the follow-up of skipped gates; a turn is gate-green only when every declared gate has a result this turn, so a green subset never ends the run before the deferred gates ran")
+                  turnGates0 (g/gatesForTurn (if (or doneTurn (listEmpty? redGates)) ra.gates redGates) doneTurn)
+                  turnGates (if (and (not doneTurn) (listAll? g/gateWholeTree? turnGates0)) (g/gatesForTurn ra.gates false) turnGates0)
                   reused (if reuseGates (reusedGateResults ra.gates state.allGateResults) (list))
                   reuseAll (and reuseGates (= (listLength reused) (listLength ra.gates)))
                   _reuseNote (if reuseAll (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :gateReuse :digest \"" digestNow "\" :gates " (stringFromInt64 (listLength reused)) ")\n"))) true)
@@ -2197,7 +2203,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                              ((or (not wantGates) wallStop) (list))
                              (reuseAll reused)
                              (else (let [firstRun (runLiveGates! turnGates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid ra.gateParallelism)
-                                         skipped (filter (fn [cmd] (not (listContains? turnGates cmd))) ra.gates)
+                                         skipped (filter (fn [cmd] (and (not (listContains? turnGates cmd)) (or doneTurn (not (g/gateWholeTree? cmd))))) ra.gates)
                                          redPassed (listAll? (fn [r] (= (g/gateExit r) 0)) firstRun)]
                                      (if (and redPassed (not (listEmpty? skipped)))
                                        (listAppend firstRun (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid ra.gateParallelism))
@@ -2233,7 +2239,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (else state.deliver))
                   writesPersisted (or state.writesPersisted wrote)
                   gatesGreen (and (liveGateResultsGreen? newGates)
-                    (or (listEmpty? ra.gates) (not (listEmpty? newGates))))
+                    (or (listEmpty? ra.gates) (gatesCovered? ra.gates newGates)))
                   ownedDone (if (and gatesGreen (and (not writesPersisted) (not (listEmpty? ra.gates))))
                     (ownedChanged! ra.owns rootDir run.written.startHead) false)
                   patchReady (if (listEmpty? ra.gates)
