@@ -3,7 +3,8 @@
   :i [])
 
 ; (:m :ref DS-BLOBSTORE :do "a store root holds blobs/<h0h1>/<sha256> (two-hex fan-out), tmp/ for writes in flight and pins/<sha256>/<owner> markers; graceMs is how long an unpinned blob or a leftover tmp file survives gc")
-(schema Cas (:f root String) (:f graceMs Int64))
+; (:m :ref DSBLOB-LOWS :do "lockWaitMs bounds how long pin!, a dedup put! and gc wait for the store lock root/lock before giving up with a busy err")
+(schema Cas (:f root String) (:f graceMs Int64) (:f lockWaitMs Int64))
 
 (schema BlobStat (:f hash String) (:f size Int64) (:f pins Int64))
 
@@ -38,7 +39,7 @@ fn ! casOpen! root: String graceMs: Int64 -> (Result Cas String)
                           ((err e) (err e))
                           ((ok _) (match (ensureDir! (str root "/pins"))
                                     ((err e) (err e))
-                                    ((ok _) (ok (Cas :root root :graceMs graceMs)))))))))))
+                                    ((ok _) (ok (Cas :root root :graceMs graceMs :lockWaitMs 10000)))))))))))
 
 ; (:m :ref DS-BLOBSTORE :do "the fan-out directory is the first two hex digits of the hash")
 fn fanOf h: String -> String
@@ -57,14 +58,38 @@ fn pinDir cas: Cas h: String -> String
 fn ! exists? p: String -> Bool
   (ok? (fileStat p))
 
+; (:m :ref DSBLOB-LOWS :do "the store lock is an flock on root/lock, released by fdClose or by the holder's death, so a crashed holder never wedges the store; it serialises pin!, the dedup touch in put! and gc's recheck-and-remove, which closes the window where a pin landing after gc's recheck lost its blob")
+fn ! lockUntil! path: String untilNs: Int64 -> (Result Int64 String)
+  (match (fileLock path true)
+    ((ok fd) (ok fd))
+    ((err e) (cond
+               ((!= e "busy") (err (str "store lock " path ": " e)))
+               ((< (monotonicNs) untilNs) (do (sleepMs 10) (lockUntil! path untilNs)))
+               (else (err (str "store lock " path ": busy"))))))
+
+fn ! lockStore! cas: Cas -> (Result Int64 String)
+  (lockUntil! (str cas.root "/lock") (+ (monotonicNs) (* (max 0 cas.lockWaitMs) 1000000)))
+
+fn ! intact? dest: String h: String -> Bool
+  (match (fileReadBytes dest) ((ok b) (= (bytesSha256 b) h)) ((err _) false))
+
+; (:m :ref DSBLOB-LOWS :do "the dedup touch takes the store lock and re-reads the blob under it, so gc cannot remove it between the intact check and the touch; ok true is a kept copy, ok false a blob that must be written")
+fn ! touchIntact! cas: Cas dest: String h: String -> (Result Bool String)
+  (match (lockStore! cas)
+    ((err e) (err e))
+    ((ok fd) (let [(r (if (intact? dest h)
+                        (match (fileUtime dest (nowNs)) ((ok _) (ok true)) ((err e) (err (str "touch " dest ": " e))))
+                        (ok false)))
+                   (_ (fdClose fd))]
+               r)))
+
 ; (:m :ref DS-BLOBSTORE :do "a blob already present is kept when it still hashes to its name (dedup, its mtime refreshed so a pending gc sees it young) and replaced when it does not; a new blob is written to tmp/, fsynced, renamed into place and its directory fsynced, so a crash leaves at most a tmp file gc removes and never a partial blob")
 fn ! put! cas: Cas data: Bytes -> (Result String String)
   (let [(h (bytesSha256 data))
         (dest (blobFile cas h))
         (fan (str cas.root "/blobs/" (fanOf h)))
-        (intact (match (fileReadBytes dest) ((ok b) (= (bytesSha256 b) h)) ((err _) false)))]
-    (if intact
-      (match (fileUtime dest (nowNs)) ((ok _) (ok h)) ((err e) (err (str "touch " dest ": " e))))
+        (kept (if (intact? dest h) (touchIntact! cas dest h) (ok false)))]
+    (match kept ((err e) (err e)) ((ok k) (if k (ok h)
       (let [(tmp (str cas.root "/tmp/" h "." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
         (match (ensureDir! fan)
           ((err e) (err e))
@@ -79,7 +104,7 @@ fn ! put! cas: Cas data: Bytes -> (Result String String)
                       ((err e) (do (pathRemove tmp) (err (str "rename " tmp ": " e))))
                       ((ok _) (match (fileFsync fan)
                                 ((err e) (err (str "fsync dir of " h ": " e)))
-                                ((ok _) (ok h))))))))))))))
+                                ((ok _) (ok h))))))))))))))))
 
 fn ! putFile! cas: Cas path: String -> (Result String String)
   (match (fileReadBytes path)
@@ -98,8 +123,9 @@ fn ! get! cas: Cas h: String -> (Result (Option Bytes) String)
 fn ! has? cas: Cas h: String -> Bool
   (and (validHash? h) (exists? (blobFile cas h)))
 
+; (:m :ref DSBLOB-LOWS :do "the kind comes from the prelude's typed IoError classifier, the runtime's one mapping of error text to kinds, and casTest pins that a missing path still classifies as notFound")
 fn notFound? e: String -> Bool
-  (stringStartsWith? e "notFound:")
+  (= (preludeIoError e) (notFound))
 
 ; (:m :ref DS-BLOBSTORE :do "the owners pinning a blob: only a pin directory that is not found is no pins; any other stat error (EACCES or EIO on the pin directory, on pins/ or on an ancestor) and a pin directory that cannot be listed are an err, never an empty list, so gc cannot read them as unpinned")
 fn ! pinsOf! cas: Cas h: String -> (Result (List String) String)
@@ -120,17 +146,22 @@ fn ! stat! cas: Cas h: String -> (Option BlobStat)
       ((err _) (none))
       ((ok st) (some (BlobStat :hash h :size st.size :pins (resultOr (countOf (pinsOf! cas h)) -1))))))
 
-; (:m :ref DS-BLOBSTORE :do "pin records one marker per owner, so pinning twice by the same owner counts once; it returns the reference count after the change and refuses a blob that is not stored")
+; (:m :ref DS-BLOBSTORE :do "pin records one marker per owner, so pinning twice by the same owner counts once; it returns the reference count after the change and refuses a blob that is not stored; the stored check and the marker write run under the store lock, so a gc never removes a blob a returned pin! holds")
 fn ! pin! cas: Cas h: String owner: String -> (Result Int64 String)
   (cond
     ((not (validHash? h)) (err (str "invalid hash " h)))
     ((not (validOwner? owner)) (err (str "invalid owner " owner)))
-    ((not (has? cas h)) (err (str "no blob " h)))
-    (else (match (ensureDir! (pinDir cas h))
-            ((err e) (err e))
-            ((ok _) (match (fileWrite (str (pinDir cas h) "/" owner) "")
-                      ((err e) (err (str "pin " owner ": " e)))
-                      ((ok _) (countOf (pinsOf! cas h))))))))
+    (else (match (lockStore! cas)
+            ((err e) (err (str "pin " owner ": " e)))
+            ((ok fd) (let [(r (pinLocked! cas h owner)) (_ (fdClose fd))] r)))))
+
+fn ! pinLocked! cas: Cas h: String owner: String -> (Result Int64 String)
+  (if (not (has? cas h)) (err (str "no blob " h))
+    (match (ensureDir! (pinDir cas h))
+      ((err e) (err e))
+      ((ok _) (match (fileWrite (str (pinDir cas h) "/" owner) "")
+                ((err e) (err (str "pin " owner ": " e)))
+                ((ok _) (countOf (pinsOf! cas h)))))))
 
 fn ! unpin! cas: Cas h: String owner: String -> (Result Int64 String)
   (cond
@@ -177,7 +208,7 @@ fn pinErrOf p: (Pair String (Result (List String) String)) -> (List String)
 fn failedOf rs: (List (Pair String Bool)) -> (List String)
   (map pairFirst (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) rs))
 
-; (:m :ref DS-BLOBSTORE :do "gc! with a hook run after the plan and before any removal, where a concurrent pin! or dedup put! can land: pins and age are read again right before each removal, so such a blob is kept; a pin! landing between that recheck and the pathRemove itself can still lose its blob (no lock), which the next put! of the bytes repairs. gc starts only when pins/ itself lists: an unreadable pins/ removes nothing and is reported. :young counts the unpinned blobs kept for age at plan time")
+; (:m :ref DS-BLOBSTORE :do "gc! with a hook run after the plan and before any removal, where a concurrent pin! or dedup put! can land: pins and age are read again right before each removal, so such a blob is kept; the recheck and the removals run under the store lock that pin! and a dedup put! also take, so neither can land between a recheck and its pathRemove; a lock still busy after lockWaitMs removes no blob and is reported in :errors. gc starts only when pins/ itself lists: an unreadable pins/ removes nothing and is reported. :young counts the unpinned blobs kept for age at plan time")
 fn ! gcWith! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
   (match (listing! (str cas.root "/pins"))
     ((err e) (GcReceipt :removed (list) :pinned 0 :young 0 :tmpRemoved 0 :errors (list e)))
@@ -190,8 +221,10 @@ fn ! gcPlanned! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
         (free (map pairFirst (filter freeOf pinRead)))
         (due (filter (fn [(h String)] -> Bool (old? (blobFile cas h) cut)) free))
         (_ (between))
-        (still (filter (fn [(h String)] -> Bool (and (unpinned? cas h) (old? (blobFile cas h) cut))) due))
+        (lock (if (listEmpty? due) (ok -1) (lockStore! cas)))
+        (still (match lock ((ok _) (filter (fn [(h String)] -> Bool (and (unpinned? cas h) (old? (blobFile cas h) cut))) due)) ((err _) (list))))
         (results (map (fn [(h String)] -> (Pair String Bool) (pair h (ok? (pathRemove (blobFile cas h))))) still))
+        (_ (match lock ((ok fd) (if (>= fd 0) (ok? (fdClose fd)) true)) ((err _) true)))
         (tmpList (listing! (str cas.root "/tmp")))
         (tmps (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) (resultOr tmpList (list))))
         (tmpResults (map (fn [(t String)] -> (Pair String Bool) (pair t (ok? (pathRemove (str cas.root "/tmp/" t))))) tmps))]
@@ -199,7 +232,7 @@ fn ! gcPlanned! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
                :pinned (listLength (filter pinnedOf pinRead))
                :young (- (listLength free) (listLength due))
                :tmpRemoved (listLength (filter pairSecond tmpResults))
-               :errors (listAppend (listAppend (pairSecond all) (listFlatMap pinErrOf pinRead))
+               :errors (listAppend (listAppend (listAppend (pairSecond all) (listFlatMap pinErrOf pinRead)) (match lock ((err e) (list e)) ((ok _) (list))))
                                    (listAppend (match tmpList ((err e) (list e)) ((ok _) (list)))
                                                (listAppend (map (fn [(h String)] -> String (blobFile cas h)) (failedOf results))
                                                            (map (fn [(t String)] -> String (str cas.root "/tmp/" t)) (failedOf tmpResults)))))))

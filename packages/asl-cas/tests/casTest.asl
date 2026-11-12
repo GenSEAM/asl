@@ -16,7 +16,7 @@ fn ! rmTree! p: String -> Unit
 fn ! openOk! dir: String graceMs: Int64 -> cas/Cas
   (match (cas/casOpen! dir graceMs)
     ((ok c) c)
-    ((err e) (do (assert false (str "open " dir ": " e)) (cas/Cas :root dir :graceMs graceMs))))
+    ((err e) (do (assert false (str "open " dir ": " e)) (cas/Cas :root dir :graceMs graceMs :lockWaitMs 10000))))
 
 fn ! putOk! c: cas/Cas s: String -> String
   (match (cas/put! c (stringToBytes s))
@@ -273,6 +273,53 @@ fn ! testRecheck! -> Bool
         (assert (= g.removed (list gone)) (str "the receipt removes only the untouched blob: " (stringJoin g.removed ",")))
         true))
 
+; (:m :ref DSBLOB-LOWS :do "while another holder has the store lock root/lock, pin! and a dedup put! give up with a busy err after lockWaitMs and write nothing, and gc removes no blob and reports the lock; once it is released the same pin! succeeds and gc removes the old unpinned blob; the holder fd is in-process and closed before cleanup")
+fn ! testStoreLock! -> Bool
+  (let [(dir (scratch "lock"))
+        (_ (rmTree! dir))
+        (c0 (openOk! dir 60000))
+        (c (cas/Cas :root c0.root :graceMs c0.graceMs :lockWaitMs 50))
+        (a (putOk! c "pinned while locked"))
+        (b (putOk! c "old while locked"))
+        (_ (age! (bp c b)))
+        (held (fileLock (str dir "/lock") true))
+        (pinHeld (cas/pin! c a "late"))
+        (pinsHeld (resultOr (cas/pinsOf! c a) (list "?")))
+        (putHeld (cas/put! c (stringToBytes "old while locked")))
+        (bOld (match (fileStat (bp c b)) ((ok st) (< st.mtimeNs (- (nowNs) 1000000000000))) ((err _) false)))
+        (gHeld (cas/gc! c (nowNs)))
+        (bKept (cas/has? c b))
+        (_ (match held ((ok fd) (ok? (fdClose fd))) ((err _) false)))
+        (pinFree (cas/pin! c a "late"))
+        (gFree (cas/gc! c (nowNs)))
+        (bGone (not (cas/has? c b)))
+        (_ (rmTree! dir))]
+    (do (assert (ok? held) "the test holds the store lock")
+        (assert (match pinHeld ((err e) (stringContains? e "busy")) ((ok _) false)) "pin! under a held store lock is a busy err, not a pin")
+        (assert (listEmpty? pinsHeld) (str "a refused pin! leaves no marker: " (stringJoin pinsHeld ",")))
+        (assert (match putHeld ((err e) (stringContains? e "busy")) ((ok _) false)) "a dedup put! under a held store lock is a busy err, not a silent touch")
+        (assert bOld "the refused dedup put! did not touch the blob")
+        (assert bKept "gc under a held store lock removes no blob")
+        (assert (listEmpty? gHeld.removed) (str "its receipt removes nothing: " (stringJoin gHeld.removed ",")))
+        (assert (listAny? (fn [(e String)] -> Bool (stringContains? e "store lock")) gHeld.errors) (str "the busy lock is reported: " (stringJoin gHeld.errors " | ")))
+        (assert (= (resultOr pinFree -1) 1) "after release the same pin! succeeds with one pin")
+        (assert (= gFree.removed (list b)) (str "after release gc removes the old unpinned blob: " (stringJoin gFree.removed ",")))
+        (assert bGone "the old unpinned blob is gone")
+        true))
+
+; (:m :ref DSBLOB-LOWS :do "pins notFound? to the runtime: a missing path's stat error classifies as the typed IoError notFound, and pinsOf! of a blob never pinned is an empty list, so a change in the runtime's error text turns this red instead of making every unpinned blob an err")
+fn ! testNotFoundKind! -> Bool
+  (let [(dir (scratch "notfound"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (a (putOk! c "never pinned"))
+        (missing (fileStat (str dir "/pins/" a)))
+        (pins (cas/pinsOf! c a))
+        (_ (rmTree! dir))]
+    (do (assert (match missing ((err e) (= (preludeIoError e) (notFound))) ((ok _) false)) "a missing pin directory's stat error is the typed IoError notFound")
+        (assert (match pins ((ok ps) (listEmpty? ps)) ((err _) false)) "pinsOf! of a never-pinned blob is ok and empty")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testPutGet!) "put and get by sha256")
       (assert (testCorrupt!) "corrupt blob detected on read")
@@ -283,4 +330,6 @@ fn ! runTests -> Bool
       (assert (testUnlistablePins!) "gc keeps a blob whose pins cannot be listed")
       (assert (testRecheck!) "gc rechecks pins and age before each removal")
       (assert (testPinsRootUnreadable!) "an unreadable pins/ stops gc")
+      (assert (testStoreLock!) "the store lock serialises pin!, dedup put! and gc removal")
+      (assert (testNotFoundKind!) "notFound? follows the typed IoError kind")
       true)
