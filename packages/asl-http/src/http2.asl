@@ -267,7 +267,7 @@ fn formatHpackLines entries: (List (Pair String String)) -> String
 fn encodeHpack tbl: HpackTable headers: http/HttpHeaders -> (Pair HpackTable String)
   (let [(pairs headers.entries)
         (encodedPayload (str "HPACK:" (stringFromInt64 (listLength pairs)) "\n" (formatHpackLines pairs)))
-        (updatedTbl (fold (fn [(acc HpackTable) (p (pair String String))] -> HpackTable
+        (updatedTbl (fold (fn [(acc HpackTable) (p (Pair String String))] -> HpackTable
           (hpackTableAdd acc (pairFirst p) (pairSecond p))) tbl pairs))]
     (pair updatedTbl encodedPayload))
 
@@ -301,6 +301,6 @@ fn decodeHpack tbl: HpackTable wireBlock: String -> (Result (Pair HpackTable htt
           (let [(bodyPart (optionOr (stringSlice wireBlock (+ idx 1) (stringLength wireBlock)) ""))
                 (lines (stringSplit bodyPart "\n"))
                 (entries (parseHpackLinesLoop lines (list)))
-                (updatedTbl (fold (fn [(acc HpackTable) (p (pair String String))] -> HpackTable
+                (updatedTbl (fold (fn [(acc HpackTable) (p (Pair String String))] -> HpackTable
                   (hpackTableAdd acc (pairFirst p) (pairSecond p))) tbl entries))]
             (ok (pair updatedTbl (http/makeHeaders entries))))))))

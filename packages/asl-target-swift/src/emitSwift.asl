@@ -9,13 +9,13 @@ fn emitSwiftStructWithPairs name: Str fields: (List (Pair Str Str)) -> Str
   (let [(cleanName (t/swiftMangleIdent name))]
     (if (= (listLength fields) 0)
       (emitSwiftStruct name "")
-      (let [(varDecls (map (fn [(p (pair Str Str))] -> Str
+      (let [(varDecls (map (fn [(p (Pair Str Str))] -> Str
                              (str "    public var " (t/swiftMangleIdent (pairFirst p)) ": " (t/emitSwiftType (pairSecond p)) "\n"))
                            fields))
-            (params (map (fn [(p (pair Str Str))] -> Str
+            (params (map (fn [(p (Pair Str Str))] -> Str
                            (str (t/swiftMangleIdent (pairFirst p)) ": " (t/emitSwiftType (pairSecond p))))
                          fields))
-            (assigns (map (fn [(p (pair Str Str))] -> Str
+            (assigns (map (fn [(p (Pair Str Str))] -> Str
                             (str "        self." (t/swiftMangleIdent (pairFirst p)) " = " (t/swiftMangleIdent (pairFirst p)) "\n"))
                           fields))
             (initBlock (str "\n    public init(" (stringJoin params ", ") ") {\n" (stringJoin assigns "") "    }\n"))]
@@ -35,7 +35,7 @@ fn emitSwiftSimpleEnum name: Str cases: (List Str) -> Str
          "}\n"))
 
 fn hasPayloadCases? cases: (List (Pair Str Str)) -> Bool
-  (fold (fn [(acc Bool) (p (pair Str Str))] -> Bool
+  (fold (fn [(acc Bool) (p (Pair Str Str))] -> Bool
           (or acc (not (stringEmpty? (stringTrim (pairSecond p))))))
         false
         cases)
@@ -44,7 +44,7 @@ fn emitSwiftEnum name: Str cases: (List (Pair Str Str)) -> Str
   (let [(cleanName (t/swiftMangleIdent name))
         (hasPayloads (hasPayloadCases? cases))]
     (if hasPayloads
-      (let [(caseLines (map (fn [(p (pair Str Str))] -> Str
+      (let [(caseLines (map (fn [(p (Pair Str Str))] -> Str
                               (let [(cName (t/swiftMangleIdent (pairFirst p)))
                                     (payload (stringTrim (pairSecond p)))]
                                 (if (stringEmpty? payload)
@@ -54,7 +54,7 @@ fn emitSwiftEnum name: Str cases: (List (Pair Str Str)) -> Str
         (str "public enum " cleanName ": Codable, Equatable, Hashable, Sendable {\n"
              (stringJoin caseLines "")
              "}\n"))
-      (let [(simpleCases (map (fn [(p (pair Str Str))] -> Str (pairFirst p)) cases))]
+      (let [(simpleCases (map (fn [(p (Pair Str Str))] -> Str (pairFirst p)) cases))]
         (emitSwiftSimpleEnum name simpleCases))))
 
 fn emitSwiftFn name: Str params: Str retTy: Str body: Str isExported: Bool -> Str

@@ -1,6 +1,6 @@
 (module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk) (lowLevelSigs :a ll)])
 
-(schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
+(schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (Pair String Int64))) (:f mapSites (List (Pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
 (schema Deferred (:f name String) (:f recv ty/Type) (:f args (List ty/Type)) (:f result ty/Type))
 
@@ -871,8 +871,7 @@ fn checkExprDiags p: a/PosForm summary: r/ModuleSummary deps: r/DepIndex path: S
     (placeFresh dMap placed pos))
 
 fn checkLintCode? code: String -> Bool
-  (or (= code "rule-10")
-    (or (= code "rule-13") (= code "type-arity")))
+  (or (= code "rule-13") (= code "type-arity"))
 
 fn isCheckLint d: ty/Diagnostic -> Bool
   (or (checkLintCode? d.code) (lintDiagnosticMessage? d))
@@ -881,7 +880,7 @@ fn lintDiagnosticMessage? d: ty/Diagnostic -> Bool
   (or (stringContains? d.message "is exported as a type but not defined as a schema or enum") (and (= d.code "builtin-reference") (stringContains? d.message "is a builtin, not a value")))
 
 fn hostCheckCode code: String -> String
-  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "literal-range") "ERR_INT_RANGE") ((= code "else-keyword") "ERR_ELSE_KEYWORD") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") (else code))
+  (cond ((= code "rule-1") "ERR_UNKNOWN_SYMBOL") ((= code "rule-2") "ERR_UNKNOWN_SYMBOL") ((= code "rule-12") "ERR_EFFECT_UNMARKED") ((= code "unresolved-import") "ERR_UNRESOLVED_IMPORT") ((= code "arity") "ERR_ARITY") ((= code "ctor") "ERR_BAD_CONSTRUCTOR") ((= code "type") "ERR_TYPE_MISMATCH") ((= code "rule-6") "ERR_TYPE_MISMATCH") ((= code "rule-10") "ERR_UNKNOWN_TYPE") ((= code "rule-4") "ERR_MATCH_NONEXHAUSTIVE") ((= code "literal-range") "ERR_INT_RANGE") ((= code "else-keyword") "ERR_ELSE_KEYWORD") ((= code "unreachable-arm") "ERR_UNREACHABLE_ARM") (else code))
 
 fn hostCheckDiagCode d: ty/Diagnostic -> String
   (cond

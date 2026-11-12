@@ -137,7 +137,7 @@ fn processFormsBatch forms: (List String) state: BatchState -> BatchState
 
 fn splitTopForms source: String -> (List String)
   (let [(lines (stringSplit source "\n"))
-        (step (fold (fn [(acc (pair (List String) (pair (List String) Int64))) (line String)] -> (Pair (List String) (Pair (List String) Int64))
+        (step (fold (fn [(acc (Pair (List String) (Pair (List String) Int64))) (line String)] -> (Pair (List String) (Pair (List String) Int64))
                       (let [(forms (pairFirst acc))
                             (cur (pairFirst (pairSecond acc)))
                             (depth (pairSecond (pairSecond acc)))

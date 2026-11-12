@@ -42,7 +42,7 @@ fn attrAlt v: String -> (Pair String String)
   (pair "alt" v)
 
 fn attrsOf pairs: (List (Pair String String)) -> (Map String String)
-  (fold (fn [(acc (Map String String)) (p (pair String String))] -> (Map String String) (mapSet acc (pairFirst p) (pairSecond p))) (mapEmpty) pairs)
+  (fold (fn [(acc (Map String String)) (p (Pair String String))] -> (Map String String) (mapSet acc (pairFirst p) (pairSecond p))) (mapEmpty) pairs)
 
 fn withAttr attrs: (Map String String) k: String v: String -> (Map String String)
   (mapSet attrs k v)

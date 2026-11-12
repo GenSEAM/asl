@@ -84,7 +84,7 @@ fn propagateEffects sigId: String effects: (List Effect) -> (List Effect)
         effects)
 
 fn propagateSignalBatch changedIds: (List String) computeds: (List Computed) effects: (List Effect) -> (Pair (List Computed) (List Effect))
-  (fold (fn [(acc (pair (List Computed) (List Effect))) (sigId String)] -> (Pair (List Computed) (List Effect))
+  (fold (fn [(acc (Pair (List Computed) (List Effect))) (sigId String)] -> (Pair (List Computed) (List Effect))
           (let [(curComps (pairFirst acc))
                 (curEffs (pairSecond acc))
                 (nextComps (propagateSignalChange sigId curComps))

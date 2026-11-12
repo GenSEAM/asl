@@ -14,7 +14,7 @@ fn makeStreamFrame kind: String payload: String length: Int64 valid: Bool -> Str
   (StreamFrame :kind kind :payload payload :length length :valid valid)
 
 fn countParenBalance text: String -> Int64
-  (let [(chars (stringChars text)) (st (fold (fn [(acc (pair Int64 (pair Bool Bool))) (c String)] -> (Pair Int64 (Pair Bool Bool)) (let [(depth (pairFirst acc)) (inStr (pairFirst (pairSecond acc))) (esc (pairSecond (pairSecond acc)))] (if esc (pair depth (pair inStr false)) (if (= c "\\") (if inStr (pair depth (pair inStr true)) (pair depth (pair inStr false))) (if (= c "\"") (pair depth (pair (not inStr) false)) (if inStr acc (if (< depth 0) acc (if (= c "(") (pair (+ depth 1) (pair inStr false)) (if (= c ")") (pair (- depth 1) (pair inStr false)) acc))))))))) (pair 0 (pair false false)) chars))] (pairFirst st))
+  (let [(chars (stringChars text)) (st (fold (fn [(acc (Pair Int64 (Pair Bool Bool))) (c String)] -> (Pair Int64 (Pair Bool Bool)) (let [(depth (pairFirst acc)) (inStr (pairFirst (pairSecond acc))) (esc (pairSecond (pairSecond acc)))] (if esc (pair depth (pair inStr false)) (if (= c "\\") (if inStr (pair depth (pair inStr true)) (pair depth (pair inStr false))) (if (= c "\"") (pair depth (pair (not inStr) false)) (if inStr acc (if (< depth 0) acc (if (= c "(") (pair (+ depth 1) (pair inStr false)) (if (= c ")") (pair (- depth 1) (pair inStr false)) acc))))))))) (pair 0 (pair false false)) chars))] (pairFirst st))
 
 fn isBalancedFrame? text: String -> Bool
   (let [(clean (stringTrim text))] (if (stringEmpty? clean) false (= (countParenBalance clean) 0)))

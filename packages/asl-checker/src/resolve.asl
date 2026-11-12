@@ -1,12 +1,12 @@
 (module asl-checker/resolve :x [ensureIndex! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
-(schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
+(schema FunSummary (:f name String) (:f params (List (Pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
 (schema FieldSummary (:f name String) (:f type String) (:f hasDefault Bool))
 
 (schema SchemaSummary (:f name String) (:f typevars (List String)) (:f fields (List FieldSummary)))
 
-(schema CaseSummary (:f name String) (:f params (List (pair String String))))
+(schema CaseSummary (:f name String) (:f params (List (Pair String String))))
 
 (schema EnumSummary (:f name String) (:f typevars (List String)) (:f cases (List CaseSummary)))
 
@@ -841,7 +841,7 @@ fn mapValuesList m: (Map String String) -> (List String)
   (mapValues m)
 
 fn isNullaryBuiltinType? resolved: String -> Bool
-  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle" "Handle") resolved))
+  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle" "Handle" "Any" "LinkStat" "Keyword") resolved))
 
 fn isKnownBuiltinType? name: String -> Bool
   (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (or (= resolved "HashMap") (or (= resolved "Pair") (= resolved "Buf")))))))

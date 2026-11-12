@@ -2231,7 +2231,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (writeResWith runWrite! rc dir u c)
 
 ; (:m :ref COND-TASK-SPEC :do "the write stage with its Leon run injected, so a gate can record the task text the writer would receive; writeRes passes runWrite!")
-fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done) rc: RealCfg dir: String u0: st/Task c: CUnit -> Res
+fn ! writeResWith run: (fn ! [RealCfg String String String String String (List String) (List String) String] -> fr/Done) rc: RealCfg dir: String u0: st/Task c: CUnit -> Res
   (let [(u (resolved! rc.repo u0))
         (path (w/wtPath rc.wt u.id))
         (added (settleWt! rc dir u path))]

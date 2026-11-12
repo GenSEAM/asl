@@ -92,7 +92,7 @@ fn listFind pred: (fn [Str] -> Bool) xs: (List Str) -> (Option Str)
   (findHelper xs pred)
 
 fn alistGet key: Str alist: (List (Pair Str Str)) -> (Option Str)
-  (fold (fn [(acc (Option Str)) (entry (pair Str Str))] -> (Option Str)
+  (fold (fn [(acc (Option Str)) (entry (Pair Str Str))] -> (Option Str)
           (if (and (none? acc) (= (pairFirst entry) key))
             (some (pairSecond entry))
             acc))
@@ -147,13 +147,13 @@ fn setSize s: PureSet -> Int64
   (listLength s.elements)
 
 (schema PureMap
-  (:f entries (List (pair Str Str))))
+  (:f entries (List (Pair Str Str))))
 
 fn makeMap -> PureMap
   (PureMap :entries (list))
 
 fn mapPut m: PureMap key: Str val: Str -> PureMap
-  (let [(filtered (filter (fn [(p (pair Str Str))] -> Bool (!= (pairFirst p) key)) m.entries))
+  (let [(filtered (filter (fn [(p (Pair Str Str))] -> Bool (!= (pairFirst p) key)) m.entries))
         (newEntry (pair key val))]
     (PureMap :entries (cons newEntry filtered)))
 
@@ -164,13 +164,13 @@ fn mapContains? m: PureMap key: Str -> Bool
   (some? (mapGet m key))
 
 fn mapRemove m: PureMap key: Str -> PureMap
-  (PureMap :entries (filter (fn [(p (pair Str Str))] -> Bool (!= (pairFirst p) key)) m.entries))
+  (PureMap :entries (filter (fn [(p (Pair Str Str))] -> Bool (!= (pairFirst p) key)) m.entries))
 
 fn mapKeys m: PureMap -> (List Str)
-  (map (fn [(p (pair Str Str))] -> Str (pairFirst p)) m.entries)
+  (map (fn [(p (Pair Str Str))] -> Str (pairFirst p)) m.entries)
 
 fn mapValues m: PureMap -> (List Str)
-  (map (fn [(p (pair Str Str))] -> Str (pairSecond p)) m.entries)
+  (map (fn [(p (Pair Str Str))] -> Str (pairSecond p)) m.entries)
 
 fn mapSize m: PureMap -> Int64
   (listLength m.entries)
