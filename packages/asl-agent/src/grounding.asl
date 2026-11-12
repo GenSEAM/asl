@@ -24,13 +24,13 @@ fn toolWrongNames -> (List (Pair String String))
   (list (pair "println!" "println") (pair "isSome" "some?") (pair "readFile" "fileReadString") (pair "replaceAll" "stringReplace"))
 
 fn toolErrNames -> (List String)
-  (list "println" "some?" "fileReadString" "stringReplace" "pairFirst" "pairSecond" "listContains?" "with")
+  (list "println" "some?" "fileReadString" "stringReplace" "pairFirst" "pairSecond" "listContains?")
 
 fn toolCapTokens -> Int64
   2000
 
 fn tokensOf s: String -> Int64
-  (/ (+ (stringLength s) 3) 4)
+  (/ (+ (stringLength s) 2) 3)
 
 fn nameChar? s: String -> Bool
   (and (not (stringEmpty? s)) (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_?!>-" s))
@@ -85,7 +85,7 @@ fn toolCardCapped ranked: (List String) capTokens: Int64 -> String
   (let [wrong (stringJoin (map (fn [p] (str "\"" (c/escapeAsn (pairFirst p)) " -> " (c/escapeAsn (pairSecond p)) "\"")) (toolWrongNames)) " ")
         head (str " :wrong (" wrong ")\n :sigs (")
         tail (str ")\n :lookup \"" (c/escapeAsn (toolLookup)) "\"\n")
-        budget (- (* capTokens 4) (+ (stringLength head) (stringLength tail)))
+        budget (- (* capTokens 3) (+ (stringLength head) (stringLength tail)))
         sigs (fillSigs (uniqueNames (listAppend ranked (cardSigNames))) 0 budget)]
     (str head (quotedList sigs) tail))
 
