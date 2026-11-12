@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv execOp! execGateOp! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -660,34 +660,84 @@ fn ! execRevertGate! n: (Option c/KvVal) rel0: String rev: String env: ExecEnv n
                      ((none) (none? atRev)))]
           (if same
             (revertRejected rid rel "ERR_REVERT_UNCHANGED" (str rel " is the same as at " rev "; there is no change to revert"))
-            (let [backupDir (str root "/.asl/run/revert")
-                  backup (str backupDir "/" env.session "-" (stringJoin (stringSplit rel "/") "__"))
-                  saved (match orig
-                          ((some b) (and (ok? (dirCreate backupDir)) (ok? (fileWrite backup b))))
-                          ((none) true))]
+            (let [stem (revertStem root env.session rel)
+                  lock (match (dirCreate (revertDir root)) ((ok _) (fileLock (str stem ".lock") true)) ((err e) (err e)))
+                  saved (and (ok? lock)
+                          (and (ok? (fileWrite (str stem ".path") rel))
+                            (match orig
+                              ((some b) (ok? (fileWrite (str stem ".bak") b)))
+                              ((none) (ok? (fileWrite (str stem ".absent") ""))))))]
               (if (not saved)
-                (revertRejected rid rel "ERR_REVERT_BACKUP" (str "could not save " rel " before the revert; nothing was changed"))
+                (do (match lock ((ok fd) (do (fdClose fd) (dropStem! stem) true)) ((err _) true))
+                  (revertRejected rid rel "ERR_REVERT_BACKUP" (str "could not save " rel " before the revert; nothing was changed")))
                 (let [reverted (putFile! full atRev)
                       gate (if reverted (execGateOp! n env newId) (list))
                       put (putFile! full orig)
                       restored (and put (sameFile! full orig))
-                      cleaned (if (and restored (some? orig)) (ok? (pathRemove backup)) true)
+                      released (match lock ((ok fd) (ok? (fdClose fd))) ((err _) true))
+                      cleaned (if restored (dropStem! stem) true)
                       runs (optionOr (recGet gate "gateRuns") (vRecs (list)))
                       gateStatus (fieldStr gate "status" "")
-                      red (= gateStatus "failed")]
+                      verdict (revertVerdict runs)
+                      red (= verdict "red")]
                   (cond
                     ((not restored)
                       (list (vs "id" rid) (vs "op" "gate") (vs "status" "failed") (vs "error" "ERR_REVERT_RESTORE") (vs "file" rel)
-                        (vs "message" (str rel " could not be written back after the revert run; its text is in " backup))))
+                        (vs "message" (str rel " could not be written back after the revert run; its text is in " stem ".bak, and the next run's start restores it"))))
                     ((not reverted)
                       (revertRejected rid rel "ERR_REVERT_WRITE" (str rel " could not be set to its text at " rev "; it was restored and the gate did not run")))
                     ((= gateStatus "rejected") (recSet gate "file" (vStr rel)))
                     (else
                       (list (vs "id" rid) (vs "op" "gate") (vs "status" "ok") (vs "file" rel) (vs "rev" rev)
-                        (pair "red" (vBool red)) (pair "revertRestored" (vBool true)) (pair "revertRuns" runs)
-                        (vs "message" (if red
-                                        (str "red on revert: the gate fails with " rel " as at " rev "; " rel " is restored")
-                                        (str "not red on revert: the gate passes with " rel " as at " rev ", so it does not prove the change; " rel " is restored"))))))))))))))
+                        (pair "red" (vBool red)) (vs "verdict" verdict) (pair "revertRestored" (vBool true)) (pair "revertRuns" runs)
+                        (vs "message" (cond
+                                        (red (str "red on revert: the gate fails with " rel " as at " rev "; " rel " is restored"))
+                                        ((= verdict "unknown") (str "unknown on revert: a gate timed out with " rel " as at " rev ", which proves nothing either way; raise :gateTimeout or run the suite alone; " rel " is restored"))
+                                        (else (str "not red on revert: the gate passes with " rel " as at " rev ", so it does not prove the change; " rel " is restored")))))))))))))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M1: red needs a gate that exited nonzero without timing out; a timeout on the reverted file is unknown, as gateRevertVerdict rules for the integrity check")
+fn revertVerdict runs: Val -> String
+  (let [recs (gateRunsOf runs)
+        timedOut (fn [r] (truthyField r "timeout"))
+        failed (fn [r] (match (recGet r "exit") ((some v) (match v ((vInt e) (!= e 0)) (_ false))) ((none) false)))]
+    (cond
+      ((listAny? (fn [r] (and (failed r) (not (timedOut r)))) recs) "red")
+      ((listAny? timedOut recs) "unknown")
+      (else "pass")))
+
+fn ! revertDir root: String -> String
+  (str root "/.asl/run/revert")
+
+fn ! revertStem root: String session: String rel: String -> String
+  (str (revertDir root) "/" session "-" (stringJoin (stringSplit rel "/") "__"))
+
+fn ! dropStem! stem: String -> Bool
+  (fold (fn [acc ext] (and acc (or (ok? (pathRemove (str stem ext))) (not (ok? (fileStat (str stem ext)))))))
+    true (list ".bak" ".absent" ".path" ".lock"))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M2: a run killed mid-revert leaves F at its :rev text with a .path/.bak (or .absent) entry whose .lock no live process holds; at a run's start every such entry puts F back (the .bak bytes, or removes F that did not exist) and is dropped; an entry whose lock is held belongs to a live run and is skipped; answers the restored paths")
+fn ! sweepRevertBackups! root0: String -> (List String)
+  (let [root (absRoot! root0)
+        dir (revertDir root)
+        stems (map (fn [n] (str dir "/" (c/sliceOf n 0 (- (stringLength n) 5))))
+                (filter (fn [n] (stringEndsWith? n ".path")) (resultOr (dirList dir) (list))))]
+    (fold (fn [acc stem]
+            (match (fileLock (str stem ".lock") true)
+              ((err _) acc)
+              ((ok fd)
+                (let [rel (resultOr (fileReadString (str stem ".path")) "")
+                      full (str root "/" rel)
+                      content (match (fileReadBytes (str stem ".bak")) ((ok b) (some b)) ((err _) (none)))
+                      absent (ok? (fileStat (str stem ".absent")))
+                      put (cond
+                            ((stringEmpty? rel) false)
+                            ((some? content) (putFile! full content))
+                            (absent (putFile! full (none)))
+                            (else false))
+                      closed (fdClose fd)
+                      dropped (if put (dropStem! stem) false)]
+                  (if put (listAppend acc (list rel)) acc)))))
+      (list) stems))
 
 fn rootRec rid: String opName: String path: String -> (List (Pair String Val))
   (list (vs "id" rid) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_ROOT") (vs "file" path)

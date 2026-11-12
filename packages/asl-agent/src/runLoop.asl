@@ -5,7 +5,7 @@
       (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
       (aslAgent/core :a c) (aslAgent/gates :a g) (asl-json/json :a j)
       (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)
-      (asl-tools/vcs/vcs :a vcs)])
+      (asl-tools/vcs/vcs :a vcs) (aslAgent/exec :a ex)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)
@@ -535,7 +535,11 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
               (jr/journalWrite env.journalPath (str "(:resumePatch :error \"" (c/escapeAsn message) "\")\n(:result :status :rejected :session \"" sid "\" :error :ERR_RESUME_PATCH :message \"" (c/escapeAsn message) "\")\n"))
               (early (emptyResult env sid "rejected" (some "ERR_RESUME_PATCH") 0 none (list) none (some message) none)))))
         (else
-          (let [green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
+          ; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M2: before the baseline, files a killed run left at their :rev text by a revert gate are put back and named in one (:revertSwept ...) row")
+          (let [swept (ex/sweepRevertBackups! rootDir)
+                _swept (if (listEmpty? swept) true
+                         (ok? (jr/journalWrite env.journalPath (str "(:revertSwept :files (" (stringJoin (map (fn [f] (str "\"" (c/escapeAsn f) "\"")) swept) " ") "))\n"))))
+                green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
                         (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
                         (list))
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)

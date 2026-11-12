@@ -32,8 +32,21 @@ fn ! text! path: String -> String
   (resultOr (fileReadString path) "<absent>")
 
 fn ! envWith root: String gates: (List String) -> ex/ExecEnv
+  (envTimed root gates 60)
+
+fn ! envTimed root: String gates: (List String) timeout: Int64 -> ex/ExecEnv
   (ex/makeExecEnv root root "auto" (list "subject.txt" "same.txt" "new.txt") false "HEAD" gates
-    (list (pair "gate" "local")) "" (list) 20000 60 (none) "revertGateTest" (none))
+    (list (pair "gate" "local")) "" (list) 20000 timeout (none) "revertGateTest" (none))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "rebuilds the tree a run killed mid-revert would leave: subject.txt at its HEAD text and the revert entry the gate copied to snap/ while it ran")
+fn ! crashState! root: String -> Bool
+  (let [snap (str root "/snap")
+        dir (str root "/.asl/run/revert")
+        made (ok? (dirCreate dir))
+        names (filter (fn [n] (!= n "subject.txt")) (resultOr (dirList snap) (list)))
+        copied (fold (fn [acc n] (and acc (match (fileReadBytes (str snap "/" n)) ((ok b) (ok? (fileWrite (str dir "/" n) b))) ((err _) false)))) true names)
+        reverted (match (fileReadBytes (str snap "/subject.txt")) ((ok b) (ok? (fileWrite (str root "/subject.txt") b))) ((err _) false))]
+    (and made (and copied (and reverted (not (listEmpty? names))))))
 
 fn ! runOne! env: ex/ExecEnv op: (List (Pair String c/KvVal)) -> (List (Pair String ex/Val))
   (let [out (ex/execOp! op env (r/newProcs) (fn [] "id1") (fn [s] false) (fn [a b n] true) (fn [f d] (t/aslRun 0 "" "")))]
@@ -56,6 +69,17 @@ fn ! runTests -> Bool
         recSame (runOne! dependent (revertOp "same.txt" (none)))
         recOwns (runOne! dependent (revertOp "other.txt" (none)))
         recRev (runOne! dependent (revertOp "subject.txt" (some "noSuchRev")))
+        recSlow (runOne! (envTimed root (list "grep -q red subject.txt || sleep 20") 2) (revertOp "subject.txt" (none)))
+        afterSlow (text! subject)
+        recSnap (runOne! (envWith root (list "mkdir -p snap && cp subject.txt snap/subject.txt && cp .asl/run/revert/* snap/ && grep -q red subject.txt")) (revertOp "subject.txt" (none)))
+        crashed (crashState! root)
+        crashText (text! subject)
+        held (fileLock (str root "/.asl/run/revert/revertGateTest-subject.txt.lock") true)
+        sweptLive (ex/sweepRevertBackups! root)
+        liveText (text! subject)
+        freed (match held ((ok fd) (ok? (fdClose fd))) ((err _) false))
+        swept (ex/sweepRevertBackups! root)
+        sweptText (text! subject)
         receipt (ex/formatOpReceipt recRed 2000)
         backups (resultOr (dirList (str root "/.asl/run/revert")) (list))]
     (do
@@ -85,5 +109,18 @@ fn ! runTests -> Bool
       (assert (stringContains? (match (r/checkRunGitGuard "git show HEAD:a > a") ((some g) (pairSecond g)) ((none) "")) ":revert") "the refusal points at the revert gate step")
       (assert (none? (r/checkRunGitGuard "git show main:subject.txt > /tmp/old.txt")) "a git show into /tmp stays allowed")
       (assert (none? (r/checkRunGitGuard "git show main:subject.txt")) "a plain git show stays allowed")
+      (assert (= (strField recSlow "verdict") "unknown") (str "a gate that times out on the reverted file is unknown, not red: " (strField recSlow "verdict")))
+      (assert (not (boolField recSlow "red")) "a timed-out revert run is not red")
+      (assert (= afterSlow "red\n") "subject.txt is restored after the timed-out run")
+      (assert (= (strField recSnap "verdict") "red") "the snapshotting gate is red on revert")
+      (assert crashed "the mid-revert snapshot holds the revert entry and the reverted file")
+      (assert (= crashText "green\n") "the rebuilt crash state has subject.txt at its HEAD text")
+      (assert (ok? held) "the test holds the entry lock like a live run")
+      (assert (listEmpty? sweptLive) "an entry whose lock is held belongs to a live run and is not swept")
+      (assert (= liveText "green\n") "the live entry's file is left alone")
+      (assert freed "the lock is released")
+      (assert (= swept (list "subject.txt")) "with no live owner the start sweep restores subject.txt and names it")
+      (assert (= sweptText "red\n") "subject.txt holds the working change again after the sweep")
+      (assert (listEmpty? (resultOr (dirList (str root "/.asl/run/revert")) (list))) "the swept entry is removed")
       (assert (ok? (pathRemove root)) "the temp dir is removed")
       true))
