@@ -691,6 +691,15 @@ fn ! largeTelemetry! -> (Pair Bool Int64)
                (and (stringStartsWith? url "https://example.com/a?q=%C3%A9+x&q=") (stringEndsWith? url "&end=1")))
           ms))
 
+; (:m :ref REVIEW-LANES-STALE-REST :do "a Leon client asks the gateway for ASN; that Accept must not reach the provider, which answers 406 to it")
+fn clientAcceptDropped? -> Bool
+  (let [(client (list (pair "Accept" "application/asn+sexpr") (pair "accept" "application/asn+sexpr") (pair "X-ASL-Session" "s1") (pair "Accept-Encoding" "gzip")))]
+    (match (u/upstreamRequest "https://api.z.ai/api/paas/v4" "/chat/completions" "k" "{}" client)
+      ((err e) false)
+      ((ok r) (and (not (listAny? (fn [(p (Pair String String))] -> Bool (= (stringLower (pairFirst p)) "accept")) r.headers))
+                   (listAny? (fn [(p (Pair String String))] -> Bool (= (stringLower (pairFirst p)) "x-asl-session")) r.headers)
+                   (listAny? (fn [(p (Pair String String))] -> Bool (= (stringLower (pairFirst p)) "accept-encoding")) r.headers)))))
+
 fn ! runTests -> Bool
   (let [(text (resultOr (fileReadString (fixturePath)) ""))
         (lines (caseLines text))
@@ -714,6 +723,7 @@ fn ! runTests -> Bool
         (sessionNoClientSession (sessionHeaderOmittedWithoutClientSession! stub tmp))
         (big (largeTransfer! stub tmp))
         (tel (largeTelemetry!))
+        (acceptDropped (clientAcceptDropped?))
         (report (eprintln (str "(:upstreamParity :cases " (stringFromInt64 (listLength cases)) " :failed " (stringFromInt64 (listLength failed))
                                " :fns " (stringFromInt64 (listLength fns)) " :largeTransferMs " (stringFromInt64 (pairSecond big))
                                " :largeTelemetryMs " (stringFromInt64 (pairSecond tel)) ")")))
@@ -738,5 +748,6 @@ fn ! runTests -> Bool
       (assert (< (pairSecond big) 20000) "large transfer finishes within 20 s")
       (assert (pairFirst tel) "large telemetry record and long clean_url query are correct")
       (assert (< (pairSecond tel) 20000) "large telemetry and clean_url finish within 20 s")
+      (assert acceptDropped "REVIEW-LANES-STALE-REST: a client Accept: application/asn+sexpr is not forwarded upstream; other client headers still are")
       (assert (ok? cleaned) "temp dir removed")
       true))

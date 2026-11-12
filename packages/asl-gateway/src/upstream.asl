@@ -1018,9 +1018,10 @@ fn hasScheme? u: String -> Bool
     ((some i) (and (> i 0) (not (stringContains? (slice u 0 i) "/"))))
     ((none) false))
 
+; (:m :ref REVIEW-LANES-STALE-REST :do "the client Accept names the format it wants from the gateway, not from the provider; z.ai answers 406 to application/asn+sexpr, so upstream gets curlConfig's own Accept")
 fn forwardHeaders hs: (List (Pair String String)) client: (List (Pair String String)) -> (List (Pair String String))
   (fold (fn [(acc (List (Pair String String))) (p (Pair String String))] -> (List (Pair String String))
-          (if (oneOf? (pyLower (pairFirst p)) (list "host" "content-length" "authorization" "user-agent")) acc (headerPut acc (pairFirst p) (pairSecond p))))
+          (if (oneOf? (pyLower (pairFirst p)) (list "host" "content-length" "authorization" "user-agent" "accept")) acc (headerPut acc (pairFirst p) (pairSecond p))))
         hs client)
 
 fn upstreamRequest url: String path: String key: String data: String clientHeaders: (List (Pair String String)) -> (Result UpstreamRequest String)
