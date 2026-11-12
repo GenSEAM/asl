@@ -168,7 +168,8 @@ fn eligible rows: (List rd/SExpr) wfams: (List String) tier: String lane: Lane -
             (let [(f (laneFamily rows lane))]
               (and (not (stringEmpty? f)) (not (listContains? wfams f))))))
 
-; (:m :ref COND2 :do "the lane a rung waits for: first lane of the tier that is out of allowance and would be eligible, else the tier name")
+; (:m :ref COND2 :do "the lanes a rung waits for: every lane of the tier that is out of allowance and would be eligible, space-separated in lane order, else the tier name")
+; (:m :ref REVIEW-STRONG-STARVED :do "node2 2026-11-12: the await named only the first such lane, so 20 units sat on ocDeepseekPro while ocGlm53 and synKimiK31Pro of the same tier regained allowance; wake! matches any name of a space-separated await, so naming every candidate lane wakes the unit on the first of them to rise")
 fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
   (match (listHead (filter (fn [(x Lane)] -> Bool (< x.quality l.quality)) sorted))
     ((none) (listAppend sorted (list l)))
@@ -180,12 +181,11 @@ fn rankLanes lanes: (List Lane) -> (List Lane)
   (fold (fn [(acc (List Lane)) (l Lane)] -> (List Lane) (insertRanked l acc)) (list) lanes)
 
 fn waitLane rows: (List rd/SExpr) wfams: (List String) tier: String skipFamily: String lanes: (List Lane) -> String
-  (match (listHead (filter (fn [(l Lane)] -> Bool
-                             (let [(f (laneFamily rows l))]
-                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
-                           lanes))
-    ((some l) l.alias)
-    ((none) tier))
+  (let [(waits (filter (fn [(l Lane)] -> Bool
+                         (let [(f (laneFamily rows l))]
+                           (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
+                       lanes))]
+    (if (listEmpty? waits) tier (stringJoin (map (fn [(l Lane)] -> String l.alias) waits) " ")))
 
 fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List Lane) -> Pick
   (let [(wfams (familiesIn rows writerAlias))
