@@ -45,13 +45,26 @@ fn receiptLine verdict: String exit: Int64 secs: Int64 ms: Int64 argv: (List Str
   (str "(:bounded :verdict :" verdict " :exit " (stringFromInt64 exit) " :secs " (stringFromInt64 secs) " :ms " (stringFromInt64 ms)
        " :cmd " (quoted (optionOr (listHead argv) "")) ")\n")
 
+; (:m :ref BOUNDED-WALL-INCLUDES-BUILD :do "ms since this process was forked, from its own ps etime (1 s steps, rounded down; 0 when unknown): bin/asl and its native CLI exec into the run binary, so the pid that sh forked for bin/asl run bounded.asl is this one and its age holds the cold build of bounded.asl and of anything it imports, measured as 3124 s wall under a 900 s bound at load 190-220, 2026-11-13")
+fn ! launchMs! -> Int64
+  (let [(self (procSelf))
+        (row (listHead (filter (fn [(p fr/Proc)] -> Bool (= p.pid self)) (fr/procSnapshot))))]
+    (match row
+      ((some p) (if (> p.age 0) (* p.age 1000) 0))
+      ((none) 0)))
+
+; (:m :ref BOUNDED-WALL-INCLUDES-BUILD :do "SECS bounds the wall from launch: the command gets what the launch left, and a launch that used all of SECS starts nothing and stops with the timeout exit 124 and a (:bounded :verdict :timeout :phase :launch ...) note; the receipt's :ms is the wall, launch plus run")
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(p (parseArgs args))]
     (if (not (stringEmpty? p.error))
       (do (eprintln (str "bounded: " p.error)) (eprintln (usage)) (ok 2))
-      (let [(root (resultOr (realPath ".") "."))
-            (d (fr/runOneLimited (fr/job p.argv root (fr/childEnv (list))) (fr/limits p.secs p.maxDesc)))
-            (wrote (or (stringEmpty? p.receipt) (ok? (fileAppend p.receipt (receiptLine d.verdict d.exit p.secs d.ms p.argv)))))]
+      (let [(launched (launchMs!))
+            (leftMs (- (* p.secs 1000) launched))
+            (root (resultOr (realPath ".") "."))
+            (d (if (> leftMs 0)
+                 (fr/runOneLimited (fr/job p.argv root (fr/childEnv (list))) (fr/Limits :timeoutMs leftMs :maxDesc p.maxDesc :class "" :jsDir ""))
+                 (fr/Done :idx 0 :exit 124 :out (str "(:bounded :verdict :timeout :phase :launch :launchMs " (stringFromInt64 launched) " :secs " (stringFromInt64 p.secs) ")\n") :ms 0 :verdict "timeout")))
+            (wrote (or (stringEmpty? p.receipt) (ok? (fileAppend p.receipt (receiptLine d.verdict d.exit p.secs (+ launched d.ms) p.argv)))))]
         (do (print d.out)
             (if wrote () (eprintln (str "bounded: the receipt could not be written to " p.receipt)))
             (ok d.exit)))))
