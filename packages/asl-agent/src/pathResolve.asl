@@ -85,15 +85,62 @@ fn moduleName want: String -> (Option String)
   (let [name (if (stringEndsWith? want ".asl") (optionOr (stringSlice want 0 (- (stringLength want) 4)) want) want)]
     (if (and (stringContains? name "/") (not (stringContains? name "."))) (some name) (none)))
 
+fn ! buildTarget! root: String name: String -> (Option String)
+  (let [r (rs/resolveImport! (str root "/.asl.config.asn") name (rs/emptyModIndex))
+        base (str (resultOr (realPath root) root) "/")]
+    (if (and (stringStartsWith? r.path base) (exists! root (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) "")))
+      (some (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) ""))
+      (none)))
+
+; (:m :ref MODPATH-LOWS :do "a module lookup walks the whole root to build the checker's index (about 0.5 s) and resolveOp! has no state to keep it in, so each build appends one (:mod NAME :path P :at MS) row to .asl/run/pathResolve/modules.asn under the root and a later lookup of NAME takes the newest row: a found path counts while the file still declares NAME in its module header, a miss counts for 10 minutes, about one run")
+fn memoPath root: String -> String
+  (str root "/.asl/run/pathResolve/modules.asn")
+
+fn memoMissMs -> Int64
+  600000
+
+fn rowName row: String -> String
+  (optionOr (listGet (stringSplit row "\"") 1) "")
+
+fn rowTarget row: String -> String
+  (optionOr (listGet (stringSplit row "\"") 3) "")
+
+fn rowAt row: String -> Int64
+  (optionOr (stringToInt64 (stringTrim (stringReplace (optionOr (listLast (stringSplit row ":at ")) "") ")" ""))) 0)
+
+fn ! declares! root: String path: String name: String -> Bool
+  (let [text (resultOr (fileReadString (str root "/" path)) "")]
+    (or (stringContains? text (str "(module " name "\n")) (stringContains? text (str "(module " name " "))))
+
+fn ! memoHit! root: String name: String -> (Option (Option String))
+  (match (listLast (filter (fn [l] (and (stringStartsWith? l "(:mod ") (= (rowName l) name))) (stringLines (resultOr (fileReadString (memoPath root)) ""))))
+    ((none) (none))
+    ((some row)
+      (let [p (rowTarget row)]
+        (if (stringEmpty? p)
+          (if (< (- (/ (nowNs) 1000000) (rowAt row)) (memoMissMs)) (some (none)) (none))
+          (if (and (exists! root p) (declares! root p name)) (some (some p)) (none))))))
+
+fn ! memoWrite! root: String name: String got: (Option String) -> Bool
+  (and (ok? (dirCreate (str root "/.asl/run/pathResolve")))
+       (ok? (fileAppend (memoPath root) (str "(:mod \"" name "\" :path \"" (optionOr got "") "\" :at " (stringFromInt64 (/ (nowNs) 1000000)) ")\n"))))
+
 fn ! moduleTarget! root: String want: String -> (Option String)
   (match (moduleName want)
     ((none) (none))
     ((some name)
-      (let [r (rs/resolveImport! (str root "/.asl.config.asn") name (rs/emptyModIndex))
-            base (str (resultOr (realPath root) root) "/")]
-        (if (and (stringStartsWith? r.path base) (exists! root (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) "")))
-          (some (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) ""))
-          (none)))))
+      (match (memoHit! root name)
+        ((some got) got)
+        ((none) (let [got (buildTarget! root name)
+                      _ (memoWrite! root name got)]
+                  got)))))
+
+; (:m :ref MODPATH-LOWS :do "outline, query and observe of a missing x/y run on x/y.asl when that file exists, before any module lookup")
+fn ! withAsl! root: String opName: String want: String -> (Option String)
+  (if (and (listContains? (list "outline" "query" "observe") opName)
+           (and (not (stringContains? (optionOr (listLast (segmentsOf want)) "") ".")) (exists! root (str want ".asl"))))
+    (some (str want ".asl"))
+    (none))
 
 ; (:m :do "a write names a file that may not exist yet: only a missing parent directory is resolved, then the file name is kept")
 fn ! targetFor! root: String opName: String want: String -> (Option String)
@@ -110,9 +157,11 @@ fn ! targetFor! root: String opName: String want: String -> (Option String)
               ((some d) (some (str d "/" base)))
               ((none) (none))))))
       ((= opName "tree") (resolveIn (dirsOf files) want))
-      (else (match (moduleTarget! root want)
+      (else (match (withAsl! root opName want)
         ((some p) (some p))
-        ((none) (resolveIn (listAppend files (dirsOf files)) want))))))
+        ((none) (match (moduleTarget! root want)
+          ((some p) (some p))
+          ((none) (resolveIn (listAppend files (dirsOf files)) want))))))))
 
 ; (:m :do "the op with its path replaced by the resolved one and the path it was sent with, or the op unchanged and none when the path exists, is absolute, carries a #symbol, or names no single candidate")
 fn ! resolveOp! op: (List (Pair String c/KvVal)) opName: String root: String -> (Pair (List (Pair String c/KvVal)) (Option String))

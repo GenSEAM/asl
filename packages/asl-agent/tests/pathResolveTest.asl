@@ -46,6 +46,22 @@ fn ! readTarget! root: String want: String -> String
   (let [r (pr/resolveOp! (list (pair "file" (c/kvStr want))) "read" root)]
     (match (c/dictGet (pairFirst r) "file") ((some (c/kvStr t)) t) (_ "")))
 
+fn ! opTarget! root: String opName: String want: String -> String
+  (let [(r (pr/resolveOp! (list (pair "file" (c/kvStr want))) opName root))]
+    (match (c/dictGet (pairFirst r) "file") ((some (c/kvStr t)) t) (_ "")))
+
+; (:m :ref MODPATH-LOWS :do "the workspace shape in a scratch root: asl/tools/fleet/run.asl declares asl-tools/fleet/run and a package kit-tools holds another fleet/run.asl, so the assert no longer reads the live tree")
+fn ! aslRoot! -> String
+  (let [root (rk/freshRecorderRoot! "pathResolveAsl")
+        made (and (ok? (dirCreate (str root "/asl/tools/fleet"))) (ok? (dirCreate (str root "/asl/packages/kit-tools/src/fleet"))))
+        w1 (fileWrite (str root "/asl/tools/fleet/run.asl") "(module asl-tools/fleet/run\n  :x [job])\n\nfn job -> Int64\n  1\n")
+        w2 (fileWrite (str root "/asl/packages/kit-tools/src/fleet/run.asl") "(module kit-tools/fleet/run\n  :x [job])\n\nfn job -> Int64\n  2\n")
+        repo (gk/initGitRepo! root "pathResolveAsl" "path-resolve.invalid")]
+    root)
+
+fn ! memoBuilds! root: String -> Int64
+  (listLength (filter (fn [l] (stringStartsWith? l "(:mod ")) (stringLines (resultOr (fileReadString (str root "/.asl/run/pathResolve/modules.asn")) ""))))
+
 fn ! runTests -> Bool
   (let [fs (files)
         run (recorded!)
@@ -53,9 +69,18 @@ fn ! runTests -> Bool
         bare (readTarget! mroot "kit-tools/fleet/run")
         withExt (readTarget! mroot "kit-tools/fleet/run.asl")
         other (readTarget! mroot "kit-other/fleet/run")
+        outl (opTarget! mroot "outline" "pk/tools/fleet/run")
+        qry (opTarget! mroot "query" "pk/other/fleet/run")
+        obs (opTarget! mroot "observe" "pk/tools/fleet/run")
+        again (readTarget! mroot "kit-tools/fleet/run")
+        builds (memoBuilds! mroot)
+        moved (fileWrite (str mroot "/pk/tools/fleet/run.asl") "(module kit-moved/fleet/run\n  :x [job])\n\nfn job -> Int64\n  1\n")
+        stale (readTarget! mroot "kit-tools/fleet/run")
+        rebuilt (memoBuilds! mroot)
         mcleaned (ok? (pathRemove mroot))
-        here (resultOr (realPath ".") ".")
-        real (readTarget! here "asl-tools/fleet/run")]
+        aroot (aslRoot!)
+        real (readTarget! aroot "asl-tools/fleet/run")
+        acleaned (ok? (pathRemove aroot))]
     (do
       (assert (= (pr/resolveIn fs "kit-gates/metaAudit.asl") (some "pk/packages/kit-gates/src/metaAudit.asl")) "a module-name file path resolves to the one file ending in its rest")
       (assert (= (pr/resolveIn fs "kit-gates/util.asl") (some "pk/packages/kit-gates/src/util.asl")) "two candidates narrow to the one that carries the dropped segment")
@@ -70,7 +95,12 @@ fn ! runTests -> Bool
       (assert (= bare "pk/tools/fleet/run.asl") (str "a module name without .asl resolves through the checker to its file: " bare))
       (assert (= withExt "pk/tools/fleet/run.asl") (str "a module name with .asl resolves to the file its header declares, though another fleet/run.asl exists: " withExt))
       (assert (= other "pk/other/fleet/run.asl") (str "the other package keeps its own module: " other))
+      (assert (and (= outl "pk/tools/fleet/run.asl") (and (= qry "pk/other/fleet/run.asl") (= obs "pk/tools/fleet/run.asl"))) (str "outline, query and observe of a missing x/y run on x/y.asl when it exists: " outl " " qry " " obs))
       (assert mcleaned "the module fixture root is removed")
-      (assert (= real "asl/tools/fleet/run.asl") (str "in this workspace asl-tools/fleet/run resolves to asl/tools/fleet/run.asl: " real))
+      (assert (= real "asl/tools/fleet/run.asl") (str "in a scratch root of the workspace shape asl-tools/fleet/run resolves to asl/tools/fleet/run.asl: " real))
+      (assert acleaned "the scratch workspace root is removed")
+      (assert (= again "pk/tools/fleet/run.asl") (str "a repeated module lookup still resolves: " again))
+      (assert (= builds 2) (str "two module names looked up five times build the index twice: the .asl and repeat lookups reuse the memo row and x/y to x/y.asl builds none: " (stringFromInt64 builds)))
+      (assert (and (!= stale "pk/tools/fleet/run.asl") (= rebuilt 3)) (str "a memo row whose file no longer declares the module is not used: the lookup builds again: " stale " builds " (stringFromInt64 rebuilt)))
       (assert (none? (pr/resolveIn (list "asl" "asl/tools" "asl/tools/coord" "asl/other" "asl/other/fixtures") "asl/tools/coord/fixtures")) "a new dir under a real top-level prefix is not redirected to another package's same-named dir")
       true))
