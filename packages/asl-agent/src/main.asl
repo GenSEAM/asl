@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1493,6 +1493,13 @@ fn wallCapped base: Int64 left: (Option Int64) -> Int64
 fn wallCappedProvider p: pv/Provider left: (Option Int64) -> pv/Provider
   (match left ((some l) (pv/capTimeouts p l)) ((none) p))
 
+; (:m :ref LEON-FINISH-HANG :do "the finish's grader call gets the run's whole wall left less graderGraceSec for the hand-back, commit and receipt, so a slow grader ends on its own timeout inside the outer bound instead of on the provider's run timeout")
+fn graderGraceSec -> Int64
+  15
+
+fn graderWall wallBudget: (Option Int64) elapsed: Float64 -> (Option Int64)
+  (match (wallLeft wallBudget elapsed) ((some l) (some (max 1 (- l (graderGraceSec))))) ((none) none))
+
 ; (:m :ref LEONATTR :do "the provider a live turn calls: wall-capped, and carrying the prefill only when the attractor set one, so an off turn sends the request as before")
 ; (:m :ref NATIVE-TOOLS-DEFAULT :do "the tool schemas a session offers on its main turns: one per local op shape for ops, none for off or false, and the single step(form) tool otherwise, so absent means step (PROTO-STUDY: 24/27 sessions green across 9 aliases, beam 0/9 -> 7/9, no loss on any alias that worked); a route that rejects tools is marked :nativeTools false in its gateway row, never here; advisor and grader calls never carry them")
 fn sessionTools v: String -> (List j/Json)
@@ -2277,7 +2284,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (ok none))
                   reviewLogged (if reviewInvoked (appendLiveHook! path turn "reviewer" reviewResult) true)
                   integrity (if (and terminal (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrityWritten! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base)
+                    (gi/gateIntegrityWithin! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)))
                     (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
@@ -2457,6 +2464,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                       providerCall (fn [p sys user] (pv/nextTurn! p sys user))
                       hooks (liveHooks! provider)
                       cfgText (ac/configText! rootDir)
+                      startedAt (ao/nowMono)
                       graderIntent (optionOr (ac/agentLoopValue cfgText ":graderIntent") "grade")
                       graderProfile (optionOr (ac/agentLoopValue cfgText ":graderProfile") "")
                       specOn (!= (optionOr (ac/agentLoopValue cfgText ":specCheck") "true") "false")
@@ -2466,7 +2474,7 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                         :contextTokens (some tokens) :model (some model) :gateTimeout (some ra.gateTimeout)
                         :wallBudget (reservedWall ra.wallBudget (wallSetting cfgText ":wallReserveSec" (defaultWallReserveSec))) :resume none :intent ra.intent :plan ra.plan :specCheck specOn :commit ra.commit :inheritedBase ra.inheritedBase :toolRoot repoRoot
                         :next call :advise (pairFirst hooks) :review (pairSecond hooks)
-                        :grade (fn [role sys msg] (liveGrader provider graderIntent graderProfile path sys msg))
+                        :grade (fn [role sys msg] (liveGrader (wallCappedProvider provider (graderWall ra.wallBudget (- (ao/nowMono) startedAt))) graderIntent graderProfile path sys msg))
                         :newId (fn [] session) :now (fn [] (ao/nowMono))
                         :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))]
                   (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
