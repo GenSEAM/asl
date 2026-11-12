@@ -23,6 +23,7 @@
       (aslAgent/gateIntegrity :a gi)
       (aslAgent/claims :a cl)
       (aslAgent/claimBacking :a cb)
+      (aslAgent/bus :a bus)
       (aslAgent/agentConfig :a ac)
       (aslAgent/poolOps :a po)
       (aslGateway/codeRoute :a cr)
@@ -146,7 +147,8 @@
   (:f resume (Option ResumeState))
   (:f pool (Option po/PoolSelf))
   (:f parentPid (Option Int64))
-  (:f route (Option RouteSetup)))
+  (:f route (Option RouteSetup))
+  (:f unit String :default ""))
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
@@ -2469,11 +2471,37 @@ fn ! liveSetup! ra0: RunArgs repoRoot0: String rootDir: String env: pv/ProviderE
                         :sleep (fn [seconds] (do (if (> seconds 0) (sleepMs (* seconds 1000)) ()) true)))]
                   (prepared (LiveSession :ra ra :repoRoot repoRoot :rootDir rootDir :path path :system system :env liveEnv :turnProvider turnProvider :providerCall providerCall)))))))))))
 
+; (:m :ref SIGNAL-LEON-DONE :do "the bus row of a finished run: :unit is the run's :unit, else its session; :gates is passed/total of the final gates; :asserts sums the executed asserts their output reports")
+fn busGatesText gates: (List j/Json) -> String
+  (str (stringFromInt64 (listLength (filter (fn [g] (= (ctx/gateOutcome g) ":exit 0")) gates))) "/" (stringFromInt64 (listLength gates)))
+
+fn busAsserts gates: (List j/Json) -> Int64
+  (fold (fn [acc g] (+ acc (optionOr (cb/executedAsserts (match (j/jsonGet g "stdout") ((some v) (pv/pyStr v)) ((none) ""))) 0))) 0 gates)
+
+fn ! busHead! rootDir: String -> String
+  (match (go/runBounded! (list "git" "rev-parse" "HEAD") (some rootDir) (some 10) none none)
+    ((ok b) (if (= (optionOr b.code 1) 0) (stringTrim b.out) ""))
+    ((err _) ""))
+
+; (:m :ref SIGNAL-LEON-DONE :do "every live run ends here, so this is the one place a terminal bus row is emitted, for a run that names its :unit (a run without one has no waiter, and test runs would fill the shared inbox); the inbox lives under :agentLoop :busHome of the run root's config, else HOME; a failed append is logged to stderr and the receipt is unchanged")
+fn ! emitBus! ra: RunArgs rootDir: String receipt: LoopResult exit: Int64 -> Bool
+  (if (stringEmpty? ra.unit) true (emitBusRow! ra.unit rootDir receipt exit))
+
+fn ! emitBusRow! unit: String rootDir: String receipt: LoopResult exit: Int64 -> Bool
+  (let [home (optionOr (ac/agentLoopValue (ac/configText! rootDir) ":busHome") (optionOr (envGet "HOME") ""))
+        ev (bus/BusEvent :unit unit :stop (optionOr receipt.stop receipt.status) :head (busHead! rootDir) :gates (busGatesText receipt.gates)
+             :exit exit :asserts (busAsserts receipt.gates) :receiptPath (match receipt.journal ((some p) (pyJoin rootDir p)) ((none) "")) :at (/ (nowNs) 1000000))]
+    (match (bus/emitTerminal! (bus/busPath home) ev)
+      ((ok _) true)
+      ((err e) (do (eprintln (str "(:busEmit :status :failed :unit \"" (c/escapeAsn unit) "\" :message \"" (c/escapeAsn e) "\")")) false))))
+
 fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
   (let [base (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))
         served (liveServed! ls.rootDir result.journal)
-        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served))]
-    (MainResult :stdout (formatReceipt receipt) :exitCode (liveExitCode receipt)))
+        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served))
+        exit (liveExitCode receipt)
+        _bus (emitBus! ls.ra ls.rootDir receipt exit)]
+    (MainResult :stdout (formatReceipt receipt) :exitCode exit))
 
 fn ! liveRun ls: LiveSession -> MainResult
   (liveResult ls (rl/runLoopWithProviderWatched! ls.env ls.turnProvider ls.ra.parentPid
@@ -2510,7 +2538,7 @@ fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResul
     (rejectWith (str ":error ERR_TOOLROOT :message \"toolRoot has no executable bin/asl: " (c/escapeAsn ra.toolRoot) "\"") 1))
 
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
-  (RunArgs :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
+  (RunArgs :unit ra.unit :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :gateParallelism ra.gateParallelism :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
@@ -2534,7 +2562,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
-                    :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
+                    :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :unit (textValue (paramOr ps "unit" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
                     :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false)) :inheritedBase (textValue (paramOr ps "inheritedBase" (j/jstr "")))
                     :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))

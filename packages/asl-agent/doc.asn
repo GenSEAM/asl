@@ -1273,3 +1273,4 @@
 (:doc :symbol "asl/packages/asl-agent/src/bus.asl#waitFor!" :text "path unit sinceMs deadlineMs: blocks until a row for the unit with at >= sinceMs appears or the clock reaches deadlineMs (epoch ms), sleeping at most pollMs between reads; none on the deadline")
 (:doc :symbol "asl/packages/asl-agent/src/bus.asl#pollMs" :text "the longest sleep between two reads in waitFor!, 200 ms")
 (:doc :symbol "asl/packages/asl-agent/tests/busTest.asl#runTests" :text "the terminal-run inbox on a scratch HOME: whole rows, lock held elsewhere blocks an emit, waitFor returns the row, the deadline returns none, a row landing mid-wait is found, a torn last line is not a row")
+(:doc :symbol "asl/packages/asl-agent/tests/busEmitLoopTest.asl#runTests" :text "no args: a recorded run with :unit busUnitX on a root whose :agentLoop :busHome is a scratch dir leaves exactly one bus row for that unit with its exit code and journal; a run without :unit leaves none (SIGNAL-LEON-DONE)")
