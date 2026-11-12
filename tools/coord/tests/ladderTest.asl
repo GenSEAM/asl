@@ -407,6 +407,14 @@ fn testFallThrough -> Bool
         (assert (and (stringContains? row "no paid lane") (stringContains? row "R3: no strong lane")) (str "naming both rungs: " row))
         true))
 
+; (:m :ref WAKE-LOWS :do "an alias listed in both the paid and the strong tier appears once in the joined R2+R3 await; joinAwait is a first-seen union")
+fn testJoinDedup -> Bool
+  (let [(shut (run (unit "high" false) (goodGates) (list (lane "ocDeepseekFlash" "paid" 0) (lane "ccKimi31Pro" "paid" 0) (lane "ccKimi31Pro" "strong" 0)) (list)))]
+    (do (assert (and (= shut.action "await") (= shut.awaitLane "ocDeepseekFlash ccKimi31Pro")) (str "the shared alias is named once: " shut.awaitLane))
+        (assert (= (l/joinAwait "a b" "b c") "a b c") (str "first-seen union: " (l/joinAwait "a b" "b c")))
+        (assert (= (l/joinAwait "a" "") "a") "an empty side adds nothing")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testFamilies) "families")
       (assert (testTokens) "tokens")
@@ -425,6 +433,7 @@ fn ! runTests -> Bool
       (assert (testPermanentLane) "permanent lane errors skip the lane")
       (assert (testSoleLaneBlocks) "a sole lane that dies blocks visibly, statuses are real statuses")
       (assert (testBlocked) "blocked")
+      (assert (testJoinDedup) "R2+R3 await join names each alias once")
       (assert (testBrief) "brief")
       (assert (testBriefWholeDiff) "whole diff reaches the reviewer")
       (assert (testBriefWithheldMarker) "a withheld diff line leaves a marker")
