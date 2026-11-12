@@ -66,7 +66,8 @@ fn startsItem? line: String -> Bool
   (and (not (stringEmpty? line))
        (not (stringStartsWith? line " "))
        (not (stringStartsWith? line ";"))
-       (not (stringStartsWith? line ")")))
+       (not (stringStartsWith? line ")"))
+       (not (stringEmpty? (itemNameOf line))))
 
 ; (:m :ref PERF-AFFECTED-TESTS-SYMBOL :do "one pass over the lines: comment lines wait and join the next item, indented and blank lines extend the open item")
 fn ! itemsLoop lines: (List String) cur: (List String) pend: (List String) name: String out: (List Item) -> (List Item)
@@ -107,8 +108,15 @@ schema Hit
 fn keyOf modName: String sym: String -> String
   (str modName "#" sym)
 
+; (:m :ref PERF-AFFECTED-TESTS-SYMBOL :do "an import is the module name or, in the path form, the file path without .asl, so a suite importing asl/packages/P/src/M is a dependent of the module named in M's header")
 fn dependents mods: (List Mod) target: String -> (List Mod)
-  (filter (fn [(m Mod)] -> Bool (or (= m.name target) (listContains? m.imports target))) mods)
+  (let [(pathForm (map (fn [(m Mod)] -> String (optionOr (stringSlice m.path 0 (- (stringLength m.path) 4)) m.path))
+                       (filter (fn [(m Mod)] -> Bool (and (= m.name target) (stringEndsWith? m.path ".asl"))) mods)))]
+    (filter (fn [(m Mod)] -> Bool
+              (or (= m.name target)
+                  (listContains? m.imports target)
+                  (some? (listHead (filter (fn [(i String)] -> Bool (listContains? pathForm i)) m.imports)))))
+            mods))
 
 ; (:m :ref PERF-AFFECTED-TESTS-SYMBOL :do "form edge: a bin/asl-driven suite has no import edge, so a module counts as the handler of form K when a line of it compares something with the literal \"K\" or \":K\"")
 fn ! dispatchesForm? source: String form: String -> Bool

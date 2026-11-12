@@ -2380,7 +2380,7 @@
 (:doc :symbol "asl/tools/affectedSuites.asl#itemNameOf" :text "name of the item starting at a column-0 line, empty when it names nothing")
 (:doc :symbol "asl/tools/affectedSuites.asl#wordIn?" :text "name occurs in text as a whole word; a qualified alias/name and a bare name hit, foo! is not foo")
 (:doc :symbol "asl/tools/affectedSuites.asl#affectedSuitesIn" :text "sources as (path source) pairs, changed files, changed symbols as path#name (path#* for a whole module, none given means all of a changed file) and form names; returns (suite reason) pairs by path")
-(:doc :symbol "asl/tools/affectedSuites.asl#affectedSuites!" :text "affectedSuitesIn over the git-tracked .asl files and the op names of asl/grammar/tools.asn")
+(:doc :symbol "asl/tools/affectedSuites.asl#affectedSuites!" :text "affectedSuitesIn over the git-tracked .asl files and the op names of asl/grammar/tools.asn; about 3 s warm. A first run in a fresh worktree can wait minutes at near zero CPU on the native cold-start build lock (bin/asl prints the holder), not in this module")
 (:doc :symbol "asl/tools/affectedSuites.asl#changedSymbolsOf" :text "per changed .asl file the item names whose text differs from the base, as path#name rows; a file with no base copy is path#*")
 (:doc :symbol "asl/tools/affectedSuites.asl#changedItemNames" :text "item names that differ, were added or were removed between two sources")
 (:doc :symbol "asl/tools/affectedSuites.asl#formNamesFrom" :text "op names from the (:op :K rows of the tools registry text")
