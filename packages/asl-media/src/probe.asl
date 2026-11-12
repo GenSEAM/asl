@@ -1,5 +1,5 @@
 (module asl-media/probe
-  :x [ProbeStream ProbeInfo parseProbe probeArgv ffmpegArgv pathAllowed? inputAllowed! outputAllowed! probe! runFfmpeg! defaultFfprobe defaultFfmpeg parseRational]
+  :x [ProbeStream ProbeInfo parseProbe probeArgv ffmpegArgv pathAllowed? inputAllowed! outputAllowed! argBad? whichBin! ffprobeBin! ffmpegBin! probe! runFfmpeg! defaultFfprobe defaultFfmpeg parseRational]
   :i [(asl-json/json :a js) (asl-tools/fleet/run :a fr)])
 
 schema ProbeStream
@@ -150,12 +150,76 @@ fn ! probe! bin: String path: String roots: (List String) timeoutS: Int64 -> (Re
       ((err e) (err e))
       ((ok out) (parseProbe out))))
 
+; (:m :ref U-MEDIA :do "args are options only: inputs and outputs come from the checked lists and are placed by this function, so a path, a protocol, a file-reading filter, an overwrite flag or a bare file name in args is refused rather than guessed at")
+fn nameChar? b: Int64 -> Bool
+  (or (and (>= b 48) (<= b 57)) (or (and (>= b 65) (<= b 90)) (or (and (>= b 97) (<= b 122)) (or (= b 46) (or (= b 95) (= b 45))))))
+
+fn allNameChars? bs: Bytes i: Int64 -> Bool
+  (cond ((>= i (bytesLength bs)) true)
+        ((not (nameChar? (bytesGet bs i))) false)
+        (else (allNameChars? bs (+ i 1))))
+
+fn anyNonDigit? bs: Bytes i: Int64 -> Bool
+  (cond ((>= i (bytesLength bs)) false)
+        ((or (< (bytesGet bs i) 48) (> (bytesGet bs i) 57)) true)
+        (else (anyNonDigit? bs (+ i 1))))
+
+; (:m :ref U-MEDIA :do "a token of only name characters with a dot and an extension that is not all digits, such as out.mp4; 1.5 and libx264 pass")
+fn bareFileName? tok: String -> Bool
+  (let [(parts (stringSplit tok "."))
+        (ext (optionOr (listGet parts (- (listLength parts) 1)) ""))]
+    (and (> (listLength parts) 1)
+         (and (not (stringStartsWith? tok "-"))
+              (and (allNameChars? (stringToBytes tok) 0)
+                   (anyNonDigit? (stringToBytes ext) 0)))))
+
+fn anyPrefix? tok: String ks: (List String) -> Bool
+  (fold (fn [(acc Bool) (k String)] -> Bool (or acc (stringStartsWith? tok k))) false ks)
+
+fn anyInfix? tok: String ks: (List String) -> Bool
+  (fold (fn [(acc Bool) (k String)] -> Bool (or acc (stringContains? tok k))) false ks)
+
+fn argBad? tok: String inputs: (List String) outputs: (List String) -> Bool
+  (if (or (listContains? inputs tok) (listContains? outputs tok))
+    false
+    (or (listContains? (list "-y" "-i" "-report" "-progress" "-vstats_file" "-passlogfile" "-attach" "-dump_attachment" "-sdp_file" "-filter_script" "-filter_complex_script" "-protocol_whitelist") tok)
+        (stringContains? tok "/")
+        (anyPrefix? tok (list "." "~" "pipe:" "file:" "concat:" "subfile:" "tcp:" "udp:" "http" "data:"))
+        (anyInfix? tok (list "movie=" "subtitles=" "ass=" "filename=" "fontfile=" "textfile=" "@"))
+        (bareFileName? tok)))
+
+fn ! pathOnPath! dirs: (List String) name: String -> Option String
+  (match (listHead dirs)
+    ((none) none)
+    ((some d)
+      (let [(c (str d "/" name))]
+        (if (and (not (stringEmpty? d)) (fileExists? c))
+          (some c)
+          (pathOnPath! (optionOr (listTail dirs) (list)) name)))))
+
+; (:m :ref U-MEDIA :do "first PATH entry holding a file of that name, else the fallback; the caller passes the result as bin, so a test never depends on PATH")
+fn ! whichBin! name: String fallback: String -> String
+  (optionOr (pathOnPath! (stringSplit (optionOr (envGet "PATH") "") ":") name) fallback)
+
+fn ! ffprobeBin! -> String
+  (whichBin! "ffprobe" (defaultFfprobe))
+
+fn ! ffmpegBin! -> String
+  (whichBin! "ffmpeg" (defaultFfmpeg))
+
+fn inputArgs ins: (List String) -> (List String)
+  (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (list "-i" p))) (list) ins)
+
 fn ! runFfmpeg! bin: String inputs: (List String) outputs: (List String) args: (List String) roots: (List String) timeoutS: Int64 -> (Result String String)
   (let [(badIn (listHead (filter (fn [(p String)] -> Bool (not (inputAllowed! p roots))) inputs)))
-        (badOut (listHead (filter (fn [(p String)] -> Bool (not (outputAllowed! p roots))) outputs)))]
+        (badOut (listHead (filter (fn [(p String)] -> Bool (not (outputAllowed! p roots))) outputs)))
+        (badArg (listHead (filter (fn [(t String)] -> Bool (argBad? t inputs outputs)) args)))]
     (match badIn
       ((some bad) (err (str "mediaPathNotAllowed: " bad)))
       ((none)
         (match badOut
           ((some bad) (err (str "mediaPathNotAllowed: " bad)))
-          ((none) (runLabelled! (ffmpegArgv bin args) (fr/limits timeoutS 64)))))))
+          ((none)
+            (match badArg
+              ((some bad) (err (str "mediaArgRefused: " bad)))
+              ((none) (runLabelled! (ffmpegArgv bin (listAppend (listAppend (inputArgs inputs) args) outputs)) (fr/limits timeoutS 64)))))))))

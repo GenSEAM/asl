@@ -61,7 +61,7 @@ fn ! testAllowlist! -> Bool
       (assert (not (pr/pathAllowed? "media/a.mp4" roots)) "relative refused")
       (assert (not (pr/pathAllowed? "-" roots)) "stdin marker refused")
       (assert (stringStartsWith? (optionOr (err->option (pr/probe! "/nonexistent/ffprobe" "/etc/passwd" roots 5)) "") "mediaPathNotAllowed") "probe refuses before spawn: a missing binary is not reached")
-      (assert (stringStartsWith? (optionOr (match (pr/runFfmpeg! "/nonexistent/ffmpeg" (list "/work/media/a" "/etc/passwd") (list) (list "-i") roots 5) ((err e) (some e)) ((ok _) none)) "") "mediaPathNotAllowed") "ffmpeg refuses a bad input before spawn")
+      (assert (stringStartsWith? (optionOr (match (pr/runFfmpeg! "/nonexistent/ffmpeg" (list "/work/media/a" "/etc/passwd") (list) (list) roots 5) ((err e) (some e)) ((ok _) none)) "") "mediaPathNotAllowed") "ffmpeg refuses a bad input before spawn")
       true))
 
 ; (:m :ref U-MEDIA :do "a runtime-built tree: root holds ok.mp4 and a symlink esc to a sibling directory outside the root; nothing is spawned, only the allowlist is asked")
@@ -100,6 +100,31 @@ fn ! testSymlinks! -> Bool
             (_ (pathRemove base))]
         true)))
 
+fn ! testArgs! -> Bool
+  (let [(roots (list "/tmp"))
+        (ins (list))
+        (outs (list))
+        (bad! (fn [(args (List String))] -> Bool
+                (stringStartsWith? (optionOr (errS (pr/runFfmpeg! "/nonexistent/ffmpeg" ins outs args roots 5)) "") "mediaArgRefused")))]
+    (do
+      (assert (bad! (list "/tmp/x.mp4")) "an absolute path in args is refused before spawn")
+      (assert (bad! (list "../x")) "a relative escape in args is refused")
+      (assert (bad! (list "~/x")) "a home path in args is refused")
+      (assert (bad! (list "-y")) "-y is refused, overwrite is not the caller's to ask for")
+      (assert (bad! (list "-i" "x")) "-i in args is refused, inputs are a checked list")
+      (assert (bad! (list "out.mp4")) "a bare output file name in args is refused")
+      (assert (bad! (list "-vf" "movie=a.png[x]")) "a file-reading filter is refused")
+      (assert (bad! (list "-f" "pipe:1")) "a protocol token is refused")
+      (assert (not (bad! (list "-c:v" "libx264" "-r" "1.5" "-vf" "scale=64:48"))) "plain options pass the arg check and reach the spawn")
+      (assert (bad! (list "-report")) "an option that writes a log file is refused")
+      true))
+
+fn ! testWhich! -> Bool
+  (do
+    (assert (stringEndsWith? (pr/whichBin! "sh" "/nowhere/sh") "/sh") "a name on PATH resolves to a PATH entry")
+    (assert (= (pr/whichBin! "noSuchBinaryAslMedia" "/fallback/x") "/fallback/x") "an absent name falls back")
+    true)
+
 fn ! testSpawnLabels! -> Bool
   (do
     (assert (stringStartsWith? (optionOr (err->option (pr/probe! "/bin/false" "/tmp/x" (list "/tmp") 5)) "") "mediaExit") "non-zero exit is labelled")
@@ -135,6 +160,8 @@ fn ! runTests -> Bool
     (testArgv!)
     (testAllowlist!)
     (testSymlinks!)
+    (testArgs!)
+    (testWhich!)
     (testSpawnLabels!)
     (testLiveProbe!)
     true)
