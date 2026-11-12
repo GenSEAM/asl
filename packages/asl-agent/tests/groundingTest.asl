@@ -27,6 +27,12 @@ fn exampleDiags examples: (List (Pair String String)) -> Int64
 fn countOf hay: String needle: String -> Int64
   (- (listLength (stringSplit hay needle)) 1)
 
+fn journalFixture -> String
+  "(:turn 1 :got \"argument to stringSlice: a argument to mapGet: x\") (:turn 2 :got \"argument to stringSlice: b argument to mapGet: y unbound symbol: localHelper\") (:turn 3 :got \"argument to stringSlice: c ERR_ARITY pair takes 2, given 3 unbound symbol: localHelper unbound symbol: localHelper\") (:turn 4 :got \"ERR_ARITY pair takes 2 unbound symbol: localHelper unbound symbol: localHelper unbound symbol: localHelper\")"
+
+fn journalShuffled -> String
+  "(:turn 4 :got \"ERR_ARITY pair takes 2 unbound symbol: localHelper unbound symbol: localHelper unbound symbol: localHelper\") (:turn 2 :got \"argument to mapGet: y argument to stringSlice: b unbound symbol: localHelper\") (:turn 1 :got \"argument to mapGet: x argument to stringSlice: a\") (:turn 3 :got \"ERR_ARITY pair takes 2, given 3 argument to stringSlice: c unbound symbol: localHelper unbound symbol: localHelper\")"
+
 fn ! runTests -> Bool
   (let [root (resultOr (realPath ".") ".")
         cardR (gr/aslCard! root)
@@ -71,7 +77,18 @@ fn ! runTests -> Bool
       (assert (= (gr/sigLine "listGet") "listGet (List T) Int64 -> (Option T)") "a signature line is the checker's own builtinSig")
       (assert (listAll? (fn [n] (stringContains? card (str "\"" (gr/sigLine n) "\""))) (gr/cardSigNames)) "every listed builtin carries its checker signature")
       (assert (listAll? (fn [n] (not (stringEmpty? (gr/sigLine n)))) (gr/cardSigNames)) "every listed builtin is known to the checker")
-      (assert (stringContains? card (str ":sigs (\"" (gr/sigLine "optionOr") "\" \"" (gr/sigLine "pair") "\"")) "the most-called builtins lead the sigs, as the checker's builtinSig prints them")
+      (assert (stringContains? card (str ":sigs (\"" (gr/sigLine "println") "\" \"" (gr/sigLine "some?") "\"")) "the builtins the journals show models misnaming lead the sigs, then the repo-frequency list")
+      (assert (stringContains? card (str "\"" (gr/sigLine "optionOr") "\" \"" (gr/sigLine "pair") "\"")) "the most-called builtins follow in repo-frequency order")
+      (assert (stringContains? card ":wrong (\"println! -> println\" \"isSome -> some?\"") "the card names the invented spellings measured in the journals")
+      (assert (stringContains? card "ASL is not on the web, never web-search") "the lookup row says ASL is not on the web")
+      (assert (<= (gr/tokensOf (gr/toolCard (gr/toolErrNames))) (gr/toolCapTokens)) "the tool card stays within the 2000-token cap, counted as bytes/4")
+      (assert (= (gr/toolCard (gr/toolErrNames)) (gr/toolCard (gr/toolErrNames))) "the tool card is identical on every build")
+      (assert (< (gr/tokensOf (gr/toolCardCapped (gr/toolErrNames) 300)) 301) "a 300-token cap is honoured")
+      (assert (< (listLength (stringSplit (gr/toolCardCapped (gr/toolErrNames) 300) " -> ")) (listLength (stringSplit (gr/toolCard (gr/toolErrNames)) " -> "))) "a tight cap drops the tail of the sigs, not the head")
+      (assert (stringContains? (gr/toolCardCapped (gr/toolErrNames) 300) (gr/sigLine "println")) "the cap keeps the head of the ranking")
+      (assert (= (gr/rankedBuiltins (gr/errorCounts (journalFixture))) (list "stringSlice" "mapGet" "pair")) "journal fixture: builtins by error count, ties by name, helpers that are not builtins dropped")
+      (assert (= (gr/rankedBuiltins (gr/errorCounts (journalShuffled))) (list "stringSlice" "mapGet" "pair")) "the ranking does not depend on journal order")
+      (assert (stringContains? (gr/toolCard (gr/rankedBuiltins (gr/errorCounts (journalFixture)))) (str ":sigs (\"" (gr/sigLine "stringSlice") "\" \"" (gr/sigLine "mapGet") "\" \"" (gr/sigLine "pair") "\"")) "the fixture journal's top builtins lead the sigs in rank order")
       (assert (= (gr/sigLine "mapEmpty") "mapEmpty () -> (Map K V)") "a builtin with no parameters prints () where the checker has an empty list")
       (assert (listAll? (fn [s] (not (stringEmpty? (gr/sigLine s)))) (list "mapEmpty" "mapSet" "pair" "pairFirst" "pairSecond")) "the map and pair builtins are known to the checker")
       (assert (listAll? (fn [n] (stringContains? card (str "\"" (gr/sigLine n) "\""))) (list "stringSplit" "stringSlice")) "the string signatures are on the card, as the checker's builtinSig prints them")

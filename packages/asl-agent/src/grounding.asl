@@ -1,5 +1,5 @@
 (module aslAgent/grounding
-  :x [cardSources cardRuleAnchors cardTypeAnchors cardSigNames cardExamples sigLine cardItems languageText! languageRules typeRules libExample aslCard! wantsAslCard
+  :x [cardSources cardRuleAnchors cardTypeAnchors cardSigNames cardExamples sigLine cardItems languageText! languageRules typeRules libExample aslCard! wantsAslCard toolCard toolCardCapped toolCapTokens toolErrNames toolWrongNames errorCounts rankedBuiltins tokensOf
       rejectedReceipts rejectHints lastGot hintCodes]
   :i [(aslAgent/core :a c) (asl-json/json :a j) (asl-checker/types :a ty)])
 
@@ -18,6 +18,76 @@ fn cardRuleAnchors -> (List String)
 
 fn cardSigNames -> (List String)
   (list "optionOr" "pair" "listAppend" "pairFirst" "cons" "pairSecond" "map" "stringLength" "listHead" "stringEmpty?" "listLength" "stringFromInt64" "listEmpty?" "fold" "stringStartsWith?" "filter" "bytesGet" "stringSlice" "listTail" "listGet" "stringJoin" "stringContains?" "listReverse" "listContains?" "stringReplace" "stringTrim" "mapGet" "stringSplit" "mapSet" "mapEmpty" "stringIndexOf" "stringToBytes" "bytesLength" "some?" "stringEndsWith?" "listAny?" "stringToInt64" "mod" "fileReadString" "resultOr" "max" "mapHas?" "envGet" "bytesSet" "min" "int64ToFloat64" "listDrop" "listTake" "stringLower" "listSlice" "fdClose" "pathRemove" "ok?" "stringChars" "fileExists?" "fileWrite" "bytesAlloc" "listAll?" "monotonicNs" "mapKeys" "none?" "realPath" "println" "fileStat" "dirCreate" "listLast" "procSelf" "eprintln" "nowNs" "stringConcat" "listFlatMap" "stringLines" "charCode" "dirList" "listSort" "stringFromFloat64" "listSortBy" "float64ToInt64" "stringToFloat64" "pathRename" "bytesSha256" "mapValues" "listIndexOf" "enumerate" "fileReadBytes" "optionMap" "procWaitPid")
+
+; (:m :ref TOOLCARD-A :do "measured 2026-11-12 over .asl/run/agentLoop and .asl/run/analysis journals (8353 files, grep of the receipts): unbound symbol println! 98, isSome 62, readFile 12, replaceAll 10; ERR_TYPE_MISMATCH at pairFirst 11, pairSecond 11, listContains? 9; ERR_ARITY with 8. Names that are the repo's own helpers are not listed. Counts are per mention in the journals, not per run")
+fn toolWrongNames -> (List (Pair String String))
+  (list (pair "println!" "println") (pair "isSome" "some?") (pair "readFile" "fileReadString") (pair "replaceAll" "stringReplace"))
+
+fn toolErrNames -> (List String)
+  (list "println" "some?" "fileReadString" "stringReplace" "pairFirst" "pairSecond" "listContains?" "with")
+
+fn toolCapTokens -> Int64
+  2000
+
+fn tokensOf s: String -> Int64
+  (/ (+ (stringLength s) 3) 4)
+
+fn nameChar? s: String -> Bool
+  (and (not (stringEmpty? s)) (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_?!>-" s))
+
+fn nameEnd s: String n: Int64 i: Int64 -> Int64
+  (if (and (< i n) (nameChar? (at s i))) (nameEnd s n (+ i 1)) i)
+
+fn namesAfter text: String marker: String -> (List String)
+  (filter (fn [x] (not (stringEmpty? x)))
+    (map (fn [piece] (cut piece 0 (nameEnd piece (stringLength piece) 0)))
+         (listDrop (stringSplit text marker) 1)))
+
+fn padCount n: Int64 -> String
+  (let [t (stringFromInt64 (- 999999999 n))]
+    (str (stringJoin (listRepeat "0" (- 9 (stringLength t))) "") t))
+
+fn listRepeat x: String n: Int64 -> (List String)
+  (if (<= n 0) (list) (cons x (listRepeat x (- n 1))))
+
+; (:m :ref TOOLCARD-A :do "name counts over journal text: unbound symbol X, ERR_ARITY X takes, argument to X; sorted by count descending then name, so equal counts order the same on every build")
+fn errorCounts text: String -> (List (Pair String Int64))
+  (let [names (listAppend (namesAfter text "unbound symbol: ") (listAppend (namesAfter text "ERR_ARITY ") (namesAfter text "argument to ")))
+        counts (fold (fn [m n] (mapSet m n (+ 1 (optionOr (mapGet m n) 0)))) (mapEmpty) names)
+        rows (map (fn [n] (pair n (optionOr (mapGet counts n) 0))) (mapKeys counts))]
+    (listSortBy (fn [r] (str (padCount (pairSecond r)) (pairFirst r))) rows))
+
+fn rankedBuiltins counts: (List (Pair String Int64)) -> (List String)
+  (filter (fn [n] (not (stringEmpty? (sigLine n)))) (map pairFirst counts))
+
+fn uniqueNames xs: (List String) -> (List String)
+  (fold (fn [acc x] (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
+
+fn fillSigs names: (List String) used: Int64 budget: Int64 -> (List String)
+  (match (listHead names)
+    ((none) (list))
+    ((some n)
+      (let [line (sigLine n)
+            cost (+ (stringLength (c/escapeAsn line)) 3)]
+        (cond
+          ((stringEmpty? line) (fillSigs (listDrop names 1) used budget))
+          ((> (+ used cost) budget) (list))
+          (else (cons line (fillSigs (listDrop names 1) (+ used cost) budget)))))))
+
+fn toolLookup -> String
+  "ASL is not on the web, never web-search a repo name or a builtin. A name in this repo -> (:step :op query :query name :in code), definitions and calls; one function -> (:step :op read :file f :symbol name); a file's shape -> (:step :op outline :file f); a builtin -> (:step :op help :name builtinName) or read asl/packages/asl-checker/src/types.asl#builtinSig; search and research are web only"
+
+; (:m :ref TOOLCARD-A :do "the tool card is :wrong (names models invent, measured) then :sigs (error-ranked builtins first, then the repo-frequency list, filled in order until the byte budget of toolCapTokens*4 is spent, never reordered or skipped) then :lookup; the cap counts bytes/4, an upper bound of tokens for ASCII")
+fn toolCard ranked: (List String) -> String
+  (toolCardCapped ranked (toolCapTokens))
+
+fn toolCardCapped ranked: (List String) capTokens: Int64 -> String
+  (let [wrong (stringJoin (map (fn [p] (str "\"" (c/escapeAsn (pairFirst p)) " -> " (c/escapeAsn (pairSecond p)) "\"")) (toolWrongNames)) " ")
+        head (str " :wrong (" wrong ")\n :sigs (")
+        tail (str ")\n :lookup \"" (c/escapeAsn (toolLookup)) "\"\n")
+        budget (- (* capTokens 4) (+ (stringLength head) (stringLength tail)))
+        sigs (fillSigs (uniqueNames (listAppend ranked (cardSigNames))) 0 budget)]
+    (str head (quotedList sigs) tail))
 
 fn cardExamples -> (List (Pair String String))
   (list (pair "(match (listGet xs 0) ((some v) v) ((none) 0))" "Int64")
@@ -130,8 +200,8 @@ fn ! aslCard! repoRoot: String -> (Result String String)
         (match (fileReadString (str repoRoot "/" libPath))
           ((err e) (err e))
           ((ok lib)
-            (ok (str "(:aslCard :types (" (quotedList (typeRules lang)) ")\n :sigs (" (quotedList (map sigLine (cardSigNames))) ")\n :examples ("
-                 (quotedList (map pairFirst (cardExamples))) ")\n :rules (" (quotedList (languageRules lang)) ")\n :lookup \"ASL is not on the web: a name in this repo -> (:step :op query :query name :in code); a builtin -> (:step :op help :name builtinName) or read asl/packages/asl-checker/src/types.asl#builtinSig; search is web only\"\n"
+            (ok (str "(:aslCard :types (" (quotedList (typeRules lang)) ")\n" (toolCard (toolErrNames))
+                 " :examples (" (quotedList (map pairFirst (cardExamples))) ")\n :rules (" (quotedList (languageRules lang)) ")\n"
                  " :reply \"a write step ends its line; the file follows unescaped in a ``` fence\")\n"
                  (rawStep libPath (libExample lib (cardItems))))))))))
 
