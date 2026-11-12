@@ -1636,9 +1636,17 @@ fn capConfig cfg: VendorConfig left: Int64 -> VendorConfig
     (let [(q (min cfg.queueTimeout (/ left 4)))]
       (with cfg :queueTimeout q :timeout (max 1 (- left q)) :timeoutSet true)))
 
+; (:m :ref LEON-FINISH-HANG :do "a scripted grader under a wall cap behaves as a vendor call would: a delay past the cap ends at the cap with a timeout error, so a test sees the cap the finish puts on its grader call")
+fn capScriptGrade fixture: ScriptData left: Int64 -> ScriptData
+  (if (> fixture.gradeDelayMs (* left 1000))
+    (with fixture :gradeDelayMs (* (max 1 left) 1000) :gradeReply none
+      :gradeError (some (str "ERR_TIMEOUT the grader call was cut at " (stringFromInt64 left) " s of wall")))
+    fixture)
+
 fn capTimeouts p: Provider left: Int64 -> Provider
   (match p
     ((vendorProvider cfg) (vendorProvider (capConfig cfg left)))
+    ((scriptFixtureProvider name fixture index) (scriptFixtureProvider name (capScriptGrade fixture left) index))
     (_ p))
 
 fn setExclude cfg: VendorConfig exclude: String -> VendorConfig
