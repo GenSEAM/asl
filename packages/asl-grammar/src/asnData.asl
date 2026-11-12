@@ -1,5 +1,5 @@
 (module asl-grammar/asnData
-  :x [AsnValue asnParse asnParseAll asnField asnItems asnString asnInt asnFloat asnBool asnKeyword asnRender]
+  :x [AsnValue asnParse asnParseAll asnField asnFieldRaw asnItems asnString asnInt asnFloat asnBool asnKeyword asnRender]
   :i [(asl-grammar/asn :a an)])
 
 ; (:m :ref DS-ASNREADER :do "ASN data text as typed values (inbox workspace-20261030-asnDataReader, row asnDataReader): the reading is asl-grammar/asn's asnReadAll (comments, string escapes, keywords, integers, byte-offset errors), this module only types its atoms (true and false as Bool, a decimal with a point or exponent as Float64) and adds keyword field lookup and a canonical printer; every read error is an err whose text starts with ERR_ASN_")
@@ -62,23 +62,33 @@ fn keyword? v: AsnValue -> Bool
 fn isKey? v: AsnValue key: String -> Bool
   (match v ((asnKw k) (= k key)) (_ false))
 
-fn fieldIn items: (List AsnValue) key: String -> (Option AsnValue)
+fn keywordOrEnd? o: (Option AsnValue) -> Bool
+  (match o ((some v) (keyword? v)) ((none) true))
+
+; (:m :ref DS-ASNREADER-FIX2 :do "true when the item after a keyword is its value: a non-keyword, or a keyword kw2 that is itself followed by a keyword or ends the form ((:status :open :do x) gives :open); a keyword kw2 followed by a non-keyword starts its own pair, so the first keyword is a bare flag ((:revertUnit :sha x))")
+fn valueFollows? rest: (List AsnValue) -> Bool
+  (match (listHead rest)
+    ((none) false)
+    ((some n) (if (keyword? n) (keywordOrEnd? (listGet rest 1)) true)))
+
+fn fieldWalk items: (List AsnValue) key: String raw: Bool -> (Option AsnValue)
   (match (listHead items)
     ((none) (none))
     ((some x)
-      (let [(rest (optionOr (listTail items) (list)))]
-        (if (isKey? x key)
-          (match (listHead rest)
-            ((some v) (if (keyword? v) (fieldIn rest key) (some v)))
-            ((none) (none)))
-          (fieldIn rest key)))))
+      (let [(rest (optionOr (listTail items) (list)))
+            (hasValue (and (keyword? x) (valueFollows? rest)))]
+        (cond
+          ((isKey? x key) (if (or raw hasValue) (listHead rest) (some (asnB true))))
+          (hasValue (fieldWalk (listDrop rest 1) key raw))
+          (else (fieldWalk rest key raw))))))
 
-; (:m :ref DS-ASNREADER-FIX :do "the value of :key at the top level of a form, found by scanning for the key itself, not by pairing items: the first :key followed by a non-keyword item gives that item; a :key followed by another keyword or ending the form is a bare flag and gives true; positional heads ((:u ID :p v)), bare flags elsewhere and odd tails never shift the reading; a keyword value is read as a flag, since (:mode :fast) cannot tell the two apart; nested forms and strings are values, never searched")
+; (:m :ref DS-ASNREADER-FIX2 :do "the value of :key at the top level of a form, walking the form left to right: a non-keyword item outside a pair is positional and skipped; a keyword takes the next item as its value when valueFollows?, else it is a bare flag and gives true; positional ids, mid-row flags and odd tails never shift later keys, and a keyword used as a value ((:status :open)) is read as that keyword; nested forms and strings are values, never searched")
 fn asnField v: AsnValue key: String -> (Option AsnValue)
-  (let [(items (asnItems v))]
-    (match (fieldIn items key)
-      ((some x) (some x))
-      ((none) (if (listAny? (fn [(x AsnValue)] -> Bool (isKey? x key)) items) (some (asnB true)) (none)))))
+  (fieldWalk (asnItems v) key false)
+
+; (:m :ref DS-ASNREADER-FIX2 :do "the raw item right after :key at its key position in the walk asnField makes, none when :key is absent or ends the form; a reader that disagrees with the flag rule can decide itself")
+fn asnFieldRaw v: AsnValue key: String -> (Option AsnValue)
+  (fieldWalk (asnItems v) key true)
 
 fn asnString v: AsnValue -> (Option String)
   (match v ((asnStr t) (some t)) ((asnSym s) (some s)) (_ (none)))
