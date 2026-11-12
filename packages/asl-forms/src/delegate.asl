@@ -1,22 +1,22 @@
-(module asl-forms/delegate :x [withSearchKeys! DelegateCtx agentEventLine appendAgentEvent! receiptToken Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr)])
+(module asl-forms/delegate :x [withSearchKeys! DelegateCtx agentBusEvent postBusEvent! receiptToken Outcome Spawned withParentPid agentStep engineOk? engineExchangeWith engineFrameData contextFromEnv! delegateOp? runDelegate agentKillSeconds poolRoute? poolForms poolStepWith fieldNumber spawnRun spawnRunInput stepHead okLine rejectedLine pyStrip pyRepr pyExt errnoText timeoutText researchGatewayEntry! researchGatewayRoutes! resolveResearchEntry! researchEntryJson searchLimit researchCliArgv! researchCliText researchTimeoutSeconds researchDispatch researchDispatchWith researchTriage? searchFailed? crawlerSpawn] :i [(asl-forms/kernel :a k) (asl-forms/extract :a ex) (aslGateway/search :a srch) (aslGateway/research :a rs) (aslGateway/config :a cfg) (aslGateway/pyText :a pt) (asl-json/json :a j) (asl-engine/transport :a etp) (asl-intel/text :a it) (asl-forms/evalOp :a ev) (asl-tools/fleet/run :a fr) (aslAgent/bus :a bus)])
 
 
 fn agentEventQuote s: String -> String
   (str "\"" (k/escapeAsnVal s) "\"")
 
-fn agentEventLine at: String unit: String root: String stop: String head: String turns: Int64 receipt: String -> String
-  (str "(:event :at " (agentEventQuote at)
-       " :unit " (agentEventQuote unit)
-       " :root " (agentEventQuote root)
-       " :stop " (agentEventQuote stop)
-       " :head " (agentEventQuote head)
-       " :turns " (stringFromInt64 turns)
-       " :receipt " (agentEventQuote receipt) ")")
+; (:m :ref ULOOP-LOWS2 :do "an (:agent) run is reported in the one BusEvent shape the waiter parses; the receipt path is the run's journal and the head its :head")
+fn agentBusEvent unit: String stop: String receipt: String exit: Int64 at: Int64 -> bus/BusEvent
+  (bus/BusEvent :unit unit :stop stop :head (receiptToken receipt ":head") :gates "" :exit exit :asserts 0
+    :receiptPath (receiptToken receipt ":journal") :at at)
 
-fn ! appendAgentEvent! path: String at: String unit: String root: String stop: String head: String turns: Int64 receipt: String -> (Result Unit String)
-  (match (makeDirs (k/dirName path))
+; (:m :ref ULOOP-LOWS2 :do "Leon already emits for a run with :unit; the dispatcher adds a row only when none for the unit landed since the run started, so a killed or failed run still signals and a finished one is not doubled")
+fn ! postBusEvent! path: String ev: bus/BusEvent sinceMs: Int64 -> (Result Bool String)
+  (match (bus/readEvents! path)
     ((err e) (err e))
-    ((ok _) (fileAppend path (str (agentEventLine at unit root stop head turns receipt) "\n"))))
+    ((ok evs)
+      (match (bus/findEvent evs ev.unit sinceMs)
+        ((some _) (ok false))
+        ((none) (bus/emitTerminal! path ev)))))
 
 ; (:m :ref SIGNAL-LEON-DONE :do "the value after key in a receipt line: a quoted string unquoted, else the bare token up to a space or close paren; empty when absent")
 fn receiptToken text: String key: String -> String
@@ -32,11 +32,9 @@ fn receiptToken text: String key: String -> String
             (optionOr (stringSlice rest 0 (if (< sp cp) sp cp)) ""))))))
 
 ; (:m :ref SIGNAL-LEON-DONE :do "every (:agent) run that returns posts one event row; stop is the receipt :stop or the dispatch failure; a failed append is reported on stderr and in the step line, never dropped")
-fn ! postAgentEvent! ctx: DelegateCtx kw: (Map String String) stop: String receipt: String -> String
-  (let [(session (receiptToken receipt ":session"))
-        (unit (k/kwOr kw "unit" session))
-        (turns (optionOr (stringToInt64 (receiptToken receipt ":turns")) 0))
-        (r (appendAgentEvent! (agentEventsPath! kw) (stringFromInt64 (/ (nowNs) 1000000)) unit (k/kwOr kw "root" ctx.rootDir) stop (receiptToken receipt ":head") turns (receiptToken receipt ":journal")))]
+fn ! postAgentEvent! ctx: DelegateCtx kw: (Map String String) stop: String receipt: String exit: Int64 sinceMs: Int64 -> String
+  (let [(unit (k/kwOr kw "unit" (receiptToken receipt ":session")))
+        (r (postBusEvent! (agentEventsPath! kw) (agentBusEvent unit stop receipt exit (/ (nowNs) 1000000)) sinceMs))]
     (match r
       ((ok _) "")
       ((err e) (do (eprintln (str "agent event not written: " e)) (str " :eventError " (agentEventQuote e))))))
@@ -853,17 +851,18 @@ fn ! agentStep ctx: DelegateCtx id: Int64 kw: (Map String String) stepStr: Strin
     (match bin
       ((err e) (rejectedLine id "agent" "ERR_AGENT_DISPATCH" (msgTail e)))
       ((ok b)
-      (let [(sp (spawnRun (list b (withParentPid stepStr (procSelf))) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
+      (let [(startMs (/ (nowNs) 1000000))
+            (sp (spawnRun (list b (withParentPid stepStr (procSelf))) (some ctx.rootDir) (mapSet (mapEmpty) "ASL_ROOT_DIR" ctx.wsDir) (agentKillSeconds kw)))
             (shown (if (stringEmpty? sp.errText) true (do (eprintln (if (stringEndsWith? sp.errText "\n") (optionOr (stringSlice sp.errText 0 (- (stringLength sp.errText) 1)) "") sp.errText)) true)))
             (out (pyStrip sp.out))
             (bad (if (!= sp.code 0) 1 0))]
         (cond
           ((not (stringEmpty? sp.failure))
-            (let [(ev (postAgentEvent! ctx kw (agentFailCode sp.failure) ""))
+            (let [(ev (postAgentEvent! ctx kw (agentFailCode sp.failure) "" sp.code startMs))
                   (o (rejectedLine id "agent" (agentFailCode sp.failure) (msgTail sp.failure)))]
               o))
           ((not (stringEmpty? out))
-            (let [(ev (postAgentEvent! ctx kw (receiptToken out ":stop") out))]
+            (let [(ev (postAgentEvent! ctx kw (receiptToken out ":stop") out sp.code startMs))]
               (Outcome :line (str (stepHead id "agent") " :status \"" (if (= bad 0) "ok" "failed") "\"" ev " :receipt " out ")") :errCount bad)))
           (else
             (Outcome :line (str (stepHead id "agent") " :status \"rejected\" :error-code \":ERR_AGENT_DISPATCH\""
