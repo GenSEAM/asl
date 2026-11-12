@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverProxyAuthTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref AUDIT12-B10 :do "with a serve token loaded, a request the gateway proxies to its upstream (not chat, not omni) arrives there without the caller's Authorization header; the token reaches the stub nowhere")
 (schema Stub (:f fd Int64) (:f input String))
@@ -78,12 +78,6 @@ fn ! pump! live: Live client: Int64 untilMs: Int64 stopOnReply: Bool got: String
             (if (and stopOnReply (stringContains? got2 "served:")) (pair live2 got2)
               (pump! live2 client untilMs stopOnReply got2)))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
-
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwProxyAuth-" (procSelf) "-" (nowNs)))
         (_ (dirCreate d))
@@ -126,7 +120,7 @@ fn ! runTests -> Bool
     (match started
       ((err po) (do (fdClose listener) (drop! dir) (assert false (str "gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (client (if (> port 0) (resultOr (tcpConnect port) -1) -1))
               (sent (if (> client 0) (writeAll! client "GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer srvTok-FFFF6666\r\nConnection: close\r\n\r\n") false))
               (first (pump! (Live :listener listener :stubs (list) :seen (list)) client (+ (nowMs!) 20000) true ""))

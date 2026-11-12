@@ -1,6 +1,6 @@
 (module aslGateway/tests/federationLiveTest
   :x [runTests]
-  :i [(federation :a f) (secrets :a s) (upstream :a u) (asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (federation :a f) (secrets :a s) (upstream :a u) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-FED-REAL-INSTANCE :do "a real asl-gateway process (the host side) serves on a loopback port with a gatewayServeToken in its HOME's secrets file and one provider pointing at a stub API in this process; the VPS side is federation's remote provider with its own secrets store; one thread drives the client call, the stub and nothing else, every wait is bounded and the child dies with its tree")
 (schema Stub (:f fd Int64) (:f input String))
@@ -77,12 +77,6 @@ fn ! exchange! store: s/SecretStore host: String port: Int64 secret: String live
         (let [(driven (drive! live call (+ (nowMs!) 20000)))]
           (pair (pairFirst driven) (f/remoteFinish! store rg (pairSecond driven) 5.0))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
-
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwFedLive-" (procSelf) "-" (nowNs)))
         (_ (dirCreate d))
@@ -128,7 +122,7 @@ fn ! runTests -> Bool
     (match started
       ((err po) (do (fdClose listener) (drop! dir) (assert false (str "host gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (loaded (s/secretsLoad! clientFile))]
           (match loaded
             ((err e) (do (assert false (str "client secrets: " e)) false))

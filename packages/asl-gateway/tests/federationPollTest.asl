@@ -1,6 +1,6 @@
 (module aslGateway/tests/federationPollTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-BALANCER-POLL-WIRE :do "a real gateway process with a balancer section and two polled endpoint budgets; after its first request the reactor must send each due poll as a GET with the poll provider's own key to the stub in this process, consume the reply (a 500 leaves one log note, a 200 none), poll each budget once inside its interval, and never print a key")
 (schema Stub (:f fd Int64) (:f input String))
@@ -78,12 +78,6 @@ fn ! pump! live: Live client: Int64 untilMs: Int64 stopOnReply: Bool got: String
             (if (and stopOnReply (stringContains? got2 "served:")) (pair live2 got2)
               (pump! live2 client untilMs stopOnReply got2)))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
-
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwFedPoll-" (procSelf) "-" (nowNs)))
         (_ (dirCreate d))
@@ -131,7 +125,7 @@ fn ! runTests -> Bool
     (match started
       ((err po) (do (fdClose listener) (drop! dir) (assert false (str "gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (client (if (> port 0) (resultOr (tcpConnect port) -1) -1))
               (body "{\"messages\":[{\"role\":\"user\",\"content\":\"route me\"}]}")
               (sent (if (> client 0) (writeAll! client (str "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body)) false))

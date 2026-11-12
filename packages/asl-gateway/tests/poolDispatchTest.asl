@@ -1,6 +1,6 @@
 (module aslGateway/poolDispatchTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 (schema StubSeen
   (:f path String)
@@ -211,12 +211,6 @@ fn gatewayConfig base: String -> String
        (modelRow "mTimeout" "poolTimeout" "timeout-target") " " (modelRow "mDirect" "direct" "direct-target")
        ") :profiles ((:profile :id default :routes ((:intent any :chain (mDirect))))) :uses ((:use :for default :profile default)))\n")
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
-
 fn ! runTests -> Bool
   (let [(temp (stringTrim (processRun "/usr/bin/mktemp -d /tmp/poolDispatchTest.XXXXXX").stdout))
         (listener (resultOr (tcpListen 0) -1))
@@ -232,7 +226,7 @@ fn ! runTests -> Bool
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn")) (fr/cacheEnv!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (gatewayPort (if (> pid 0) (sk/waitPort! readyPath pid) 0))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list) :hold (list "bypass-target" "queue-target" "timeout-target")))
 
         (w1 (pump! (send! (send! (send! w0 "mBatch" "b1") "mBatch" "b2") "mBatch" "b3")

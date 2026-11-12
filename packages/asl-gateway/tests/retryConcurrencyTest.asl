@@ -1,6 +1,6 @@
 (module aslGateway/tests/retryConcurrencyTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "an end-to-end sanity companion to serverTest.asl's testEffSleepMsDoesNotBlockReactor, which is the actual red/green proof of non-blocking (a deterministic 5000 ms timing bound with no network or jitter involved). Since GW-FREE-RETRY-3, the stub's Retry-After: 2 header is honored (headers now flow through u/UpstreamResponse/u/httpFailure into retryAfterSecOf), so aDoneMs below has a real minimum-wait assertion instead of only the always-true ordering check; this is still kept as a live-process check that the whole retry-then-succeed path (429, backoff, retried call, success) works end to end alongside a second concurrent client, not as the sole concurrency proof")
 
@@ -155,28 +155,6 @@ fn clientsDone? w: World tags: (List String) -> Bool
 fn seenOnce? w: World model: String -> Bool
   (>= (occurrencesOf w.seen model) 1)
 
-fn ! readyPort! path: String -> Int64
-  (optionOr (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none) 0)
-
-; (:m :ref RETRYCONC-FLAKE :do "waits for the gateway's ready file while the child lives: the port once it is written, the child's exit status the moment it ends without one (procWaitPid pid true, non-blocking), or deadline when neither happens by deadlineMs; the state names which, for the failure message")
-fn ! waitReady! path: String pid: Int64 deadlineMs: Int64 -> (Pair Int64 String)
-  (let [(port (readyPort! path))]
-    (cond
-      ((> port 0) (pair port "ready"))
-      (else
-        (match (procWaitPid pid true)
-          ((ok (some code)) (pair (readyPort! path) (str "exited " (stringFromInt64 code))))
-          (_ (if (> (nowMs!) deadlineMs)
-               (pair 0 "deadline")
-               (do (sleepMs 20) (waitReady! path pid deadlineMs))))))))
-
-; (:m :ref RETRYCONC-FLAKE :do "the gateway child compiles server.asl to native on a cold cache before it writes its ready file, silent on stdout and stderr: measured 2026-11-12 on the Mac at load ~137 (8 controlled busy loops plus other work), cold starts took 22462, 20898 and 8836 ms and once more than 120 s (load 154) against the old fixed 10 s wait (500 x 20 ms), which failed with an empty stderr; waitReady! returns as soon as the child exits, so this bound only caps a child that lives without answering: 300 s")
-fn startDeadlineMs -> Int64
-  300000
-
-fn tailOf text: String n: Int64 -> String
-  (if (<= (stringLength text) n) text (optionOr (stringSlice text (- (stringLength text) n) (stringLength text)) text))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -206,7 +184,7 @@ fn ! runTests -> Bool
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
         (startMs (nowMs!))
-        (started (if (> pid 0) (waitReady! readyPath pid (+ startMs (startDeadlineMs))) (pair 0 "spawn failed")))
+        (started (if (> pid 0) (sk/waitReady! readyPath pid (+ startMs (sk/startDeadlineMs))) (pair 0 "spawn failed")))
         (gatewayPort (pairFirst started))
         (startNote (str "start " (pairSecond started) " after " (stringFromInt64 (- (nowMs!) startMs)) " ms"))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list)))
@@ -228,7 +206,7 @@ fn ! runTests -> Bool
                   (map (fn [(c Client)] -> Bool (if c.done true (do (fdClose c.fd) true))) w4.clients)
                   (fdClose listener) true))
         (gatewayErr (resultOr (fileReadString (str temp "/gateway.err")) ""))
-        (startDiag (str startNote "; stderr: " (tailOf gatewayErr 600) "; stdout: " (tailOf (resultOr (fileReadString (str temp "/gateway.out")) "") 300)))
+        (startDiag (str startNote "; stderr: " (sk/tailOf gatewayErr 600) "; stdout: " (sk/tailOf (resultOr (fileReadString (str temp "/gateway.out")) "") 300)))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
       (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " startDiag))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/claudeProviderE2eTest
   :x [runTests]
-  :i [(federation :a f) (secrets :a s) (asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (federation :a f) (secrets :a s) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-CLAUDE-PROVIDER-E2E :do "a real asl-gateway process (the Mac side) serves the claude CLI provider with a stub claude binary and a :sessions vendor row: a federation client (node2 Leon's hop) and a second plain client post through it; the client's X-ASL-Session is bound to the vendor session id, so the second turn passes --resume with the id the first turn answered with, a different session key starts a fresh vendor session, and every reply comes back through the bearer-checked federation hop")
 fn ! nowMs! -> Int64
@@ -30,12 +30,6 @@ fn ! settle! g: fr/Guarded tries: Int64 -> Bool
     (match st.out
       ((some _) true)
       ((none) (if (<= tries 0) false (do (fdPoll (fr/guardFds st.guard) 20) (settle! st.guard (- tries 1)))))))
-
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
 
 fn ! writeSecretsFile! path: String text: String -> Bool
   (do (fileWrite path text) (fileChmod path 384) true)
@@ -78,13 +72,13 @@ fn ! runTests -> Bool
         (warmArgv (list "/bin/sh" "-c" (str "exec " (hostExe!) " run asl/packages/asl-gateway/src/server.asl serve --port 0 --upstream http://127.0.0.1:1/v1 --ready " dir "/ready0 2>" dir "/warm.err")))
         (warm (fr/guardStart! warmArgv "." env (fr/limits 600 40)))
         (warmPort (match warm
-                    ((ok wg) (let [(p (waitPort! (str dir "/ready0") 10000))] (do (fr/killTree! wg.run.pid) (settle! wg 100) p)))
+                    ((ok wg) (let [(p (sk/waitPort! (str dir "/ready0") wg.run.pid))] (do (fr/killTree! wg.run.pid) (settle! wg 100) p)))
                     ((err _) 0)))
         (started (if (> warmPort 0) (fr/guardStart! argv "." env (fr/limits 180 40)) (err (fr/ProcOut :exitCode 1 :stdout "" :stderr (str "warm start failed: " (resultOr (fileReadString (str dir "/warm.err")) "")) :timedOut false))))]
     (match started
       ((err po) (do (drop! dir) (assert false (str "host gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (loaded (s/secretsLoad! clientFile))]
           (match loaded
             ((err e) (do (assert false (str "client secrets: " e)) false))

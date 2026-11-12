@@ -1,6 +1,6 @@
 (module aslGateway/tests/dispatchTest
   :x [runTests]
-  :i [(aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
       (aslGateway/budget :a bgt) (aslGateway/fleet :a fl) (aslGateway/tests/fixtures/launch/launchFixture :a lf) (asl-parser/reader :a rd) (asl-json/json :a j)])
 
 fn wiringConfig base: String withRouter: Bool -> String
@@ -362,12 +362,6 @@ fn ! exchange! listener: Int64 gatewayPort: Int64 seen: (List Seen) -> Run
         (let [(run (pumpRun! (Run :listener listener :client fd :response "" :done (not (writeAll! fd request)) :stubs (list) :seen seen) (+ (nowMs!) 15000)))]
           (do (fdClose fd) run)))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
-
 fn seenAt seen: (List Seen) index: Int64 -> Seen
   (optionOr (listGet seen index) (Seen :path "" :auth "" :model ""))
 
@@ -385,7 +379,7 @@ fn ! socketChecks -> Bool
                    (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" "RUNPOD_API_KEY=rpKey" (nativeCliCacheEnvRow!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 12000) 0))
+        (gatewayPort (if (> pid 0) (sk/waitPort! readyPath pid) 0))
         (first (exchange! listener gatewayPort (list)))
         (second (exchange! listener gatewayPort first.seen))
         (cfgPath (str temp "/.asl/gateway.asn"))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverServedModelTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVED-MODEL-HEADER :do "a real gateway whose balancer picks mB while the caller's chain names mA answers with x-asl-served-model: mB/m-b; a pick equal to the hint adds no header")
 (schema Stub (:f fd Int64) (:f input String) (:f born Int64))
@@ -79,12 +79,6 @@ fn ! pump! live: Live client: Int64 untilMs: Int64 stopOnReply: Bool got: String
             (if (and stopOnReply (stringContains? got2 "served:")) (pair live2 got2)
               (pump! live2 client untilMs stopOnReply got2)))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
-
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwServed-" (procSelf) "-" (nowNs)))
         (_ (dirCreate d))
@@ -140,7 +134,7 @@ fn ! runTests -> Bool
     (match started
       ((err po) (do (fdClose listener) (drop! dir) (assert false (str "gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (c1 (if (> port 0) (resultOr (tcpConnect port) -1) -1))
                             (body "{\"messages\":[{\"role\":\"user\",\"content\":\"route me\"}]}")
               (req (str "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: " (stringFromInt64 (stringLength body)) "\r\nConnection: close\r\n\r\n" body))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverReserveTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVE-KEYFILES :do "a real gateway whose only copy of a provider key is in a (:gateway :keyFiles) file sends that key as the bearer to the stub; the key is in no process env and no log")
 (schema Stub (:f fd Int64) (:f input String) (:f born Int64))
@@ -79,12 +79,6 @@ fn ! pump! live: Live client: Int64 untilMs: Int64 stopOnReply: Bool got: String
             (if (and stopOnReply (stringContains? got2 "served:")) (pair live2 got2)
               (pump! live2 client untilMs stopOnReply got2)))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
-
 fn ! scratch! -> String
   (let [(d (str "/tmp/gwReserve-" (procSelf) "-" (nowNs)))
         (_ (dirCreate d))
@@ -140,7 +134,7 @@ fn ! runTests -> Bool
     (match started
       ((err po) (do (fdClose listener) (drop! dir) (assert false (str "gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (c1 (if (> port 0) (resultOr (tcpConnect port) -1) -1))
               (c2 (if (> port 0) (resultOr (tcpConnect port) -1) -1))
               (body "{\"messages\":[{\"role\":\"user\",\"content\":\"route me\"}]}")

@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverAuthTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVE-AUTH-HEALTH-EXEMPT :do "a real gateway whose secrets file is named by (:gateway :secretsFile) holds gatewayServeToken; GET /health answers 200 with status only and no bearer, every other path answers 401 without the bearer and passes the check with it; the token is read from the overridden path, so a server that ignored :secretsFile would answer 200 everywhere")
 fn ! writeAll! fd: Int64 data: String -> Bool
@@ -8,12 +8,6 @@ fn ! writeAll! fd: Int64 data: String -> Bool
     (match (fdWrite fd data)
       ((err _) false)
       ((ok n) (if (<= n 0) false (writeAll! fd (optionOr (stringSlice data n (stringLength data)) ""))))))
-
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
 
 fn ! slurp! fd: Int64 tries: Int64 acc: String -> String
   (if (<= tries 0) acc
@@ -61,7 +55,7 @@ fn ! runTests -> Bool
     (match (fr/guardStart! argv "." env (fr/limits 120 40))
       ((err po) (do (dropAll! dir) (assert false (str "gateway did not start: " po.stderr)) false))
       ((ok g)
-        (let [(port (waitPort! readyPath 750))
+        (let [(port (sk/waitPort! readyPath g.run.pid))
               (health (if (> port 0) (ask! port "GET /health" "") ""))
               (models (if (> port 0) (ask! port "GET /v1/models" "") ""))
               (wrong (if (> port 0) (ask! port "GET /v1/models" "Authorization: Bearer nope\r\n") ""))

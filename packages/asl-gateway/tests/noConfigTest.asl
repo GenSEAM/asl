@@ -1,6 +1,6 @@
 (module aslGateway/tests/noConfigTest
   :x [runTests]
-  :i [(aslGateway/config :a cfg) (asl-tools/fleet/run :a fr)])
+  :i [(aslGateway/tests/gatewayStartKit :a sk) (aslGateway/config :a cfg) (asl-tools/fleet/run :a fr)])
 
 (schema Probe
   (:f response String)
@@ -62,7 +62,7 @@ fn ! runTests -> Bool
                    "OPENROUTER_API_KEY=fake-test-key" (str "OPENROUTER_BASE_URL=http://127.0.0.1:" (stringFromInt64 providerPort) "/v1")) (fr/cacheEnv!)))
         (spawned (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)))
         (pid (match spawned ((ok sp) sp.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (gatewayPort (if (> pid 0) (sk/waitPort! readyPath pid) 0))
         (clientRes (if (> gatewayPort 0) (tcpConnect gatewayPort) (err "no gateway")))
         (client (match clientRes ((ok fd) fd) ((err _) -1)))
         (body "{\"model\":\"x\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}]}")
@@ -80,12 +80,6 @@ fn ! runTests -> Bool
       (assert (not probe.providerContact) "missing config must not connect to the local provider recorder")
       (assert (not (stringContains? gatewayErr "(:gateway :usage :provider ")) "missing config must not emit a provider usage attempt")
       (and killed (and closed removed))))
-
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))) )
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
