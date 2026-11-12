@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [utf8Clip verdictSig porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -221,6 +221,9 @@ fn utf8Back bs: Bytes j: Int64 -> Int64
 fn utf8Clip t: String limit: Int64 -> String
   (let [(bs (stringToBytes t))]
     (if (<= (bytesLength bs) limit) t (optionOr (stringSlice t 0 (utf8Back bs (max 0 limit))) "")))
+
+fn spawnFailedSig stderr: String -> String
+  (str "spawnFailed " (utf8Clip stderr 120))
 
 fn verdictSig sig: String -> String
   (utf8Clip (stringTrim (stringJoin (stringSplit sig "\n") " ")) 400)
@@ -452,7 +455,7 @@ fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
         (_ (dirCreate (runsDir ctx.dir)))
         (_ (dropRun! ctx.dir c.id stage))]
     (match (fr/spawnSep argv "." (fr/childEnv (list)))
-      ((err po) (fail! ctx c stage "" (str "spawnFailed " (optionOr (stringSlice po.stderr 0 (if (< (stringLength po.stderr) 120) (stringLength po.stderr) 120)) "")) 0))
+      ((err po) (fail! ctx c stage "" (spawnFailedSig po.stderr) 0))
       ((ok r)
         (let [(_ (fdClose r.outFd))
               (_ (fdClose r.errFd))
@@ -1431,7 +1434,7 @@ fn gateSig out: String -> String
         (quiet (filter (fn [(l String)] -> Bool (not (or (stringStartsWith? l "(:gateway :usage") (stringStartsWith? l "(:usage")))) lines))
         (marked (filter (fn [(l String)] -> Bool (let [(low (stringLower l))] (or (stringContains? low "fail") (or (stringContains? low "error") (stringContains? low "exit"))))) quiet))
         (pick (match (listHead errs) ((some e) e) ((none) (match (listHead marked) ((some m) m) ((none) (optionOr (listLast quiet) "no output"))))))]
-    (optionOr (stringSlice pick 0 (if (< (stringLength pick) 160) (stringLength pick) 160)) pick))
+    (utf8Clip pick 160))
 
 fn ! taskText dir: String u: st/Task -> String
   (match (fileReadString (str dir "/tasks/" u.id ".txt"))
@@ -2146,7 +2149,7 @@ fn stopOf out: String -> String
 fn modelEscalatedSig out: String -> String
   (let [(row (receiptRowOf out))
         (reason (quotedAfter row ":reason \""))]
-    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (optionOr (stringSlice reason 0 (min 200 (stringLength reason))) reason))))
+    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (utf8Clip reason 200))))
 
 fn modelEscalatedSig? sig: String -> Bool
   (stringStartsWith? sig "modelEscalated: ")
@@ -2237,6 +2240,9 @@ fn mergeCheckWhy receipt: String key: String -> String
     (utf8Clip rows 300))
 
 ; (:m :ref CONDUCTOR-MERGE-CHECK :do "a check that blocks leaves dev untouched and the unit blocked with verdict block and the sig mergeCheck: rows; one that could not verify (exit 3, or 2 when it could not run) holds the unit with verdict hold plus one lead-stream event; neither counts as a failed merge; exit 0 returns none and the train goes on")
+fn mergeHoldWhy ex: Int64 receipt: String -> String
+  (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (utf8Clip receipt 160))
+
 fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option Res)
   (let [(ex (pairFirst r))
         (receipt (pairSecond r))
@@ -2245,7 +2251,7 @@ fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option
       ((= ex 0) (none))
       ((= ex 1) (some (with (failRes (str "mergeCheck: " (mergeCheckWhy receipt ":structure") " " (mergeCheckWhy receipt ":regressions"))) :verdict "block")))
       (else
-        (let [(why (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (utf8Clip receipt 160)))
+        (let [(why (mergeHoldWhy ex receipt))
               (_ (ls/emitAt! (dirOf store) (nowMs) "conductor" "warn" "mergeCheckHold" u.id u.id why))]
           (some (with (failRes why) :verdict "hold"))))))
 
