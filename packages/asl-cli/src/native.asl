@@ -945,7 +945,13 @@ fn ! fileEntry! ctx: sys/Context args: (List String) -> Int64
       ((err _) (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2))
       ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text))))))
 
+; (:m :ref REMOTE-TARGET :do "asl --on NODE:UNIT and a remote .asl/target.asn route forms, test and check to tools/remote/on.asl before any local dispatch (cmd/remote!), run natively like asl run; --local drops the profile for one call")
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
+  (match (cmd/remote! ctx args (fn [(a (List String))] -> Int64 (run! ctx a)))
+    ((some code) code)
+    ((none) (localEntry! ctx (if (= (first args) "--local") (rest args) args))))
+
+fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
     (cond
       ((= head "-e") (if (listEmpty? (rest args)) (inlineUsage!) (runInline! ctx "e" (first (rest args)) (rest (rest args)))))

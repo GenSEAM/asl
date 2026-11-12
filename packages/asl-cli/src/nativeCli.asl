@@ -16,7 +16,7 @@ fn headPath cache: String root: String -> String
 fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
-      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
+      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e" "--on" "--local") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
       ((or (stringStartsWith? verb "(")
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"

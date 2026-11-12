@@ -7,7 +7,7 @@
       Outcome Ctx freeze mainWith! usageText
       Captured runCapture! whichIn! probe! platform! today! pruneRunDirs! runChild! main mainIn!
       renderAsn renderAsnText renderAsnFor absentPaths writePromptWith! asnPrint asnQuote]
-  :i [(asl-proc/runnerBin :a rb) (asl-harness/collect :a col)])
+  :i [(asl-proc/runnerBin :a rb) (asl-harness/collect :a col) (asl/packages/asl-cli/src/remoteTarget :a rt)])
 
 enum Asn
   (asnForm items: (List Asn))
@@ -1314,6 +1314,16 @@ fn ! workerAsn loaded: Loaded ctx: Ctx opts: RenderOpts -> (Result (Option Strin
       ((err e) (err e))
       ((ok t) (ok (some (str t (workerReportAsn)))))))
 
+; (:m :ref REMOTE-TARGET :do "when the cwd workspace has a remote .asl/target.asn the prompt ends with one line naming NODE:wt/UNIT and that asl forms, test and check are the only view of that tree; appended last so the cached prefix stays byte-stable, and a malformed profile is reported on stderr and adds nothing")
+fn ! withTarget! cwd: String rendered: (Result String String) -> (Result String String)
+  (match rendered
+    ((err e) (err e))
+    ((ok prompt)
+      (match (rt/findProfile! cwd)
+        ((ok (some t)) (ok (str prompt (rt/promptLine t) "\n")))
+        ((ok (none)) (ok prompt))
+        ((err e) (do (eprintln (str "launch: " e)) (ok prompt))))))
+
 fn ! runPlan loaded: Loaded ctx: Ctx plan: Plan -> Outcome
   (let [(client plan.client) (rest plan.rest) (extra plan.extra)
         (has (fn [(f String)] -> Bool (listContains? rest f)))
@@ -1326,7 +1336,7 @@ fn ! runPlan loaded: Loaded ctx: Ctx plan: Plan -> Outcome
         (promptDir (optionOr (envGet "ASL_LAUNCH_PROMPT_DIR") ctx.runDir))
         (opts (RenderOpts :cwd ctx.cwd :client client :mode plan.mode :core (has "--core") :promptDir (some promptDir)
                           :drop drop :only (list) :fills fills :once (or once (= (optionOr (envGet "ASL_LAUNCH_ONCE") "") "true")) :platform ctx.platform :date ctx.date))]
-    (match (if asn (renderAsnFor loaded ctx.probe opts) (render loaded ctx.probe opts))
+    (match (withTarget! ctx.cwd (if asn (renderAsnFor loaded ctx.probe opts) (render loaded ctx.probe opts)))
       ((err e) (stop 1 (str e "\n")))
       ((ok prompt)
         (if (has "--print-prompt")
