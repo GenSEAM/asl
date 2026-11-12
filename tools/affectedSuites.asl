@@ -169,11 +169,18 @@ fn ! visit! mods: (List Mod) queue: (List (Pair String String)) seen: (Map Strin
                        (filter (fn [(h Hit)] -> Bool (not (isTest? h.path))) fresh)))]
         (visit! mods (listAppend rest next) seen2 (listAppend picked testHits) forms))))
 
+; (:m :ref AFFSYM-CHAIN-CYCLE :do "the reason chain from a hit back to a changed symbol, following parents; two changed items that mention each other are each other's parent, so the walk stops at the first node it has already listed (and at guard hops), never repeating one")
 fn ! chainOf seen: (Map String Hit) key: String guard: Int64 -> (List String)
-  (if (<= guard 0) (list key)
-    (match (mapGet seen key)
-      ((none) (list key))
-      ((some h) (cons key (chainOf seen h.parent (- guard 1))))))
+  (chainWalk seen key guard (list))
+
+fn chainWalk seen: (Map String Hit) key: String guard: Int64 acc: (List String) -> (List String)
+  (cond
+    ((listContains? acc key) (listReverse acc))
+    ((<= guard 0) (listReverse (cons key acc)))
+    (else
+      (match (mapGet seen key)
+        ((none) (listReverse (cons key acc)))
+        ((some h) (chainWalk seen h.parent (- guard 1) (cons key acc))))))
 
 fn reasonText chain: (List String) -> String
   (stringJoin chain " <- ")
