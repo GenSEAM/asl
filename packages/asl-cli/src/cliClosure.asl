@@ -2,7 +2,7 @@
   :x [Reach closureOf! reachFrom testEntry testCuts testGates fnKey]
   :i [(asl-checker/resolve :a r) (asl-parser/ast :a a)])
 
-; (:m :ref PERF-CLI-REBUILD :do "the files whose code a verb of the native CLI can run: a walk over the checker's per-function reference atoms (FunSummary.calls, params and return types) from root functions of the entry module; a qualified alias/name follows the import to its module, a bare name a function of the same module, a reached module also pulls in the modules its schema and enum types name; cut names are not followed, and a cut referenced from a reached function outside the gates makes the walk an error, so a new call into a cut handler can never shrink the set")
+; (:m :ref PERF-CLI-REBUILD :do "the files whose code a verb of the native CLI can run: a walk over the checker's per-function reference atoms (FunSummary.calls, params and return types) from root functions of the entry module; every reference atom counts, call heads and values alike (a function stored in a map or list, passed as an argument or called inside a lambda), so a qualified alias/name follows the import to its module and a bare name a function of the same module; ASL has no call by string name, so a string-keyed table still names its functions as atoms; a reached module also pulls in the modules its schema and enum types name; cut names are not followed, and a cut referenced from a reached function outside the gates makes the walk an error, so a new call into a cut handler can never shrink the set")
 (schema Reach (:f files (Map String Bool)) (:f seen (Map String Bool)) (:f bad (List String)))
 
 fn fnKey path: String name: String -> String
