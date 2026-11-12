@@ -75,7 +75,7 @@ fn fillSigs names: (List String) used: Int64 budget: Int64 -> (List String)
           (else (cons line (fillSigs (listDrop names 1) (+ used cost) budget)))))))
 
 fn toolLookup -> String
-  "ASL is not on the web, never web-search a repo name or a builtin. A name in this repo -> (:step :op query :query name :in code), definitions and calls; one function -> (:step :op read :file f :symbol name); a file's shape -> (:step :op outline :file f); a builtin signature -> its line in :sigs, else (:step :op read :file asl/packages/asl-checker/src/types.asl :symbol builtinSig); (:step :op help :name opName) describes an op; search and research are web only"
+  "ASL is not on the web, never web-search a repo name or a builtin. A name in this repo -> (:step :op query :query name :in code), definitions and calls; one function -> (:step :op read :file f :symbol name); a file's shape -> (:step :op outline :file f); a builtin signature -> its line in :sigs, else (:step :op help :name builtinName); (:step :op help :name opName) describes an op; search and research are web only"
 
 ; (:m :ref TOOLCARD-A :do "the tool card is :wrong (names models invent, measured) then :sigs (error-ranked builtins first, then the repo-frequency list, filled in order until the byte budget of toolCapTokens*4 is spent, never reordered or skipped) then :lookup; the cap counts bytes/4, an upper bound of tokens for ASCII")
 fn toolCard ranked: (List String) -> String

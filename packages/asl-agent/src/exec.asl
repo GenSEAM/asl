@@ -14,7 +14,8 @@
       (aslAgent/plan :a p)
       (aslAgent/claims :a cl)
       (aslAgent/remoteOps :a rr)
-      (asl-syntax/core/bytesText :a bt)])
+      (asl-syntax/core/bytesText :a bt)
+      (aslAgent/grounding :a gr)])
 
 enum Val
   (vStr text: String)
@@ -668,14 +669,13 @@ fn ! execRevertGate! n: (Option c/KvVal) rel0: String rev: String env: ExecEnv n
                               ((some b) (ok? (fileWrite (str stem ".bak") b)))
                               ((none) (ok? (fileWrite (str stem ".absent") ""))))))]
               (if (not saved)
-                (do (match lock ((ok fd) (do (fdClose fd) (dropStem! stem) true)) ((err _) true))
+                (do (match lock ((ok fd) (closeEntry! stem fd true)) ((err _) true))
                   (revertRejected rid rel "ERR_REVERT_BACKUP" (str "could not save " rel " before the revert; nothing was changed")))
                 (let [reverted (putFile! full atRev)
                       gate (if reverted (execGateOp! n env newId) (list))
                       put (putFile! full orig)
                       restored (and put (sameFile! full orig))
-                      released (match lock ((ok fd) (ok? (fdClose fd))) ((err _) true))
-                      cleaned (if restored (dropStem! stem) true)
+                      closed (match lock ((ok fd) (closeEntry! stem fd restored)) ((err _) true))
                       runs (optionOr (recGet gate "gateRuns") (vRecs (list)))
                       gateStatus (fieldStr gate "status" "")
                       verdict (revertVerdict runs)
@@ -711,9 +711,16 @@ fn ! revertDir root: String -> String
 fn ! revertStem root: String session: String rel: String -> String
   (str (revertDir root) "/" session "-" (stringJoin (stringSplit rel "/") "__"))
 
-fn ! dropStem! stem: String -> Bool
+fn ! dropFiles! stem: String exts: (List String) -> Bool
   (fold (fn [acc ext] (and acc (or (ok? (pathRemove (str stem ext))) (not (ok? (fileStat (str stem ext)))))))
-    true (list ".bak" ".absent" ".path" ".lock"))
+    true exts)
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: an entry is dropped while its lock is still held (data files first, then the lock is released, then the lock file removed), so a sweep never sees a free lock beside a stale .path")
+fn ! closeEntry! stem: String fd: Int64 drop: Bool -> Bool
+  (let [data (if drop (dropFiles! stem (list ".path" ".bak" ".absent")) true)
+        closed (ok? (fdClose fd))
+        lockGone (if drop (dropFiles! stem (list ".lock")) true)]
+    (and data (and closed lockGone)))
 
 ; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M2: a run killed mid-revert leaves F at its :rev text with a .path/.bak (or .absent) entry whose .lock no live process holds; at a run's start every such entry puts F back (the .bak bytes, or removes F that did not exist) and is dropped; an entry whose lock is held belongs to a live run and is skipped; answers the restored paths")
 fn ! sweepRevertBackups! root0: String -> (List String)
@@ -734,10 +741,15 @@ fn ! sweepRevertBackups! root0: String -> (List String)
                             ((some? content) (putFile! full content))
                             (absent (putFile! full (none)))
                             (else false))
-                      closed (fdClose fd)
-                      dropped (if put (dropStem! stem) false)]
+                      closed (closeEntry! stem fd put)]
                   (if put (listAppend acc (list rel)) acc)))))
       (list) stems))
+
+; (:m :ref TOOLCARD-B :do "(:step :op help :name N) for a builtin that is not an op answers the checker's signature line locally, so a model asks the harness instead of the web; an op name keeps the op help")
+fn builtinHelp name: String -> String
+  (if (or (stringEmpty? name) (listAny? (fn [p] (= (pairFirst p) name)) (opShapes)))
+    ""
+    (gr/sigLine name))
 
 fn rootRec rid: String opName: String path: String -> (List (Pair String Val))
   (list (vs "id" rid) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_ROOT") (vs "file" path)
@@ -879,6 +891,8 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
         (let [res (r/execManageOp! op (runCtx! env) procs (newId) onKeep)]
           (eo (mapRec res.rec fromRun) res.procs)))
       ((and step (= opName "note")) (eo (execNoteOp op (newId)) procs))
+      ((and step (and (= opName "help") (not (stringEmpty? (builtinHelp (opStr op "name" ""))))))
+        (eo (list (vs "id" (newId)) (vs "op" "help") (vs "status" "ok") (vs "name" (opStr op "name" "")) (vs "content" (builtinHelp (opStr op "name" "")))) procs))
       (else (eo (withCanonical op (execRest! op opType opName env newId snap run)) procs))))
 
 fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))

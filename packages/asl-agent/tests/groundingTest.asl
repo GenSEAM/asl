@@ -82,7 +82,7 @@ fn ! runTests -> Bool
       (assert (stringContains? card ":wrong (\"println! -> println\" \"isSome -> some?\"") "the card names the invented spellings measured in the journals")
       (assert (stringContains? card "ASL is not on the web, never web-search") "the lookup row says ASL is not on the web")
       (assert (listAll? (fn [op] (listAny? (fn [p] (= (pairFirst p) op)) (ex/opShapes))) (gr/namesAfter (gr/toolLookup) "(:step :op ")) "every op the lookup row advertises is an op exec accepts")
-      (assert (not (stringContains? (gr/toolLookup) ":name builtinName")) "the lookup row does not advertise help on a builtin name, which fails today")
+      (assert (stringContains? (gr/toolLookup) "(:step :op help :name builtinName)") "the lookup row advertises help on a builtin name, which exec answers with its signature (TOOLCARD-B)")
       (assert (>= (listLength (gr/namesAfter (gr/toolLookup) "(:step :op ")) 4) "the lookup row names at least four ops")
       (assert (<= (gr/tokensOf (gr/toolCard (gr/toolErrNames))) (gr/toolCapTokens)) "the tool card stays within the 2000-token cap, counted as bytes/3, a conservative bound for code")
       (assert (<= (/ (stringLength (gr/toolCard (gr/toolErrNames))) 3) (gr/toolCapTokens)) "the card's own bytes/3 is within the cap, so the bound is real at about 3 chars per token")
