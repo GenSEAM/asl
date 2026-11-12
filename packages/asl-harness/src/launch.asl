@@ -7,7 +7,7 @@
       Outcome Ctx freeze mainWith! usageText
       Captured runCapture! whichIn! probe! platform! today! pruneRunDirs! runChild! main mainIn!
       renderAsn renderAsnText renderAsnFor absentPaths writePromptWith! asnPrint asnQuote]
-  :i [(asl-proc/runnerBin :a rb) (asl-harness/collect :a col) (asl/packages/asl-cli/src/remoteTarget :a rt)])
+  :i [(asl-proc/runnerBin :a rb) (asl-harness/collect :a col) (asl/packages/asl-remote/src/target :a rt)])
 
 enum Asn
   (asnForm items: (List Asn))

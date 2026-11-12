@@ -1,5 +1,5 @@
-(module asl-cli/remoteTarget
-  :x [Target Route profileRel parseOn parseProfile loadProfile! findProfile! routeOf remoteArgv timeoutOf onArgv promptLine]
+(module asl-remote/target
+  :x [Target Route profileRel parseOn parseProfile loadProfile! findProfile! localArgs routeOf remoteArgv timeoutOf onArgv promptLine]
   :i [])
 
 ; (:m :ref REMOTE-TARGET :do "a workspace may name a remote worktree its code lives in: .asl/target.asn holds (:target :exec remote :node NODE :wt UNIT), and then asl '<forms>', asl test and asl check run in NODE's worktree wt/UNIT over tools/remote (relay when configured, else ssh); asl --on NODE:UNIT routes one call the same way and asl --local ignores the profile; :node absent or default is the node of ~/.asl/remote.asn")
@@ -82,11 +82,14 @@ fn verbOf args: (List String) -> (Option Route)
 fn aimed r: Route t: Target -> Route
   (with r :node t.node :unit t.unit)
 
-; (:m :ref REMOTE-TARGET :do "the routing decision: --local first means local whatever the profile says; --on SPEC routes forms, test and check and refuses any other verb; a remote profile routes forms, test and check and leaves every other verb local; ok none means run locally with the argv as it came minus --local")
+; (:m :ref REMOTE-TARGET :do "asl --local ARGS runs ARGS locally whatever the profile says: the leading --local is dropped before local dispatch")
+fn localArgs args: (List String) -> (List String)
+  (if (= (optionOr (listHead args) "") "--local") (optionOr (listTail args) (list)) args)
+
+; (:m :ref REMOTE-TARGET :do "the routing decision (asl --local never reaches it: both CLI entries strip it with localArgs and skip the profile); --on SPEC routes forms, test and check and refuses any other verb; a remote profile routes forms, test and check and leaves every other verb local; ok none means run locally with the argv as it came minus --local")
 fn routeOf args: (List String) profile: (Option Target) -> (Result (Option Route) String)
   (let [(lead (optionOr (listHead args) ""))]
     (cond
-      ((= lead "--local") (ok (none)))
       ((= lead "--on")
         (match (parseOn (optionOr (listGet args 1) ""))
           ((err e) (err e))

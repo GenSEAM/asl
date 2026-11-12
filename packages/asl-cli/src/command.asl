@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! remote! asnEcho testFiles! readStdin!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-cli/src/remoteTarget :a rt)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
   (:f closer String)
@@ -584,13 +584,13 @@ fn ! remote! ctx: sys/Context args: (List String) runner: (fn [(List String)] ->
             ((ok body)
               (match (rt/routeOf (if on (listAppend (listTake args 2) body) body) p)
                 ((err e) (some (fail e)))
-                ((ok (none)) (none))
+                ((ok (none)) (if (= body args) (none) (some (fail "under a remote .asl/target.asn, asl - and asl -f take forms only, and the input is already read; run asl --local - for a local script"))))
                 ((ok (some r)) (some (runner (rt/onArgv ctx.root r)))))))))))
 
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
   (match (remote! ctx args (fn [(a (List String))] -> Int64 (runFile! ctx a)))
     ((some code) code)
-    ((none) (localEntry! ctx (if (= (first args) "--local") (rest args) args))))
+    ((none) (localEntry! ctx (rt/localArgs args))))
 
 fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(cmd (first args))]

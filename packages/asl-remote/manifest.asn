@@ -1,0 +1,7 @@
+(:package asl-remote
+ :version "0.1.0"
+ :entry "src/target.asl"
+ :description "Remote target routing: the workspace .asl/target.asn profile and the asl --on NODE:UNIT routing decision, a leaf both asl-cli and asl-harness import"
+ :aslFirst true
+ :modules ["asl-remote/target"]
+ :dependencies [])

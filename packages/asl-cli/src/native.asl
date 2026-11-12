@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main pruneStaleStaged!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -949,7 +949,7 @@ fn ! fileEntry! ctx: sys/Context args: (List String) -> Int64
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
   (match (cmd/remote! ctx args (fn [(a (List String))] -> Int64 (run! ctx a)))
     ((some code) code)
-    ((none) (localEntry! ctx (if (= (first args) "--local") (rest args) args))))
+    ((none) (localEntry! ctx (rt/localArgs args))))
 
 fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]

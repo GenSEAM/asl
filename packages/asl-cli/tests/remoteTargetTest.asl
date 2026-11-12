@@ -1,8 +1,8 @@
 (module asl-cli/tests/remoteTargetTest
   :x [runTests]
-  :i [(asl/packages/asl-cli/src/remoteTarget :a rt) (asl/packages/asl-cli/src/nativeCli :a nc)])
+  :i [(asl/packages/asl-remote/src/target :a rt) (asl/packages/asl-cli/src/nativeCli :a nc) (asl-tools/fleet/run :a fr)])
 
-; (:m :ref REMOTE-TARGET :do "pure gate for the routing decision and the batch framing: profile parse (remote, local, malformed), --on NODE:UNIT and UNIT, --local overriding a profile, which verbs a profile routes and which stay local, that a forms batch is one remote argv element, and the launcher line; no child, no network, no file")
+; (:m :ref REMOTE-TARGET :do "pure gate for the routing decision and the batch framing: profile parse (remote, local, malformed), --on NODE:UNIT and UNIT, --local overriding a profile, which verbs a profile routes and which stay local, that a forms batch is one remote argv element, and the launcher line; no network; the boundary part builds a temp tree and removes it with one bounded rm")
 fn some? x: (Result (Option rt/Route) String) -> Bool
   (match x ((ok (some _)) true) (_ false))
 
@@ -58,7 +58,10 @@ fn ! profileRouting -> Unit
       (assert (= (verbOf (rt/routeOf (list "  (:read :file \"x\")") (prof))) "forms") "leading blanks still read as forms")
       (assert (= (routed (rt/routeOf (list "test" "a.asl" "b.asl") (prof))) (rt/Route :node "node2" :unit "RTPROBE" :verb "test" :args (list "a.asl" "b.asl"))) "a remote profile routes test with its files")
       (assert (= (verbOf (rt/routeOf (list "check" "a.asl") (prof))) "check") "a remote profile routes check")
-      (assert (local? (rt/routeOf (list "--local" "(:tools)") (prof))) "--local keeps forms local under a remote profile")
+      (assert (= (rt/localArgs (list "--local" "(:tools)")) (list "(:tools)")) "--local is stripped before local dispatch, so the forms run as plain asl forms")
+      (assert (= (rt/localArgs (list "--local" "test" "a.asl")) (list "test" "a.asl")) "--local test keeps the verb and its files")
+      (assert (= (rt/localArgs (list "(:tools)")) (list "(:tools)")) "without --local the argv is unchanged")
+      (assert (= (rt/localArgs (list "x" "--local")) (list "x" "--local")) "only a leading --local is stripped")
       (assert (local? (rt/routeOf (list "test" "--all") (prof))) "test --all stays local: a whole sweep is not sent")
       (assert (local? (rt/routeOf (list "test") (prof))) "a bare test stays local and is refused there as before")
       (assert (local? (rt/routeOf (list "audit" "consistency") (prof))) "audit stays local under a profile")
@@ -89,5 +92,40 @@ fn ! nativeLane -> Unit
   (do (assert (= (nc/verbKind (list "--on" "node2:U" "(:tools)")) "native") "--on runs on the native CLI, never the retired host")
       (assert (= (nc/verbKind (list "--local" "(:tools)")) "native") "--local runs on the native CLI, never the retired host"))
 
+; (:m :ref REMOTE-TARGET :do "findProfile! boundary on a real temp tree: the nearest .asl/target.asn wins, a profile above a directory holding .git or .asl.config.asn is never read, a tree with no profile is none")
+fn ! mk! d: String -> Bool
+  (ok? (dirCreate d))
+
+fn ! put! dir: String wt: String -> Bool
+  (and (mk! (str dir "/.asl")) (ok? (fileWrite (str dir "/.asl/target.asn") (str "(:target :exec remote :wt " wt ")\n"))))
+
+fn wtOf r: (Result (Option rt/Target) String) -> String
+  (match r ((ok (some t)) t.unit) ((ok (none)) "none") ((err e) (str "err " e)))
+
+fn ! boundary -> Unit
+  (let [(root (str (optionOr (envGet "TMPDIR") "/tmp") "/remoteTargetBoundary_" (stringFromInt64 (procSelf))))
+        (made (and (mk! root)
+                   (and (mk! (str root "/near")) (and (mk! (str root "/near/repo")) (and (mk! (str root "/near/repo/.git")) (and (mk! (str root "/near/repo/sub")) (mk! (str root "/near/repo/sub/deep"))))))))
+        (nearA (put! (str root "/near/repo") "A"))
+        (nearB (put! (str root "/near/repo/sub") "B"))
+        (fromDeep (rt/findProfile! (str root "/near/repo/sub/deep")))
+        (fromRepo (rt/findProfile! (str root "/near/repo")))
+        (gitMade (and (mk! (str root "/g")) (and (mk! (str root "/g/repo")) (and (mk! (str root "/g/repo/.git")) (mk! (str root "/g/repo/x"))))))
+        (gitOuter (put! (str root "/g") "OUTER"))
+        (belowGit (rt/findProfile! (str root "/g/repo/x")))
+        (cfgMade (and (mk! (str root "/c")) (and (mk! (str root "/c/ws")) (and (ok? (fileWrite (str root "/c/ws/.asl.config.asn") "(:config)\n")) (mk! (str root "/c/ws/a"))))))
+        (cfgOuter (put! (str root "/c") "OUTER"))
+        (belowCfg (rt/findProfile! (str root "/c/ws/a")))
+        (noneMade (and (mk! (str root "/n")) (and (mk! (str root "/n/.git")) (mk! (str root "/n/y")))))
+        (noFile (rt/findProfile! (str root "/n/y")))
+        (gone (fr/runOneLimited (fr/job (list "/bin/rm" "-rf" root) "/" (fr/childEnv (list))) (fr/limits 20 4)))]
+    (do (assert (and made (and nearA (and nearB (and gitMade (and gitOuter (and cfgMade (and cfgOuter noneMade))))))) "the temp tree is built")
+        (assert (= (wtOf fromDeep) "B") (str "the nearest profile wins: " (wtOf fromDeep)))
+        (assert (= (wtOf fromRepo) "A") (str "a profile beside .git is read: " (wtOf fromRepo)))
+        (assert (= (wtOf belowGit) "none") (str "a profile above the .git directory is not read: " (wtOf belowGit)))
+        (assert (= (wtOf belowCfg) "none") (str "a profile above the .asl.config.asn directory is not read: " (wtOf belowCfg)))
+        (assert (= (wtOf noFile) "none") (str "no profile in the tree is none: " (wtOf noFile)))
+        (assert (= gone.exit 0) "the temp tree is removed")))
+
 fn ! runTests -> Bool
-  (do (profiles) (onFlag) (profileRouting) (framing) (promptHook) (nativeLane) true)
+  (do (profiles) (onFlag) (profileRouting) (framing) (promptHook) (nativeLane) (boundary) true)
