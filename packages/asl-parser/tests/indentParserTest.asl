@@ -83,5 +83,21 @@ fn testLaterBraceDoesNotCaptureEarlierForm -> Bool
         true))
 
 
+; (:m :ref parseLeadingWhitespaceForm :do "an indented first row is one form at its own column, not a stray indent form plus the row")
+fn testLeadingIndentForm -> Bool
+  (let [(one (formCountOf "    (:a :b \"x\")\n"))
+        (two (formCountOf "  (:a 1)\n  (:b 2)\n"))
+        (flat (formCountOf "(:a :b \"x\")\n"))
+        (pos (ip/parseIndentedFormsPos "    (:a :b \"x\")\n"))]
+    (do (assert (= one 1) (str "an indented row is one top-level form, got " (stringFromInt64 one)))
+        (assert (= two 2) (str "two rows at one margin are two forms, got " (stringFromInt64 two)))
+        (assert (= flat 1) "the unindented row is still one form")
+        (match pos
+          ((ok forms) (do (assert (= (listLength forms) 1) (str "parseIndentedFormsPos sees one form, got " (stringFromInt64 (listLength forms))))
+                          (assert (match (listHead forms) ((some f) (and (= f.col 5) (stringContains? (rd/renderPrefix f.expr) ":a :b"))) ((none) false)) "the form starts at column 5 and holds the row")
+                          true))
+          ((err e) (do (assert false (str "indented row must parse: " e.msg)) false)))))
+
+
 fn runTests -> Bool
-  (do (assert (testLaterBraceDoesNotCaptureEarlierForm) "testLaterBraceDoesNotCaptureEarlierForm passed") (assert (testUnannotatedParameterUsesAny) "unannotated parameter infers Any") (assert (testBracketInsideStringLiteral) "testBracketInsideStringLiteral passed") (assert (testDotAccessLowering) "testDotAccessLowering passed") (assert (testInterpolationLowering) "testInterpolationLowering passed") (assert (testFunctionDeclarationLowering) "testFunctionDeclarationLowering passed") (assert (testFnHeaderContinuationLowering) "testFnHeaderContinuationLowering passed") (assert (testFnHeaderJoinSkipsStringLiteral) "testFnHeaderJoinSkipsStringLiteral passed") (assert (testFnHeaderJoinErrorPositionRemap) "testFnHeaderJoinErrorPositionRemap passed") (assert (testFnHeaderJoinStripsCr) "testFnHeaderJoinStripsCr passed") (assert (testMatchWithArmsLowering) "testMatchWithArmsLowering passed") (assert (testRecordLiteralBodyLowering) "testRecordLiteralBodyLowering passed") (assert (testSchemaLowering) "testSchemaLowering passed") (assert (testEnumLowering) "testEnumLowering passed") (assert (testPipelineLowering) "testPipelineLowering passed") (assert (testBracketFreeLetLowering) "testBracketFreeLetLowering passed") (assert (testKeywordEndingInQuestionMark) "testKeywordEndingInQuestionMark passed") true)
+  (do (assert (testLeadingIndentForm) "testLeadingIndentForm passed") (assert (testLaterBraceDoesNotCaptureEarlierForm) "testLaterBraceDoesNotCaptureEarlierForm passed") (assert (testUnannotatedParameterUsesAny) "unannotated parameter infers Any") (assert (testBracketInsideStringLiteral) "testBracketInsideStringLiteral passed") (assert (testDotAccessLowering) "testDotAccessLowering passed") (assert (testInterpolationLowering) "testInterpolationLowering passed") (assert (testFunctionDeclarationLowering) "testFunctionDeclarationLowering passed") (assert (testFnHeaderContinuationLowering) "testFnHeaderContinuationLowering passed") (assert (testFnHeaderJoinSkipsStringLiteral) "testFnHeaderJoinSkipsStringLiteral passed") (assert (testFnHeaderJoinErrorPositionRemap) "testFnHeaderJoinErrorPositionRemap passed") (assert (testFnHeaderJoinStripsCr) "testFnHeaderJoinStripsCr passed") (assert (testMatchWithArmsLowering) "testMatchWithArmsLowering passed") (assert (testRecordLiteralBodyLowering) "testRecordLiteralBodyLowering passed") (assert (testSchemaLowering) "testSchemaLowering passed") (assert (testEnumLowering) "testEnumLowering passed") (assert (testPipelineLowering) "testPipelineLowering passed") (assert (testBracketFreeLetLowering) "testBracketFreeLetLowering passed") (assert (testKeywordEndingInQuestionMark) "testKeywordEndingInQuestionMark passed") true)

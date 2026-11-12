@@ -786,6 +786,7 @@
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#guide" :text "Closer edits the indentation of a text implies; closers still open at the end go to the last code line, and a text with no code line has nothing to close.")
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#guideBroken" :text "Like guide but applies only the edits inside segments whose delimiters do not balance; edits in balanced segments come back as skipped.")
 (:doc :symbol "asl/packages/asl-forms/src/indent.asl#editsAsn" :text "Indent edits as one parenthesised ASN list of their edit forms.")
+(:doc :symbol "asl/packages/asl-forms/src/indent.asl#editsAsnIn" :text "Indent edits as editsAsn renders them, each edit with an opener also naming its enclosing top-level item from the source text.")
 (:doc :symbol "asl/packages/asl-forms/tests/flushBytesTest.asl#" :text "gate for FORMS-FLUSH-CR: (:edit)+(:flush) writes bytes outside the edited span unchanged on CR, CRLF, mixed and CRLF source files")
 (:doc :symbol "asl/packages/asl-forms/tests/flushBytesTest.asl#runTests" :text "run the flush-bytes cases: bytes outside the hunk, multi-line CRLF, mixed endings, :all, CRLF .asl source")
 (:doc :symbol "asl/packages/asl-forms/tests/fastCheckParityTest.asl#runTests" :text "the in-process check of a staged .asl file agrees with asl check on a paren inside a comment and an unresolved import, and passes a clean file")

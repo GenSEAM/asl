@@ -1,5 +1,5 @@
 (module asl-forms/indent
-  :x [IndentEdit Guided guide guideBroken editsAsn]
+  :x [IndentEdit Guided guide guideBroken editsAsn editsAsnIn]
   :i [])
 
 ; (:m :ref PAREN-DESIGN :do "indentation-guided closer repair: every closer the indentation agrees with is kept; a line at column x closes the open frames whose column is >= x (a missing closer, inserted at the previous code line's trail) and reopens the frames the previous trail closed whose column + 2 <= x (an extra closer, removed); a closer with nothing open is deleted and a closer of the wrong kind is replaced; each edit names its opener and the line that decided it")
@@ -207,3 +207,33 @@ fn editAsn e: IndentEdit -> String
 
 fn editsAsn es: (List IndentEdit) -> String
   (str "(" (stringJoin (map editAsn es) " ") ")")
+
+; (:m :ref unbalancedFormDiagnostic :do "the top-level item enclosing a line: the nearest line at or above it that starts at column 0 with code, not a closer, comment or string; none above means -1")
+fn itemLine lines: (List String) li: Int64 -> Int64
+  (if (< li 0)
+    -1
+    (let [(b (stringToBytes (optionOr (listGet lines li) "")))
+          (c (if (> (bytesLength b) 0) (bytesGet b 0) 32))]
+      (if (or (or (= c 32) (= c 9)) (or (= c 59) (or (= c 34) (or (= c 13) (closer? c)))))
+        (itemLine lines (- li 1))
+        li)))
+
+fn itemWords ln: String -> (List String)
+  (filter (fn [(w String)] -> Bool (not (or (stringEmpty? w) (= w "!"))))
+          (stringSplit (stringReplace (stringReplace (stringReplace ln "(" " ") "[" " ") "\t" " ") " "))
+
+; (:m :ref unbalancedFormDiagnostic :do "an edit with an opener also names the item it sits in, (:item (:line L :kind \"fn\" :name \"h\")), so a missing closer deep in one fn points at that fn; a stray closer or an opener above every item adds nothing")
+fn itemAsn lines: (List String) e: IndentEdit -> String
+  (let [(at (if (>= e.openLine 0) (itemLine lines e.openLine) -1))
+        (ws (itemWords (optionOr (listGet lines at) "")))]
+    (if (< at 0)
+      ""
+      (str " :item (:line " (stringFromInt64 (+ at 1)) " :kind " (quoteTok (optionOr (listGet ws 0) "")) " :name " (quoteTok (optionOr (listGet ws 1) "")) ")")))
+
+fn editAsnIn lines: (List String) e: IndentEdit -> String
+  (let [(base (editAsn e))]
+    (str (optionOr (stringSlice base 0 (- (stringLength base) 1)) base) (itemAsn lines e) ")"))
+
+fn editsAsnIn text: String es: (List IndentEdit) -> String
+  (let [(lines (stringSplit text "\n"))]
+    (str "(" (stringJoin (map (fn [(e IndentEdit)] -> String (editAsnIn lines e)) es) " ") ")"))

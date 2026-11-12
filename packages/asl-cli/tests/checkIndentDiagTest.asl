@@ -22,7 +22,7 @@ fn testMissingCloserNamesOpener dir: String r: String -> Bool
   (let [(path (str dir "/missing.asl"))]
     (do
       (assert (stringContains? r ":ev \"unclosed (\"") (str "the checker's own verdict is kept: " r))
-      (assert (stringContains? r "(:insert \")\" :line 5 :col 21 :opener (:line 4 :col 3 :head \"let\") :by (:line 7))") (str "the missing closer goes after line 5, opened by let on line 4, decided by line 7: " r))
+      (assert (stringContains? r "(:insert \")\" :line 5 :col 21 :opener (:line 4 :col 3 :head \"let\") :by (:line 7) :item (:line 3 :kind \"fn\" :name \"f\"))") (str "the missing closer goes after line 5, opened by let on line 4 inside fn f on line 3, decided by line 7: " r))
       true))
 
 fn testWrongKindNamesOpenerLine dir: String r: String -> Bool

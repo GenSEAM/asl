@@ -158,6 +158,7 @@
 (:sym "guide" :mod "asl-forms/indent" :sig "guide text: String -> Guided" :doc "Closer edits the indentation of a text implies; closers still open at the end go to the last code line, and a text with no code line has nothing to close.")
 (:sym "guideBroken" :mod "asl-forms/indent" :sig "guideBroken text: String -> Guided" :doc "Like guide but applies only the edits inside segments whose delimiters do not balance; edits in balanced segments come back as skipped.")
 (:sym "editsAsn" :mod "asl-forms/indent" :sig "editsAsn es: (List IndentEdit) -> String" :doc "Indent edits as one parenthesised ASN list of their edit forms.")
+(:sym "editsAsnIn" :mod "asl-forms/indent" :sig "editsAsnIn text: String es: (List IndentEdit) -> String" :doc "Indent edits as editsAsn renders them, each edit with an opener also naming its enclosing top-level item from the source text.")
 (:sym "toolEnv!" :mod "asl-forms/kernel" :kind fn! :sig "toolEnv! name: String -> String" :doc "ROOT_DIR or SCRIPT_DIR; when neither is set, the ASL_CLI_ROOT or ASL_CLI_SCRIPT_DIR bin/asl exports, so forms run in process by the CLI see the roots an asl-host child was given" :pit (effect))
 (:sym "aslHome!" :mod "asl-forms/kernel" :sig "aslHome! root: String -> String" :pit (effect))
 (:sym "aslPath!" :mod "asl-forms/kernel" :sig "aslPath! root: String rel: String -> String" :pit (effect))
