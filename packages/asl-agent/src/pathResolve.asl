@@ -1,6 +1,6 @@
 (module aslAgent/pathResolve
   :x [resolvedOps resolveIn dirsOf resolveOp!]
-  :i [(aslAgent/core :a c) (asl-proc/coreProcess :a cp)])
+  :i [(aslAgent/core :a c) (asl-proc/coreProcess :a cp) (asl-checker/resolve :a rs)])
 
 ; (:m :ref LEON-PATH-RESOLVE :do "node2 2026-11-02: the top repeatFailure op was tree (15 of 37), then write (14) and read (6); the runs named files by module name (asl-gates/metaAudit.asl, asl-tools/coord/gateWiden.asl, asl-cli/cacheGc.asl) and repeated the same not-found step until the stop, since the :nearest siblings of a missing first segment point nowhere; a step path that does not exist is resolved against the workspace's own file list, and the receipt says so")
 fn resolvedOps -> (List String)
@@ -80,6 +80,21 @@ fn textOf v: (Option c/KvVal) -> String
 fn withKey op: (List (Pair String c/KvVal)) k: String v: String -> (List (Pair String c/KvVal))
   (map (fn [p] (if (= (pairFirst p) k) (pair k (c/kvStr v)) p)) op)
 
+; (:m :ref LEON-MODULE-PATH-ASLTOOLS :do "a missing path that is a module name, with or without .asl, resolves the way the checker resolves that import from the workspace root (package index and declared module headers), so asl-tools/fleet/run reaches asl/tools/fleet/run.asl, where suffix matching found no file or several")
+fn moduleName want: String -> (Option String)
+  (let [name (if (stringEndsWith? want ".asl") (optionOr (stringSlice want 0 (- (stringLength want) 4)) want) want)]
+    (if (and (stringContains? name "/") (not (stringContains? name "."))) (some name) (none)))
+
+fn ! moduleTarget! root: String want: String -> (Option String)
+  (match (moduleName want)
+    ((none) (none))
+    ((some name)
+      (let [r (rs/resolveImport! (str root "/.asl.config.asn") name (rs/emptyModIndex))
+            base (str (resultOr (realPath root) root) "/")]
+        (if (and (stringStartsWith? r.path base) (exists! root (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) "")))
+          (some (optionOr (stringSlice r.path (stringLength base) (stringLength r.path)) ""))
+          (none)))))
+
 ; (:m :do "a write names a file that may not exist yet: only a missing parent directory is resolved, then the file name is kept")
 fn ! targetFor! root: String opName: String want: String -> (Option String)
   (let [files (listed! root)]
@@ -95,7 +110,9 @@ fn ! targetFor! root: String opName: String want: String -> (Option String)
               ((some d) (some (str d "/" base)))
               ((none) (none))))))
       ((= opName "tree") (resolveIn (dirsOf files) want))
-      (else (resolveIn (listAppend files (dirsOf files)) want))))
+      (else (match (moduleTarget! root want)
+        ((some p) (some p))
+        ((none) (resolveIn (listAppend files (dirsOf files)) want))))))
 
 ; (:m :do "the op with its path replaced by the resolved one and the path it was sent with, or the op unchanged and none when the path exists, is absolute, carries a #symbol, or names no single candidate")
 fn ! resolveOp! op: (List (Pair String c/KvVal)) opName: String root: String -> (Pair (List (Pair String c/KvVal)) (Option String))

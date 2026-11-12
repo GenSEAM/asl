@@ -33,9 +33,29 @@ fn ! recorded! -> rk/RecordedRun
         cleaned (pathRemove root)]
     (rk/RecordedRun :exitCode code :journal (str text "\n(:written \"" written "\")") :sentLines (list)))
 
+; (:m :ref LEON-MODULE-PATH-ASLTOOLS :do "two fleet/run.asl files under different package dirs, so suffix matching alone is ambiguous; the module headers name them kit-tools/fleet/run and kit-other/fleet/run")
+fn ! moduleRoot! -> String
+  (let [root (rk/freshRecorderRoot! "pathResolveModule")
+        made (and (ok? (dirCreate (str root "/pk/tools/fleet"))) (ok? (dirCreate (str root "/pk/other/fleet"))))
+        w1 (fileWrite (str root "/pk/tools/fleet/run.asl") "(module kit-tools/fleet/run\n  :x [job])\n\nfn job -> Int64\n  1\n")
+        w2 (fileWrite (str root "/pk/other/fleet/run.asl") "(module kit-other/fleet/run\n  :x [job])\n\nfn job -> Int64\n  2\n")
+        repo (gk/initGitRepo! root "pathResolveModule" "path-resolve.invalid")]
+    root)
+
+fn ! readTarget! root: String want: String -> String
+  (let [r (pr/resolveOp! (list (pair "file" (c/kvStr want))) "read" root)]
+    (match (c/dictGet (pairFirst r) "file") ((some (c/kvStr t)) t) (_ "")))
+
 fn ! runTests -> Bool
   (let [fs (files)
-        run (recorded!)]
+        run (recorded!)
+        mroot (moduleRoot!)
+        bare (readTarget! mroot "kit-tools/fleet/run")
+        withExt (readTarget! mroot "kit-tools/fleet/run.asl")
+        other (readTarget! mroot "kit-other/fleet/run")
+        mcleaned (ok? (pathRemove mroot))
+        here (resultOr (realPath ".") ".")
+        real (readTarget! here "asl-tools/fleet/run")]
     (do
       (assert (= (pr/resolveIn fs "kit-gates/metaAudit.asl") (some "pk/packages/kit-gates/src/metaAudit.asl")) "a module-name file path resolves to the one file ending in its rest")
       (assert (= (pr/resolveIn fs "kit-gates/util.asl") (some "pk/packages/kit-gates/src/util.asl")) "two candidates narrow to the one that carries the dropped segment")
@@ -47,5 +67,10 @@ fn ! runTests -> Bool
       (assert (stringContains? run.journal "resolvedFrom") "the receipt names the path the step was sent with")
       (assert (not (stringContains? run.journal "Directory not found")) "the tree of kit-gates found the package directory")
       (assert (stringContains? run.journal "(:written \"NEWBODY") "the write to a module-name directory landed in the resolved directory")
+      (assert (= bare "pk/tools/fleet/run.asl") (str "a module name without .asl resolves through the checker to its file: " bare))
+      (assert (= withExt "pk/tools/fleet/run.asl") (str "a module name with .asl resolves to the file its header declares, though another fleet/run.asl exists: " withExt))
+      (assert (= other "pk/other/fleet/run.asl") (str "the other package keeps its own module: " other))
+      (assert mcleaned "the module fixture root is removed")
+      (assert (= real "asl/tools/fleet/run.asl") (str "in this workspace asl-tools/fleet/run resolves to asl/tools/fleet/run.asl: " real))
       (assert (none? (pr/resolveIn (list "asl" "asl/tools" "asl/tools/coord" "asl/other" "asl/other/fixtures") "asl/tools/coord/fixtures")) "a new dir under a real top-level prefix is not redirected to another package's same-named dir")
       true))
