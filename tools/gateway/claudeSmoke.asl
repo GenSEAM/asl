@@ -34,7 +34,7 @@ fn turnBody prior: String user: String -> String
   (str "{\"model\":\"claude/opus\",\"messages\":[" prior "{\"role\":\"user\",\"content\":\"" user "\"}]}")
 
 fn ! post! store: s/SecretStore port: Int64 key: String prior: String user: String -> String
-  (let [(rg (f/RemoteGateway :id "smoke" :base (str "http://127.0.0.1:" (stringFromInt64 port)) :secret (f/serveTokenId)))
+  (let [(rg (f/RemoteGateway :id "smoke" :base (str "http://127.0.0.1:" (stringFromInt64 port)) :secret (f/serveTokenId) :aslGateway true))
         (env (mapFromPairs (list (pair "PATH" (optionOr (envGet "PATH") "/usr/bin:/bin")))))]
     (f/remoteForward! store rg (turnBody prior user) (list (pair "X-ASL-Session" key)) env 120.0))
 
