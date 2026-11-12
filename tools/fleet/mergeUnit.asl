@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mergeUnit
-  :x [capNeighbours clipWhy mergeBatch! claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [capNeighbours clipWhy directGates! mergeBatch! claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
@@ -177,9 +177,9 @@ fn ! symbolSuites! cfg: Cfg wt: String -> (Result (List (Pair String String)) St
             ((not (stringContains? d.out "(:affected ")) (err "noReceipt"))
             (else (ok (affectedPairs d.out))))))))
 
-; (:m :ref AFFWIRE-FIX :do "true when the change adds or edits an .asl file: an empty symbol answer for such a change falls back to the importer scan (emptySelection), so a code change never merges on the brief's gates alone")
+; (:m :ref AFFWIRE-FIX :do "true when the change adds, edits or deletes an .asl file: an empty symbol answer for such a change falls back to the importer scan (emptySelection), so a code change never merges on the brief's gates alone")
 fn changesAsl? changes: (List (Pair String String)) -> Bool
-  (listAny? (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)
+  (listAny? (fn [(c (Pair String String))] -> Bool (stringEndsWith? (pairSecond c) ".asl")) changes)
 
 ; (:m :ref AFFSYM-WIRE :do "the direct suites of a change: by default the symbol-level selector's answer (only suites reaching a changed item, each logged as SELECTED with its reason chain); when it cannot answer, answers no suite for a change to an .asl file, or with cfg.symbolSelect off, the import scan below runs instead and NEIGHBOUR-SELECTOR names why")
 fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) -> (List String)
@@ -194,10 +194,13 @@ fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String S
     ((err why) (importerGates! cfg unit wt changes why)))
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the import-scan suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk; the fallback of the symbol selector")
+; (:m :ref AFFWIRE-LOWS :do "a deleted .asl file counts too: its module name is read from the main checkout, where it still exists, so the suites importing the removed module run")
 fn ! importerGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) why: String -> (List String)
   (let [(paths (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
         (tests (filter (fn [(p String)] -> Bool (suite? wt p)) paths))
-        (names (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str wt "/" p)) p))) (list) paths))
+        (gone (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
+        (names (listAppend (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str wt "/" p)) p))) (list) paths)
+                           (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str cfg.main "/" p)) p))) (list) gone)))
         (imps (if (listEmpty? names) (list) (importersIn! wt (uniq names))))
         (all (uniq (listAppend tests imps)))
         (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :why " (q why) " :n " (stringFromInt64 (listLength all)))))
