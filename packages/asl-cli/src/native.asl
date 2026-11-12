@@ -409,14 +409,13 @@ fn ! freshStaged? path: String -> Bool
 fn ! pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64
   (pruneStaleStagedFrom! mirrorDir expected (fn [(f String)] -> Bool true))
 
-; (:m :ref ASLCLI-PREEXISTING-REDS :do "a mirror file has a live source when the package root holds it at its flat rel or at its rel past the workspace segment, or the toolchain root holds that asl/ rel; a fresh file whose source is gone was staged by an earlier run, not a concurrent stager, so it is pruned at once")
-fn ! liveSource? root: String toolRoot: String mirrorDir: String f: String -> Bool
-  (let [(rel (dropPrefixLen f (+ (stringLength mirrorDir) 1)))
-        (tail (stringJoin (optionOr (listTail (stringSplit rel "/")) (list)) "/"))]
+; (:m :ref ASLCLI-PREEXISTING-REDS :do "a mirror file has a live source when it maps to an existing file: a flat copy (outside pkgDir) only to root/rel; a copy under pkgDir to root/rel, root/tail or toolRoot/tail, where tail is its path past pkgDir (the package's own files and the first-party files staged from the toolchain root)")
+fn ! liveSource? root: String toolRoot: String mirrorDir: String pkgDir: String f: String -> Bool
+  (let [(rel (dropPrefixLen f (+ (stringLength mirrorDir) 1)))]
     (or (sys/isFile? (str root "/" rel))
-        (and (not (stringEmpty? tail))
-             (or (sys/isFile? (str root "/" tail))
-                 (and (stringStartsWith? tail "asl/") (sys/isFile? (str toolRoot "/" tail)))))))
+        (and (stringStartsWith? f (str pkgDir "/"))
+             (let [(tail (dropPrefixLen f (+ (stringLength pkgDir) 1)))]
+               (or (sys/isFile? (str root "/" tail)) (sys/isFile? (str toolRoot "/" tail)))))))
 
 ; (:m :ref ASLCLI-PREEXISTING-REDS :do "prune a file no copy wrote when it is old, or when it is fresh but live says its source is gone: the 600 s guard protects a concurrent stager's files, never a module deleted between two runs")
 fn ! pruneStaleStagedFrom! mirrorDir: String expected: (List String) live: (fn [String] -> Bool) -> Int64
@@ -439,7 +438,7 @@ fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) diges
                   ((ok _)
                     (match (writeMirrorConfig! root pkgDir)
                       ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                      ((ok _) (do (pruneStaleStagedFrom! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn"))))) (fn [(f String)] -> Bool (liveSource? root ctx.root mirrorDir f))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
+                      ((ok _) (do (pruneStaleStagedFrom! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn"))))) (fn [(f String)] -> Bool (liveSource? root ctx.root mirrorDir pkgDir f))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
