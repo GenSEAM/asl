@@ -15,6 +15,23 @@ fn tokensOf s: String -> Int64
 fn capWords s: String n: Int64 -> String
   (if (<= (stringLength s) n) s (str (optionOr (stringSliceUtf8 s 0 n) (optionOr (stringSlice s 0 n) "")) "..."))
 
+fn lastSpaceBefore s: String i: Int64 -> Int64
+  (cond
+    ((<= i 0) 0)
+    ((= (optionOr (stringSlice s i (+ i 1)) "") " ") i)
+    (else (lastSpaceBefore s (- i 1))))
+
+; (:m :ref KNOWCARDS-STALE :do "an index purpose cut at the last word boundary within n bytes, then ...; no mid-word cut; a first word longer than n falls back to the byte cut of capWords")
+fn capAtWord s: String n: Int64 -> String
+  (if (<= (stringLength s) n)
+    s
+    (let [(at (lastSpaceBefore s n))]
+      (if (<= at 0) (capWords s n) (str (stringTrim (optionOr (stringSlice s 0 at) "")) "..."))))
+
+; (:m :ref KNOWCARDS-STALE :do "index purpose length: 82 cards at the old 36-byte cut measured 2023 o200k tokens, over the 2000 budget; 24 bytes cut at a word boundary measures 1766 (28: 1824, 20: 1690), leaving 11.7% headroom")
+fn indexPurposeBytes -> Int64
+  24
+
 fn upperFirst w: String -> String
   (if (stringEmpty? w) w (str (stringUpper (optionOr (stringSlice w 0 1) "")) (optionOr (stringSlice w 1 (stringLength w)) "")))
 
@@ -182,7 +199,7 @@ fn langCard spec: String ex: String -> Card
     (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "match" "let") :line line :rows (list) :missing (list)))
 
 fn indexText cards: (List Card) -> String
-  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (capWords c.purpose 36)) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
+  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (capAtWord c.purpose (indexPurposeBytes))) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
         (body (stringJoin lines "\n"))]
     (str "(:know :tier L0 :cards " (listLength cards) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card\")\n" body "\n"))
 
