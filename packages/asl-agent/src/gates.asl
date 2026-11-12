@@ -8,7 +8,7 @@
       parseCmdTokens isPathLike candidateGatePaths! missingGatePaths! missingGateFiles!
       vacuousOutsideOwns!
       gateRunScripts gatePartitionFiles gateVacuousMessage gateRevertOutcome gateRevertVerdict
-      gateTimesPath readGateTimes! gateTimeoutFit gateTimeoutFit! gateSuiteOf gateTimeoutCapSec gateRaisedSec]
+      gateTimesPath readGateTimes! gateTimeoutFit gateTimeoutFit! gateSuiteOf gateTimeoutCapSec gateRaisedSec gateWholeTree? gatesForTurn]
   :i [(aslAgent/core :a c) (aslAgent/diff :a d)])
 
 enum GateResult
@@ -496,7 +496,17 @@ fn gateRevertVerdict reverted: (List GateResult) verdicts: (List String) impl: (
       (let [keptStr (if (listEmpty? newFiles) "" (str " (kept " (c/joinSep newFiles ", ") ")"))
             weakStr (if compileOnly " :revertKind compile (the gate only stops compiling with the change reverted; a new fn needs a caller outside tests)" "")]
         (pair true (str "revertCheck" keptStr weakStr ": " detail)))
-      (pair false (str "no gate reports a failed assertion with " (c/joinSep impl ", ") " reverted to HEAD: " detail))))
+      (pair false (str "no gate reports a failed assertion with " (c/joinSep impl ", ") " reverted to HEAD: " detail
+        (if (listContains? verdicts "timeoutOnRevert") " :reason revertTimeout (a timed-out revert run is unknown, not red; raise :gateTimeout or run the suite alone)" "")))))
+
+; (:m :ref PERF-VACUOUS-GATES-AT-DONE :do "gates that check the whole tree whatever the turn edited (noSelfHostTest 31 s x134, build.sh x125 in the 2026-11-08 audit) wait for the :done turn")
+fn gateWholeTree? cmd: String -> Bool
+  (or (stringContains? cmd "noSelfHostTest.asl") (stringContains? cmd "build.sh"))
+
+; (:m :ref PERF-VACUOUS-GATES-AT-DONE :do "the gates a turn runs: all on the :done turn or when every gate is whole-tree, else without the whole-tree ones; order kept")
+fn gatesForTurn gates: (List String) doneTurn: Bool -> (List String)
+  (let [rest (filter (fn [cmd] (not (gateWholeTree? cmd))) gates)]
+    (if (or doneTurn (listEmpty? rest)) gates rest))
 
 fn gateTimesPath -> String
   (str (optionOr (envGet "HOME") "") "/.asl/run/gateTimes.asn")
