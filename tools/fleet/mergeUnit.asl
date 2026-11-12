@@ -1,8 +1,9 @@
 (module asl-tools/fleet/mergeUnit
-  :x [capNeighbours claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [capNeighbours mergeBatch! claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
+; (:m :ref MERGE-TRAIN-SLOW :do "--branch B names the branch every unit is rebased onto and fast-forwarded into (default main), never the unit's own branch (that is refused as BRANCH-IS-TARGET); the gate set is the brief's :gates plus the direct tests of the change (changed suites, and suites that import a changed module), within the budget; graph neighbours join only with --neighbours or a brief :neighbours true; a brief :budgetS N replaces --neighbour-budget-secs for that unit; live suites (cfg.liveSuites plus the tools/remote/ rows of .asl/mem/skipAllowed.asn) are selected only when the change touches tools/remote/; --batch U1,U2 cherry-picks the units onto one integration branch, runs the union of their gates once and fast-forwards main once")
 
 (schema Cfg
   (:f main String)
@@ -26,6 +27,9 @@
   (:f aslBin String :default "./bin/asl")
   (:f invariantCapS Int64 :default 120)
   (:f neighbourBudgetS Int64 :default 1200)
+  (:f neighbours Bool :default false)
+  (:f liveRoot String :default "tools/remote/")
+  (:f liveSuites (List String) :default (list "tools/remote/tests/vpsE2eTest.asl"))
   (:f invariantCosts (List String) :default (list
     "./bin/asl test tools/tests/noSelfHostTest.asl=30"
     "./scripts/install.sh --check-rules=30"
@@ -116,15 +120,55 @@ fn ! graphGates! cfg: Cfg wt: String -> (Option (List String))
                              (map stringTrim (stringLines d.out)))))
           (none)))))
 
-; (:m :ref MERGE-NEIGHBOURS-PAR :do "the graph selector's answer is used when it names at least one suite, or when the branch changed no file; an empty answer for a branch that changed files falls back to the import scan with why graphEmpty, and a missing or failing graph with why graphUnavailable")
-fn ! neighbourGates! cfg: Cfg unit: String wt: String -> (List String)
+; (:m :ref MERGE-NEIGHBOURS-PAR :do "the graph selector's answer is used when it names at least one suite, or when the branch changed no file; an empty answer for a branch that changed files falls back to the import scan with why graphEmpty, and a missing or failing graph with why graphUnavailable; the result pairs the direct suites (kept first under the budget) with the whole selection")
+fn ! neighbourSets! cfg: Cfg unit: String wt: String -> (Pair (List String) (List String))
   (match (if cfg.graphSelect (graphGates! cfg wt) (none))
     ((some gs)
       (if (and (listEmpty? gs) (not (stringEmpty? (stringTrim (gitOut! wt (list "diff" "--name-only" (str cfg.branch "...HEAD"))).out))))
-        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\" :why \"graphEmpty\"") (scanGates! cfg wt))
+        (do (emit! cfg unit "NEIGHBOUR-SELECTOR" ":by \"scan\" :why \"graphEmpty\"") (let [(sc (scanGates! cfg wt))] (pair sc sc)))
         (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"graph\" :n " (stringFromInt64 (listLength gs))))
-            (capNeighbours cfg unit (timesNow!) (listAppend (scanGates! cfg wt) (importersOf! cfg wt gs)) gs))))
-    ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"scan\" :why " (if cfg.graphSelect "\"graphUnavailable\"" "\"off\""))) (scanGates! cfg wt))))
+            (pair (listAppend (scanGates! cfg wt) (importersOf! cfg wt gs)) gs))))
+    ((none) (do (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"scan\" :why " (if cfg.graphSelect "\"graphUnavailable\"" "\"off\""))) (let [(sc (scanGates! cfg wt))] (pair sc sc)))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "a suite: an .asl file under a tests directory (top-level tests/ or any */tests/), not a fixture, whose text holds runTests")
+fn ! suite? wt: String p: String -> Bool
+  (and (stringEndsWith? p ".asl")
+       (and (or (stringStartsWith? p "tests/") (stringContains? p "/tests/"))
+            (and (not (stringContains? p "/fixtures/"))
+                 (stringContains? (resultOr (fileReadString (str wt "/" p)) "") "runTests"))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the suites anywhere in the worktree (tracked or untracked, not ignored) whose text names module m in an import, (m ...), found by one git grep over the whole tree (the vcs layer passes --literal-pathspecs, so no glob narrows it; suite? filters)")
+fn ! importersIn! wt: String m: String -> (List String)
+  (let [(o (gitOut! wt (list "grep" "-l" "-F" "--untracked" "-e" (str "(" m " "))))]
+    (filter (fn [(p String)] -> Bool (suite? wt p)) (map stringTrim (stringLines o.out))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the direct suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk")
+fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) -> (List String)
+  (let [(paths (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
+        (tests (filter (fn [(p String)] -> Bool (suite? wt p)) paths))
+        (mods (filter (fn [(m String)] -> Bool (not (stringEmpty? m))) (map (fn [(p String)] -> String (moduleOf! (str wt "/" p))) paths)))
+        (imps (fold (fn [(acc (List String)) (m String)] -> (List String) (listAppend acc (importersIn! wt m))) (list) mods))
+        (all (uniq (listAppend tests imps)))
+        (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :n " (stringFromInt64 (listLength all)))))]
+    (map (fn [(t String)] -> String (str cfg.testCmd " " t)) all))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the live suites: cfg.liveSuites and every :suite of the main checkout's .asl/mem/skipAllowed.asn under cfg.liveRoot (suites that need a reachable VPS)")
+fn ! liveSuites! cfg: Cfg -> (List String)
+  (let [(text (resultOr (fileReadString (str cfg.main "/.asl/mem/skipAllowed.asn")) ""))
+        (listed (map (fn [(piece String)] -> String (optionOr (listHead (stringSplit piece "\"")) "")) (listDrop (stringSplit text ":suite \"") 1)))]
+    (uniq (listAppend cfg.liveSuites (filter (fn [(s String)] -> Bool (stringStartsWith? s cfg.liveRoot)) listed))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the selected suites of a unit: the direct suites, or with cfg.neighbours the graph selection; a live suite is dropped with SKIPPED-LIVE unless the change touches cfg.liveRoot; the rest is capped to the budget by cost")
+fn ! selectedGates! cfg: Cfg unit: String wt: String -> (List String)
+  (let [(d (gitOut! wt (list "diff" "--name-status" (str cfg.branch "...HEAD"))))
+        (changes (map changeOf (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines d.out))))
+        (remote (listAny? (fn [(c (Pair String String))] -> Bool (stringStartsWith? (pairSecond c) cfg.liveRoot)) changes))
+        (live (liveSuites! cfg))
+        (sel (if cfg.neighbours (neighbourSets! cfg unit wt) (let [(ds (directGates! cfg unit wt changes))] (pair ds ds))))
+        (keep? (fn [(g String)] -> Bool (or remote (not (listContains? live (gateKey cfg g))))))
+        (_ (map (fn [(g String)] -> Bool (emit! cfg unit "SKIPPED-LIVE" (str ":cmd " (q g) " :why \"the change touches nothing under " cfg.liveRoot "\"")))
+                (filter (fn [(g String)] -> Bool (not (keep? g))) (pairSecond sel))))]
+    (capNeighbours cfg unit (timesNow!) (filter keep? (pairFirst sel)) (filter keep? (pairSecond sel))))
 
 ; (:m :ref MERGE-NEIGHBOUR-FANOUT :do "the suites among gs whose source names a module changed by the branch in an import, (<module> ...), wherever that module lives: the import scan only covers /src/ files, so a change to tools/fleet/run.asl or mergeUnit.asl would otherwise have no direct importer")
 fn ! importersOf! cfg: Cfg wt: String gs: (List String) -> (List String)
@@ -157,17 +201,19 @@ fn pickWithin cfg: Cfg times: (Map String Int64) left: Int64 gs: (List String) a
 fn hashKey g: String -> String
   (bytesSha256 (stringToBytes g))
 
+; (:m :ref MERGE-TRAIN-SLOW :do "the budget is never exceeded: the picked cost stays within cfg.neighbourBudgetS times the slots; direct suites are picked first in their order, each only while it fits, the rest sampled after them; :directDropped counts the direct suites that did not fit")
 fn capNeighbours cfg: Cfg unit: String times: (Map String Int64) direct: (List String) gs: (List String) -> (List String)
   (let [(slots (max 1 cfg.gateSlots))
+        (room (* cfg.neighbourBudgetS slots))
         (total (sumSecs cfg times gs))]
-    (if (<= (/ (+ total (- slots 1)) slots) cfg.neighbourBudgetS)
+    (if (<= total room)
       gs
-      (let [(keep (filter (fn [(g String)] -> Bool (listContains? direct g)) gs))
+      (let [(directs (filter (fn [(g String)] -> Bool (listContains? direct g)) gs))
+            (keep (pickWithin cfg times room directs (list)))
             (rest (listSortBy hashKey (filter (fn [(g String)] -> Bool (not (listContains? direct g))) gs)))
-            (room (max 0 (- (* cfg.neighbourBudgetS slots) (sumSecs cfg times keep))))
-            (sample (pickWithin cfg times room rest (list)))
+            (sample (pickWithin cfg times (max 0 (- room (sumSecs cfg times keep))) rest (list)))
             (picked (listAppend keep sample))]
-        (do (emit! cfg unit "NEIGHBOUR-CAP" (str ":n " (stringFromInt64 (listLength gs)) " :picked " (stringFromInt64 (listLength picked)) " :direct " (stringFromInt64 (listLength keep)) " :budgetS " (stringFromInt64 cfg.neighbourBudgetS) " :costS " (stringFromInt64 (sumSecs cfg times picked))))
+        (do (emit! cfg unit "NEIGHBOUR-CAP" (str ":n " (stringFromInt64 (listLength gs)) " :picked " (stringFromInt64 (listLength picked)) " :direct " (stringFromInt64 (listLength keep)) " :budgetS " (stringFromInt64 cfg.neighbourBudgetS) " :costS " (stringFromInt64 (sumSecs cfg times picked)) " :directDropped " (stringFromInt64 (- (listLength directs) (listLength keep)))))
             picked))))
 
 fn ! scanGates! cfg: Cfg wt: String -> (List String)
@@ -502,7 +548,8 @@ fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
       ((not (rebased! cfg unit wt "REBASE-CONFLICT")) false)
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
-        (let [(gates (uniq (listAppend (gatesOf! unit cfg) (if (listEmpty? (gatesOf! unit cfg)) (list) (listAppend (neighbourGates! cfg unit wt) (listAppend (ledgerGates! cfg wt) (invariantGates! cfg unit)))))))]
+        (let [(own (unitGates! cfg unit wt))
+              (gates (uniq (listAppend own (if (listEmpty? own) (list) (invariantGates! cfg unit)))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) false))
             ((not (gatesPass! cfg unit wt gates)) (do (emit! cfg unit "GATE-FAIL" "") false))
@@ -523,10 +570,132 @@ fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
 fn ! mergeUnit! cfg: Cfg unit: String -> Bool
   (mergeUnitWith! cfg unit (fn [] true))
 
+fn leadDigits chars: (List String) acc: String -> String
+  (match (listHead chars)
+    ((none) acc)
+    ((some c) (if (stringContains? "0123456789" c) (leadDigits (optionOr (listTail chars) (list)) (str acc c)) acc)))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the brief's own selection keys: :neighbours true turns the graph neighbours on for the unit, :budgetS N (N > 0) replaces the neighbour budget")
+fn briefCfg cfg: Cfg text: String -> Cfg
+  (let [(c1 (if (stringContains? text ":neighbours true") (with cfg :neighbours true) cfg))]
+    (match (stringIndexOf text ":budgetS ")
+      ((none) c1)
+      ((some at)
+        (let [(n (optionOr (stringToInt64 (leadDigits (stringChars (stringTrim (optionOr (stringSlice text (+ at 9) (stringLength text)) ""))) "")) 0))]
+          (if (> n 0) (with c1 :neighbourBudgetS n) c1)))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "a unit's own gates in order: the brief's :gates, then (when the brief names any) its selected suites and the doc ledger gate; empty when the brief names none")
+fn ! unitGates! cfg: Cfg unit: String wt: String -> (List String)
+  (let [(brief (gatesOf! unit cfg))
+        (c (briefCfg cfg (resultOr (fileReadString (str cfg.briefDir "/" unit "-leon.asn")) "")))]
+    (if (listEmpty? brief) (list)
+      (uniq (listAppend brief (listAppend (selectedGates! c unit wt) (ledgerGates! c wt))))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "one unit of a batch: its commits not on main are cherry-picked onto the integration worktree; some gates when they landed, none (with an event naming the unit) for no worktree, --branch as its own branch, no brief gates, nothing to merge or a conflict (aborted)")
+fn ! batchUnit! cfg: Cfg iwt: String mainHead: String unit: String -> (Option (List String))
+  (let [(wt (str cfg.worktrees "/asex-" unit))]
+    (cond
+      ((not (fileExists? wt)) (do (emit! cfg unit "NO-WORKTREE" (str ":path " (q wt))) (none)))
+      ((branchIsTarget! cfg wt) (do (emit! cfg unit "BRANCH-IS-TARGET" (str ":branch " (q cfg.branch))) (none)))
+      (else
+        (let [(gates (unitGates! cfg unit wt))
+              (h (gitOut! wt (list "rev-parse" "HEAD")))
+              (revs (gitOut! cfg.main (list "rev-list" "--reverse" "--no-merges" (str mainHead ".." (stringTrim h.out)))))
+              (shas (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringLines revs.out))))]
+          (cond
+            ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) (none)))
+            ((or (!= h.exit 0) (!= revs.exit 0)) (do (emit! cfg unit "BATCH-PICK-FAIL" (str ":git " (q (stringTrim (str h.out " " revs.out))))) (none)))
+            ((listEmpty? shas) (do (emit! cfg unit "NOTHING-TO-MERGE" "") (none)))
+            (else
+              (let [(cp (gitOut! iwt (listAppend (list "cherry-pick") shas)))]
+                (if (= cp.exit 0)
+                  (do (emit! cfg unit "BATCH-PICKED" (str ":commits " (stringFromInt64 (listLength shas)))) (some gates))
+                  (do (gitOut! iwt (list "cherry-pick" "--abort"))
+                      (emit! cfg unit "BATCH-CONFLICT" (str ":git " (q (stringTrim cp.out))))
+                      (none))))))))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the units whose gate set holds g (by normalised text); every unit when none does (an invariant gate)")
+fn ownersOf picked: (List (Pair String (List String))) g: String -> (List String)
+  (let [(own (map pairFirst (filter (fn [(p (Pair String (List String)))] -> Bool (listAny? (fn [(x String)] -> Bool (= (norm x) (norm g))) (pairSecond p))) picked)))]
+    (if (listEmpty? own) (map pairFirst picked) own))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "the union of the picked units' gates runs once in the integration worktree; a red gate is judged against main and its verdict is logged under every unit that selected it; the blocking units are returned")
+fn ! batchBlockers! cfg: Cfg name: String iwt: String picked: (List (Pair String (List String))) gates: (List String) -> (List String)
+  (let [(greens (greensOf! cfg iwt gates))]
+    (fold (fn [(acc (List String)) (i Int64)] -> (List String)
+            (let [(g (optionOr (listGet gates i) ""))
+                  (own (ownersOf picked g))]
+              (if (optionOr (listGet greens i) false)
+                (do (emit! cfg name "GATE" (str ":cmd " (q g) " :exit 0")) acc)
+                (let [(v (gateVerdict! cfg g))
+                      (_ (map (fn [(u String)] -> Bool (emit! cfg u v (str ":cmd " (q g) " :batch " (q name)))) own))]
+                  (if (= v "BASE-RED") acc (uniq (listAppend acc own)))))))
+          (list) (range 0 (listLength gates))))
+
+fn ! batchGated! cfg: Cfg name: String iwt: String picked: (List (Pair String (List String))) hook: (fn [] -> Bool) -> Bool
+  (let [(units (map pairFirst picked))]
+    (cond
+      ((listEmpty? picked) (do (emit! cfg name "BATCH-EMPTY" "") false))
+      ((not (hostBuild! iwt)) (do (emit! cfg name "BUILD-FAIL" "") false))
+      (else
+        (let [(gates (uniq (listAppend (fold (fn [(acc (List String)) (p (Pair String (List String)))] -> (List String) (listAppend acc (pairSecond p))) (list) picked) (invariantGates! cfg name))))
+              (_ (emit! cfg name "BATCH-GATES" (str ":units (" (stringJoin (map q units) " ") ") :n " (stringFromInt64 (listLength gates)))))
+              (blockers (batchBlockers! cfg name iwt picked gates))]
+          (cond
+            ((not (listEmpty? blockers))
+              (do (map (fn [(u String)] -> Bool (emit! cfg u "GATE-FAIL" (str ":batch " (q name)))) blockers)
+                  (emit! cfg name "BATCH-FAIL" (str ":red (" (stringJoin (map q blockers) " ") ")"))
+                  false))
+            ((not (auditPass! cfg iwt)) (do (emit! cfg name "AUDIT-FAIL" "") false))
+            (else
+              (let [(_ (hook))]
+                (if (ffLoop! cfg name iwt name 1)
+                  (let [(h (vg/head! cfg.main))
+                        (sha (q (stringTrim h.out)))]
+                    (do (map (fn [(u String)] -> Bool (emit! cfg u "MERGED" (str ":sha " sha " :batch " (q name)))) units)
+                        (emit! cfg name "BATCH-MERGED" (str ":sha " sha " :units " (stringFromInt64 (listLength units))))
+                        (mainBuild! cfg name)
+                        true))
+                  false))))))))
+
+fn ! batchClean! cfg: Cfg name: String iwt: String -> Bool
+  (let [(r (vg/worktreeRemove! cfg.main iwt))
+        (b (gitOut! cfg.main (list "branch" "-D" name)))]
+    (and (= r.exit 0) (= b.exit 0)))
+
+fn ! batchLocked! cfg: Cfg name: String units: (List String) hook: (fn [] -> Bool) -> Bool
+  (let [(h (vg/head! cfg.main))
+        (mainHead (stringTrim h.out))
+        (iwt (str cfg.worktrees "/asex-" name))
+        (add (vg/worktreeAdd! cfg.main iwt mainHead))
+        (sw (if (= add.exit 0) (vg/switch! iwt name mainHead) add))]
+    (if (or (!= h.exit 0) (!= sw.exit 0))
+      (do (emit! cfg name "BATCH-FAIL" (str ":why " (q (str "integration worktree: " (stringTrim sw.out)))))
+          (if (= add.exit 0) (batchClean! cfg name iwt) true)
+          false)
+      (let [(picked (fold (fn [(acc (List (Pair String (List String)))) (u String)] -> (List (Pair String (List String)))
+                            (match (batchUnit! cfg iwt mainHead u)
+                              ((some gs) (listAppend acc (list (pair u gs))))
+                              ((none) acc)))
+                          (list) units))
+            (merged (batchGated! cfg name iwt picked hook))
+            (cleaned (batchClean! cfg name iwt))]
+        (do (if cleaned true (emit! cfg name "BATCH-CLEAN-FAIL" (str ":path " (q iwt))))
+            (and merged (= (listLength picked) (listLength units)))))))
+
+; (:m :ref MERGE-TRAIN-SLOW :do "several units merged as one batch under the main-merge lock: an integration branch batch-NS from main's HEAD in its own worktree, each unit's commits cherry-picked onto it in order, the union of their gates run once there, one fast-forward of main, then the integration worktree and branch removed; a unit that cannot be picked is left out and named, a blocking red names the units that selected the gate and nothing merges; true when every unit merged. hook runs just before the fast-forward")
+fn ! mergeBatchWith! cfg: Cfg units: (List String) hook: (fn [] -> Bool) -> Bool
+  (let [(name (str "batch-" (stringFromInt64 (nowNs))))]
+    (withLock! cfg name (fn [] -> Bool (batchLocked! cfg name units hook))))
+
+fn ! mergeBatch! cfg: Cfg units: (List String) -> Bool
+  (mergeBatchWith! cfg units (fn [] true))
+
 (schema Parsed
   (:f cfg Cfg)
   (:f after Int64)
   (:f units (List String))
+  (:f batch Bool :default false)
   (:f error String))
 
 fn intOpt s: String -> Int64
@@ -543,7 +712,9 @@ fn parseLoop args: (List String) p: Parsed -> Parsed
             (more (optionOr (listTail rest) (list)))]
         (cond
           ((not (stringStartsWith? a "--")) (parseLoop rest (with p :units (listAppend p.units (list a)))))
+          ((= a "--neighbours") (parseLoop rest (with p :cfg (with c :neighbours true))))
           ((stringEmpty? v) (with p :error (str a " needs a value")))
+          ((= a "--batch") (parseLoop more (with p :batch true :units (listAppend p.units (filter (fn [(u String)] -> Bool (not (stringEmpty? u))) (stringSplit v ","))))))
           ((= a "--main") (parseLoop more (with p :cfg (with c :main v))))
           ((= a "--worktrees") (parseLoop more (with p :cfg (with c :worktrees v))))
           ((= a "--brief-dir") (parseLoop more (with p :cfg (with c :briefDir v))))
@@ -576,7 +747,7 @@ fn ! parseArgs args: (List String) -> Parsed
       (else p)))
 
 fn usage -> String
-  "usage: bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] [--branch B] [--neighbour-budget-secs N] UNIT..."
+  "usage: bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] [--branch B] [--neighbour-budget-secs N] [--neighbours] [--batch U1,U2,...] UNIT...\n  --branch B: the branch every unit is rebased onto and fast-forwarded into (default main); never the unit's own branch\n  --neighbours: add the graph neighbour suites to the direct ones (a brief :neighbours true does it per unit)\n  --batch U1,U2: cherry-pick the units onto one integration branch, run the union of their gates once, fast-forward main once"
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(p (parseArgs args))]
@@ -586,7 +757,7 @@ fn ! main args: (List String) -> (Result Int64 String)
             (c p.cfg)]
         (if (not waited)
           (do (emit! c "" "AFTER-TIMEOUT" (str ":pid " p.after)) (ok 3))
-          (let [(merged (map (fn [u] (mergeUnit! c u)) p.units))
+          (let [(merged (if p.batch (list (mergeBatch! c p.units)) (map (fn [u] (mergeUnit! c u)) p.units)))
                 (_ (if (or (stringEmpty? c.audit) (= c.audit "none")) true
                      (let [(d (sh! c.main c.audit c.auditSecs))]
                        (emit! c "" "MAIN-AUDIT" (str ":passed " (if (and (= d.verdict "exit") (stringContains? d.out "audit consistency: passed")) "true" "false"))))))]
