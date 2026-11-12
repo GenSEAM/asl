@@ -178,7 +178,7 @@ fn execReply o: fr/ProcOut -> String
   (str "(:exec :exit " (stringFromInt64 o.exitCode) " :out " (asnQuote o.stdout) " :err " (asnQuote o.stderr) ")")
 
 fn ! startExec! p: Pool s: Sess x: Exec turn: (fn [T String String] -> (Pair T Turn)) d: T now: Int64 -> (Pair Pool T)
-  (match (fr/guardStart! x.argv x.cwd x.env (fr/limits (max 1 x.timeoutS) (max 0 x.maxDesc)))
+  (match (fr/guardBegin! x.argv x.cwd x.env (fr/limits (max 1 x.timeoutS) (max 0 x.maxDesc)))
     ((err o) (let [(r (turn d s.state (execReply o)))] (settle! p s (pairSecond r) turn (pairFirst r) now)))
     ((ok g) (pair (with p :execs (listAppend p.execs (list (with s :guard (some g))))) d)))
 
