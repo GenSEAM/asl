@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1779,16 +1779,29 @@ fn readOnlyTurnCapIn cfgText: String -> Int64
 fn historyText entry: j/Json key: String -> String
   (match (j/jsonGet entry key) ((some v) (pv/pyStr v)) ((none) ""))
 
-; (:m :ref LEON-OPROWS-M4 :do "audit: a turn is non-progress when it persisted no write (history :wrote 0) and every step is a read-only one or a write, edit or delete, so a refused write does not reset the read-only count; a persisted write, or any other step (run, gate, patch, txn), resets it")
+fn entryOps entry: j/Json -> (List String)
+  (filter (fn [n] (not (stringEmpty? n))) (stringSplit (historyText entry "ops") " "))
+
+; (:m :ref LEON-WRITE-REJECT-LOOP :do "a turn counts toward the read-only cap only when it persisted nothing and every step only read; GWIMPL's five refused writes each added to the count and the cap stopped it with 0 lines landed")
 fn readOnlyEntry? entry: j/Json -> Bool
-  (let [names (filter (fn [n] (not (stringEmpty? n))) (stringSplit (historyText entry "ops") " "))]
+  (let [names (entryOps entry)]
     (and (not (listEmpty? names))
       (and (!= (historyText entry "wrote") "1")
-        (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "delete") n))) names))))
+        (listAll? (fn [n] (listContains? (readOnlyOps) n)) names))))
+
+; (:m :ref LEON-WRITE-REJECT-LOOP :do "a turn that attempted a write, edit, delete or txn and persisted nothing, beside only reads: it neither counts toward nor resets the read-only cap, so reads around refused writes still reach the cap while a run of refused writes is bounded by stalledTurnCap (OPROWS-M4 kept)")
+fn refusedWriteEntry? entry: j/Json -> Bool
+  (let [names (entryOps entry)]
+    (and (!= (historyText entry "wrote") "1")
+      (and (listAny? (fn [n] (listContains? (list "write" "edit" "delete" "txn") n)) names)
+        (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "delete" "txn") n))) names))))
 
 fn readOnlyCount entries: (List j/Json) -> Int64
-  (if (listEmpty? entries) 0
-    (if (readOnlyEntry? (c/firstOf entries)) (+ 1 (readOnlyCount (c/restOf entries))) 0))
+  (cond
+    ((listEmpty? entries) 0)
+    ((readOnlyEntry? (c/firstOf entries)) (+ 1 (readOnlyCount (c/restOf entries))))
+    ((refusedWriteEntry? (c/firstOf entries)) (readOnlyCount (c/restOf entries)))
+    (else 0))
 
 fn readOnlyTail history: (List j/Json) -> Int64
   (readOnlyCount (listReverse history))

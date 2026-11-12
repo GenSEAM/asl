@@ -30,7 +30,7 @@
     (:effect :op "note" :class :local :doc "Replace the session note, sent whole in every message; over the cap it is rejected and unchanged")
     (:effect :op "delete" :class :local :doc "Remove a file inside :owns; kept for hand-back like a write, so a run that does not end :ok restores it")
     (:effect :op "run" :class :local :doc "Run a command through sh -c in the workspace, bounded by the step timeout; paths it changes outside :owns are restored; push, publish, request bodies and rm/mv outside :owns answer needsConfirm")
-    (:effect :op "gate" :class :local :doc "Run the principal-declared gate commands (all, or :n i from 1) with the end-of-run env and timeout; answers exit and output tail, never ends the run")
+    (:effect :op "gate" :class :local :doc "Run the principal-declared gate commands (all, or :n i from 1) with the end-of-run env and timeout; answers exit and output tail, never ends the run; with :revert F [:rev R] it runs them on F as at R (default HEAD) and restores F in the same step, answering :red")
     (:effect :op "push" :class :needsConfirm :doc "Git push — outward, irreversible")
     (:effect :op "search" :class :local :doc "Web search — observational")
     (:effect :op "research" :class :local :doc "Deep research — observational")

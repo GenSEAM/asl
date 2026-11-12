@@ -253,6 +253,29 @@ fn filesHint -> String
 fn commitHint -> String
   "(:done :commit msg) for commits"
 
+fn revertHint -> String
+  "(:step :op \"gate\" :revert \"F\" [:rev main] [:n i]), which runs the gate on F as of rev and restores F in the same step,"
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "the target of an output redirect among a git command's words: the word after > >> 1> or the rest of a word that starts with >; none when the command has no stdout redirect")
+fn redirectTarget args: (List String) -> (Option String)
+  (if (listEmpty? args)
+    (none)
+    (let [a (c/firstOf args)
+          rest (c/restOf args)]
+      (cond
+        ((memberOf a (list ">" ">>" "1>" "1>>" ">|"))
+          (if (listEmpty? rest) (none) (some (c/firstOf rest))))
+        ((and (stringStartsWith? a ">") (> (stringLength a) 1))
+          (let [t (c/sliceOf a (if (stringStartsWith? a ">>") 2 1) (stringLength a))]
+            (some (if (stringStartsWith? t "|") (c/sliceOf t 1 (stringLength t)) t))))
+        (else (redirectTarget rest)))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "git show REV:F > F overwrote an owned file to prove red on revert and the budget ended before the restore; a git show whose stdout goes to a path in the tree is refused, while one into /tmp, /dev or $TMPDIR stays allowed")
+fn showIntoTree? args: (List String) -> Bool
+  (match (redirectTarget args)
+    ((none) false)
+    ((some t) (not (listAny? (fn [p] (stringStartsWith? t p)) (list "/tmp/" "/dev/" "/private/tmp/" "/var/folders/" "$TMPDIR" "${TMPDIR" "\"$TMPDIR" "\"${TMPDIR")))))
+
 fn refuse name: String hint: String -> (Option (Pair String String))
   (some (pair name hint))
 
@@ -300,6 +323,7 @@ fn gitVerdict raw: (List String) -> (Option (Pair String String))
         (if (listAny? (fn [a] (memberOf a (list "-d" "-D" "--delete"))) args) (refuse "git branch -d/-D" (commitHint)) (none)))
       ((= sub "update-ref") (refuse "git update-ref" (commitHint)))
       ((= sub "am") (refuse "git am" (commitHint)))
+      ((and (= sub "show") (showIntoTree? rest)) (refuse "git show >" (revertHint)))
       (else (none))))
 
 fn skipShFlags toks: (List String) -> (List String)

@@ -63,7 +63,7 @@ fn ! runTests -> Bool
                 (stringContains? (optionOr (listGet (opRows rows.journal) 1) "") ":name \"write\" :file \"other.txt\" :status err :error ERR_OWNS")) "rows are ok then err ERR_OWNS")
       (assert (stringContains? (optionOr (listGet (opRows rows.journal) 2) "") ":name \"edit\" :file \"subject.txt\" :status ok") "the owned edit row is ok")
       (assert (stringContains? loop.journal ":signal :readStreak :cause :readOnly") "twenty successful reads stop as readStreak cause readOnly")
-      (assert (not (stringContains? loop.journal "(:turn 17 :reply")) "the stop lands on the sixteenth read, not later")
+      (assert (not (stringContains? loop.journal "(:turn 13 :reply")) "the stop lands on the twelfth read, not later")
       (assert (stringContains? shortCap.journal ":signal :readStreak :cause :readOnly") "a configured cap of 4 stops eight reads")
       (assert (not (stringContains? wroteMid.journal ":cause :readOnly")) "a persisted edit between reads resets the read-only count")
       (assert (not (stringContains? mixed.journal ":cause :readOnly")) "a turn that mixes a read with a run step is not read-only")
