@@ -29,6 +29,32 @@ fn ! startDecoy! secs: String -> Int64
 fn ! child! root: String argv: (List String) -> fr/Done
   (fr/runOneLimited (fr/job (listAppend (list "./bin/asl" "run" "asl/tools/fleet/bounded.asl") argv) root (fr/childEnv (list))) (fr/limits 90 64))
 
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the pid written to path once it is there, polled every 100 ms up to deadlineNs; 0 when it never came")
+fn ! pidBy! path: String deadlineNs: Int64 -> Int64
+  (let [(p (pidIn! path))]
+    (if (or (> p 1) (> (monotonicNs) deadlineNs)) p (do (sleepMs 100) (pidBy! path deadlineNs))))
+
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "true once pid is gone (or a zombie), polled every 200 ms up to deadlineNs")
+fn ! goneBy! pid: Int64 deadlineNs: Int64 -> Bool
+  (cond
+    ((not (aliveOwn? pid)) true)
+    ((> (monotonicNs) deadlineNs) false)
+    (else (do (sleepMs 200) (goneBy! pid deadlineNs))))
+
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a bounded run whose launcher alone is SIGKILLed while its command runs (2 s after the command started: the sentinel learns the command from ps snapshots with 1 s age steps, so a kill inside about the first 1 to 2 s is a known gap): the launcher leads its own group (spawnSep), the command's group is apart from it, so only the sentinel can stop the command; the launcher is reaped here; the pair (wrapper pid, sleeper pid, launcher pid)")
+fn ! killedLauncher! root: String dir: String secs: String -> (List Int64)
+  (match (fr/spawnSep (list "./bin/asl" "run" "asl/tools/fleet/bounded.asl" "60" "--" "sh" "-c" (str "echo $$ > " dir "/lw; sleep " secs " & echo $! > " dir "/ls; wait")) root (fr/childEnv (list)))
+    ((err _) (list 0 0 0))
+    ((ok r)
+      (let [(ls (pidBy! (str dir "/ls") (+ (monotonicNs) 60000000000)))
+            (lw (pidIn! (str dir "/lw")))
+            (_ (sleepMs 2000))
+            (_ (procKill r.pid "SIGKILL"))
+            (_ (procWaitPid r.pid false))
+            (_ (fdClose r.outFd))
+            (_ (fdClose r.errFd))]
+        (list lw ls r.pid))))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (m (mod (procSelf) 90))
@@ -36,8 +62,11 @@ fn ! runTests -> Bool
         (sb (stringFromInt64 (+ 200 m)))
         (sc (stringFromInt64 (+ 300 m)))
         (sd (stringFromInt64 (+ 400 m)))
+        (sl (stringFromInt64 (+ 500 m)))
         (dir (str (optionOr (envGet "TMPDIR") "/tmp") "/boundedTest-" (stringFromInt64 (procSelf))))
         (_ (dirCreate dir))
+        ; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a first run builds bounded.asl: SECS now counts the launch (BOUNDED-WALL-INCLUDES-BUILD), so on a cold cache the 3 s cases below spent their bound on the build and ran nothing")
+        (warm (child! root (list "300" "--" "true")))
         (_ (fileWrite (str dir "/esc.pl") "use POSIX; exit 0 if fork; POSIX::setsid(); exit 0 if fork; open(STDIN, '<', '/dev/null'); open(STDOUT, '>', '/dev/null'); open(STDERR, '>', '/dev/null'); open(F, '>', $ARGV[0]); print F $$; close F; exec @ARGV[1..$#ARGV];\n"))
         (_ (fileWrite (str dir "/spin.asl") "(module spin :x [main])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (do (sleepMs 120000) (ok 0))\n"))
         (decoy (startDecoy! sa))
@@ -70,15 +99,20 @@ fn ! runTests -> Bool
         (late (fr/runOneLimited (fr/job (list "sh" "-c" (str "sleep 4; exec ./bin/asl run asl/tools/fleet/bounded.asl 3 -- sh -c 'echo ran > " dir "/late'")) root (fr/childEnv (list))) (fr/limits 90 64)))
         (lateRan (fileExists? (str dir "/late")))
         (partial (fr/runOneLimited (fr/job (list "sh" "-c" "sleep 2; exec ./bin/asl run asl/tools/fleet/bounded.asl 5 -- sleep 4") root (fr/childEnv (list))) (fr/limits 90 64)))
+        (lk (killedLauncher! root dir sl))
+        (lkWrapperGone (goneBy! (optionOr (listGet lk 0) 0) (+ (monotonicNs) 10000000000)))
+        (lkSleeperGone (goneBy! (optionOr (listGet lk 1) 0) (+ (monotonicNs) 10000000000)))
+        (lkLeft (+ (killOwn! (optionOr (listGet lk 1) 0) (str "sleep " sl)) (killOwn! (optionOr (listGet lk 0) 0) dir)))
         (killedOwn (fold (fn [(n Int64) (x (Pair Int64 String))] (+ n (killOwn! (pairFirst x) (pairSecond x)))) 0
                     (list (pair pa (str "sleep " sa)) (pair pb (str "sleep " sb)) (pair pc (str "sleep " sc)) (pair w1 dir) (pair w2 dir) (pair w3 dir))))
         (escapeeKilled (killOwn! pe (str "sleep " sd)))
         (escapeeAliveAfterKill (aliveOwn? pe))
         (decoyAlive (aliveOwn? decoy))
         (decoyKilled (killOwn! decoy (str "sleep " sa)))
-        (_ (map (fn [(f String)] (pathRemove (str dir "/" f))) (list "a" "b" "c" "e" "o" "late" "receipt.asn" "esc.pl" "spin.asl" "w1" "w2" "w3")))
+        (_ (map (fn [(f String)] (pathRemove (str dir "/" f))) (list "a" "b" "c" "e" "o" "late" "lw" "ls" "receipt.asn" "esc.pl" "spin.asl" "w1" "w2" "w3")))
         (_ (pathRemove dir))]
-    (do (assert (and (> pa 1) (and (> pb 1) (and (> pc 1) (and (> w1 1) (and (> w2 1) (> w3 1)))))) "the commands recorded the pids of their sleepers and wrappers")
+    (do (assert (= warm.exit 0) (str "the warm-up run of bounded.asl ends 0: " (stringFromInt64 warm.exit) " " warm.out))
+        (assert (and (> pa 1) (and (> pb 1) (and (> pc 1) (and (> w1 1) (and (> w2 1) (> w3 1)))))) "the commands recorded the pids of their sleepers and wrappers")
         (assert (> decoy 1) "the decoy sleep with the same number as a test sleeper started outside every bounded run")
         (assert (= tree.exit 124) (str "a tree past SECS ends with exit 124: " (stringFromInt64 tree.exit)))
         (assert (stringContains? tree.out ":verdict :timeout") (str "the timeout note is printed: " tree.out))
@@ -96,6 +130,9 @@ fn ! runTests -> Bool
         (assert (stringContains? late.out ":phase :launch") (str "the note names the launch as what used the bound: " late.out))
         (assert (not lateRan) "a launch that used all of SECS starts no command")
         (assert (= partial.exit 124) (str "a 4 s command under SECS 5 is killed when the launch took 2 s of it: " (stringFromInt64 partial.exit) " " partial.out))
+        (assert (and (> (optionOr (listGet lk 0) 0) 1) (> (optionOr (listGet lk 1) 0) 1)) (str "the killed launcher's command recorded its wrapper and sleeper: " (stringJoin (map stringFromInt64 lk) " ")))
+        (assert lkSleeperGone (str "a SIGKILL of the launcher alone takes its command's sleeper with it within 10 s (left for the cleanup kill: " (stringFromInt64 lkLeft) ")"))
+        (assert lkWrapperGone "and the command's wrapper sh")
         (assert (= (bd/parseArgs (list "5" "--max-desc" "9" "--" "a" "b")).maxDesc 9) "parseArgs reads --max-desc")
         (assert (= (bd/parseArgs (list "5" "--" "a" "b")).maxDesc 64) "parseArgs defaults maxDesc to 64")
         (assert (stringStartsWith? treeReceipt "(:bounded :verdict :timeout :exit 124 :secs 3 ") (str "a run killed at SECS leaves a timeout receipt line: " treeReceipt))

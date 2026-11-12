@@ -53,6 +53,37 @@ fn ! launchMs! -> Int64
       ((some p) (if (> p.age 0) (* p.age 1000) 0))
       ((none) 0)))
 
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the command's group leader: the oldest direct child of the launcher that leads its own group (fleet/run.asl spawns the command so), never the sentinel; the launcher's own short ps children lead their groups too (seen: the sentinel held a ps pid and the command survived), and they are younger than the command at every sample after it starts; 0 when none shows")
+fn childOf snap: (List fr/Proc) launcher: Int64 sentinel: Int64 -> Int64
+  (pairFirst (fold (fn [(best (Pair Int64 Int64)) (p fr/Proc)] -> (Pair Int64 Int64) (if (> p.age (pairSecond best)) (pair p.pid p.age) best))
+               (pair 0 -2) (filter (fn [(p fr/Proc)] -> Bool (and (= p.ppid launcher) (and (= p.pgid p.pid) (not (= p.pid sentinel))))) snap)))
+
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the launcher is gone when its pid answers no signal, or when a snapshot shows the sentinel no longer its child (a killed launcher left as a zombie still answers kill 0, its orphans are reparented at once); an empty snapshot (ps failed) proves nothing")
+fn launcherGone? alive: Bool snap: (List fr/Proc) launcher: Int64 sentinel: Int64 -> Bool
+  (or (not alive)
+      (and (not (listEmpty? snap))
+           (not (listAny? (fn [(p fr/Proc)] -> Bool (and (= p.pid sentinel) (= p.ppid launcher))) snap))))
+
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the sentinel's loop: every 250 ms a kill-0 probe of the launcher, a snapshot every tick until the command shows and every 4th tick after, each naming the oldest candidate; once the launcher is gone the command's whole tree is killed and the sentinel ends; it ends on its own at deadlineNs, as nobody judges it when the launcher is dead")
+fn ! watch! launcher: Int64 sentinel: Int64 child: Int64 deadlineNs: Int64 tick: Int64 -> Int64
+  (if (> (monotonicNs) deadlineNs) 0
+    (let [(alive (resultOr (procAlive? launcher) false))
+          (snap (if (or (not alive) (or (= child 0) (= (mod tick 4) 0))) (fr/procSnapshot) (list)))
+          (seen (childOf snap launcher sentinel))
+          (c (if (> seen 0) seen child))]
+      (if (launcherGone? alive snap launcher sentinel)
+        (if (> c 0) (do (fr/killTree! c) 1) 0)
+        (do (sleepMs 250) (watch! launcher sentinel c deadlineNs (+ tick 1))))))
+
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a forked sentinel in its own group watches this launcher: a kill of the launcher alone (SIGKILL included, which no handler sees) leaves the command's group, which fleet/run.asl puts outside the launcher's, running with ppid 1; the sentinel kills it within about a second; it lives at most SECS plus 60 s; forkLimited! leases it to the launcher, so any reaper on the machine would kill it the moment the launcher dies, before it acts (seen: the command survived); its lease is rewritten to name itself as owner, so only its deadline reaps it")
+fn ! sentinel! launcher: Int64 secs: Int64 -> (Result fr/Forked String)
+  (match (fr/forkLimited! "/dev/null" (fr/Limits :timeoutMs (* (+ secs 60) 1000) :maxDesc 16 :class "" :jsDir "")
+           (fn [] -> Int64 (watch! launcher (procSelf) 0 (+ (monotonicNs) (* (+ secs 60) 1000000000)) 0)))
+    ((ok f) (let [(now (monotonicNs))
+                  (_ (fr/writeLease! f.pid f.pid now (+ now (* (+ secs 60) 1000000000))))]
+              (ok f)))
+    ((err e) (err e)))
+
 ; (:m :ref BOUNDED-WALL-INCLUDES-BUILD :do "SECS bounds the wall from launch: the command gets what the launch left, and a launch that used all of SECS starts nothing and stops with the timeout exit 124 and a (:bounded :verdict :timeout :phase :launch ...) note; the receipt's :ms is the wall, launch plus run")
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(p (parseArgs args))]
@@ -61,9 +92,11 @@ fn ! main args: (List String) -> (Result Int64 String)
       (let [(launched (launchMs!))
             (leftMs (- (* p.secs 1000) launched))
             (root (resultOr (realPath ".") "."))
+            (guard (if (> leftMs 0) (sentinel! (procSelf) p.secs) (err "no run")))
             (d (if (> leftMs 0)
                  (fr/runOneLimited (fr/job p.argv root (fr/childEnv (list))) (fr/Limits :timeoutMs leftMs :maxDesc p.maxDesc :class "" :jsDir ""))
                  (fr/Done :idx 0 :exit 124 :out (str "(:bounded :verdict :timeout :phase :launch :launchMs " (stringFromInt64 launched) " :secs " (stringFromInt64 p.secs) ")\n") :ms 0 :verdict "timeout")))
+            (stopped (match guard ((ok f) (do (fr/forkKill! f "done") true)) ((err _) false)))
             (wrote (or (stringEmpty? p.receipt) (ok? (fileAppend p.receipt (receiptLine d.verdict d.exit p.secs (+ launched d.ms) p.argv)))))]
         (do (print d.out)
             (if wrote () (eprintln (str "bounded: the receipt could not be written to " p.receipt)))
