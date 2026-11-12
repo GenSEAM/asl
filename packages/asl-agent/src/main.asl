@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1709,6 +1709,23 @@ fn modelEscalationReceipt ops: (List (List (Pair String c/KvVal))) -> (Option St
         (some (str "(:escalate :reason \"" (c/escapeAsn (kvTextOf kv "reason")) "\" :seen \"" (c/escapeAsn (kvTextOf kv "seen")) "\" :tried \"" (c/escapeAsn (kvTextOf kv "tried")) "\")"))))
     ((none) none))
 
+; (:m :ref LEON-ESCALATE-UNREAD :do "GWADMIT escalated at turn 7 naming owned files it had never read with 380k budget left; the owned files (paths with an extension, no glob) whose name the escalate form mentions and that no step of the run named yet; the loop answers the first such escalation with a read hint instead of stopping")
+fn lastSegment path: String -> String
+  (optionOr (listLast (stringSplit path "/")) path)
+
+fn escalateUnread owns: (List String) text: String touched: (List String) -> (List String)
+  (filter (fn [o]
+            (let [name (lastSegment o)]
+              (and (not (stringContains? o "*"))
+                (and (stringContains? name ".")
+                  (and (stringContains? text name)
+                    (not (listAny? (fn [f] (or (= f o) (or (stringEndsWith? f (str "/" o)) (stringEndsWith? o (str "/" f))))) touched)))))))
+    owns)
+
+fn escalateRefusal unread: (List String) -> String
+  (str "(:escalateRefused :unread (" (stringJoin (map (fn [o] (str "\"" (c/escapeAsn o) "\"")) unread) " ")
+       ") :do \"the escalation names owned files this run has not read; read them with (:read :file F :symbol S) or (:outline :file F), then edit, or escalate again if still blocked\")")
+
 ; (:m :ref LEON-YIELD-F4 :do "node2 2026-11-04: one turn sent 724 reads of one file over 16 turns; a read-only step identical to an earlier one in the same reply ignoring its :id (parse already drops byte-identical steps and counts them in facts.repeated), with no write, edit, run or other mutating step between them, runs once, and the reply says how many were dropped")
 ; (:m :ref LEON-YIELD-LOWS-F4 :do "opKey joined key=value rows with a newline, so a value holding newline and another key=value collided with a step that really had that key; every key and value now carries its byte length in front, so no value can imitate a boundary")
 fn opKeyPart text: String -> String
@@ -2226,11 +2243,19 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
                   historyEntry (fn [text] (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr text))
                       (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0"))))))
+                  escalateForm (optionOr (modelEscalationReceipt operations) "")
+                  escalateTouched (fold (fn [acc e] (listAppend acc (stringSplit (historyText e "files") " "))) (stringSplit turnOpFiles " ") wrapped.history)
+                  escalateRefusedBefore (listAny? (fn [e] (stringContains? (historyText e "got") "(:escalateRefused")) wrapped.history)
+                  escalateHeld (if (or terminal (or escalateRefusedBefore (stringEmpty? escalateForm))) (list)
+                                 (filter (fn [o] (ok? (fileStat (str rootDir "/" o)))) (escalateUnread ra.owns escalateForm escalateTouched)))
+                  _escalateNote (if (listEmpty? escalateHeld) true
+                                  (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :escalateRefused :unread " (stringFromInt64 (listLength escalateHeld)) ")\n"))))
+                  gotTurn (if (listEmpty? escalateHeld) got (str got "\n" (escalateRefusal escalateHeld)))
                   readOnlyCap (readOnlyTurnCapIn (ac/configText! rootDir))
-                  readOnlyNow (readOnlyTail (listAppend wrapped.history (list (historyEntry got))))
+                  readOnlyNow (readOnlyTail (listAppend wrapped.history (list (historyEntry gotTurn))))
                   nudged (= readOnlyNow (readOnlyNudgeAt readOnlyCap))
                   _nudgeNote (if nudged (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readNudge :readOnly " (stringFromInt64 readOnlyNow) " :cap " (stringFromInt64 readOnlyCap) ")\n"))) true)
-                  historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str got "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap) "\n" (ctx/mustEditForm (listAppend wrapped.history (list (historyEntry got))) ra.owns readOnlyNow)) got))))
+                  historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str gotTurn "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap) "\n" (ctx/mustEditForm (listAppend wrapped.history (list (historyEntry gotTurn))) ra.owns readOnlyNow)) gotTurn))))
                   historyKeep (ctx/contextKeepTurnsFor! rootDir)
                   historyToolCap (ctx/contextToolCapBytesFor! rootDir)
                   historyTokens (optionOr servedCtx 24000)
@@ -2286,7 +2311,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   _ (if repeatStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :repeatFailure :reason \"" repeatReason "\")\n"))) true)
                   modelEscalation (modelEscalationReceipt operations)
                   modelReason (optionOr (modelEscalationReason operations) "")
-                  modelStop (and (some? modelEscalation) (not terminal))
+                  modelStop (and (some? modelEscalation) (and (not terminal) (listEmpty? escalateHeld)))
                   _ (if modelStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :modelEscalated :reason \"" (c/escapeAsn modelReason) "\")\n"))) true)
                   stalledStop (and (not terminal) (and notFoundTurn (>= notFoundStreak (stalledTurnCapIn (ac/configText! rootDir)))))
                   stalledCause (if (writeAttempt? operations) "refusedWrites" "notFound")
