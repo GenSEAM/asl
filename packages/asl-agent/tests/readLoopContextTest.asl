@@ -11,6 +11,12 @@ fn entry turn: Int64 got: String -> j/Json
   (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr "Task: read")) (pair "got" (j/jstr got))
     (pair "ops" (j/jstr "read")) (pair "files" (j/jstr "")) (pair "gates" (j/jstr "")) (pair "wrote" (j/jstr "0"))))
 
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "an entry already rendered, as freezeTranscriptHistory stores it, so a test can hand it a target clipped after its marker was made, as when the kept cap changes with the served context mid-run")
+fn renderedEntry turn: Int64 got: String rendered: String shown: String -> j/Json
+  (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr "Task: read")) (pair "got" (j/jstr got))
+    (pair "ops" (j/jstr "read")) (pair "files" (j/jstr "")) (pair "gates" (j/jstr "")) (pair "wrote" (j/jstr "0"))
+    (pair "rendered" (j/jstr rendered)) (pair "shown" (j/jstr shown))))
+
 fn grow history: (List j/Json) h: j/Json keptCap: Int64 -> (List j/Json)
   (ctx/freezeTranscriptHistory (listAppend history (list h)) 8 40 keptCap 4000)
 
@@ -32,6 +38,9 @@ fn ! runTests -> Bool
         sameClipped (ctx/sameMarkedGot a (list (j/jobj (list (pair "turn" (j/jstr "1")) (pair "rendered" (j/jstr (optionOr (stringSlice whole1 0 (- (stringLength whole1) 12)) "")))))))
         w8 (fold (fn [acc i] (grow acc (entry i (if (< i 3) a b)) 60)) (list) (range 1 9))
         w9 (grow w8 (entry 9 b) 60)
+        staleH (ctx/freezeTranscriptHistory (list (renderedEntry 1 a "(:turn 1 :sent \"Task: read\" :got \"clipped\")" "")
+          (renderedEntry 2 a "(:turn 2 :sent \"Task: read\" :got \"(:same :turn 1)\")" sameWhole) (entry 3 b)) 8 40 2000 4000)
+        staleR2 (renderedOf staleH 2)
         digest (ctx/turnReceiptLine (entry 5 (str a "\n" b)))
         must (ctx/mustEditForm (list (entry 1 a) (entry 2 b) (entry 3 a)) (list "src/x.asl") 6)
         root (rk/freshRecorderRoot! "readLoopContext")
@@ -52,6 +61,7 @@ fn ! runTests -> Bool
       (assert (not (stringContains? sameClipped ":same")) "no marker points at a rendering that clipped the content")
       (assert (stringContains? (renderedOf w8 2) ":content (:same :turn 1)") "turn 2 is marked while turn 1 shows the read whole")
       (assert (not (stringContains? (renderedOf w9 2) ":same")) "when the window first fills and turn 1 re-renders clipped at the kept cap, turn 2 re-renders without the stale marker")
+      (assert (and (stringContains? staleR2 "alpha two") (not (stringContains? staleR2 ":same"))) (str "a stored marker whose target no longer shows the read whole re-renders with the content: " staleR2))
       (assert (stringContains? digest ":read \"a.txt:1-2 b.txt:1-1\"") (str "a dropped turn's digest names the ranges it read: " digest))
       (assert (stringContains? must ":known (\"a.txt:1-2\" \"b.txt:1-1\")") (str "mustEdit lists each read range once: " must))
       (assert (stringContains? must ":owns (\"src/x.asl\")") "mustEdit names the owned files")
