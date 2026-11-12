@@ -61,6 +61,32 @@ fn ! budgets root: String -> Bool
           (assert (<= langTokens 1500) (str "language card fits 1500 o200k tokens, got " langTokens))
           true))))
 
+; (:m :ref KNOW-INDEX-BRANDING :do "words that name the language or praise a package and say nothing about what it does; an index purpose made only of them, or led by one, spends its few bytes on nothing a model can pick the card by")
+fn brandOnly -> (List String)
+  (list "100%" "Self-Hosted" "Self-Contained" "Pure" "AgentSlang" "ASL" "Aslany" "Native" "Standalone" "Sovereign" "Standard" "Universal" "Autonomous" "Unified")
+
+fn indexPurposeOf line: String -> String
+  (let [(parts (stringSplit line "\""))]
+    (optionOr (listGet parts 3) ""))
+
+fn bareIndexLine? line: String -> Bool
+  (let [(words (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace (stringReplace (indexPurposeOf line) "..." "") ":" "") " ")))]
+    (and (not (listEmpty? words)) (listAll? (fn [(w String)] -> Bool (listContains? (brandOnly) w)) words)))
+
+fn brandLed? line: String -> Bool
+  (listContains? (brandOnly) (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) ""))
+
+fn ! indexDistinct root: String -> Bool
+  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
+        (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \"")) (stringSplit index "\n")))
+        (bare (filter bareIndexLine? lines))
+        (led (filter brandLed? lines))]
+    (do
+      (assert (> (listLength lines) 80) (str "index lists every card, got " (listLength lines)))
+      (assert (listEmpty? bare) (str (listLength bare) " index lines show only a branding prefix: " (stringJoin (listTake bare 6) " ")))
+      (assert (listEmpty? led) (str (listLength led) " index lines spend their purpose bytes on a branding word first: " (stringJoin (listTake led 6) " ")))
+      true))
+
 fn ! queries root: String -> Bool
   (let [(es (qy/loadEntries! (kn/cardsDir root)))
         (exact (qy/answer es "jsonParse" 400))
@@ -78,4 +104,4 @@ fn ! queries root: String -> Bool
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))]
-    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (queries root)))
+    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (indexDistinct root) (queries root)))

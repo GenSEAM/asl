@@ -64,3 +64,5 @@
 (:doc :symbol "asl/packages/asl-know/src/examples/coreMap.asl#wordCounts" :text "Count of each blank-separated word")
 (:doc :symbol "asl/packages/asl-know/src/examples/coreOption.asl#parsePort" :text "A port number in 1..65535 or the reason it is not one")
 (:doc :symbol "asl/packages/asl-know/src/examples/coreString.asl#shout" :text "Words reversed, joined by dashes and upper-cased")
+(:doc :symbol "asl/packages/asl-know/src/render.asl#brandWords" :text "the leading words an index purpose drops: names of the language and praise (Pure, AgentSlang, ASL, Native, Standalone, Sovereign, 100%, Self-Hosted and the like)")
+(:doc :symbol "asl/packages/asl-know/src/render.asl#indexPurpose" :text "the purpose an L0 index line shows: leading brandWords dropped (the whole purpose when only they remain), then cut at a word within indexPurposeBytes")

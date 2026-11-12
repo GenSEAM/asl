@@ -1,5 +1,5 @@
 (module asl-know/render
-  :x [Card q unquoteRow tokensOf camelId cardFile exampleText pitTags packageCard areaCards langCard indexText missingOf allCards!]
+  :x [Card q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard indexText missingOf allCards!]
   :i [(asl-know/scan :a sc)])
 
 ; (:m :tags (know) :note "L0 index, L1 cards and L2 symbol rows as single-line ASN frames; token figures are bytes/4, labelled :tokensBy bytes36")
@@ -31,6 +31,21 @@ fn capAtWord s: String n: Int64 -> String
 ; (:m :ref KNOWCARDS-STALE :do "index purpose length: 82 cards at the old 36-byte cut measured 2023 o200k tokens, over the 2000 budget; 24 bytes cut at a word boundary measures 1766 (28: 1824, 20: 1690), leaving 11.7% headroom")
 fn indexPurposeBytes -> Int64
   24
+
+; (:m :ref KNOW-INDEX-BRANDING :do "leading words that name the language or praise a package; the index drops them before the byte cut, so its 24 bytes show what the package does (21 of 82 lines were only these words, 2026-11-13)")
+fn brandWords -> (List String)
+  (list "100%" "Self-Hosted" "Self-Contained" "Pure" "AgentSlang" "ASL" "Aslany" "Native" "Standalone" "Sovereign" "Standard" "Universal" "Autonomous" "Unified")
+
+fn dropBrand words: (List String) -> (List String)
+  (match (listHead words)
+    ((some w) (if (listContains? (brandWords) w) (dropBrand (optionOr (listTail words) (list))) words))
+    ((none) words))
+
+; (:m :ref KNOW-INDEX-BRANDING :do "the purpose an index line shows: the card purpose without its leading branding words, the whole purpose when nothing else is left, cut at a word within indexPurposeBytes")
+fn indexPurpose purpose: String -> String
+  (let [(rest (dropBrand (stringSplit purpose " ")))
+        (shown (if (listEmpty? rest) purpose (stringJoin rest " ")))]
+    (capAtWord shown (indexPurposeBytes)))
 
 fn upperFirst w: String -> String
   (if (stringEmpty? w) w (str (stringUpper (optionOr (stringSlice w 0 1) "")) (optionOr (stringSlice w 1 (stringLength w)) "")))
@@ -199,7 +214,7 @@ fn langCard spec: String ex: String -> Card
     (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "match" "let") :line line :rows (list) :missing (list)))
 
 fn indexText cards: (List Card) -> String
-  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (capAtWord c.purpose (indexPurposeBytes))) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
+  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (indexPurpose c.purpose)) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
         (body (stringJoin lines "\n"))]
     (str "(:know :tier L0 :cards " (listLength cards) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card\")\n" body "\n"))
 
