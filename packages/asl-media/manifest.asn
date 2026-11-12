@@ -1,0 +1,6 @@
+(:package asl-media
+ :version "0.1.0"
+ :entry "src/probe.asl"
+ :description "Typed ffprobe and ffmpeg runner, PNG codec and WAV codec with signal metrics, pure AgentSlang"
+ :aslFirst true
+ :dependencies [asl-json asl-zip])
