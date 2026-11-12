@@ -1,6 +1,6 @@
 (:package asl-media
  :version "0.1.0"
  :entry "src/probe.asl"
- :description "Typed ffprobe and ffmpeg runner, PNG codec and WAV codec with signal metrics, pure AgentSlang"
+ :description "Typed ffprobe and ffmpeg runner, PNG codec, WAV codec with signal metrics, SRT and VTT captions and word error rate with ASR time alignment, pure AgentSlang"
  :aslFirst true
  :dependencies ("asl-json" "asl-zip"))
