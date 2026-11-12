@@ -36,10 +36,17 @@ fn mean xs: (List Float64) -> (Result Float64 String)
 fn squares xs: (List Float64) m: Float64 -> (List Float64)
   (map (fn [(x Float64)] -> Float64 (* (- x m) (- x m))) xs)
 
+; (:m :ref STATSLOWS-LOWS2 :do "the squared deviations over d; when their plain sum overflows each is scaled by 1/d before summing (as mean does), and a variance past Float64 max (1e308 and -1e308) is statsRange, never ok inf")
+fn spread xs: (List Float64) m: Float64 d: Int64 -> (Result Float64 String)
+  (let [(n (int64ToFloat64 d))
+        (ss (sumKahan (squares xs m)))
+        (v (if (finiteValue? ss) (/ ss n) (let [(r (sqrt n))] (sumKahan (map (fn [(x Float64)] -> Float64 (* (/ (- x m) r) (/ (- x m) r))) xs)))))]
+    (if (finiteValue? v) (ok v) (err "statsRange: the variance overflows Float64")))
+
 fn popVariance xs: (List Float64) -> (Result Float64 String)
   (match (mean xs)
     ((err e) (err e))
-    ((ok m) (ok (/ (sumKahan (squares xs m)) (int64ToFloat64 (listLength xs))))))
+    ((ok m) (spread xs m (listLength xs))))
 
 fn variance xs: (List Float64) -> (Result Float64 String)
   (cond
@@ -48,7 +55,7 @@ fn variance xs: (List Float64) -> (Result Float64 String)
     (else
       (match (mean xs)
         ((err e) (err e))
-        ((ok m) (ok (/ (sumKahan (squares xs m)) (int64ToFloat64 (- (listLength xs) 1))))))))
+        ((ok m) (spread xs m (- (listLength xs) 1))))))
 
 fn stddev xs: (List Float64) -> (Result Float64 String)
   (match (variance xs)

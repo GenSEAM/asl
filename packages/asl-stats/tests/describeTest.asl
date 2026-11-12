@@ -89,6 +89,12 @@ fn testNonFinite! -> Bool
       (assert (= (ds/mean (list 1.0e308 1.0e308)) (ok 1.0e308)) "the mean of two 1e308 is 1e308, not inf: the sum overflows, the scaled sum does not")
       (assert (= (ds/mean (list 1.0e308 1.0e308 -1.0e308)) (ok (/ 1.0e308 3.0))) "an overflowing sum with a negative term still gives the scaled mean")
       (assert (= (ds/mean (list 1.0 2.0 4.0)) (ok (/ 7.0 3.0))) "an ordinary mean is the plain sum over n")
+      (assert (= (ds/variance (list 1.0e308 1.0e308)) (ok 0.0)) "the variance of two 1e308 is 0: the mean is 1e308, so no deviation overflows")
+      (assert (= (ds/popVariance (list 1.0e308 1.0e308)) (ok 0.0)) "the population variance of two 1e308 is 0")
+      (assert (= (errOf (ds/variance (list 1.0e308 -1.0e308))) "statsRange: the variance overflows Float64") "1e308 and -1e308 have a variance past Float64 max: statsRange, not ok inf")
+      (assert (= (errOf (ds/popVariance (list 1.0e308 -1.0e308))) "statsRange: the variance overflows Float64") "popVariance refuses the same overflow")
+      (assert (let [(xs (map (fn [(i Int64)] -> Float64 (if (= (mod i 2) 0) 2.0e153 -2.0e153)) (range 0 100)))] (near? (/ (val (ds/variance xs)) (* 4.0e306 (/ 100.0 99.0))) 1.0 1.0e-12)) "100 values of +-2e153: the squares sum past max (4e308), the variance 4.04e306 is not, and comes back from the scaled sum")
+      (assert (let [(src (resultOr (fileReadString "asl/packages/asl-stats/src/agree.asl") ""))] (and (stringContains? src "ds/finiteValue?") (not (stringContains? src "fn finite?")))) "agree.asl uses describe finiteValue? and keeps no finite check of its own")
       true))
 
 fn testRank! -> Bool

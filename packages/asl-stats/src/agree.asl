@@ -27,11 +27,9 @@ fn indexedList xs: (List Float64) i: Int64 -> (List (Pair Int64 Float64))
     ((none) (list))
     ((some v) (cons (pair i v) (indexedList (optionOr (listTail xs) (list)) (+ i 1)))))
 
-fn finite? x: Float64 -> Bool
-  (and (not (isNan? x)) (not (= (abs x) (floatInf))))
-
+; (:m :ref STATSLOWS-LOWS2 :do "one finite check for the package: describe.asl#finiteValue?")
 fn finiteAll? xs: (List Float64) -> Bool
-  (listAll? finite? xs)
+  (listAll? ds/finiteValue? xs)
 
 fn ! ranks xs: (List Float64) -> (Result (List Float64) String)
   (if (not (finiteAll? xs)) (err "statsRange: a value is NaN or infinite")

@@ -1,5 +1,5 @@
 (module asl-stats/rng
-  :x [Rng rngFromState rngSeed rngNext rngFloat rngNormal gammaDraw betaDraw lsr]
+  :x [Rng rngFromState rngSeed rngNext rngFloat rngNormal gammaDraw logGammaDraw betaDraw lsr]
   :i [])
 
 ; (:m :ref workspace-20261031-experimentStats :do "xoshiro256** over four Int64 words; mulWrap, addWrap and rotateLeft have no native lowering yet so the wrapping adds, the times 5 and 9 and the 64-bit multiply in seeding are built from 32-bit halves, shifts and masks; the generator is a value, every draw returns the new state, so a fixed seed reproduces every draw bit for bit; rngSeed expands one Int64 with splitmix64; a float is the top 53 bits times 2^-53; normals by Box-Muller, gamma by Marsaglia-Tsang, beta as two gammas")

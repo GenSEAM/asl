@@ -72,7 +72,35 @@ fn ! testDraws! -> Bool
       (let [(tiny (betas! 0.001 0.001 300 r))]
         (do (assert (not (listAny? isNan? tiny)) "beta(0.001, 0.001) draws are never NaN: the gamma draws underflow, their logs do not")
             (assert (listAll? (fn [(x Float64)] -> Bool (and (>= x 0.0) (<= x 1.0))) tiny) "every tiny-shape beta draw is inside [0, 1]")
-            (assert (near? (mean tiny) 0.5 0.15) "beta(0.001, 0.001) is nearly a fair coin between 0 and 1")))
+            (assert (near? (mean tiny) 0.5 0.09) "beta(0.001, 0.001) is nearly a fair coin between 0 and 1: within 3 sd (0.029) of 1/2 over 300 draws")))
+      true))
+
+fn ones xs: (List Float64) -> Int64
+  (listLength (filter (fn [(x Float64)] -> Bool (> x 0.5)) xs))
+
+fn sides xs: (List Float64) -> String
+  (stringJoin (map (fn [(x Float64)] -> String (if (> x 0.5) "1" "0")) xs) "")
+
+; (:m :ref STATSLOWS-LOWS :do "an all-zero xoshiro state draws u = 0 forever: the gamma(1.5) loop returns d = 7/6 and the boost u is clamped to 1e-300, so log gamma(0.5) is log(7/6) + log(1e-300)/0.5, finite; without the clamp it is -inf")
+fn ! testClamp! -> Bool
+  (let [(zero (rg/rngFromState 0 0 0 0))
+        (lg (rg/logGammaDraw 0.5 zero))
+        (v (match lg ((ok p) (pairFirst p)) ((err _) 0.0)))]
+    (do
+      (assert (= (pairFirst (rg/rngFloat zero)) 0.0) "the all-zero state draws exactly 0.0")
+      (assert (ok? lg) "logGammaDraw on the zero stream is ok")
+      (assert (near? v -1381.3969051166 1.0e-9) (str "log gamma(0.5) with u = 0 is log(7/6) + log(1e-300)/0.5 = -1381.3969051166, got " (stringFromFloat64 v)))
+      true))
+
+; (:m :ref STATSLOWS-LOWS :do "a tiny-shape beta stream is pinned to its seed: from seed 2026 the side (above or below 1/2) of each of the first 40 draws and the count above 1/2 among 300 are exact, so a mirrored or reordered log-gamma ratio flips them; the 0.15 mean band in testDraws! stays only as a sanity bound")
+fn ! testTinySeeded! -> Bool
+  (let [(tiny (betas! 0.001 0.001 300 (rg/rngSeed 2026)))
+        (k (ones tiny))
+        (s (sides (listTake tiny 40)))]
+    (do
+      (assert (= k 150) (str "beta(0.001, 0.001) from seed 2026: 150 of 300 draws above 1/2, got " (stringFromInt64 k)))
+      (assert (= s "1010010010000101100001100011000000000110") (str "beta(0.001, 0.001) from seed 2026: sides of the first 40 draws, got " s))
+      (assert (= k (ones (betas! 0.001 0.001 300 (rg/rngSeed 2026)))) "the same seed gives the same count")
       true))
 
 fn ! runTests -> Bool
@@ -80,4 +108,6 @@ fn ! runTests -> Bool
     (testXoshiro!)
     (testSeed!)
     (testDraws!)
+    (testClamp!)
+    (testTinySeeded!)
     true)
