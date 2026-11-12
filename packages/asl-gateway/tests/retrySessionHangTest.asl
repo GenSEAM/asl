@@ -167,11 +167,28 @@ fn clientOf w: World tag: String -> Client
 fn clientsDone? w: World tags: (List String) -> Bool
   (listAll? (fn [(t String)] -> Bool (clientOf w t).done) tags)
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
+fn ! readyPort! path: String -> Int64
+  (optionOr (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none) 0)
+
+; (:m :ref RETRYCONC-FLAKE :do "waits for the gateway's ready file while the child lives: the port once it is written, the child's exit status the moment it ends without one (procWaitPid pid true, non-blocking), or deadline when neither happens by deadlineMs; the state names which, for the failure message")
+fn ! waitReady! path: String pid: Int64 deadlineMs: Int64 -> (Pair Int64 String)
+  (let [(port (readyPort! path))]
+    (cond
+      ((> port 0) (pair port "ready"))
+      (else
+        (match (procWaitPid pid true)
+          ((ok (some code)) (pair (readyPort! path) (str "exited " (stringFromInt64 code))))
+          (_ (if (> (nowMs!) deadlineMs)
+               (pair 0 "deadline")
+               (do (sleepMs 20) (waitReady! path pid deadlineMs))))))))
+
+
+; (:m :ref RETRYCONC-FLAKE :do "the gateway child compiles server.asl to native on a cold cache before it writes its ready file, silent on stdout and stderr: measured 2026-11-12 on the Mac at load ~137 (8 controlled busy loops plus other work), cold starts took 22462, 20898 and 8836 ms and once more than 120 s (load 154) against the old fixed 10 s wait (500 x 20 ms), which failed with an empty stderr; waitReady! returns as soon as the child exits, so this bound only caps a child that lives without answering: 300 s")
+fn startDeadlineMs -> Int64
+  300000
+
+fn tailOf text: String n: Int64 -> String
+  (if (<= (stringLength text) n) text (optionOr (stringSlice text (- (stringLength text) n) (stringLength text)) text))
 
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
@@ -201,7 +218,10 @@ fn ! runTests -> Bool
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (startMs (nowMs!))
+        (started (if (> pid 0) (waitReady! readyPath pid (+ startMs (startDeadlineMs))) (pair 0 "spawn failed")))
+        (gatewayPort (pairFirst started))
+        (startNote (str "start " (pairSecond started) " after " (stringFromInt64 (- (nowMs!) startMs)) " ms"))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list)))
 
         (start (nowMs!))
@@ -214,9 +234,10 @@ fn ! runTests -> Bool
                   (map (fn [(c Client)] -> Bool (if c.done true (do (fdClose c.fd) true))) w1.clients)
                   (fdClose listener) true))
         (gatewayErr (resultOr (fileReadString (str temp "/gateway.err")) ""))
+        (startDiag (str startNote "; stderr: " (tailOf gatewayErr 600) "; stdout: " (tailOf (resultOr (fileReadString (str temp "/gateway.out")) "") 300)))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
-      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " gatewayErr))
+      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " startDiag))
       (assert (clientsDone? w1 (list "a1")) (str "a request to a :sessionHeader+:pool provider with :retry configured must finish within 10 s, not hang past it: " gatewayErr))
       (assert (stringContains? (clientOf w1 "a1").response "HTTP/1.1 200") (str "the retried call eventually succeeds: " (clientOf w1 "a1").response " " gatewayErr))
       (assert (>= (occurrencesOf w1.seen "retry-target") 2) (str "the stub must see both the original 429 and the retried call, saw " (occurrencesOf w1.seen "retry-target") " hit(s)"))
