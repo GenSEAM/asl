@@ -109,6 +109,23 @@ fn testComposite! -> Bool
         (assert (= (px dst) (list 1 1 1 255 2 2 2 255 3 3 3 255 4 4 4 255)) "the destination is not edited")
         true)))
 
+fn testEdges! -> Bool
+  (let [(big 9223372036854775806)
+        (g (grid3x2))]
+    (do
+      (assert (stringStartsWith? (errOf (im/imageCrop g big 0 2 1)) "imageBounds") "a crop origin near Int64 max is imageBounds, not an overflow trap")
+      (assert (stringStartsWith? (errOf (im/imageCrop g 0 big 1 2)) "imageBounds") "a crop y near Int64 max is imageBounds")
+      (assert (stringStartsWith? (errOf (im/imageCrop g 1 0 big 1)) "imageBounds") "a crop width near Int64 max is imageBounds")
+      (assert (stringStartsWith? (errOf (im/imagePad g big 0 0 0 0 0 0 0)) "imageBounds") "padding near Int64 max is imageBounds")
+      (assert (stringStartsWith? (errOf (im/imagePad g 0 big big 0 0 0 0 0)) "imageBounds") "two huge paddings are imageBounds, the sum never overflows")
+      (let [(dst (mk 1 1 (list 1 2 3 255)))
+            (src (mk 1 1 (list 9 9 9 255)))]
+        (do
+          (assert (= (px (im/imageComposite dst src big big)) (list 1 2 3 255)) "a composite offset near Int64 max changes nothing and does not trap")
+          (assert (= (px (im/imageComposite dst src (- 0 big) (- 0 big))) (list 1 2 3 255)) "a composite offset near Int64 min changes nothing and does not trap")
+          (assert (= (px (im/imageComposite dst src (- (- 0 big) 2) 0)) (list 1 2 3 255)) "the Int64 minimum offset is clamped, not subtracted")
+          true))))
+
 fn testStats! -> Bool
   (let [(i (mk 2 2 (list 0 5 9 255 0 6 9 128 255 7 9 0 10 8 9 255)))]
     (do
@@ -133,5 +150,6 @@ fn ! runTests -> Bool
     (testFlip!)
     (testPremul!)
     (testComposite!)
+    (testEdges!)
     (testStats!)
     true)

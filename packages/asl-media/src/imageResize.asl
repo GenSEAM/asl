@@ -132,7 +132,7 @@ fn ! weightedImage! img: im/Image kind: String w: Int64 h: Int64 -> im/Image
 
 fn imageResize img: im/Image method: String w: Int64 h: Int64 -> (Result im/Image String)
   (cond
-    ((not (im/dimOk? w h)) (err (str "imageSize: bad target " (stringFromInt64 w) "x" (stringFromInt64 h))))
+    ((not (and (im/dimOk? w h) (im/dimOk? w img.height))) (err (str "imageSize: bad target or intermediate " (stringFromInt64 w) "x" (stringFromInt64 h))))
     ((not (listContains? (resizeMethods) method)) (err (str "imageMethod: unknown method " method)))
     ((= method "nearest") (ok (nearestImage img w h)))
     (else (ok (weightedImage! img method w h))))

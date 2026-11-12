@@ -94,6 +94,15 @@ fn testConstant! -> Bool
       (assert (= (rs4 (gray 4 1 (list 0 100 100 0)) "lanczos3" 2 1) (list 61 61)) "lanczos3 of a 0 100 100 0 bump to 2 px is 61 61 (python oracle 60.51)")
       true))
 
+fn testTaps! -> Bool
+  (let [(alt (gray 10 1 (list 0 255 0 255 0 255 0 255 0 255)))
+        (spike (gray 10 1 (list 0 0 0 255 0 0 0 0 0 0)))]
+    (do
+      (assert (= (rs4 alt "lanczos3" 7 1) (list 99 132 128 127 127 123 156)) "lanczos3 10 to 7 alternating matches the python oracle, taps with 2<=|t|<3 included")
+      (assert (= (rs4 alt "lanczos3" 13 1) (list 0 196 155 22 254 43 128 212 1 233 100 59 255)) "lanczos3 10 to 13 alternating matches the python oracle")
+      (assert (= (rs4 spike "lanczos3" 7 1) (list 0 8 179 0 2 0 0)) "lanczos3 of a single spike keeps the outer lobe at 2, which a |t|<2 cutoff zeroes")
+      true))
+
 fn testErrors! -> Bool
   (let [(g (gray 2 2 (list 1 2 3 4)))]
     (do
@@ -101,6 +110,8 @@ fn testErrors! -> Bool
       (assert (stringStartsWith? (errOf (rs/imageResize g "area" 0 1)) "imageSize") "a zero target is imageSize")
       (assert (stringStartsWith? (errOf (rs/imageResize g "area" 1 -3)) "imageSize") "a negative target is imageSize")
       (assert (stringStartsWith? (errOf (rs/imageResize g "area" 70000 70000)) "imageSize") "a target above the pixel cap is imageSize")
+      (assert (stringStartsWith? (errOf (rs/imageResize (gray 1 1000 (map (fn [(i Int64)] -> Int64 5) (range 0 1000))) "area" 1000000 1)) "imageSize") "a 1x1000 source to 1000000x1 is imageSize, the intermediate buffer is bounded too")
+      (assert (stringStartsWith? (errOf (rs/imageResize (gray 1 1000 (map (fn [(i Int64)] -> Int64 5) (range 0 1000))) "lanczos3" 100000 1)) "imageSize") "the same bound holds for lanczos3")
       true))
 
 fn testLarge! -> Bool
@@ -127,6 +138,7 @@ fn ! runTests -> Bool
     (testBilinear!)
     (testIdentity!)
     (testConstant!)
+    (testTaps!)
     (testErrors!)
     (testLarge!)
     true)

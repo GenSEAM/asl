@@ -53,7 +53,7 @@ fn imageCrop img: Image x: Int64 y: Int64 w: Int64 h: Int64 -> (Result Image Str
   (cond
     ((not (dimOk? w h)) (err "imageBounds: empty or oversized crop"))
     ((or (< x 0) (< y 0)) (err "imageBounds: negative crop origin"))
-    ((or (> (+ x w) img.width) (> (+ y h) img.height)) (err (str "imageBounds: crop " (stringFromInt64 x) "," (stringFromInt64 y) " " (stringFromInt64 w) "x" (stringFromInt64 h) " leaves the " (stringFromInt64 img.width) "x" (stringFromInt64 img.height) " image")))
+    ((or (> x (- img.width w)) (> y (- img.height h))) (err (str "imageBounds: crop " (stringFromInt64 x) "," (stringFromInt64 y) " " (stringFromInt64 w) "x" (stringFromInt64 h) " leaves the " (stringFromInt64 img.width) "x" (stringFromInt64 img.height) " image")))
     (else
       (let [(n (* (* w h) 4))
             (out (bytesAlloc n))
@@ -71,8 +71,8 @@ fn ! blitRows! dst: Bytes dw: Int64 src: Bytes sw: Int64 dx: Int64 dy: Int64 j: 
           (blitRows! dst dw src sw dx dy (+ j 1) n))))
 
 fn imagePad img: Image top: Int64 right: Int64 bottom: Int64 left: Int64 r: Int64 g: Int64 b: Int64 a: Int64 -> (Result Image String)
-  (if (or (< top 0) (or (< right 0) (or (< bottom 0) (< left 0))))
-    (err "imageBounds: negative padding")
+  (if (or (< top 0) (or (< right 0) (or (< bottom 0) (or (< left 0) (or (> top (maxImagePixels)) (or (> right (maxImagePixels)) (or (> bottom (maxImagePixels)) (> left (maxImagePixels)))))))))
+    (err "imageBounds: padding is negative or above the pixel cap")
     (let [(w (+ (+ img.width left) right))
           (h (+ (+ img.height top) bottom))]
       (match (imageSolid w h r g b a)
@@ -125,8 +125,13 @@ fn blendByte dv: Int64 sv: Int64 sa: Int64 da: Int64 c: Int64 -> Int64
       ((= num 0) 0)
       (else (clampByte (/ (+ (* 2 (+ (* (* sv sa) 255) (* (* dv da) (- 255 sa)))) num) (* 2 num))))))
 
-fn imageComposite dst: Image src: Image ox: Int64 oy: Int64 -> Image
-  (let [(n (bytesLength dst.rgba))
+fn clampOffset o: Int64 -> Int64
+  (max (- 0 (* 2 (maxImagePixels))) (min (* 2 (maxImagePixels)) o))
+
+fn imageComposite dst: Image src: Image ox0: Int64 oy0: Int64 -> Image
+  (let [(ox (clampOffset ox0))
+        (oy (clampOffset oy0))
+        (n (bytesLength dst.rgba))
         (out (bytesAlloc n))
         (w dst.width)
         (_ (fillBytes! out (fn [(j Int64)] -> Int64

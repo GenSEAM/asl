@@ -18,6 +18,16 @@ fn okImg r: (Result im/Image String) -> im/Image
     ((ok i) i)
     ((err e) (do (assert false e) (im/Image :width 1 :height 1 :rgba (bytesAlloc 4)))))
 
+fn ! dh img: im/Image -> Int64
+  (match (ih/imageDHash img)
+    ((ok h) h)
+    ((err e) (do (assert false e) -1)))
+
+fn ! phh img: im/Image -> Int64
+  (match (ih/imagePHash img)
+    ((ok h) h)
+    ((err e) (do (assert false e) -1)))
+
 fn zigzag -> (List Int64)
   (listFlatMap (fn [(r Int64)] -> (List Int64) (if (= (mod r 2) 0) (list 9 8 7 6 5 4 3 2 1) (list 1 2 3 4 5 6 7 8 9))) (range 0 8))
 
@@ -35,14 +45,14 @@ fn pat64 -> (List Int64)
 
 fn testD! -> Bool
   (do
-    (assert (= (ih/hashHex (ih/imageDHash (gray 9 8 (zigzag)))) "ff00ff00ff00ff00") "dHash of alternating descending and ascending rows is ff00ff00ff00ff00")
-    (assert (= (ih/hashHex (ih/imageDHash (gray 9 8 (rowZero)))) "8c00000000000000") "row 0 5 3 3 9 9 1 0 0 7 gives bits 10001100 and equal rows give 0")
-    (assert (= (ih/imageDHash (gray 9 8 (listFlatMap (fn [(r Int64)] -> (List Int64) (list 1 1 1 1 1 1 1 1 1)) (range 0 8)))) 0) "a flat image hashes to 0")
+    (assert (= (ih/hashHex (dh (gray 9 8 (zigzag)))) "ff00ff00ff00ff00") "dHash of alternating descending and ascending rows is ff00ff00ff00ff00")
+    (assert (= (ih/hashHex (dh (gray 9 8 (rowZero)))) "8c00000000000000") "row 0 5 3 3 9 9 1 0 0 7 gives bits 10001100 and equal rows give 0")
+    (assert (= (dh (gray 9 8 (listFlatMap (fn [(r Int64)] -> (List Int64) (list 1 1 1 1 1 1 1 1 1)) (range 0 8)))) 0) "a flat image hashes to 0")
     (let [(base (gray 9 8 (zigzag)))
           (up (okImg (rs/imageResize base "nearest" 18 16)))]
       (do
-        (assert (= (ih/imageDHash up) (ih/imageDHash base)) "a 2x nearest upscale keeps the dHash")
-        (assert (= (ih/imageDHash (im/imageFlipH base)) (ih/imageDHash (gray 9 8 (listFlatMap (fn [(r Int64)] -> (List Int64) (if (= (mod r 2) 0) (list 1 2 3 4 5 6 7 8 9) (list 9 8 7 6 5 4 3 2 1))) (range 0 8))))) "mirroring flips the comparison direction")
+        (assert (= (dh up) (dh base)) "a 2x nearest upscale keeps the dHash")
+        (assert (= (dh (im/imageFlipH base)) (dh (gray 9 8 (listFlatMap (fn [(r Int64)] -> (List Int64) (if (= (mod r 2) 0) (list 1 2 3 4 5 6 7 8 9) (list 9 8 7 6 5 4 3 2 1))) (range 0 8))))) "mirroring flips the comparison direction")
         true)))
 
 fn testHamming! -> Bool
@@ -58,10 +68,10 @@ fn testP! -> Bool
   (let [(a (gray 32 32 (pat32)))
         (b (gray 64 64 (pat64)))]
     (do
-      (assert (= (ih/hashHex (ih/imagePHash a)) "c815c39f3770a54d") "pHash of the pattern image is c815c39f3770a54d (python DCT oracle)")
-      (assert (= (ih/imagePHash b) (ih/imagePHash a)) "a 2x blocky upscale area-resizes back to the same pHash")
-      (assert (> (ih/hammingDistance (ih/imagePHash a) (ih/imagePHash (im/imageFlipV a))) 0) "a vertical flip changes the pHash")
-      (assert (= (ih/imagePHash (gray 32 32 (map (fn [(i Int64)] -> Int64 0) (range 0 1024)))) 0) "a black image hashes to 0")
+      (assert (= (ih/hashHex (phh a)) "c815c39f3770a54d") "pHash of the pattern image is c815c39f3770a54d (python DCT oracle)")
+      (assert (= (phh b) (phh a)) "a 2x blocky upscale area-resizes back to the same pHash")
+      (assert (> (ih/hammingDistance (phh a) (phh (im/imageFlipV a))) 0) "a vertical flip changes the pHash")
+      (assert (= (phh (gray 32 32 (map (fn [(i Int64)] -> Int64 0) (range 0 1024)))) 0) "a black image hashes to 0")
       true))
 
 fn ! runTests -> Bool
