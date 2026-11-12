@@ -1247,3 +1247,5 @@
 (:doc :symbol "asl/packages/asl-agent/src/grounding.asl#errorCounts" :text "journal text to (name count) pairs from unbound symbol, ERR_ARITY and argument to receipts, count descending then name")
 (:doc :symbol "asl/packages/asl-agent/src/grounding.asl#rankedBuiltins" :text "the names of an errorCounts list that the checker knows as builtins, in rank order")
 (:doc :symbol "asl/packages/asl-agent/src/grounding.asl#tokensOf" :text "bytes/4 rounded up, the token bound used for the tool card cap")
+(:doc :symbol "asl/packages/asl-agent/src/grounding.asl#toolLookup" :text "the lookup row text: ASL is not on the web, with the ops that work today for repo names, one function, file shape, builtin signature and op help")
+(:doc :symbol "asl/packages/asl-agent/src/grounding.asl#namesAfter" :text "the name-character runs that follow each occurrence of a marker in a text")
