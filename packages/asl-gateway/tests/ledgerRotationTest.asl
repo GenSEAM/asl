@@ -49,14 +49,14 @@ fn ! failureChecks -> Bool
 fn redactChecks -> Bool
   (let [(bearer (ul/redactReason "401 Unauthorized: bad header Authorization: Bearer tok_short9"))
         (labelled (ul/redactReason "{\"api_key\":\"zz9QW\",\"error\":\"invalid\"}"))
-        (shaped (ul/redactReason "upstream said key AKIAabcdefgh1234567890XYZ was revoked"))
+        (shaped (ul/redactReason (str "upstream said key " "AKIA" "abcdefgh1234567890XYZ was revoked")))
         (sk (ul/redactReason "no access for sk-proj-abcdef"))
         (lines (ul/redactReason "line one\nline two"))
         (plain (ul/redactReason "400 Bad Request: model m1 rejects tools"))]
     (do
       (assert (and (not (stringContains? bearer "tok_short9")) (stringContains? bearer "[redacted]")) (str "the run after Bearer is redacted: " bearer))
       (assert (and (not (stringContains? labelled "zz9QW")) (stringContains? labelled "invalid")) (str "a labelled key value is redacted: " labelled))
-      (assert (and (not (stringContains? shaped "AKIAabcdefgh1234567890XYZ")) (stringContains? shaped "was revoked")) (str "a key-shaped token is redacted: " shaped))
+      (assert (and (not (stringContains? shaped (str "AKIA" "abcdefgh1234567890XYZ"))) (stringContains? shaped "was revoked")) (str "a key-shaped token is redacted: " shaped))
       (assert (not (stringContains? sk "sk-proj-abcdef")) (str "an sk- key is redacted: " sk))
       (assert (= lines "line one line two") (str "a reason stays on one line: " lines))
       (assert (= plain "400 Bad Request: model m1 rejects tools") (str "plain text is kept: " plain))

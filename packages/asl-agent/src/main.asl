@@ -1995,7 +1995,7 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
         toolCap (ctx/contextToolCapBytesFor! rootDir)
         windowTokens (optionOr state.contextTokens 24000)
         transcript (ctx/renderTranscriptKept wrapped.history keepTurns toolCap (ctx/contextMaxOlderLinesFor! rootDir)
-          (ctx/contextKeptCapBytes windowTokens keepTurns toolCap) (ctx/contextLatestCapBytes windowTokens))
+          (ctx/contextKeptCapBytes windowTokens keepTurns toolCap) (ctx/contextWindowLatestCapBytes windowTokens))
         advisorInvoked (= (optionOr ra.intent "") "reinforce")
         advisorResult (if advisorInvoked
           (env.advise (ctx/advisorSystem) (str "Task: " ra.task "\n\n" transcript))
@@ -2221,7 +2221,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   historyToolCap (ctx/contextToolCapBytesFor! rootDir)
                   historyTokens (optionOr servedCtx 24000)
                   history (ctx/freezeTranscriptHistory historyRaw historyKeep historyToolCap
-                    (ctx/contextKeptCapBytes historyTokens historyKeep historyToolCap) (ctx/contextLatestCapBytes historyTokens))
+                    (ctx/contextKeptCapBytes historyTokens historyKeep historyToolCap) (ctx/contextWindowLatestCapBytes historyTokens))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
                     (or (liveReviewerAvailable? wrapped.provider) (= (optionOr ra.intent "") "reinforce"))))
                   reviewResult (if reviewInvoked

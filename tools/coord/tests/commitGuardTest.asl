@@ -306,7 +306,7 @@ fn ! fixPure -> Bool
     (assert (cg/secretLine? (str "x sk-" "abcdefghijklmnopqrstuvwxyz0123")) "a real sk- key after a space is a secret")
     (assert (cg/secretLine? (str "sk-" "abcdefghijklmnopqrstuvwxyz0123")) "a real sk- key at the line start is a secret")
     (assert (not (cg/secretLine? "MAX_TOKENS=1000000000000000000000")) "a digit run is no secret")
-    (assert (not (cg/secretLine? "ASL_TOKEN_FILE=/Users/purplelephant/.asl/secrets/tokenfile12345")) "a path value is no secret")
+    (assert (not (cg/secretLine? "ASL_TOKEN_FILE=/opt/aslhome/.asl/secrets/tokenfile12345")) "a path value is no secret")
     (assert (not (cg/secretLine? "ASL_TOKEN_FILE=~/.asl/secrets/tokenfile12345678")) "a home path value is no secret")
     (assert (cg/secretLine? (str "GH_TOKEN=" "Ab3dEf6hIj9kLm2nOp5qRs8t")) "a high entropy token value is a secret")
     (let [(rows (cg/secretHits (list (cg/Added :path "e.txt" :line 7 :text (str "OPENAI_API_" "KEY=" "Ab3dEf6hIj9kLm2nOp5qRs8t")))))]

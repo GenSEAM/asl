@@ -317,7 +317,7 @@ fn testBrief -> Bool
         (assert (listEmpty? (l/scrubLines "+ db passwd=hunter2" 10 120)) "a passwd assignment is scrubbed")
         (assert (listContains? (l/scrubLines "+ (fn [task-id] (run task-id))" 10 120) "+ (fn [task-id] (run task-id))") "task- is not mistaken for an sk- key")
         (assert (= (l/scrubLines "+ ok1\n+ -----BEGIN OPENSSH PRIVATE KEY-----\n+ b3BlbnNzaC1rZXktdjEAAAAABG5vbmU\n+ AAAAC3NzaC1lZDI1NTE5AAAAIOx\n+ -----END OPENSSH PRIVATE KEY-----\n+ ok2" 10 120) (list "+ ok1" "+ ok2")) "a PEM block is dropped whole, body lines included")
-        (assert (listEmpty? (l/scrubLines "+ x sk-abcdefghijklmnopqrstuvwx y" 10 120)) "every egress shape is scrubbed by the ladder too")
+        (assert (listEmpty? (l/scrubLines (str "+ x sk-" "abcdefghijklmnopqrstuvwx y") 10 120)) "every egress shape is scrubbed by the ladder too")
         (assert (not (stringContains? b "\n")) "the brief is a single line")
         (assert (stringStartsWith? b "(:review :unit \"U1\"") "the brief is an ASN form")
         true))
