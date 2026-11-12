@@ -480,10 +480,16 @@ fn ! withLock! cfg: Cfg unit: String body: (fn [] -> Bool) -> Bool
 fn ! mergeUnitWith! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
   (withLock! cfg unit (fn [] -> Bool (mergeLocked! cfg unit hook)))
 
+; (:m :ref MERGEUNIT-FF-NOREBASE :do "--branch equal to the worktree's checked-out branch is the 2026-11-12 misuse: refused before the rebase and any gate")
+fn ! branchIsTarget! cfg: Cfg wt: String -> Bool
+  (let [(b (gitOut! wt (list "branch" "--show-current")))]
+    (and (= b.exit 0) (= (stringTrim b.out) cfg.branch)))
+
 fn ! mergeLocked! cfg: Cfg unit: String hook: (fn [] -> Bool) -> Bool
   (let [(wt (str cfg.worktrees "/asex-" unit))]
     (cond
       ((not (fileExists? wt)) (do (emit! cfg unit "NO-WORKTREE" (str ":path " (q wt))) false))
+      ((branchIsTarget! cfg wt) (do (emit! cfg unit "BRANCH-IS-TARGET" (str ":branch " (q cfg.branch) " :why \"--branch names the branch to rebase onto and merge into (default main); it is the worktree's own checked-out branch, so the rebase would be a no-op\"")) false))
       ((not (rebased! cfg unit wt "REBASE-CONFLICT")) false)
       ((not (hostBuild! wt)) (do (emit! cfg unit "BUILD-FAIL" "") false))
       (else
