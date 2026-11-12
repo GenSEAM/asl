@@ -23,6 +23,9 @@ fn grow history: (List j/Json) h: j/Json keptCap: Int64 -> (List j/Json)
 fn renderedOf history: (List j/Json) turn: Int64 -> String
   (optionOr (listHead (filter (fn [l] (stringStartsWith? l (str "(:turn " (stringFromInt64 turn) " :"))) (stringSplit (ctx/renderTranscriptKept history 8 40 50 40 4000) "\n"))) "")
 
+fn mustCount line: String -> Int64
+  (- (listLength (stringSplit line "(:mustEdit")) 1)
+
 fn ! runTests -> Bool
   (let [a (readGot "a.txt" "1 2" "alpha one\\nalpha two\\n")
         b (readGot "b.txt" "1 1" "beta one\\n")
@@ -43,6 +46,8 @@ fn ! runTests -> Bool
         staleR2 (renderedOf staleH 2)
         digest (ctx/turnReceiptLine (entry 5 (str a "\n" b)))
         must (ctx/mustEditForm (list (entry 1 a) (entry 2 b) (entry 3 a)) (list "src/x.asl") 6)
+        many (ctx/mustEditForm (map (fn [i] (entry i (readGot (str "f" (stringFromInt64 i) ".txt") "1 1" "x\\n"))) (range 1 31)) (list "src/x.asl") 6)
+        scout (ctx/mustEditForm (list (entry 1 a)) (list) 6)
         root (rk/freshRecorderRoot! "readLoopContext")
         w1 (ok? (fileWrite (str root "/a.txt") "alpha line one\nalpha line two\n"))
         w2 (ok? (fileWrite (str root "/b.txt") "beta line one\n"))
@@ -69,6 +74,10 @@ fn ! runTests -> Bool
       (assert (and w1 w2) "fixture files are written")
       (assert (not (listEmpty? sentSame)) "in a real loop, a re-read of turn 1's file reaches the model as (:same :turn 1)")
       (assert (= (listLength sentMust) (- (listLength run.sentLines) 6)) (str "the mustEdit form is injected once at the 6th read-only turn and stays in the window: " (stringFromInt64 (listLength sentMust)) " of " (stringFromInt64 (listLength run.sentLines))))
+      (assert (listAll? (fn [l] (= (mustCount l) 1)) sentMust) "every prompt after the nudge holds exactly one (:mustEdit form, never one per read-only turn")
+      (assert (stringContains? many ":more 6") (str "mustEdit keeps the newest 24 of 30 ranges and counts the rest: " many))
+      (assert (and (stringContains? many "f30.txt:1-1") (not (stringContains? many "\"f1.txt:1-1\""))) "the kept ranges are the newest ones")
+      (assert (stringContains? scout "(:findings ...) or (:done)") "a run with no :owns is told to deliver findings or done, not to edit")
       (assert (stringContains? run.journal "(:turn 6 :signal :readNudge :readOnly 6 :cap 12)") "the nudge point is 6 of the default cap 12")
       (assert (stringContains? run.journal ":signal :readStreak :cause :readOnly") "the default cap of 12 stops 14 read-only turns")
       (assert cleaned "the fixture root is removed")

@@ -896,12 +896,21 @@ fn readRangesOf got: String -> (List String)
   (map (fn [l] (let [r (linesAfter l)] (str (optionOr (quotedAfter l " :file \"") "") (if (stringEmpty? r) "" (str ":" r)))))
     (filter (fn [l] (and (readReceiptOk? l) (some? (quotedAfter l " :file \"")))) (stringSplit got "\n")))
 
-; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "the one form a read-only streak gets at the nudge point: the file ranges already read, deduplicated, and the owned files to edit next")
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "the one form a read-only streak gets at the nudge point: the file ranges already read, deduplicated, at most mustEditKnownCap of the newest with :more for the rest, and the owned files to edit next; a run with no :owns (scout, findings) is told to deliver findings or done from what it read, since it may have nothing to edit")
+fn mustEditKnownCap -> Int64
+  24
+
 fn mustEditForm history: (List j/Json) owns: (List String) n: Int64 -> String
-  (let [known (dedupe (fold (fn [acc h] (listAppend acc (readRangesOf (jgetStr h "got")))) (list) history))
+  (let [all (dedupe (fold (fn [acc h] (listAppend acc (readRangesOf (jgetStr h "got")))) (list) history))
+        more (max 0 (- (listLength all) (mustEditKnownCap)))
+        known (listDrop all more)
         q (fn [s] (str "\"" (c/escapeAsn s) "\""))]
-    (str "(:mustEdit :readOnly " (stringFromInt64 n) " :known (" (joinSep (map q known) " ") ") :owns (" (joinSep (map q owns) " ")
-      ") :do \"these ranges are already read; the next reply edits an owned file, it does not read them again\")"))
+    (str "(:mustEdit :readOnly " (stringFromInt64 n) " :known (" (joinSep (map q known) " ") ")"
+      (if (> more 0) (str " :more " (stringFromInt64 more)) "")
+      " :owns (" (joinSep (map q owns) " ")
+      (if (listEmpty? owns)
+        ") :do \"these ranges are already read; the next reply sends (:findings ...) or (:done) from them, it does not read them again\")"
+        ") :do \"these ranges are already read; the next reply edits an owned file, it does not read them again\")")))
 
 fn sameFragment line: String -> (Option String)
   (if (and (readReceiptOk? line) (and (stringEndsWith? line "\")") (stringContains? line " :content \"")))
