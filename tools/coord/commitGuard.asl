@@ -123,7 +123,7 @@ fn entropic? v: String -> Bool
          (and (listAny? (fn [(c String)] -> Bool (stringContains? "0123456789" c)) cs)
               (>= (listLength distinct) 8))))
 
-; (:m :do "NAME_(API_KEY|SECRET|TOKEN|PASSWORD)=value where the value has no path characters (/ . ~) and is high entropy; MAX_TOKENS=1000000000000000000000 and ASL_TOKEN_FILE=/Users/x are not credentials")
+; (:m :do "NAME_(API_KEY|SECRET|TOKEN|PASSWORD)=value where the value has no path characters (/ . ~) and is high entropy; MAX_TOKENS=1000000000000000000000 and ASL_TOKEN_FILE=~/x are not credentials")
 fn assignSecret? line: String -> Bool
   (and (stringContains? line "=")
     (and (listAny? (fn [(n String)] -> Bool (stringContains? line n)) (list "API_KEY" "SECRET" "TOKEN" "PASSWORD"))
