@@ -102,6 +102,27 @@ fn ! testRefreshWake -> Bool
         (assert (= refreshes "r\nr\n") (str "refresh called once per round: " refreshes))
         true))
 
+; (:m :ref REFRESH-WAKE-MISSED-RISE :do "a refresh in which nothing rose still wakes a unit parked on a lane set holding a lane with allowance now (the reset fell between ticks) and one on a single such lane whose last await was not quorumStarved; a unit on a lane with no allowance, one on a tier name and one whose newest await is quorumStarved stay parked; a second refresh wakes nobody")
+fn ! testAvailWake -> Bool
+  (let [(dir (scratch "avail"))
+        (_ (cleanup dir))
+        (_ (dirCreate dir))
+        (_ (park dir "A1" "review" "ocDeepseekPro ocGlm53")) (_ (park dir "A2" "review" "ocDeepseekPro")) (_ (park dir "A3" "review" "strong"))
+        (_ (park dir "A4" "review" "ocGlm53")) (_ (park dir "A5" "review" "ocGlm53"))
+        (_ (fileAppend (cd/journalPath dir) "(:await :unit A4 :rung R3 :lane ocGlm53 :why \"quorumStarved: reviewers did not answer\")\n(:await :unit A5 :rung R3 :lane ocGlm53 :why \"quorumStarved: earlier\")\n(:await :unit A5 :rung R3 :lane ocGlm53 :why \"no strong lane with allowance outside family google\")\n"))
+        (snap (fn [] -> (List (Pair String Int64)) (list (pair "ocGlm53" 5) (pair "ocDeepseekPro" 0) (pair "strong" 5) (pair "paid" 0))))
+        (ctx (cd/Ctx :dir dir :holder "t" :ttlMs 1000 :maxWait 5 :maxSame 3 :stageSec 5 :maxDesc 5
+                     :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (list)) :pace (cd/fixedPace 1 1)))
+        (refresh (fn [] -> Unit ()))
+        (woken (cd/refreshWake! ctx snap refresh))
+        (flags (map (fn [(id String)] -> Int64 (match (listFind (fn [(x cd/CUnit)] -> Bool (= x.id id)) (cd/readCUnits! dir)) ((some c) c.parked) ((none) -1))) (list "A1" "A2" "A3" "A4" "A5")))
+        (again (cd/refreshWake! ctx snap refresh))
+        (_ (cleanup dir))]
+    (do (assert (= woken 2) (str "with no rise, the two units whose awaited lane has allowance now wake: " (stringFromInt64 woken)))
+        (assert (= flags (list 0 1 1 1 0)) (str "A1 and A5 unparked; A2 (no allowance), A3 (tier name) and A4 (quorumStarved) still parked: " (stringJoin (map stringFromInt64 flags) ",")))
+        (assert (= again 0) (str "a second refresh wakes nobody: " (stringFromInt64 again)))
+        true))
+
 fn passCall alias: String prompt: String -> (Result String String)
   (ok "(:verdict :pass :defects () :model m)")
 
@@ -1364,6 +1385,7 @@ fn ! runTests -> Bool
       (assert (testSigKey) "signature key ignores ids")
       (assert (testAllowance) "allowances from subPace")
       (assert (testRefreshWake) "refresh wakes the lanes that rose")
+      (assert (testAvailWake) "refresh wakes units whose awaited lane has allowance now")
       (assert (testLadderWiring) "ladder wiring")
       (assert (testService) "service unit and dev repo steps")
       (assert (testCoverage) "coverage refusal")
