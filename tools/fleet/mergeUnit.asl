@@ -137,17 +137,22 @@ fn ! suite? wt: String p: String -> Bool
             (and (not (stringContains? p "/fixtures/"))
                  (stringContains? (resultOr (fileReadString (str wt "/" p)) "") "runTests"))))
 
-; (:m :ref MERGE-TRAIN-SLOW :do "the suites anywhere in the worktree (tracked or untracked, not ignored) whose text names module m in an import, (m ...), found by one git grep over the whole tree (the vcs layer passes --literal-pathspecs, so no glob narrows it; suite? filters)")
-fn ! importersIn! wt: String m: String -> (List String)
-  (let [(o (gitOut! wt (list "grep" "-l" "-F" "--untracked" "-e" (str "(" m " "))))]
+; (:m :ref MERGE-TRAIN-SLOW :do "the suites anywhere in the worktree (tracked or untracked, not ignored) whose text names any of names in an import, (NAME ...), found by one git grep over the whole tree (the vcs layer passes --literal-pathspecs, so no glob narrows it; suite? filters); a suite that reaches the module only through another module's re-export is not followed")
+fn ! importersIn! wt: String names: (List String) -> (List String)
+  (let [(o (gitOut! wt (listAppend (list "grep" "-l" "-F" "--untracked") (fold (fn [(acc (List String)) (m String)] -> (List String) (listAppend acc (list "-e" (str "(" m " ")))) (list) names))))]
     (filter (fn [(p String)] -> Bool (suite? wt p)) (map stringTrim (stringLines o.out))))
+
+; (:m :ref MERGESLIM-FIX :do "the names a suite may import a changed file by: its module name and its path without .asl (39 suites import by path, e.g. (asl/packages/asl-cli/src/verify :a v))")
+fn importNames mod: String path: String -> (List String)
+  (let [(byPath (optionOr (stringSlice path 0 (- (stringLength path) 4)) ""))]
+    (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (if (= mod byPath) (list mod) (list mod byPath))))
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the direct suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk")
 fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) -> (List String)
   (let [(paths (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
         (tests (filter (fn [(p String)] -> Bool (suite? wt p)) paths))
-        (mods (filter (fn [(m String)] -> Bool (not (stringEmpty? m))) (map (fn [(p String)] -> String (moduleOf! (str wt "/" p))) paths)))
-        (imps (fold (fn [(acc (List String)) (m String)] -> (List String) (listAppend acc (importersIn! wt m))) (list) mods))
+        (names (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str wt "/" p)) p))) (list) paths))
+        (imps (if (listEmpty? names) (list) (importersIn! wt (uniq names))))
         (all (uniq (listAppend tests imps)))
         (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :n " (stringFromInt64 (listLength all)))))]
     (map (fn [(t String)] -> String (str cfg.testCmd " " t)) all))
@@ -591,7 +596,7 @@ fn ! unitGates! cfg: Cfg unit: String wt: String -> (List String)
     (if (listEmpty? brief) (list)
       (uniq (listAppend brief (listAppend (selectedGates! c unit wt) (ledgerGates! c wt))))))
 
-; (:m :ref MERGE-TRAIN-SLOW :do "one unit of a batch: its commits not on main are cherry-picked onto the integration worktree; some gates when they landed, none (with an event naming the unit) for no worktree, --branch as its own branch, no brief gates, nothing to merge or a conflict (aborted)")
+; (:m :ref MERGE-TRAIN-SLOW :do "one unit of a batch: its commits not on main are cherry-picked onto the integration worktree; some gates when they landed, none (with an event naming the unit) for no worktree, --branch as its own branch, no brief gates, nothing to merge, a branch holding merge commits (BATCH-HAS-MERGES: a cherry-pick would drop the resolution) or a conflict (aborted)")
 fn ! batchUnit! cfg: Cfg iwt: String mainHead: String unit: String -> (Option (List String))
   (let [(wt (str cfg.worktrees "/asex-" unit))]
     (cond
@@ -600,11 +605,13 @@ fn ! batchUnit! cfg: Cfg iwt: String mainHead: String unit: String -> (Option (L
       (else
         (let [(gates (unitGates! cfg unit wt))
               (h (gitOut! wt (list "rev-parse" "HEAD")))
-              (revs (gitOut! cfg.main (list "rev-list" "--reverse" "--no-merges" (str mainHead ".." (stringTrim h.out)))))
+              (revs (gitOut! cfg.main (list "rev-list" "--reverse" (str mainHead ".." (stringTrim h.out)))))
+              (merges (gitOut! cfg.main (list "rev-list" "--merges" (str mainHead ".." (stringTrim h.out)))))
               (shas (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringLines revs.out))))]
           (cond
             ((listEmpty? gates) (do (emit! cfg unit "NO-GATES" (str ":brief " (q (str cfg.briefDir "/" unit "-leon.asn")))) (none)))
             ((or (!= h.exit 0) (!= revs.exit 0)) (do (emit! cfg unit "BATCH-PICK-FAIL" (str ":git " (q (stringTrim (str h.out " " revs.out))))) (none)))
+            ((not (stringEmpty? (stringTrim merges.out))) (do (emit! cfg unit "BATCH-HAS-MERGES" ":why \"a cherry-pick cannot carry a merge resolution; merge this unit alone or rebase it flat\"") (none)))
             ((listEmpty? shas) (do (emit! cfg unit "NOTHING-TO-MERGE" "") (none)))
             (else
               (let [(cp (gitOut! iwt (listAppend (list "cherry-pick") shas)))]
