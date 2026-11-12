@@ -32,7 +32,11 @@ fn pad n: Int64 width: Int64 -> String
 fn zeros n: Int64 -> (List String)
   (if (<= n 0) (list) (cons "0" (zeros (- n 1))))
 
-fn formatTime ms: Int64 sep: String -> String
+fn formatTime ms: Int64 sep: String -> (Result String String)
+  (if (< ms 0) (err (str "captionTime: negative time " (stringFromInt64 ms) " ms"))
+    (ok (fmtTime ms sep)))
+
+fn fmtTime ms: Int64 sep: String -> String
   (let [(h (/ ms 3600000))
         (m (mod (/ ms 60000) 60))
         (s (mod (/ ms 1000) 60))
@@ -45,7 +49,7 @@ fn parseTime t: String -> (Result Int64 String)
         (halves (stringSplit norm "."))
         (hms (stringSplit (optionOr (listGet halves 0) "") ":"))
         (frac (optionOr (listGet halves 1) ""))]
-    (if (or (!= (listLength halves) 2) (!= (stringLength frac) 3) (< (listLength hms) 2) (> (listLength hms) 3))
+    (if (or (!= (listLength halves) 2) (!= (stringLength frac) 3) (< (listLength hms) 2) (> (listLength hms) 3) (not (listAll? digits? (listAppend hms (list frac)))))
       (err (str "captionTime: " t))
       (let [(nums (map (fn [(x String)] -> Int64 (optionOr (stringToInt64 x) -1)) (listAppend hms (list frac))))]
         (if (listAny? (fn [(n Int64)] -> Bool (< n 0)) nums)
@@ -55,7 +59,12 @@ fn parseTime t: String -> (Result Int64 String)
                 (m (optionOr (listGet nums (- (listLength nums) 3)) 0))
                 (h (if (= (listLength hms) 3) (optionOr (listGet nums 0) 0) 0))
                 (mm (if (= (listLength hms) 3) m (optionOr (listGet nums 0) 0)))]
-            (ok (+ (* h 3600000) (+ (* mm 60000) (+ (* s 1000) f)))))))))
+            (if (or (>= mm 60) (>= s 60))
+              (err (str "captionTime: minutes and seconds must be below 60: " t))
+              (ok (+ (* h 3600000) (+ (* mm 60000) (+ (* s 1000) f))))))))))
+
+fn digits? x: String -> Bool
+  (and (not (stringEmpty? x)) (listAll? (fn [(c String)] -> Bool (stringContains? "0123456789" c)) (stringChars x)))
 
 fn normalise raw: String -> String
   (let [(noBom (if (stringStartsWith? raw "\xef\xbb\xbf") (optionOr (stringSlice raw 3 (stringLength raw)) raw) raw))]
@@ -80,7 +89,7 @@ fn arrow? l: String -> Bool
 fn cueOfBlock b: (List String) -> (Result (Option Cue) String)
   (let [(timeIdx (optionOr (listIndexOf2 b) -1))]
     (if (< timeIdx 0)
-      (ok none)
+      (err (str "captionBlock: no timing line in block starting " (optionOr (listHead b) "")))
       (let [(tl (optionOr (listGet b timeIdx) ""))
             (parts (stringSplit tl " --> "))
             (a (stringTrim (optionOr (listGet parts 0) "")))
@@ -128,15 +137,29 @@ fn parseVtt raw: String -> (Result (List Cue) String)
         ((ok cs) (ok (map (fn [(c Cue)] -> Cue (with c :text (unescapeVtt c.text))) cs))))))
 
 fn escapeVtt s: String -> String
-  (stringReplace (stringReplace (stringReplace (stringReplace s "&" "&amp;") "<" "&lt;") ">" "&gt;") "\n\n" "\n")
+  (keepTags (stringReplace (stringReplace (stringReplace (cleanLines s) "&" "&amp;") "<" "&lt;") ">" "&gt;"))
+
+fn keepTags s: String -> String
+  (fold (fn [(acc String) (t String)] -> String (stringReplace acc (str "&lt;" t "&gt;") (str "<" t ">"))) s (list "i" "/i" "b" "/b" "u" "/u"))
 
 fn unescapeVtt s: String -> String
   (stringReplace (stringReplace (stringReplace s "&lt;" "<") "&gt;" ">") "&amp;" "&")
 
+fn cleanLines s: String -> String
+  (stringJoin (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit s "\n")) "\n")
+
 fn cleanSrt s: String -> String
-  (stringReplace s "\n\n" "\n")
+  (cleanLines s)
+
+fn badTimeCue cues: (List Cue) -> (Option Cue)
+  (listHead (filter (fn [(c Cue)] -> Bool (or (< c.startMs 0) (< c.endMs 0))) cues))
 
 fn writeSrt cues: (List Cue) -> (Result String String)
+  (match (badTimeCue cues)
+    ((some c) (err (str "captionTime: negative time in the cue at " (stringFromInt64 c.startMs) " ms")))
+    ((none) (writeSrtChecked cues)))
+
+fn writeSrtChecked cues: (List Cue) -> (Result String String)
   (match (listHead (filter (fn [(c Cue)] -> Bool (stringContains? c.text "-->")) cues))
     ((some c) (err (str "captionText: a cue text contains -->: " c.text)))
     ((none)
@@ -145,12 +168,17 @@ fn writeSrt cues: (List Cue) -> (Result String String)
                             (numbered cues)) "\n"))))
 
 fn srtBlock i: Int64 c: Cue -> String
-  (str (stringFromInt64 (+ i 1)) "\n" (formatTime c.startMs ",") " --> " (formatTime c.endMs ",") "\n" (cleanSrt c.text) "\n")
+  (str (stringFromInt64 (+ i 1)) "\n" (fmtTime c.startMs ",") " --> " (fmtTime c.endMs ",") "\n" (cleanSrt c.text) "\n")
 
-fn writeVtt cues: (List Cue) -> String
+fn writeVtt cues: (List Cue) -> (Result String String)
+  (match (badTimeCue cues)
+    ((some c) (err (str "captionTime: negative time in the cue at " (stringFromInt64 c.startMs) " ms")))
+    ((none) (ok (vttText cues))))
+
+fn vttText cues: (List Cue) -> String
   (str "WEBVTT\n\n"
        (stringJoin (map (fn [(c Cue)] -> String
-                          (str (formatTime c.startMs ".") " --> " (formatTime c.endMs ".")
+                          (str (fmtTime c.startMs ".") " --> " (fmtTime c.endMs ".")
                                (if (stringEmpty? c.settings) "" (str " " c.settings)) "\n"
                                (escapeVtt c.text) "\n"))
                         cues) "\n"))
