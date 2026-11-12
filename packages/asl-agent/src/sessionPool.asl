@@ -186,7 +186,7 @@ fn ! advanceExec! p: Pool s: Sess turn: (fn [T String String] -> (Pair T Turn)) 
   (match s.guard
     ((none) (pair p d))
     ((some g)
-      (let [(step (fr/guardAdvance! g))]
+      (let [(step (fr/guardPoll! g))]
         (match step.out
           ((some o) (let [(r (turn d s.state (execReply o)))] (settle! p (with s :guard none) (pairSecond r) turn (pairFirst r) now)))
           ((none) (pair (with p :execs (listAppend p.execs (list (with s :guard (some step.guard))))) d))))))

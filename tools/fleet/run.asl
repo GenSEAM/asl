@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
 
 (schema Job
@@ -663,7 +663,11 @@ fn ! reapStaleLeases! -> Int64
 (schema Guarded
   (:f run RunningSep)
   (:f lim Limits)
-  (:f lastCheck Int64))
+  (:f lastCheck Int64)
+  (:f snapPid Int64 :default -1)
+  (:f snapFd Int64 :default -1)
+  (:f snapText String :default "")
+  (:f snapStart Int64 :default 0))
 
 (schema GuardStep
   (:f out (Option ProcOut))
@@ -688,7 +692,8 @@ fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits 
                    (ok (Guarded :run r :lim lim :lastCheck 0)))))))
 
 fn guardFds g: Guarded -> (List (Pair Int64 Int64))
-  (listAppend (if g.run.outOpen (list (pair g.run.outFd 1)) (list)) (if g.run.errOpen (list (pair g.run.errFd 1)) (list)))
+  (listAppend (listAppend (if g.run.outOpen (list (pair g.run.outFd 1)) (list)) (if g.run.errOpen (list (pair g.run.errFd 1)) (list)))
+    (if (> g.snapPid 0) (list (pair g.snapFd 1)) (list)))
 
 fn ! guardAdvance! g: Guarded -> GuardStep
   (let [(lim g.lim)
@@ -706,6 +711,57 @@ fn ! guardAdvance! g: Guarded -> GuardStep
       (let [(o (finishSep r2)) (_ (removeLease! r2.pid)) (_ (js/releasePid lim.jsDir lim.class r2.pid))]
         (GuardStep :out (some o) :guard g2 :progress progress))
       (GuardStep :out none :guard g2 :progress progress)))
+
+; (:m :ref SESSIONPOOL-HUB-STALL :do "the process snapshot behind the descendant check is a ps child of about 75 ms, which guardAdvance! waits for: a reactor stepping several guarded runs stalled most of each 250 ms check period. guardPoll! starts the same ps without waiting, reads it on later steps (its fd is in guardFds) and judges the tree once it has ended; the timeout is still judged on every step, ps gets the 10 s bound shellOut gives it and is killed past it, a spawn failure falls back to the blocking snapshot")
+fn snapCmd -> String
+  "exec ps -A -o pid= -o ppid= -o pgid= -o stat= -o etime= -o comm= 2>/dev/null"
+
+fn ! snapBegin! g: Guarded now: Int64 -> Guarded
+  (match (procSpawnv (list "/bin/sh" "-c" (snapCmd)) (some "/") (some (list "PATH=/bin:/usr/bin")))
+    ((err _) g)
+    ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdClose p.stderr)) (_ (fdNonBlocking p.stdout true))]
+              (with g :snapPid p.pid :snapFd p.stdout :snapText "" :snapStart now :lastCheck now))))
+
+fn ! snapDrain! fd: Int64 text: String -> (Pair Bool String)
+  (let [(c (readChunk fd true))]
+    (if (not (pairFirst c)) (pair false text)
+      (if (stringEmpty? (pairSecond c)) (pair true text) (snapDrain! fd (str text (pairSecond c))))))
+
+fn ! snapStop! g: Guarded -> Guarded
+  (if (<= g.snapPid 0) g
+    (let [(_ (procKill g.snapPid "SIGKILL")) (_ (procWaitPid g.snapPid false)) (_ (fdClose g.snapFd))]
+      (with g :snapPid -1 :snapFd -1 :snapText "")))
+
+fn ! snapCollect! g: Guarded now: Int64 -> (Pair (Option (List Proc)) Guarded)
+  (if (<= g.snapPid 0) (pair none g)
+    (let [(d (snapDrain! g.snapFd g.snapText))]
+      (cond
+        ((not (pairFirst d))
+          (let [(_ (procWaitPid g.snapPid false))]
+            (pair (some (procsAt (pairSecond d) (/ (nowNs) 1000000000))) (with g :snapPid -1 :snapFd -1 :snapText ""))))
+        ((> (- now g.snapStart) 10000000000) (pair (some (list)) (snapStop! g)))
+        (else (pair none (with g :snapText (pairSecond d)))))))
+
+fn ! guardPoll! g: Guarded -> GuardStep
+  (let [(lim g.lim)
+        (pumped (pumpOneSep g.run))
+        (r1 (pairSecond pumped))
+        (now (monotonicNs))
+        (due (and (> lim.maxDesc 0) (and (<= g.snapPid 0) (>= (- now g.lastCheck) (checkEveryNs)))))
+        (begun Guarded (if due (snapBegin! g now) g))
+        (fallback (and due (<= begun.snapPid 0)))
+        (got (if fallback (pair (some (procSnapshot)) (with begun :lastCheck now)) (snapCollect! begun now)))
+        (g1 Guarded (pairSecond got))
+        (checked (some? (pairFirst got)))
+        (snap (optionOr (pairFirst got) (list)))
+        (self (if checked (procSelf) -1))
+        (r2 (judgeSep lim now snap self checked r1))
+        (over? (or (not (stringEmpty? r2.killed)) (and (not r2.outOpen) (not r2.errOpen))))
+        (g2 (with g1 :run r2))]
+    (if over?
+      (let [(o (finishSep r2)) (_ (removeLease! r2.pid)) (_ (js/releasePid lim.jsDir lim.class r2.pid))]
+        (GuardStep :out (some o) :guard (snapStop! g2) :progress (pairFirst pumped)))
+      (GuardStep :out none :guard g2 :progress (or (pairFirst pumped) checked))))
 
 fn ! guardLoop g: Guarded -> ProcOut
   (let [(s (guardAdvance! g))]
