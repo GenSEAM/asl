@@ -34,6 +34,8 @@ fn ! runTests -> Bool
     (do
       (assert (stringContains? turn1Green "(:gate :cmd \"true\" :exit 0)") "the write turn runs the unit gate")
       (assert (not (stringContains? turn1Green ":cmd \"echo build.sh")) "the write turn defers the whole-tree gate")
+      (assert (stringContains? green.journal "(:gatesDeferred :turn 1 :gates (\"echo build.sh\"))") "the write turn names the deferred whole-tree gate")
+      (assert (not (stringContains? green.journal "(:gatesDeferred :turn 2 ")) "the done turn defers nothing")
       (assert (stringContains? green.journal "(:gate :cmd \"echo build.sh\" :exit 0)") "the done turn runs the whole-tree gate")
       (assert (stringContains? green.journal "(:gateIntegrity") "with every gate green on the done turn the run reaches its terminal check")
       (assert (not (stringContains? (before green.journal "(:turn 2 :sent") "(:gateIntegrity")) "the green unit subset of the write turn is not terminal")

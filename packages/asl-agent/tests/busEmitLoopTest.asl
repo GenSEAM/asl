@@ -24,6 +24,9 @@ fn ! runTests -> Bool
         mine (filter (fn [e] (= e.unit "busUnitX")) rows)
         code2 (runOnce! root "n" "")
         rows2 (match (bus/readEvents! (bus/busPath home)) ((ok r) r) ((err _) (list)))
+        code3 (m/main (list (str "(:agent :task \"fix subject\" :backend \"script/noSuchFixture\" :root \"" (c/escapeAsn root) "\" :mode \"scout\" :unit \"busSetupY\" :budget 4 :contextTokens 8000)")))
+        rows3 (match (bus/readEvents! (bus/busPath home)) ((ok r) r) ((err _) (list)))
+        setup (filter (fn [e] (= e.unit "busSetupY")) rows3)
         cleaned (pathRemove root)]
     (do
       (assert repo "the fixture repo is committed")
@@ -32,5 +35,8 @@ fn ! runTests -> Bool
       (assert (match (listHead mine) ((some e) (= e.exit code)) ((none) false)) "the row carries the run's exit code")
       (assert (match (listHead mine) ((some e) (and (not (stringEmpty? e.stop)) (stringEndsWith? e.receiptPath ".journal"))) ((none) false)) "the row names the stop and the journal")
       (assert (= (listLength rows2) 1) "a run without :unit appends no row")
+      (assert (!= code3 0) "a run whose backend fixture is missing is rejected")
+      (assert (= (listLength setup) 1) (str "a rejected setup with :unit still leaves exactly one row, got " (stringFromInt64 (listLength setup))))
+      (assert (match (listHead setup) ((some e) (and (= e.stop "setupRejected") (= e.exit code3))) ((none) false)) "the setup row says setupRejected with the exit code")
       (assert (ok? cleaned) "the scratch root is removed")
       true))

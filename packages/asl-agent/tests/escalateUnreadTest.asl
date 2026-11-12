@@ -18,7 +18,8 @@ fn ! recorded! tag: String replies: (List String) -> rk/RecordedRun
 
 fn ! runTests -> Bool
   (let [held (recorded! "escHeld" (list (escalateReply "subject.txt") "(:step :op \"read\" :file \"subject.txt\")" (escalateReply "subject.txt")))
-        plain (recorded! "escPlain" (list (escalateReply "the provider")))]
+        plain (recorded! "escPlain" (list (escalateReply "the provider")))
+        twice (recorded! "escTwice" (list (escalateReply "subject.txt") (escalateReply "subject.txt")))]
     (do
       (assert (= (m/escalateUnread (list "a/server.asl" "b/*.asl" "src") "blocked on server.asl and src" (list)) (list "a/server.asl")) "an unread owned file named in the escalation is listed; globs and extensionless dirs are not")
       (assert (listEmpty? (m/escalateUnread (list "a/server.asl") "blocked on server.asl" (list "a/server.asl"))) "a file the run already read is not listed")
@@ -29,4 +30,6 @@ fn ! runTests -> Bool
       (assert (stringContains? held.journal "(:turn 3 :signal :modelEscalated") "after the read, the second escalation stops the run")
       (assert (stringContains? plain.journal "(:turn 1 :signal :modelEscalated") "an escalation that names no owned file stops at once")
       (assert (not (stringContains? plain.journal ":escalateRefused")) "and is not refused")
+      (assert (stringContains? twice.journal "(:turn 2 :signal :modelEscalated") "a second escalation is never refused again, read from the journal's refusal row")
+      (assert (not (stringContains? twice.journal "(:turn 2 :signal :escalateRefused")) "the second escalation is not refused")
       true))
