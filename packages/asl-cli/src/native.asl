@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main pruneStaleStaged!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -391,7 +391,9 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
         (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (resultOr dataFiles (list)))))]
     (match dataFiles
       ((err e) (err e))
-      ((ok _) (stagePackageFiles! ctx root files digest mirrorDir pkgDir))))
+      ((ok _) (match (stagePackageFiles! ctx root files digest mirrorDir pkgDir)
+                ((err e) (err e))
+                ((ok staged) (do (cg/recordOrigin! mirrorDir root) (ok staged)))))))
 
 ; (:m :ref INBOXFIX-STALESTAGE-20261028 :do "staging mirrors the source exactly: after the copies, every regular file under the package's own staging dir (mirrorDir) that no copy wrote is removed, so a module deleted or checked out away no longer resolves; hidden paths (.used, .asl caches) are never pruned, nothing outside mirrorDir is touched, and the walk compares listings only (no recopy)")
 fn ! stagedDests root: String dir: String files: (List String) -> (List String)

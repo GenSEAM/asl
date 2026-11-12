@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! remote! asnEcho testFiles! readStdin!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
   (:f closer String)
@@ -507,6 +507,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "browser") (browser! args))
     ((= cmd "cockpit") (cockpit! ctx args))
     ((= cmd "intel") (intel! ctx args))
+    ((= cmd "cache") (cg/cacheCmd! ctx args))
     ((= cmd "lens") (cliResult! "lens" args (lens/runLensCommand args)))
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
