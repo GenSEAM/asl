@@ -98,14 +98,17 @@ fn ! get! cas: Cas h: String -> (Result (Option Bytes) String)
 fn ! has? cas: Cas h: String -> Bool
   (and (validHash? h) (exists? (blobFile cas h)))
 
-; (:m :ref DS-BLOBSTORE :do "the owners pinning a blob: no pin directory is no pins, but a pin directory that cannot be listed (EACCES, EIO) is an err, never an empty list, so gc cannot read it as unpinned")
+fn notFound? e: String -> Bool
+  (stringStartsWith? e "notFound:")
+
+; (:m :ref DS-BLOBSTORE :do "the owners pinning a blob: only a pin directory that is not found is no pins; any other stat error (EACCES or EIO on the pin directory, on pins/ or on an ancestor) and a pin directory that cannot be listed are an err, never an empty list, so gc cannot read them as unpinned")
 fn ! pinsOf! cas: Cas h: String -> (Result (List String) String)
-  (cond
-    ((not (validHash? h)) (err (str "invalid hash " h)))
-    ((not (exists? (pinDir cas h))) (ok (list)))
-    (else (match (dirList (pinDir cas h))
-            ((ok ns) (ok (filter validOwner? ns)))
-            ((err e) (err (str "pins of " h ": " e))))))
+  (if (not (validHash? h)) (err (str "invalid hash " h))
+    (match (fileStat (pinDir cas h))
+      ((err e) (if (notFound? e) (ok (list)) (err (str "pins of " h ": " e))))
+      ((ok _) (match (dirList (pinDir cas h))
+                ((ok ns) (ok (filter validOwner? ns)))
+                ((err e) (err (str "pins of " h ": " e)))))))
 
 fn countOf r: (Result (List String) String) -> (Result Int64 String)
   (match r ((ok ps) (ok (listLength ps))) ((err e) (err e)))
@@ -174,8 +177,13 @@ fn pinErrOf p: (Pair String (Result (List String) String)) -> (List String)
 fn failedOf rs: (List (Pair String Bool)) -> (List String)
   (map pairFirst (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) rs))
 
-; (:m :ref DS-BLOBSTORE :do "gc! with a hook run after the plan and before any removal, where a concurrent pin! or dedup put! can land: pins and age are read again right before each removal, so such a blob is kept; tests use the hook to prove the recheck")
+; (:m :ref DS-BLOBSTORE :do "gc! with a hook run after the plan and before any removal, where a concurrent pin! or dedup put! can land: pins and age are read again right before each removal, so such a blob is kept; a pin! landing between that recheck and the pathRemove itself can still lose its blob (no lock), which the next put! of the bytes repairs. gc starts only when pins/ itself lists: an unreadable pins/ removes nothing and is reported. :young counts the unpinned blobs kept for age at plan time")
 fn ! gcWith! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
+  (match (listing! (str cas.root "/pins"))
+    ((err e) (GcReceipt :removed (list) :pinned 0 :young 0 :tmpRemoved 0 :errors (list e)))
+    ((ok _) (gcPlanned! cas nowNs between)))
+
+fn ! gcPlanned! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
   (let [(cut (- nowNs (* cas.graceMs 1000000)))
         (all (blobsAll! cas))
         (pinRead (map (fn [(h String)] -> (Pair String (Result (List String) String)) (pair h (pinsOf! cas h))) (pairFirst all)))
@@ -189,7 +197,7 @@ fn ! gcWith! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
         (tmpResults (map (fn [(t String)] -> (Pair String Bool) (pair t (ok? (pathRemove (str cas.root "/tmp/" t))))) tmps))]
     (GcReceipt :removed (map pairFirst (filter pairSecond results))
                :pinned (listLength (filter pinnedOf pinRead))
-               :young (- (listLength free) (listLength (filter pairSecond results)))
+               :young (- (listLength free) (listLength due))
                :tmpRemoved (listLength (filter pairSecond tmpResults))
                :errors (listAppend (listAppend (pairSecond all) (listFlatMap pinErrOf pinRead))
                                    (listAppend (match tmpList ((err e) (list e)) ((ok _) (list)))

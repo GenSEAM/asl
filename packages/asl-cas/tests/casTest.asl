@@ -234,6 +234,29 @@ fn ! testUnlistablePins! -> Bool
         (assert (listAny? (fn [(e String)] -> Bool (stringContains? e (str "pins of " a))) g.errors) (str "the unreadable pins are reported: " (stringJoin g.errors " | ")))
         true))
 
+; (:m :ref DS-BLOBSTORE :do "with pins/ itself unreadable (mode 000) gc removes nothing, neither the pinned old blob nor the unpinned one, and reports the listing error; pinsOf! is an err, not no pins; the mode is restored before cleanup")
+fn ! testPinsRootUnreadable! -> Bool
+  (let [(dir (scratch "pinsroot"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (a (putOk! c "pinned, pins root locked"))
+        (b (putOk! c "unpinned, pins root locked"))
+        (_ (cas/pin! c a "manifest"))
+        (_ (age! (bp c a)))
+        (_ (age! (bp c b)))
+        (_ (fileChmod (str dir "/pins") 0))
+        (pins (cas/pinsOf! c a))
+        (g (cas/gc! c (nowNs)))
+        (alive (list (cas/has? c a) (cas/has? c b)))
+        (_ (fileChmod (str dir "/pins") 493))
+        (_ (rmTree! dir))]
+    (do (refute (ok? pins) "pinsOf! under an unreadable pins/ is an err")
+        (assert (= alive (list true true)) "gc removes nothing while pins/ cannot be read")
+        (assert (listEmpty? g.removed) (str "the receipt removes nothing: " (stringJoin g.removed ",")))
+        (assert (= (listLength g.errors) 1) (str "gc stops at the pins/ listing, one error, no per-blob pass: " (stringJoin g.errors " | ")))
+        (assert (listAny? (fn [(e String)] -> Bool (stringStartsWith? e (str "list " dir "/pins"))) g.errors) (str "the error names pins/: " (stringJoin g.errors " | ")))
+        true))
+
 ; (:m :ref DS-BLOBSTORE :do "gc rechecks before each removal: a pin! and a dedup put! that land after gc planned (through the gcWith! hook) keep their blobs, while an untouched old unpinned blob in the same pass goes")
 fn ! testRecheck! -> Bool
   (let [(dir (scratch "recheck"))
@@ -259,4 +282,5 @@ fn ! runTests -> Bool
       (assert (testLayout!) "on-disk fan-out layout and blobPath validation")
       (assert (testUnlistablePins!) "gc keeps a blob whose pins cannot be listed")
       (assert (testRecheck!) "gc rechecks pins and age before each removal")
+      (assert (testPinsRootUnreadable!) "an unreadable pins/ stops gc")
       true)
