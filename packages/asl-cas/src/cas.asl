@@ -1,5 +1,5 @@
 (module asl-cas/cas
-  :x [Cas BlobStat GcReceipt casOpen! validHash? validOwner? blobPath put! putFile! get! has? stat! pin! unpin! pinsOf! gc!]
+  :x [Cas BlobStat GcReceipt casOpen! validHash? validOwner? blobPath put! putFile! get! has? stat! pin! unpin! pinsOf! gc! gcWith!]
   :i [])
 
 ; (:m :ref DS-BLOBSTORE :do "a store root holds blobs/<h0h1>/<sha256> (two-hex fan-out), tmp/ for writes in flight and pins/<sha256>/<owner> markers; graceMs is how long an unpinned blob or a leftover tmp file survives gc")
@@ -40,8 +40,16 @@ fn ! casOpen! root: String graceMs: Int64 -> (Result Cas String)
                                     ((err e) (err e))
                                     ((ok _) (ok (Cas :root root :graceMs graceMs)))))))))))
 
-fn blobPath cas: Cas h: String -> String
-  (str cas.root "/blobs/" (stringSlice h 0 2) "/" h)
+; (:m :ref DS-BLOBSTORE :do "the fan-out directory is the first two hex digits of the hash")
+fn fanOf h: String -> String
+  (optionOr (stringSlice h 0 2) "")
+
+fn blobFile cas: Cas h: String -> String
+  (str cas.root "/blobs/" (fanOf h) "/" h)
+
+; (:m :ref DS-BLOBSTORE :do "the path of a blob for a well-formed hash only, so a caller never turns a name into a path outside blobs/")
+fn blobPath cas: Cas h: String -> (Option String)
+  (if (validHash? h) (some (blobFile cas h)) (none))
 
 fn pinDir cas: Cas h: String -> String
   (str cas.root "/pins/" h)
@@ -52,12 +60,13 @@ fn ! exists? p: String -> Bool
 ; (:m :ref DS-BLOBSTORE :do "a blob already present is kept when it still hashes to its name (dedup, its mtime refreshed so a pending gc sees it young) and replaced when it does not; a new blob is written to tmp/, fsynced, renamed into place and its directory fsynced, so a crash leaves at most a tmp file gc removes and never a partial blob")
 fn ! put! cas: Cas data: Bytes -> (Result String String)
   (let [(h (bytesSha256 data))
-        (dest (blobPath cas h))
+        (dest (blobFile cas h))
+        (fan (str cas.root "/blobs/" (fanOf h)))
         (intact (match (fileReadBytes dest) ((ok b) (= (bytesSha256 b) h)) ((err _) false)))]
     (if intact
       (match (fileUtime dest (nowNs)) ((ok _) (ok h)) ((err e) (err (str "touch " dest ": " e))))
       (let [(tmp (str cas.root "/tmp/" h "." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
-        (match (ensureDir! (str cas.root "/blobs/" (stringSlice h 0 2)))
+        (match (ensureDir! fan)
           ((err e) (err e))
           ((ok _)
             (match (fileWrite tmp data)
@@ -68,7 +77,7 @@ fn ! put! cas: Cas data: Bytes -> (Result String String)
                   ((ok _)
                     (match (pathRename tmp dest)
                       ((err e) (do (pathRemove tmp) (err (str "rename " tmp ": " e))))
-                      ((ok _) (match (fileFsync (str cas.root "/blobs/" (stringSlice h 0 2)))
+                      ((ok _) (match (fileFsync fan)
                                 ((err e) (err (str "fsync dir of " h ": " e)))
                                 ((ok _) (ok h))))))))))))))
 
@@ -80,23 +89,33 @@ fn ! putFile! cas: Cas path: String -> (Result String String)
 ; (:m :ref DS-BLOBSTORE :do "get re-hashes what it read: a missing blob is none, a blob whose bytes no longer hash to its name is a labelled corrupt err, never returned")
 fn ! get! cas: Cas h: String -> (Result (Option Bytes) String)
   (if (not (validHash? h)) (err (str "invalid hash " h))
-    (if (not (exists? (blobPath cas h))) (ok (none))
-      (match (fileReadBytes (blobPath cas h))
+    (if (not (exists? (blobFile cas h))) (ok (none))
+      (match (fileReadBytes (blobFile cas h))
         ((err e) (err (str "read " h ": " e)))
         ((ok b) (let [(got (bytesSha256 b))]
                   (if (= got h) (ok (some b)) (err (str "corrupt blob " h ": content hashes to " got))))))))
 
 fn ! has? cas: Cas h: String -> Bool
-  (and (validHash? h) (exists? (blobPath cas h)))
+  (and (validHash? h) (exists? (blobFile cas h)))
 
-fn ! pinsOf! cas: Cas h: String -> (List String)
-  (if (not (validHash? h)) (list) (filter validOwner? (resultOr (dirList (pinDir cas h)) (list))))
+; (:m :ref DS-BLOBSTORE :do "the owners pinning a blob: no pin directory is no pins, but a pin directory that cannot be listed (EACCES, EIO) is an err, never an empty list, so gc cannot read it as unpinned")
+fn ! pinsOf! cas: Cas h: String -> (Result (List String) String)
+  (cond
+    ((not (validHash? h)) (err (str "invalid hash " h)))
+    ((not (exists? (pinDir cas h))) (ok (list)))
+    (else (match (dirList (pinDir cas h))
+            ((ok ns) (ok (filter validOwner? ns)))
+            ((err e) (err (str "pins of " h ": " e))))))
 
+fn countOf r: (Result (List String) String) -> (Result Int64 String)
+  (match r ((ok ps) (ok (listLength ps))) ((err e) (err e)))
+
+; (:m :ref DS-BLOBSTORE :do "stat reports -1 pins when the pin directory cannot be listed")
 fn ! stat! cas: Cas h: String -> (Option BlobStat)
   (if (not (validHash? h)) (none)
-    (match (fileStat (blobPath cas h))
+    (match (fileStat (blobFile cas h))
       ((err _) (none))
-      ((ok st) (some (BlobStat :hash h :size st.size :pins (listLength (pinsOf! cas h)))))))
+      ((ok st) (some (BlobStat :hash h :size st.size :pins (resultOr (countOf (pinsOf! cas h)) -1))))))
 
 ; (:m :ref DS-BLOBSTORE :do "pin records one marker per owner, so pinning twice by the same owner counts once; it returns the reference count after the change and refuses a blob that is not stored")
 fn ! pin! cas: Cas h: String owner: String -> (Result Int64 String)
@@ -108,7 +127,7 @@ fn ! pin! cas: Cas h: String owner: String -> (Result Int64 String)
             ((err e) (err e))
             ((ok _) (match (fileWrite (str (pinDir cas h) "/" owner) "")
                       ((err e) (err (str "pin " owner ": " e)))
-                      ((ok _) (ok (listLength (pinsOf! cas h)))))))))
+                      ((ok _) (countOf (pinsOf! cas h))))))))
 
 fn ! unpin! cas: Cas h: String owner: String -> (Result Int64 String)
   (cond
@@ -117,30 +136,62 @@ fn ! unpin! cas: Cas h: String owner: String -> (Result Int64 String)
     (else (let [(p (str (pinDir cas h) "/" owner))
                 (_ (if (exists? p) (ok? (pathRemove p)) true))
                 (left (pinsOf! cas h))
-                (_ (if (listEmpty? left) (ok? (pathRemove (pinDir cas h))) true))]
-            (if (exists? p) (err (str "unpin " owner ": marker still present")) (ok (listLength left))))))
+                (_ (match left ((ok ps) (if (listEmpty? ps) (ok? (pathRemove (pinDir cas h))) true)) ((err _) true)))]
+            (if (exists? p) (err (str "unpin " owner ": marker still present")) (countOf left)))))
 
 fn ! old? p: String cutNs: Int64 -> Bool
   (match (fileStat p) ((ok st) (< st.mtimeNs cutNs)) ((err _) false))
 
-fn ! blobsAll! cas: Cas -> (List String)
-  (listFlatMap (fn [(d String)] -> (List String)
-                 (filter validHash? (resultOr (dirList (str cas.root "/blobs/" d)) (list))))
-               (resultOr (dirList (str cas.root "/blobs")) (list)))
+fn ! listing! dir: String -> (Result (List String) String)
+  (match (dirList dir) ((ok ns) (ok ns)) ((err e) (err (str "list " dir ": " e))))
 
-; (:m :ref DS-BLOBSTORE :do "gc at nowNs removes a blob only when it has no pin and its mtime is older than graceMs, and tmp files older than graceMs (left by a crash between write and rename); a pinned blob is never removed")
+; (:m :ref DS-BLOBSTORE :do "every blob under every fan-out directory, and the listing errors: a directory that cannot be listed is reported, its blobs are neither counted nor removed")
+fn ! blobsAll! cas: Cas -> (Pair (List String) (List String))
+  (match (listing! (str cas.root "/blobs"))
+    ((err e) (pair (list) (list e)))
+    ((ok fans) (fold (fn [(acc (Pair (List String) (List String))) (d String)] -> (Pair (List String) (List String))
+                       (match (listing! (str cas.root "/blobs/" d))
+                         ((ok ns) (pair (listAppend (pairFirst acc) (filter validHash? ns)) (pairSecond acc)))
+                         ((err e) (pair (pairFirst acc) (listAppend (pairSecond acc) (list e))))))
+                     (pair (list) (list)) fans)))
+
+fn ! unpinned? cas: Cas h: String -> Bool
+  (match (pinsOf! cas h) ((ok ps) (listEmpty? ps)) ((err _) false))
+
+; (:m :ref DS-BLOBSTORE :do "gc at nowNs removes a blob only when it has no pin and its mtime is older than graceMs, and tmp files older than graceMs (left by a crash between write and rename); a pinned blob is never removed, a blob whose pins cannot be read is kept and reported in :errors")
 fn ! gc! cas: Cas nowNs: Int64 -> GcReceipt
+  (gcWith! cas nowNs (fn [] -> Unit ()))
+
+fn freeOf p: (Pair String (Result (List String) String)) -> Bool
+  (match (pairSecond p) ((ok ps) (listEmpty? ps)) ((err _) false))
+
+fn pinnedOf p: (Pair String (Result (List String) String)) -> Bool
+  (match (pairSecond p) ((ok ps) (not (listEmpty? ps))) ((err _) false))
+
+fn pinErrOf p: (Pair String (Result (List String) String)) -> (List String)
+  (match (pairSecond p) ((ok _) (list)) ((err e) (list e)))
+
+fn failedOf rs: (List (Pair String Bool)) -> (List String)
+  (map pairFirst (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) rs))
+
+; (:m :ref DS-BLOBSTORE :do "gc! with a hook run after the plan and before any removal, where a concurrent pin! or dedup put! can land: pins and age are read again right before each removal, so such a blob is kept; tests use the hook to prove the recheck")
+fn ! gcWith! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
   (let [(cut (- nowNs (* cas.graceMs 1000000)))
-        (blobs (blobsAll! cas))
-        (pinned (filter (fn [(h String)] -> Bool (not (listEmpty? (pinsOf! cas h)))) blobs))
-        (free (filter (fn [(h String)] -> Bool (listEmpty? (pinsOf! cas h))) blobs))
-        (due (filter (fn [(h String)] -> Bool (old? (blobPath cas h) cut)) free))
-        (results (map (fn [(h String)] -> (Pair String Bool) (pair h (ok? (pathRemove (blobPath cas h))))) due))
-        (tmps (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) (resultOr (dirList (str cas.root "/tmp")) (list))))
+        (all (blobsAll! cas))
+        (pinRead (map (fn [(h String)] -> (Pair String (Result (List String) String)) (pair h (pinsOf! cas h))) (pairFirst all)))
+        (free (map pairFirst (filter freeOf pinRead)))
+        (due (filter (fn [(h String)] -> Bool (old? (blobFile cas h) cut)) free))
+        (_ (between))
+        (still (filter (fn [(h String)] -> Bool (and (unpinned? cas h) (old? (blobFile cas h) cut))) due))
+        (results (map (fn [(h String)] -> (Pair String Bool) (pair h (ok? (pathRemove (blobFile cas h))))) still))
+        (tmpList (listing! (str cas.root "/tmp")))
+        (tmps (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) (resultOr tmpList (list))))
         (tmpResults (map (fn [(t String)] -> (Pair String Bool) (pair t (ok? (pathRemove (str cas.root "/tmp/" t))))) tmps))]
     (GcReceipt :removed (map pairFirst (filter pairSecond results))
-               :pinned (listLength pinned)
-               :young (- (listLength free) (listLength due))
+               :pinned (listLength (filter pinnedOf pinRead))
+               :young (- (listLength free) (listLength (filter pairSecond results)))
                :tmpRemoved (listLength (filter pairSecond tmpResults))
-               :errors (listAppend (map (fn [(p (Pair String Bool))] -> String (blobPath cas (pairFirst p))) (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) results))
-                                   (map (fn [(p (Pair String Bool))] -> String (str cas.root "/tmp/" (pairFirst p))) (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) tmpResults)))))
+               :errors (listAppend (listAppend (pairSecond all) (listFlatMap pinErrOf pinRead))
+                                   (listAppend (match tmpList ((err e) (list e)) ((ok _) (list)))
+                                               (listAppend (map (fn [(h String)] -> String (blobFile cas h)) (failedOf results))
+                                                           (map (fn [(t String)] -> String (str cas.root "/tmp/" t)) (failedOf tmpResults)))))))

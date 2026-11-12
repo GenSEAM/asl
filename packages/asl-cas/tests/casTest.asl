@@ -41,6 +41,9 @@ fn ! fileCount! dir: String -> Int64
     ((err _) 0)
     ((ok st) (if st.isDir (fold (fn [(a Int64) (n String)] -> Int64 (+ a (fileCount! (str dir "/" n)))) 0 (resultOr (dirList dir) (list))) 1)))
 
+fn bp c: cas/Cas h: String -> String
+  (optionOr (cas/blobPath c h) "")
+
 fn ! age! p: String -> Bool
   (ok? (fileUtime p (- (nowNs) 864000000000000)))
 
@@ -82,7 +85,7 @@ fn ! testCorrupt! -> Bool
         (_ (rmTree! dir))
         (c (openOk! dir 60000))
         (h (putOk! c "precious bytes"))
-        (_ (fileWrite (cas/blobPath c h) (stringToBytes "precious bytez")))
+        (_ (fileWrite (bp c h) (stringToBytes "precious bytez")))
         (got (getText! c h))
         (h2 (putOk! c "precious bytes"))
         (again (getText! c h2))
@@ -133,9 +136,9 @@ fn ! testPinsGc! -> Bool
         (u1 (resultOr (cas/unpin! c a "run.7") -1))
         (noBlob (ok? (cas/pin! c (bytesSha256 (stringToBytes "absent")) "manifest")))
         (badOwner (ok? (cas/pin! c a "../x")))
-        (_ (age! (cas/blobPath c a)))
-        (_ (age! (cas/blobPath c b)))
-        (_ (age! (cas/blobPath c r)))
+        (_ (age! (bp c a)))
+        (_ (age! (bp c b)))
+        (_ (age! (bp c r)))
         (r2 (putOk! c "re-put old"))
         (g (cas/gc! c (nowNs)))
         (alive (map (fn [(h String)] -> Bool (cas/has? c h)) (list a b y r)))
@@ -176,7 +179,7 @@ fn ! step! c: cas/Cas hs: (List String) os: (List String) m: Model i: Int64 -> M
         (present1 (filter (fn [(x String)] -> Bool (not (listContains? g.removed x))) (if (and reput (not wasHere)) (listAppend m.present (list h)) m.present)))
         (refs (fn [(x String)] -> Int64 (listLength (filter (fn [(p String)] -> Bool (stringStartsWith? p (str x "/"))) pins1))))
         (lostPinned (listAny? (fn [(x String)] -> Bool (and (> (refs x) 0) (not (cas/has? c x)))) hs))
-        (countsOff (listAny? (fn [(x String)] -> Bool (and (cas/has? c x) (!= (refs x) (listLength (cas/pinsOf! c x))))) hs))
+        (countsOff (listAny? (fn [(x String)] -> Bool (and (cas/has? c x) (!= (refs x) (listLength (resultOr (cas/pinsOf! c x) (list "unreadable")))))) hs))
         (presenceOff (listAny? (fn [(x String)] -> Bool (!= (listContains? present1 x) (cas/has? c x))) hs))
         (bad (+ m.bad (if (or (!= (ok? res) okExpected) (or lostPinned (or countsOff presenceOff))) 1 0)))]
     (Model :seed s3 :pins pins1 :present present1 :bad bad :removed (+ m.removed (listLength g.removed))))
@@ -194,10 +197,66 @@ fn ! testProperty! -> Bool
         (assert (> (listLength end.pins) 0) (str "pins are live at the end: " (stringFromInt64 (listLength end.pins))))
         true))
 
+; (:m :ref DS-BLOBSTORE :do "layout: a blob lives at blobs/<first two hex>/<sha256> on disk, blobs/ holds only two-character fan-out directories, and blobPath refuses a malformed hash")
+fn ! testLayout! -> Bool
+  (let [(dir (scratch "layout"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (h (putOk! c "layout bytes"))
+        (fan (optionOr (stringSlice h 0 2) "??"))
+        (fans (resultOr (dirList (str dir "/blobs")) (list)))
+        (onDisk (ok? (fileStat (str dir "/blobs/" fan "/" h))))
+        (_ (rmTree! dir))]
+    (do (assert (= fans (list fan)) (str "the only fan-out directory is the two hex digits " fan ": " (stringJoin fans ",")))
+        (assert onDisk "the blob file is blobs/<h0h1>/<sha256>")
+        (assert (= (bp c h) (str dir "/blobs/" fan "/" h)) (str "blobPath names that file: " (bp c h)))
+        (refute (some? (cas/blobPath c "../../etc/passwd")) "blobPath refuses a malformed hash")
+        true))
+
+; (:m :ref DS-BLOBSTORE :do "a pinned old blob whose pin directory cannot be listed (mode 000) is kept by gc and reported in :errors; pinsOf! is an err, not an empty list; the mode is restored before cleanup")
+fn ! testUnlistablePins! -> Bool
+  (let [(dir (scratch "unlistable"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (a (putOk! c "pinned but unreadable"))
+        (_ (cas/pin! c a "manifest"))
+        (_ (age! (bp c a)))
+        (pd (str dir "/pins/" a))
+        (_ (fileChmod pd 0))
+        (pins (cas/pinsOf! c a))
+        (g (cas/gc! c (nowNs)))
+        (kept (cas/has? c a))
+        (_ (fileChmod pd 493))
+        (_ (rmTree! dir))]
+    (do (refute (ok? pins) "an unlistable pin directory is an err from pinsOf!")
+        (assert kept "gc keeps a blob whose pins it cannot read")
+        (assert (listEmpty? g.removed) (str "nothing removed: " (stringJoin g.removed ",")))
+        (assert (listAny? (fn [(e String)] -> Bool (stringContains? e (str "pins of " a))) g.errors) (str "the unreadable pins are reported: " (stringJoin g.errors " | ")))
+        true))
+
+; (:m :ref DS-BLOBSTORE :do "gc rechecks before each removal: a pin! and a dedup put! that land after gc planned (through the gcWith! hook) keep their blobs, while an untouched old unpinned blob in the same pass goes")
+fn ! testRecheck! -> Bool
+  (let [(dir (scratch "recheck"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (pinned (putOk! c "pinned during gc"))
+        (reput (putOk! c "put again during gc"))
+        (gone (putOk! c "nobody wants me"))
+        (_ (map (fn [(h String)] -> Bool (age! (bp c h))) (list pinned reput gone)))
+        (g (cas/gcWith! c (nowNs) (fn [] -> Unit (let [(_ (cas/pin! c pinned "late")) (_ (cas/put! c (stringToBytes "put again during gc")))] ()))))
+        (alive (map (fn [(h String)] -> Bool (cas/has? c h)) (list pinned reput gone)))
+        (_ (rmTree! dir))]
+    (do (assert (= alive (list true true false)) (str "late pin kept, late put kept, untouched removed: " (stringJoin (map (fn [(x Bool)] -> String (if x "1" "0")) alive) ",")))
+        (assert (= g.removed (list gone)) (str "the receipt removes only the untouched blob: " (stringJoin g.removed ",")))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testPutGet!) "put and get by sha256")
       (assert (testCorrupt!) "corrupt blob detected on read")
       (assert (testAtomic!) "atomic write through tmp and rename")
       (assert (testPinsGc!) "pins and gc with a grace period")
       (assert (testProperty!) "gc never removes a pinned blob over 200 random steps")
+      (assert (testLayout!) "on-disk fan-out layout and blobPath validation")
+      (assert (testUnlistablePins!) "gc keeps a blob whose pins cannot be listed")
+      (assert (testRecheck!) "gc rechecks pins and age before each removal")
       true)
