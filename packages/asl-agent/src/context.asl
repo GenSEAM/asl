@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor contextTokensForIn contextTokensAt! contextTokensFor! gatewayConfigPathFrom aliasRowText modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory contextKeptCapBytes contextLatestCapBytes contextWindowLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory readRangesOf sameMarkedGot mustEditForm contextKeptCapBytes contextLatestCapBytes contextWindowLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -811,14 +811,21 @@ fn ! contextMaxOlderLinesFor! root: String -> Int64
 fn jgetStr h: j/Json k: String -> String
   (match (jget h k) ((some v) (pyStr v)) ((none) ""))
 
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "a turn of reads only keeps :read file:start-end in place of :ops and :files, which it covers, so the digest names the ranges without growing the summary section")
 fn turnReceiptLine h: j/Json -> String
   (let [turn (jgetStr h "turn")
         ops (jgetStr h "ops")
         files (jgetStr h "files")
-        gates (jgetStr h "gates")]
+        gates (jgetStr h "gates")
+        ranges (readRangesOf (jgetStr h "got"))
+        read (joinSep ranges " ")
+        words (fn [s] (filter (fn [w] (not (stringEmpty? w))) (stringSplit s " ")))
+        readOnly (and (not (listEmpty? ranges)) (and (listAll? (fn [o] (= o "read")) (words ops))
+          (listAll? (fn [f] (listAny? (fn [r] (or (= r f) (stringStartsWith? r (str f ":")))) ranges)) (words files))))]
     (str "(:turnSummary :turn " turn
-      (if (stringEmpty? ops) "" (str " :ops \"" (c/escapeAsn ops) "\""))
-      (if (stringEmpty? files) "" (str " :files \"" (c/escapeAsn files) "\""))
+      (if (or readOnly (stringEmpty? ops)) "" (str " :ops \"" (c/escapeAsn ops) "\""))
+      (if (or readOnly (stringEmpty? files)) "" (str " :files \"" (c/escapeAsn files) "\""))
+      (if (stringEmpty? read) "" (str " :read \"" (c/escapeAsn read) "\""))
       (if (stringEmpty? gates) "" (str " :gates \"" (c/escapeAsn gates) "\""))
       ")"))
 
@@ -862,10 +869,62 @@ fn clipSent sent: String turnLabel: String -> String
     sent)
 
 fn turnWhole h: j/Json cap: Int64 -> String
+  (turnWholeGot h (jgetStr h "got") cap)
+
+fn turnWholeGot h: j/Json got: String cap: Int64 -> String
   (let [turn (jgetStr h "turn")
-        sent (clipSent (jgetStr h "sent") turn)
-        got (jgetStr h "got")]
+        sent (clipSent (jgetStr h "sent") turn)]
     (str "(:turn " turn " :sent \"" (c/escapeAsn sent) "\" :got \"" (c/escapeAsn (clipGot (neutralGot got turn) turn cap)) "\")"))
+
+fn readReceiptOk? line: String -> Bool
+  (and (stringStartsWith? line "(:receipt ") (and (stringContains? line " :op \"read\"") (stringContains? line " :status :ok")))
+
+fn quotedAfter line: String key: String -> (Option String)
+  (match (stringIndexOf line key)
+    ((none) none)
+    ((some k) (let [rest (sub line (+ k (stringLength key)) (stringLength line))]
+      (match (stringIndexOf rest "\"") ((some e) (some (sub rest 0 e))) ((none) none)))))
+
+fn linesAfter line: String -> String
+  (match (stringIndexOf line " :lines (")
+    ((none) "")
+    ((some k) (let [rest (sub line (+ k 9) (stringLength line))]
+      (match (stringIndexOf rest ")") ((some e) (stringReplace (sub rest 0 e) " " "-")) ((none) "")))))
+
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "file:start-end of each successful read receipt in a turn's got, for the dropped-turn digest and the mustEdit known list")
+fn readRangesOf got: String -> (List String)
+  (map (fn [l] (let [r (linesAfter l)] (str (optionOr (quotedAfter l " :file \"") "") (if (stringEmpty? r) "" (str ":" r)))))
+    (filter (fn [l] (and (readReceiptOk? l) (some? (quotedAfter l " :file \"")))) (stringSplit got "\n")))
+
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "the one form a read-only streak gets at the nudge point: the file ranges already read, deduplicated, and the owned files to edit next")
+fn mustEditForm history: (List j/Json) owns: (List String) n: Int64 -> String
+  (let [known (dedupe (fold (fn [acc h] (listAppend acc (readRangesOf (jgetStr h "got")))) (list) history))
+        q (fn [s] (str "\"" (c/escapeAsn s) "\""))]
+    (str "(:mustEdit :readOnly " (stringFromInt64 n) " :known (" (joinSep (map q known) " ") ") :owns (" (joinSep (map q owns) " ")
+      ") :do \"these ranges are already read; the next reply edits an owned file, it does not read them again\")"))
+
+fn sameFragment line: String -> (Option String)
+  (if (and (readReceiptOk? line) (and (stringEndsWith? line "\")") (stringContains? line " :content \"")))
+    (match (stringIndexOf line " :file \"") ((some k) (some (sub line k (- (stringLength line) 1)))) ((none) none))
+    none)
+
+fn sameTurnFor fragment: String earlier: (List j/Json) -> (Option String)
+  (let [needle (c/escapeAsn fragment)
+        hits (filter (fn [e] (stringContains? (jgetStr e "rendered") needle)) earlier)]
+    (match (listHead (listReverse hits)) ((some e) (some (jgetStr e "turn"))) ((none) none)))
+
+fn sameMarkLine line: String earlier: (List j/Json) -> String
+  (match (sameFragment line)
+    ((none) line)
+    ((some f) (match (sameTurnFor f earlier)
+      ((none) line)
+      ((some n) (match (stringIndexOf line " :content \"")
+        ((some k) (str (sub line 0 k) " :content (:same :turn " n "))"))
+        ((none) line))))))
+
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "U11 re-read the same files for 30 turns with turn 13 repeating turn 1's reads; a read receipt whose file, lines and content an earlier kept turn's rendering still shows whole becomes (:same :turn N) instead of the content again")
+fn sameMarkedGot got: String earlier: (List j/Json) -> String
+  (joinSep (map (fn [l] (sameMarkLine l earlier)) (stringSplit got "\n")) "\n")
 
 ; (:m :do "everything older than the last keepTurns turns collapses to one deterministic receipt line each (ops/files/gates, never model text); only the most recent maxOlderLines of those survive at all, the rest are dropped with nothing rendered in their place, giving a true fixed ceiling for a run of any length. Below that cap the older section is pure append-only as turns age out of the kept window one at a time, so the rendered prefix stays byte-stable call over call; the kept tail is re-rendered whole (clipped per-turn) every call")
 ; (:m :ref LEON-PREFIX-CACHE-20261026 :do "the cut between summarised and whole turns only moves at fixed compaction points (every contextCompactStep turns) so the rendered bytes between two points are an append-only extension of the previous call's bytes, which is what provider prefix caches match on; the kept window is therefore keepTurns to keepTurns+step-1 whole turns")
@@ -913,21 +972,36 @@ fn freezeTranscriptTurn h: j/Json -> j/Json
     (transcriptTurnCopy h (list (pair "frozen" (j/jstr (turnReceiptLine h)))))
     h)
 
-fn renderTranscriptTurn h: j/Json capBytes: Int64 -> j/Json
-  (if (stringEmpty? (jgetStr h "rendered"))
-    (transcriptTurnCopy h (list (pair "rendered" (j/jstr (turnWhole h capBytes)))))
-    h)
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "renders a turn against the kept turns before it, so a read they still show whole is a (:same :turn N) marker; shown keeps the got the rendering used")
+fn renderTurnIn h: j/Json capBytes: Int64 earlier: (List j/Json) -> j/Json
+  (let [shown (sameMarkedGot (jgetStr h "got") earlier)]
+    (transcriptTurnCopy h (list (pair "rendered" (j/jstr (turnWholeGot h shown capBytes))) (pair "shown" (j/jstr shown)))))
+
+fn shownGot h: j/Json -> String
+  (let [shown (jgetStr h "shown")] (if (stringEmpty? shown) (jgetStr h "got") shown))
+
+fn renderTurnOnce h: j/Json capBytes: Int64 earlier: (List j/Json) -> j/Json
+  (if (stringEmpty? (jgetStr h "rendered")) (renderTurnIn h capBytes earlier) h)
+
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "a marker whose earlier turn no longer shows the content whole, after that turn re-rendered at a compaction point or the kept cap, is stale and the turn re-renders with the content")
+fn staleSame? h: j/Json earlier: (List j/Json) -> Bool
+  (let [shown (jgetStr h "shown")]
+    (and (stringContains? shown "(:same :turn ") (!= shown (sameMarkedGot (jgetStr h "got") earlier))))
 
 ; (:m :ref TRANSCRIPT-BUDGET-WITNESS :do "a kept turn holds a rendering above the kept cap only while fewer than step-1 older kept turns do; before the kept window first fills no cut moves, so keepTurns turns held latest-cap renderings (7 x 5160 = 36235 chars at 8k tokens, over 36000); the oldest ones keep theirs, so the spec read of turn 1 and the longest byte prefix survive, and a newer one re-renders at the kept cap")
-fn boundLargeTurns hs: (List j/Json) keptCap: Int64 allowance: Int64 -> (List j/Json)
-  (listReverse (pairFirst (fold (fn [acc h]
-    (let [large (> (stringLength (jgetStr h "rendered")) (stringLength (turnWhole h keptCap)))
-          room (pairSecond acc)]
-      (cond
-        ((not large) (pair (cons h (pairFirst acc)) room))
-        ((> room 0) (pair (cons h (pairFirst acc)) (- room 1)))
-        (else (pair (cons (renderTranscriptTurn (transcriptTurnCopy h (list)) keptCap) (pairFirst acc)) room)))))
-    (pair (list) allowance) hs)))
+fn windowTurnStep acc: (Pair (List j/Json) Int64) h: j/Json isLatest: Bool moved: Bool keptCap: Int64 latestCap: Int64 -> (Pair (List j/Json) Int64)
+  (let [earlier (listReverse (pairFirst acc))
+        room (pairSecond acc)
+        cap (if isLatest latestCap keptCap)
+        cleared (if (and moved (not isLatest)) (transcriptTurnCopy h (list)) h)
+        once (renderTurnOnce cleared cap earlier)
+        fresh (if (staleSame? once earlier) (renderTurnIn once cap earlier) once)
+        large (and (not isLatest) (> (stringLength (jgetStr fresh "rendered")) (stringLength (turnWholeGot fresh (shownGot fresh) keptCap))))
+        bounded (cond
+          ((not large) (pair fresh room))
+          ((> room 0) (pair fresh (- room 1)))
+          (else (pair (renderTurnIn fresh keptCap earlier) room)))]
+    (pair (cons (pairFirst bounded) (pairFirst acc)) (pairSecond bounded)))
 
 ; (:m :ref TRANSCRIPT-BUDGET-REGRESSION :do "a turn first rendered as the latest kept its latest-cap bytes for the rest of the window, so keepTurns+step-1 turns of ~2 read payloads each overran a small contextTokens; at a compaction point, where the prefix moves anyway, kept turns re-render at the kept cap, and the latest cap is held to the window share of one step, which only binds when contextTokens is small")
 fn freezeTranscriptHistory history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> (List j/Json)
@@ -939,10 +1013,10 @@ fn freezeTranscriptHistory history: (List j/Json) keepTurns: Int64 toolCapBytes:
         latestCap (max toolCapBytes latestCapBytes)
         older (optionOr (listSlice history 0 cutAt) (list))
         kept (optionOr (listSlice history cutAt (- n 1)) (list))
-        latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))]
-    (listAppend (map freezeTranscriptTurn older)
-      (listAppend (boundLargeTurns (map (fn [h] (renderTranscriptTurn (if moved (transcriptTurnCopy h (list)) h) keptCap)) kept) keptCap (- step 1))
-        (map (fn [h] (renderTranscriptTurn h latestCap)) latest))))
+        latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))
+        keptDone (fold (fn [acc h] (windowTurnStep acc h false moved keptCap latestCap)) (pair (list) (- step 1)) kept)
+        allDone (fold (fn [acc h] (windowTurnStep acc h true moved keptCap latestCap)) keptDone latest)]
+    (listAppend (map freezeTranscriptTurn older) (listReverse (pairFirst allDone))))
 
 fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)

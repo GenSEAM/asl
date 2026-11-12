@@ -1767,8 +1767,9 @@ fn ! liveOpRow! journal: String turn: Int64 name: String file: String out: ex/Ex
         (if (and unnamed (stringEmpty? error)) "ERR_NO_OP" error)) "\n")))))
 
 ; (:m :ref LEON-READLOOP :do "node2 UNBALANCED-DIAG ran 37 successful read-only turns and nothing stopped it, since readStreak counts only missing-file or refused turns and only against a red gate; the rule: consecutive turns whose steps are all read-only and (a read-only turn runs no gate, unchangedTurn?), counted from the last turn that wrote, ran a gate or sent any other step, stop the run at readOnlyTurnCap (adopted 16, :agentLoop :readOnlyTurnCap) as readStreak with cause readOnly; no exemption before the first write, whatever the owned files are: a new file needs no reading, and the 37-turn run had written nothing")
+; (:m :ref LEON-READ-LOOP-CONTEXT-LOSS :do "U11 ran 30 read-only turns; 12 stops a read loop sooner, and the nudge with its mustEdit form comes at 6")
 fn defaultReadOnlyTurnCap -> Int64
-  16
+  12
 
 fn readOnlyTurnCapIn cfgText: String -> Int64
   (match (ac/agentLoopValue cfgText ":readOnlyTurnCap")
@@ -2216,7 +2217,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   readOnlyNow (readOnlyTail (listAppend wrapped.history (list (historyEntry got))))
                   nudged (= readOnlyNow (readOnlyNudgeAt readOnlyCap))
                   _nudgeNote (if nudged (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readNudge :readOnly " (stringFromInt64 readOnlyNow) " :cap " (stringFromInt64 readOnlyCap) ")\n"))) true)
-                  historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str got "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap)) got))))
+                  historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str got "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap) "\n" (ctx/mustEditForm (listAppend wrapped.history (list (historyEntry got))) ra.owns readOnlyNow)) got))))
                   historyKeep (ctx/contextKeepTurnsFor! rootDir)
                   historyToolCap (ctx/contextToolCapBytesFor! rootDir)
                   historyTokens (optionOr servedCtx 24000)

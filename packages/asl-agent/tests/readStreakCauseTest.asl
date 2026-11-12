@@ -47,7 +47,7 @@ fn ! runTests -> Bool
         keptWhole (ctx/renderTranscriptKept hist 8 300 50 2000 2000)
         keptClipped (ctx/renderTranscriptKept hist 8 300 50 300 2000)
         bounded (ctx/renderTranscriptBounded hist 8 300 50 2000)
-        cfg "(:aslConfig :agentLoop (:specCheck false :readStreakNudge 3 :readStreakEscalate 20))"
+        cfg "(:aslConfig :agentLoop (:specCheck false :readStreakNudge 3 :readStreakEscalate 20 :readOnlyTurnCap 20))"
         run (recordedRun! "cfg" cfg)
         turn3 (sentOf run 4)
         turn5 (sentOf run 5)

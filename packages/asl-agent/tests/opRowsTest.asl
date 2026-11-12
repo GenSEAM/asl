@@ -41,7 +41,7 @@ fn ! pureTests -> Bool
   (do
     (assert (= (m/opRowText 3 "write" "x.txt" "rejected" "ERR_OWNS") "(:op :turn 3 :name \"write\" :file \"x.txt\" :status err :error ERR_OWNS)") "an err row carries the error code")
     (assert (= (m/opRowText 1 "read" "a" "ok" "") "(:op :turn 1 :name \"read\" :file \"a\" :status ok)") "an ok row carries no error")
-    (assert (= (m/readOnlyTurnCapIn "") 16) "readOnlyTurnCap defaults to 16")
+    (assert (= (m/readOnlyTurnCapIn "") 12) "readOnlyTurnCap defaults to 12 (LEON-READ-LOOP-CONTEXT-LOSS)")
     (assert (= (m/readOnlyTurnCapIn "(:aslConfig :agentLoop (:readOnlyTurnCap 5))") 5) "readOnlyTurnCap reads the :agentLoop row")
     true)
 
