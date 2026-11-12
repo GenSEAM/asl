@@ -11,6 +11,7 @@ fn fillerFile n: Int64 tag: String -> String
 
 fn ! runTests -> Bool
   (let [root (rk/freshRecorderRoot! "transcriptBudget")
+        cfg (ok? (fileWrite (str root "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false :readStreakEscalate 100 :readOnlyTurnCap 200))\n"))
         names (map (fn [i] (str "pad" (stringFromInt64 i) ".txt")) (range 0 70))
         written (listAll? (fn [name] (ok? (fileWrite (str root "/" name) (fillerFile 400 name)))) names)
         contextTokens 8000
@@ -26,6 +27,7 @@ fn ! runTests -> Bool
         latestWhole (filter (fn [l] (stringContains? l " padding line 60 ")) run.sentLines)
         cleaned (ok? (pathRemove root))]
     (do
+      (assert cfg "the fixture config lifts the read-streak stops so the 70-file read run completes")
       (assert written "padding fixture files are written")
       (assert (= run.exitCode 0) "the recorded run completes")
       (assert (>= n 12) "at least 12 turns were journaled")

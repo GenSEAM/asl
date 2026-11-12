@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor contextTokensForIn contextTokensAt! contextTokensFor! gatewayConfigPathFrom aliasRowText modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory contextKeptCapBytes contextLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory contextKeptCapBytes contextLatestCapBytes contextWindowLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -880,6 +880,10 @@ fn compactionCut n: Int64 keepTurns: Int64 step: Int64 -> Int64
 fn contextLatestCapBytes contextTokens: Int64 -> Int64
   (* 2 (readPayloadChars contextTokens))
 
+; (:m :ref TRANSCRIPT-BUDGET-REGRESSION :do "a turn keeps its first rendering until the next compaction point, so up to contextCompactStep turns hold the newest-turn cap at once; held to half the window over those turns, 3000 chars at 8k tokens and 45000 at 120k")
+fn contextWindowLatestCapBytes contextTokens: Int64 -> Int64
+  (min (contextLatestCapBytes contextTokens) (/ (* contextTokens (charsPerToken)) (+ (max 1 (contextCompactStep)) 1)))
+
 ; (:m :ref READSTREAK-TUNE :do "node2 2026-11-02, 22 readStreak stops: runs re-read the same file and range up to 79 times while input stayed at 10-20k of a 120k window, because every kept turn but the newest was clipped to toolCapBytes (1500) and single-op turns kept only one read whole; a kept turn now keeps up to half the window shared over the most kept turns (keepTurns plus compaction step minus 1), never below toolCapBytes nor above the newest-turn cap, a fixed value per run so the rendered prefix stays byte-stable")
 fn contextKeptCapBytes contextTokens: Int64 keepTurns: Int64 toolCapBytes: Int64 -> Int64
   (let [slots (max 1 (+ keepTurns (- (contextCompactStep) 1)))
@@ -914,15 +918,31 @@ fn renderTranscriptTurn h: j/Json capBytes: Int64 -> j/Json
     (transcriptTurnCopy h (list (pair "rendered" (j/jstr (turnWhole h capBytes)))))
     h)
 
+; (:m :ref TRANSCRIPT-BUDGET-WITNESS :do "a kept turn holds a rendering above the kept cap only while fewer than step-1 older kept turns do; before the kept window first fills no cut moves, so keepTurns turns held latest-cap renderings (7 x 5160 = 36235 chars at 8k tokens, over 36000); the oldest ones keep theirs, so the spec read of turn 1 and the longest byte prefix survive, and a newer one re-renders at the kept cap")
+fn boundLargeTurns hs: (List j/Json) keptCap: Int64 allowance: Int64 -> (List j/Json)
+  (listReverse (pairFirst (fold (fn [acc h]
+    (let [large (> (stringLength (jgetStr h "rendered")) (stringLength (turnWhole h keptCap)))
+          room (pairSecond acc)]
+      (cond
+        ((not large) (pair (cons h (pairFirst acc)) room))
+        ((> room 0) (pair (cons h (pairFirst acc)) (- room 1)))
+        (else (pair (cons (renderTranscriptTurn (transcriptTurnCopy h (list)) keptCap) (pairFirst acc)) room)))))
+    (pair (list) allowance) hs)))
+
+; (:m :ref TRANSCRIPT-BUDGET-REGRESSION :do "a turn first rendered as the latest kept its latest-cap bytes for the rest of the window, so keepTurns+step-1 turns of ~2 read payloads each overran a small contextTokens; at a compaction point, where the prefix moves anyway, kept turns re-render at the kept cap, and the latest cap is held to the window share of one step, which only binds when contextTokens is small")
 fn freezeTranscriptHistory history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> (List j/Json)
   (let [n (listLength history)
-        cutAt (compactionCut n keepTurns (contextCompactStep))
+        step (max 1 (contextCompactStep))
+        cutAt (compactionCut n keepTurns step)
+        moved (or (!= cutAt (compactionCut (- n 1) keepTurns step)) (= n (+ (max 0 keepTurns) 1)))
+        keptCap (max toolCapBytes keptCapBytes)
+        latestCap (max toolCapBytes latestCapBytes)
         older (optionOr (listSlice history 0 cutAt) (list))
         kept (optionOr (listSlice history cutAt (- n 1)) (list))
         latest (optionOr (listSlice history (max cutAt (- n 1)) n) (list))]
     (listAppend (map freezeTranscriptTurn older)
-      (listAppend (map (fn [h] (renderTranscriptTurn h (max toolCapBytes keptCapBytes))) kept)
-        (map (fn [h] (renderTranscriptTurn h (max toolCapBytes latestCapBytes))) latest))))
+      (listAppend (boundLargeTurns (map (fn [h] (renderTranscriptTurn (if moved (transcriptTurnCopy h (list)) h) keptCap)) kept) keptCap (- step 1))
+        (map (fn [h] (renderTranscriptTurn h latestCap)) latest))))
 
 fn renderTranscriptKept history: (List j/Json) keepTurns: Int64 toolCapBytes: Int64 maxOlderLines: Int64 keptCapBytes: Int64 latestCapBytes: Int64 -> String
   (if (listEmpty? history)
