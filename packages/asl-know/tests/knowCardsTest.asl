@@ -80,11 +80,14 @@ fn ! indexDistinct root: String -> Bool
   (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \"")) (stringSplit index "\n")))
         (bare (filter bareIndexLine? lines))
-        (led (filter brandLed? lines))]
+        (led (filter brandLed? lines))
+        (empty (filter (fn [(l String)] -> Bool (stringEmpty? (stringTrim (indexPurposeOf l)))) lines))]
     (do
       (assert (> (listLength lines) 80) (str "index lists every card, got " (listLength lines)))
       (assert (listEmpty? bare) (str (listLength bare) " index lines show only a branding prefix: " (stringJoin (listTake bare 6) " ")))
       (assert (listEmpty? led) (str (listLength led) " index lines spend their purpose bytes on a branding word first: " (stringJoin (listTake led 6) " ")))
+      ; (:m :ref KNOW-INTEL-PURPOSE :do "an empty purpose leaves a model only the card id: a description the scan blanks (it names a retired path) shows up here, not as a missing card")
+      (assert (listEmpty? empty) (str (listLength empty) " index lines carry an empty purpose: " (stringJoin (listTake empty 6) " ")))
       true))
 
 fn ! queries root: String -> Bool

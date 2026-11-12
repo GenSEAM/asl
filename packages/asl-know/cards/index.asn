@@ -40,7 +40,7 @@
 (:c "asl-html" "Typed HTML5 and CSS for..." (el voidEl))
 (:c "asl-http" "Streaming HTTP/1.1 and..." (makeHeaders getHeader))
 (:c "asl-hypergraph" "Codebase Hypergraph..." (makeHyperNode makeHyperEdge))
-(:c "asl-intel" "" (runIntel! dispatchIntel!))
+(:c "asl-intel" "Code intelligence graph,..." (runIntel! dispatchIntel!))
 (:c "asl-ir" "Typed Monomorphic ANF..." (lowerModule verifyIr))
 (:c "asl-json" "RFC 8259 JSON parser,..." (jsonParse jsonEmit))
 (:c "asl-know" "Tiered knowledge surface..." (cardsDir ratchetDiff))

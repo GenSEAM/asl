@@ -1,7 +1,7 @@
 (:package asl-intel
  :version "0.2.0"
  :entry "src/main.asl"
- :description "Code intelligence graph, impact analysis and ASN navigator (aslIntel modules, folded from the former top-level code-intel) plus analyzers (coupling, impact, outline, query, deadcode, vacuity, stubs, graph, complexity, trace, sweep, vitality) ported from bin/asl-intel under ADR D135"
+ :description "Code intelligence graph, impact analysis and ASN navigator (aslIntel modules, folded from the former top-level code-intel) plus analyzers (coupling, impact, outline, query, deadcode, vacuity, stubs, graph, complexity, trace, sweep, vitality) under ADR D135"
  :aslFirst true
  :modules [
    "asl-intel"
