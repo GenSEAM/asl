@@ -274,7 +274,31 @@ fn redirectTarget args: (List String) -> (Option String)
 fn showIntoTree? args: (List String) -> Bool
   (match (redirectTarget args)
     ((none) false)
-    ((some t) (not (listAny? (fn [p] (stringStartsWith? t p)) (list "/tmp/" "/dev/" "/private/tmp/" "/var/folders/" "$TMPDIR" "${TMPDIR" "\"$TMPDIR" "\"${TMPDIR")))))
+    ((some t) (not (scratchTarget? t))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: a scratch target starts in /tmp, /dev, /var/folders or $TMPDIR and has no .. segment, so /tmp/../repo/F is a tree path again")
+fn scratchTarget? t: String -> Bool
+  (and (not (stringContains? t ".."))
+    (listAny? (fn [p] (stringStartsWith? t p)) (list "/tmp/" "/dev/" "/private/tmp/" "/var/folders/" "$TMPDIR" "${TMPDIR" "\"$TMPDIR" "\"${TMPDIR")))
+
+fn pipeTail toks: (List String) -> (List String)
+  (cond
+    ((listEmpty? toks) toks)
+    ((memberOf (c/firstOf toks) (list ";" "&&" "||" "&")) (list))
+    ((= (c/firstOf toks) "|") (c/restOf toks))
+    (else (pipeTail (c/restOf toks))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: git show REV:F | tee F wrote the tree through a pipe the redirect scan never saw; the stage after the pipe is tee and a file it names is outside scratch")
+fn teeIntoTree? toks: (List String) -> Bool
+  (let [stage (pipeTail toks)]
+    (and (not (listEmpty? stage))
+      (and (= (c/firstOf stage) "tee")
+        (listAny? (fn [a] (and (not (isFlag a)) (not (scratchTarget? a))))
+          (gitArgs (c/restOf stage) (list))))))
+
+fn showSub? toks: (List String) -> Bool
+  (let [plain (filter (fn [a] (not (isFlag a))) (dropGitGlobals (gitArgs toks (list))))]
+    (and (not (listEmpty? plain)) (= (c/firstOf plain) "show")))
 
 fn refuse name: String hint: String -> (Option (Pair String String))
   (some (pair name hint))
@@ -346,8 +370,9 @@ fn scanTokens toks: (List String) -> (Option (Pair String String))
       (cond
         ((some? shHit) shHit)
         ((and (= tok "git") (not (listEmpty? rest)))
-          (let [v (gitVerdict (gitArgs rest (list)))]
-            (if (some? v) v (scanTokens rest))))
+          (let [v (gitVerdict (gitArgs rest (list)))
+                piped (if (and (none? v) (and (showSub? rest) (teeIntoTree? rest))) (refuse "git show | tee" (revertHint)) (none))]
+            (cond ((some? v) v) ((some? piped) piped) (else (scanTokens rest)))))
         (else (scanTokens rest)))))
 
 fn checkRunGitGuard cmd: String -> (Option (Pair String String))
