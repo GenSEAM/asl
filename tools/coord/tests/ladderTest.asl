@@ -42,7 +42,7 @@ fn models r: l/Ruling -> (List String)
 fn rungs r: l/Ruling -> (List String)
   (map (fn [(v l/Verdict)] -> String v.rung) r.verdicts)
 
-fn rows -> (List rd)
+fn rows -> (List String)
   (list)
 
 fn testFamilies -> Bool

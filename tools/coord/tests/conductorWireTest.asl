@@ -686,7 +686,7 @@ fn ! testWriteModelEscalated -> Bool
         (rc (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) dir))
         (outEsc "(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop modelEscalated :escalate (:escalate :reason \"the gate contradicts the task\") :usage (:input 1)))")
         (outRef "(:agent :status :failed :receipt (:agentReceipt :status :escalated :stop readStreak :escalate (:escalate :reason \"9 turns in a row persisted nothing (refusedWrites)\") :usage (:input 1)))")
-        (runWith (fn [(out String) (code Int64)] -> (fn ! [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done)
+        (runWith (fn [(out String) (code Int64)] -> (fn ! [cd/RealCfg String String String String String (List String) (List String) String] -> fr/Done)
                    (fn [(rcx cd/RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done
                      (fr/Done :idx 0 :exit code :out out :ms 0 :verdict "exit"))))
         (uE (aheadUnit "E1" "sh gImpl.sh"))
