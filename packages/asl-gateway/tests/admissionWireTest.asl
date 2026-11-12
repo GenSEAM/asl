@@ -97,33 +97,39 @@ fn ! untilHttp! srv: srv/GatewayLoop step: ch/ChatStep fuel: Int64 -> (Pair srv/
          (_ (let [(r (srv/runEffect! srv eff))] (untilHttp! (pairFirst r) (k (pairSecond r)) (- fuel 1))))))
       (_ (pair srv step))))
 
+fn laneLease text: String -> String
+  (optionOr (listHead (filter (fn [(s String)] -> Bool (stringStartsWith? s "test\tm1\t")) (stringSplit text "\n"))) "")
+
 fn okReply -> ch/ChatOutcome
   (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) (ok200)))
 
-; (:m :ref UGWADMIT-LOWS :do "two calls in flight on one lane: A is admitted and waits on its upstream, B runs to its answer, then A gets its answer; the lease file holds A's lease alone after B ends and nothing after A ends, so each call releases exactly its own lease")
-fn ! twoInFlight! -> (List Int64)
+; (:m :ref GWLOWS-LOWS :do "two calls in flight on one lane: A is admitted and waits on its upstream, B (admitted a few ms later) runs to its answer, then A gets its answer; a release frees the lane's oldest lease, so B's end drops A's lease and B's stays; one lease per call is released, the file holds B's lease alone after B ends and nothing after A ends; returns the three counts and the lane lease lines while A waits and after B")
+fn ! twoInFlight! -> (List String)
   (let [(dir (str "/tmp/gwAdmWire2-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (_ (dirCreate dir))
         (_2 (dirCreate (str dir "/.asl")))
         (_3 (fileWrite (str dir "/.asl/gateway.asn") (str (configText dir) "\n")))
         (empty (Run :asked 1 :at429 0 :status 0 :end "" :notes (list)))
         (counts (match (srv/linkOpen! (mapSet (testEnv) "HOME" dir) dir dir (list))
-                  ((err _) (list -1))
+                  ((err e) (list (str "linkOpen " e)))
                   ((ok loop)
                    (match (u/upstreamSettings (testEnv))
-                     ((err _) (list -2))
+                     ((err e) (list (str "settings " e)))
                      ((ok settings)
                       (let [(world (ch/ChatWorld :env (testEnv) :rootDir "/" :settings settings :agyPromptMaxBytes 10000
                                                  :table (c/gatewayProfilesLoadText! "/test" true (ok (configText dir)) "")))
                             (a (untilHttp! loop (ch/chatStart! (request) world) 400))
-                            (whileA (leaseLines (laneFile dir "leases.tsv")))
+                            (whileAText (laneFile dir "leases.tsv"))
+                            (whileA (leaseLines whileAText))
+                            (_5 (sleepMs 5))
                             (b (drive! (pairFirst a) (ch/chatStart! (request) world) "" empty 400))
-                            (afterB (leaseLines (laneFile dir "leases.tsv")))
+                            (afterBText (laneFile dir "leases.tsv"))
+                            (afterB (leaseLines afterBText))
                             (aDone (match (pairSecond a)
                                      ((ch/stepEffect _ k) (drive! (pairFirst a) (k (okReply)) "" empty 400))
                                      (_ (with empty :end "a never asked"))))
                             (afterA (leaseLines (laneFile dir "leases.tsv")))]
-                        (list whileA (if (= b.end "done") afterB -3) (if (= aDone.end "done") afterA -4))))))))
+                        (list (stringFromInt64 whileA) (if (= b.end "done") (stringFromInt64 afterB) "bNotDone") (if (= aDone.end "done") (stringFromInt64 afterA) "aNotDone") (laneLease whileAText) (laneLease afterBText))))))))
         (_4 (removeTree! dir))]
     counts)
 
@@ -159,5 +165,9 @@ fn ! runTests -> Bool
       (assert (= (leaseLines leases) 0) (str "the failed call and the ok call each released their lease: " leases))
       (assert (and (= (pairFirst noRa).status 200) (= (stringTrim noHold) "")) "a 429 without Retry-After sets no hold")
       (assert (and (>= hugeHold (+ hugeAt 299000)) (<= hugeHold (+ hugeAt 301000))) (str "Retry-After 1e300 holds the lane for the 300 s cap, not zero: hold " (stringFromInt64 hugeHold) " 429 at " (stringFromInt64 hugeAt)))
-      (assert (= two (list 1 1 0)) (str "two calls in flight release one lease each: leases while A waits, after B, after A: " (stringJoin (map stringFromInt64 two) " ")))
+      (assert (= (listTake two 3) (list "1" "1" "0")) (str "two calls in flight release one lease each: leases while A waits, after B, after A: " (stringJoin two " | ")))
+      (assert (let [(aLease (optionOr (listGet two 3) "")) (bLease (optionOr (listGet two 4) ""))] (and (not (stringEmpty? aLease)) (not (stringEmpty? bLease)) (!= aLease bLease))) (str "after B ends the remaining lease is B's (a later atMs), A's oldest lease was the one freed: " (stringJoin two " | ")))
+      (assert (and (= (ch/parkedHoldMs (none)) 0) (= (ch/parkedHoldMs (some 1.0)) 1000) (= (ch/parkedHoldMs (some 300.0)) 300000)) "no Retry-After holds nothing, 1 s holds 1000 ms, 300 s holds the cap")
+      (assert (= (ch/parkedHoldMs (some 500.0)) 300000) (str "a finite Retry-After over the cap is clamped by min, not converted whole: " (stringFromInt64 (ch/parkedHoldMs (some 500.0)))))
+      (assert (= (ch/parkedHoldMs (some (/ 0.0 0.0))) 300000) (str "a Retry-After float64ToInt64 cannot convert (NaN) takes the 300000 fallback, never 0: " (stringFromInt64 (ch/parkedHoldMs (some (/ 0.0 0.0))))))
       true))

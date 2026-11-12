@@ -80,7 +80,7 @@ fn env -> (Map String String)
   (mapFromPairs (list (pair "PATH" (optionOr (envGet "PATH") "/usr/bin:/bin"))))
 
 fn rg port: Int64 secret: String -> f/RemoteGateway
-  (f/RemoteGateway :id "mac" :base (str "http://127.0.0.1:" (stringFromInt64 port)) :secret secret)
+  (f/RemoteGateway :id "mac" :base (str "http://127.0.0.1:" (stringFromInt64 port)) :secret secret :aslGateway true)
 
 fn body -> String
   "{\"model\":\"agyFlash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
@@ -124,6 +124,7 @@ fn ! runTests -> Bool
                           (_ (fdClose l))]
                       (f/remoteForward! store (rg p "macToken") (body) (hdrs) (env) 5.0)))
               (remoteAccept (match (f/remoteRequest store (rg 1 "macToken") (body) (hdrs)) ((ok r) (optionOr (u/headerGet r.headers "Accept") "<none>")) ((err e) e)))
+              (undeclaredAccept (match (f/remoteRequest store (f/RemoteGateway :id "zai" :base "https://api.z.ai/api/paas/v4" :secret "macToken") (body) (hdrs)) ((ok r) (optionOr (u/headerGet r.headers "Accept") "<none>")) ((err e) e)))
               (providerAccept (match (u/upstreamRequest "https://api.z.ai/api/paas/v4" "/chat/completions" "k" (body) (hdrs)) ((ok r) (optionOr (u/headerGet r.headers "Accept") "<none>")) ((err e) e)))
               (all (str (pairFirst good) (pairFirst bad) (pairFirst echoed) missing dead))
               (_ (drop! dir))]
@@ -135,6 +136,7 @@ fn ! runTests -> Bool
             (assert (stringContains? (stringLower (pairSecond good)) "x-asl-session: sess-abc123") "the session header is forwarded")
             (assert (stringContains? (stringLower (pairSecond good)) "accept: application/asn+sexpr") (str "the remote asl gateway is sent the client's Accept on the wire: " (pairSecond good)))
             (assert (= remoteAccept "application/asn+sexpr") (str "remoteRequest carries the client Accept: " remoteAccept))
+            (assert (= undeclaredAccept "<none>") (str "a remote base not declared :aslGateway true is treated as a provider and gets no client Accept: " undeclaredAccept))
             (assert (= providerAccept "<none>") (str "a provider request still drops the client Accept: " providerAccept))
             (assert (stringContains? (pairFirst bad) "(:err :code ERR_REMOTE_HTTP :provider mac :status 401") (str "a rejected token is an ASN error: " (pairFirst bad)))
             (assert (stringContains? (pairFirst echoed) "ERR_REMOTE_HTTP") "an echoing second gateway still yields an error receipt")

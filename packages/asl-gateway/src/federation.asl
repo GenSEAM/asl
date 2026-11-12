@@ -7,7 +7,8 @@
 (schema RemoteGateway
   (:f id String)
   (:f base String)
-  (:f secret String))
+  (:f secret String)
+  (:f aslGateway Bool :default false))
 
 fn remoteChatPath -> String
   "/v1/chat/completions"
@@ -15,10 +16,13 @@ fn remoteChatPath -> String
 fn asnQuote text: String -> String
   (str "\"" (stringReplace (stringReplace text "\\" "\\\\") "\"" "\\\"") "\"")
 
-fn withClientAccept req: u/UpstreamRequest clientHeaders: (List (Pair String String)) -> u/UpstreamRequest
-  (match (u/headerGet clientHeaders "Accept")
-    ((some accept) (with req :headers (u/headerPut req.headers "Accept" accept)))
-    ((none) req))
+; (:m :ref GWLOWS-LOWS :do "the client Accept goes back on only when the remote is declared an asl gateway (:aslGateway true); any other base is treated as a provider and keeps upstreamRequest's stripped headers, so a provider never sees application/asn+sexpr")
+fn withClientAccept req: u/UpstreamRequest rg: RemoteGateway clientHeaders: (List (Pair String String)) -> u/UpstreamRequest
+  (if rg.aslGateway
+    (match (u/headerGet clientHeaders "Accept")
+      ((some accept) (with req :headers (u/headerPut req.headers "Accept" accept)))
+      ((none) req))
+    req)
 
 ; (:m :ref ZAIACCEPT-LOWS :do "the hop to a remote asl gateway is the one upstream that speaks the gateway's own formats, so the client's Accept (application/asn+sexpr for an ASN reply) is put back after upstreamRequest strips it for providers")
 fn remoteRequest store: s/SecretStore rg: RemoteGateway data: String clientHeaders: (List (Pair String String)) -> (Result u/UpstreamRequest String)
@@ -27,7 +31,7 @@ fn remoteRequest store: s/SecretStore rg: RemoteGateway data: String clientHeade
     ((ok token)
       (match (u/upstreamRequest rg.base (remoteChatPath) token data (u/headerPut clientHeaders "Content-Type" "application/json"))
         ((err e) (err (str "(:err :code ERR_REMOTE_REQUEST :provider " rg.id " :why " (asnQuote (s/secretsRedact store e)) ")")))
-        ((ok req) (ok (withClientAccept req clientHeaders))))))
+        ((ok req) (ok (withClientAccept req rg clientHeaders))))))
 
 fn ! remoteStart! store: s/SecretStore rg: RemoteGateway data: String clientHeaders: (List (Pair String String)) env: (Map String String) timeoutSec: Float64 -> (Result u/UpstreamCall String)
   (match (remoteRequest store rg data clientHeaders)
