@@ -47,7 +47,7 @@
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#AsnValue" :text "A typed ASN value: keyword, symbol, string, Int64, Float64, Bool, list or vector.")
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnParse" :text "Exactly one value from the text; a read error is ERR_ASN_READ with its byte offset, no value ERR_ASN_EMPTY, more than one ERR_ASN_TRAILING.")
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnParseAll" :text "Every top-level value of the text, or ERR_ASN_READ with the reader's message and byte offset.")
-(:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnField" :text "The value after :key at the top level of a list or vector, keys and values taken in pairs, after a head when the form has an odd number of items; none when absent.")
+(:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnField" :text "The value after :key at the top level of a list or vector, found by scanning for the key: the first :key followed by a non-keyword gives that item, a :key followed by a keyword or ending the form is a bare flag and gives true; positional items and flags never shift the reading; none when absent.")
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnItems" :text "The items of a list or vector, empty for any other value.")
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnString" :text "The text of a string or symbol, none otherwise.")
 (:doc :symbol "asl/packages/asl-grammar/src/asnData.asl#asnInt" :text "The Int64 of an integer, none otherwise.")

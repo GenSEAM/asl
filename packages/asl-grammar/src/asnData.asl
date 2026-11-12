@@ -56,19 +56,29 @@ fn asnItems v: AsnValue -> (List AsnValue)
     ((asnVec items) items)
     (_ (list)))
 
+fn keyword? v: AsnValue -> Bool
+  (match v ((asnKw _) true) (_ false))
+
+fn isKey? v: AsnValue key: String -> Bool
+  (match v ((asnKw k) (= k key)) (_ false))
+
 fn fieldIn items: (List AsnValue) key: String -> (Option AsnValue)
   (match (listHead items)
     ((none) (none))
     ((some x)
       (let [(rest (optionOr (listTail items) (list)))]
-        (match x
-          ((asnKw k) (if (= k key) (listHead rest) (fieldIn (listDrop rest 1) key)))
-          (_ (fieldIn (listDrop rest 1) key))))))
+        (if (isKey? x key)
+          (match (listHead rest)
+            ((some v) (if (keyword? v) (fieldIn rest key) (some v)))
+            ((none) (none)))
+          (fieldIn rest key)))))
 
-; (:m :ref DS-ASNREADER :do "the value after :key at the top level of a form: keys and values are taken in pairs, after a head when the form has an odd number of items ((:cfg :k v) or (tag :k v)), so a keyword used as a value is not read as a key; nested forms and strings are values, never searched")
+; (:m :ref DS-ASNREADER-FIX :do "the value of :key at the top level of a form, found by scanning for the key itself, not by pairing items: the first :key followed by a non-keyword item gives that item; a :key followed by another keyword or ending the form is a bare flag and gives true; positional heads ((:u ID :p v)), bare flags elsewhere and odd tails never shift the reading; a keyword value is read as a flag, since (:mode :fast) cannot tell the two apart; nested forms and strings are values, never searched")
 fn asnField v: AsnValue key: String -> (Option AsnValue)
   (let [(items (asnItems v))]
-    (fieldIn (if (= (mod (listLength items) 2) 1) (listDrop items 1) items) key))
+    (match (fieldIn items key)
+      ((some x) (some x))
+      ((none) (if (listAny? (fn [(x AsnValue)] -> Bool (isKey? x key)) items) (some (asnB true)) (none)))))
 
 fn asnString v: AsnValue -> (Option String)
   (match v ((asnStr t) (some t)) ((asnSym s) (some s)) (_ (none)))
