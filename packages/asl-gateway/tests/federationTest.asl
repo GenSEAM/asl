@@ -86,7 +86,7 @@ fn body -> String
   "{\"model\":\"agyFlash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
 
 fn hdrs -> (List (Pair String String))
-  (list (pair "X-ASL-Session" "sess-abc123"))
+  (list (pair "X-ASL-Session" "sess-abc123") (pair "Accept" "application/asn+sexpr"))
 
 fn ! feedStdin! call: u/UpstreamCall rounds: Int64 -> u/UpstreamCall
   (if (or (<= rounds 0) (not call.pipe.inOpen)) call
@@ -123,6 +123,8 @@ fn ! runTests -> Bool
                           (p (resultOr (sockLocalPort l) 0))
                           (_ (fdClose l))]
                       (f/remoteForward! store (rg p "macToken") (body) (hdrs) (env) 5.0)))
+              (remoteAccept (match (f/remoteRequest store (rg 1 "macToken") (body) (hdrs)) ((ok r) (optionOr (u/headerGet r.headers "Accept") "<none>")) ((err e) e)))
+              (providerAccept (match (u/upstreamRequest "https://api.z.ai/api/paas/v4" "/chat/completions" "k" (body) (hdrs)) ((ok r) (optionOr (u/headerGet r.headers "Accept") "<none>")) ((err e) e)))
               (all (str (pairFirst good) (pairFirst bad) (pairFirst echoed) missing dead))
               (_ (drop! dir))]
           (do
@@ -131,6 +133,9 @@ fn ! runTests -> Bool
             (assert (stringContains? (pairSecond good) "Authorization: Bearer tok-MAC-7f3a9c21") "the second gateway saw the bearer read from the secrets file with no env var set")
             (assert (stringContains? (pairSecond good) "agyFlash") "the request body is forwarded")
             (assert (stringContains? (stringLower (pairSecond good)) "x-asl-session: sess-abc123") "the session header is forwarded")
+            (assert (stringContains? (stringLower (pairSecond good)) "accept: application/asn+sexpr") (str "the remote asl gateway is sent the client's Accept on the wire: " (pairSecond good)))
+            (assert (= remoteAccept "application/asn+sexpr") (str "remoteRequest carries the client Accept: " remoteAccept))
+            (assert (= providerAccept "<none>") (str "a provider request still drops the client Accept: " providerAccept))
             (assert (stringContains? (pairFirst bad) "(:err :code ERR_REMOTE_HTTP :provider mac :status 401") (str "a rejected token is an ASN error: " (pairFirst bad)))
             (assert (stringContains? (pairFirst echoed) "ERR_REMOTE_HTTP") "an echoing second gateway still yields an error receipt")
             (assert (stringContains? (pairFirst echoed) "<secret:wrongToken>") "the echoed token is redacted to its id")

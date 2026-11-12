@@ -2392,7 +2392,7 @@ fn httpFailed cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (
     (concurrencyParked cx l a headers)
     (httpFailedPlain cx l a status reason headers body))
 
-; (:m :ref GW-SYN-ADMISSION :do "the 429's Retry-After (seconds or HTTP-date, 0 when absent) rides the effect so admission holds the lane; each parked attempt writes one ledger row with outcome limit:concurrency429, which the limit counters and the lease release both ignore (sentOutcome?), so the lease freed by the effect is released exactly once")
+; (:m :ref GW-SYN-ADMISSION :do "the 429's Retry-After (seconds or HTTP-date, 0 when absent) rides the effect so admission holds the lane; each parked attempt writes one ledger row with outcome limit:concurrency429, which the limit counters and the lease release both ignore (sentOutcome?), so the lease freed by the effect is released exactly once; the seconds are clamped to the 300 s hold cap before float64ToInt64, so a huge Retry-After (1e300) holds 300 s instead of overflowing to no hold")
 fn concurrencyParked cx: Ctx l: Loop a: Attempt headers: (List (Pair String String)) -> ChatStep
   (let [(prov a.upstream.provider)
         (poll (c/defaultConcurrencyPollMs))
@@ -2400,7 +2400,7 @@ fn concurrencyParked cx: Ctx l: Loop a: Attempt headers: (List (Pair String Stri
     (askFloat (effClock)
       (fn [(now Float64)] -> ChatStep
         (let [(raMs (match (retryAfterSecondsFromNow (retryAfterHeaderOf headers) now)
-                      ((some s) (optionOr (float64ToInt64 (* s 1000.0)) 0))
+                      ((some s) (optionOr (float64ToInt64 (* (min s 300.0) 1000.0)) 300000))
                       ((none) 0)))]
           (tell (effConcurrency429 prov a.alias raMs)
             (fn [] -> ChatStep

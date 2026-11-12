@@ -1018,7 +1018,7 @@ fn hasScheme? u: String -> Bool
     ((some i) (and (> i 0) (not (stringContains? (slice u 0 i) "/"))))
     ((none) false))
 
-; (:m :ref REVIEW-LANES-STALE-REST :do "the client Accept names the format it wants from the gateway, not from the provider; z.ai answers 406 to application/asn+sexpr, so upstream gets curlConfig's own Accept")
+; (:m :ref REVIEW-LANES-STALE-REST :do "the client Accept names the format it wants from the gateway, not from the provider (z.ai answers 406 to application/asn+sexpr), so it is dropped here and transportLines then empties curl's default, so a provider gets no Accept header; federation remoteRequest puts the client Accept back for a remote asl gateway")
 fn forwardHeaders hs: (List (Pair String String)) client: (List (Pair String String)) -> (List (Pair String String))
   (fold (fn [(acc (List (Pair String String))) (p (Pair String String))] -> (List (Pair String String))
           (if (oneOf? (pyLower (pairFirst p)) (list "host" "content-length" "authorization" "user-agent" "accept")) acc (headerPut acc (pairFirst p) (pairSecond p))))

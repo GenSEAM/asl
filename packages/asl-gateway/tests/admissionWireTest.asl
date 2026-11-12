@@ -27,7 +27,10 @@ fn testEnv -> (Map String String)
   (mapSet (mapEmpty) "TEST_KEY" "test-key")
 
 fn request -> ch/ChatRequest
-  (ch/ChatRequest :path "/v1/chat/completions" :headers (list (pair "X-ASL-Intent" "solo") (pair "X-ASL-Queue-Ms" "20000"))
+  (requestQ "20000")
+
+fn requestQ queueMs: String -> ch/ChatRequest
+  (ch/ChatRequest :path "/v1/chat/completions" :headers (list (pair "X-ASL-Intent" "solo") (pair "X-ASL-Queue-Ms" queueMs))
                   :body "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":10}")
 
 fn statusOf head: (List ch/HeadItem) -> Int64
@@ -61,6 +64,9 @@ fn leaseLines text: String -> Int64
   (listLength (filter (fn [(s String)] -> Bool (stringStartsWith? s "test\tm1\t")) (stringSplit text "\n")))
 
 fn ! once! ra: String -> (Pair Run (Pair String String))
+  (onceQ! ra "20000")
+
+fn ! onceQ! ra: String queueMs: String -> (Pair Run (Pair String String))
   (let [(dir (str "/tmp/gwAdmWire-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (_ (dirCreate dir))
         (_2 (dirCreate (str dir "/.asl")))
@@ -74,11 +80,52 @@ fn ! once! ra: String -> (Pair Run (Pair String String))
                   ((ok settings)
                    (let [(world (ch/ChatWorld :env (testEnv) :rootDir "/" :settings settings :agyPromptMaxBytes 10000
                                               :table (c/gatewayProfilesLoadText! "/test" true (ok (configText dir)) "")))]
-                     (drive! loop (ch/chatStart! (request) world) ra empty 400)))))))
+                     (drive! loop (ch/chatStart! (requestQ queueMs) world) ra empty 400)))))))
         (hold (laneFile dir "test-m1.asn.hold"))
         (leases (laneFile dir "leases.tsv"))
         (_4 (removeTree! dir))]
     (pair run (pair hold leases)))
+
+; (:m :ref UGWADMIT-LOWS :do "runs a chat's effects through the real handler until it asks the upstream, so the call holds its lease")
+fn ! untilHttp! srv: srv/GatewayLoop step: ch/ChatStep fuel: Int64 -> (Pair srv/GatewayLoop ch/ChatStep)
+  (if (<= fuel 0)
+    (pair srv step)
+    (match step
+      ((ch/stepEffect eff k)
+       (match eff
+         ((ch/effHttp _ _ _ _ _ _ _ _) (pair srv step))
+         (_ (let [(r (srv/runEffect! srv eff))] (untilHttp! (pairFirst r) (k (pairSecond r)) (- fuel 1))))))
+      (_ (pair srv step))))
+
+fn okReply -> ch/ChatOutcome
+  (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) (ok200)))
+
+; (:m :ref UGWADMIT-LOWS :do "two calls in flight on one lane: A is admitted and waits on its upstream, B runs to its answer, then A gets its answer; the lease file holds A's lease alone after B ends and nothing after A ends, so each call releases exactly its own lease")
+fn ! twoInFlight! -> (List Int64)
+  (let [(dir (str "/tmp/gwAdmWire2-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (_ (dirCreate dir))
+        (_2 (dirCreate (str dir "/.asl")))
+        (_3 (fileWrite (str dir "/.asl/gateway.asn") (str (configText dir) "\n")))
+        (empty (Run :asked 1 :at429 0 :status 0 :end "" :notes (list)))
+        (counts (match (srv/linkOpen! (mapSet (testEnv) "HOME" dir) dir dir (list))
+                  ((err _) (list -1))
+                  ((ok loop)
+                   (match (u/upstreamSettings (testEnv))
+                     ((err _) (list -2))
+                     ((ok settings)
+                      (let [(world (ch/ChatWorld :env (testEnv) :rootDir "/" :settings settings :agyPromptMaxBytes 10000
+                                                 :table (c/gatewayProfilesLoadText! "/test" true (ok (configText dir)) "")))
+                            (a (untilHttp! loop (ch/chatStart! (request) world) 400))
+                            (whileA (leaseLines (laneFile dir "leases.tsv")))
+                            (b (drive! (pairFirst a) (ch/chatStart! (request) world) "" empty 400))
+                            (afterB (leaseLines (laneFile dir "leases.tsv")))
+                            (aDone (match (pairSecond a)
+                                     ((ch/stepEffect _ k) (drive! (pairFirst a) (k (okReply)) "" empty 400))
+                                     (_ (with empty :end "a never asked"))))
+                            (afterA (leaseLines (laneFile dir "leases.tsv")))]
+                        (list whileA (if (= b.end "done") afterB -3) (if (= aDone.end "done") afterA -4))))))))
+        (_4 (removeTree! dir))]
+    counts)
 
 ; (:m :do "removes a scratch tree in process")
 fn ! removeTree! p: String -> Bool
@@ -94,6 +141,10 @@ fn ! removeTree! p: String -> Bool
 fn ! runTests -> Bool
   (let [(withRa (once! "1"))
         (noRa (once! ""))
+        (huge (onceQ! "1e300" "600"))
+        (hugeHold (optionOr (stringToInt64 (stringTrim (pairFirst (pairSecond huge)))) 0))
+        (hugeAt (pairFirst huge).at429)
+        (two (twoInFlight!))
         (run (pairFirst withRa))
         (hold (optionOr (stringToInt64 (stringTrim (pairFirst (pairSecond withRa)))) 0))
         (leases (pairSecond (pairSecond withRa)))
@@ -107,4 +158,6 @@ fn ! runTests -> Bool
       (assert (not (ul/sentOutcome? "limit:concurrency429")) "the parked note is not a sent outcome, so effUsageNote releases no lease for it")
       (assert (= (leaseLines leases) 0) (str "the failed call and the ok call each released their lease: " leases))
       (assert (and (= (pairFirst noRa).status 200) (= (stringTrim noHold) "")) "a 429 without Retry-After sets no hold")
+      (assert (and (>= hugeHold (+ hugeAt 299000)) (<= hugeHold (+ hugeAt 301000))) (str "Retry-After 1e300 holds the lane for the 300 s cap, not zero: hold " (stringFromInt64 hugeHold) " 429 at " (stringFromInt64 hugeAt)))
+      (assert (= two (list 1 1 0)) (str "two calls in flight release one lease each: leases while A waits, after B, after A: " (stringJoin (map stringFromInt64 two) " ")))
       true))

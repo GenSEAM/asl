@@ -200,7 +200,7 @@ fn ! releaseShared! home: String lims: (List c/GatewayLimit) provider: String al
            (closed (fdClose fd))]
        res)))
 
-; (:m :ref GW-ADAPTIVE-ADMISSION :do "an upstream 429 naming concurrency: the failed call frees its lease and the lane cap falls to max(1, inFlight-1), inFlight counting the failed call; the new cap is returned")
+; (:m :ref GW-ADAPTIVE-ADMISSION :do "an upstream 429 naming concurrency: the failed call frees its lease and the lane cap halves to max(1, min(cap, inFlight) / 2), inFlight counting the failed call, at most once per dropGuardMs; the new cap is returned")
 fn ! concurrency429! home: String lims: (List c/GatewayLimit) provider: String alias: String now: Int64 -> (Result Int64 String)
   (match (baseOf lims)
     ((none) (ok 0))
