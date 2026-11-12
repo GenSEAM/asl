@@ -402,8 +402,10 @@ fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
 
 ; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
+; (:m :ref SESSIONPOOL-LOWS-20261112 :do "a polled snapshot still running when the guard is stopped is killed, reaped and its fd closed, so a caller stopping at its deadline leaves no ps child behind")
 fn ! stopGuard! g: Guarded -> Int64
-  (let [(left (killTreeWith! g.run.pid g.run.groups g.run.known))
+  (let [(_ (snapStop! g))
+        (left (killTreeWith! g.run.pid g.run.groups g.run.known))
         (_ (dropTmp g.run.tmp))]
     left)
 

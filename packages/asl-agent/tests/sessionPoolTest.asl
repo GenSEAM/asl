@@ -123,7 +123,7 @@ fn ! pumpUntil! p: sp/Pool h: Hub delayMs: Int64 stop: (fn [sp/Pool] -> Bool) de
       ((err _) (pumpUntil! p h delayMs stop deadline))
       ((ok ready) (pumpUntil! (sp/poolStep! p ready turnFn (nowMs!)) (stepHub! h ready delayMs) delayMs stop deadline))))
 
-; (:m :ref SE4-ASYNC-EXEC :do "a session in a 1 s local process (gate) and one in a killed 30 s process (timeout 1 s) and one with a missing binary share the pool with a hub session of 5 turns: the hub session finishes in under 900 ms while the gate is still running, the gate then returns exit 0 with its output, the timeout kills the long one, the missing binary is an error reply")
+; (:m :ref SE4-ASYNC-EXEC :do "a session in a 1 s local process (gate) and one in a killed 30 s process (timeout 1 s) and one with a missing binary share the pool with a hub session of 5 turns: the hub session finishes in under 600 ms while the gate is still running (SESSIONPOOL-LOWS-20261112: 900 let a blocking guardStart! pass), the gate then returns exit 0 with its output, the timeout kills the long one, the missing binary is an error reply")
 fn withDoneRows p: sp/Pool rows: (List (Pair String String)) -> sp/Pool
   (with p :done rows)
 
@@ -181,9 +181,26 @@ fn ! staleSnapProbe! -> Bool
                 (kept (listContains? step.guard.run.groups 999999))
                 (fakeGone (<= step.guard.snapPid 0))
                 (_ (fdClose frun.errFd))
+                (_ (fr/stopGuard! fake))
                 (_ (pathRemove (fr/leasePath frun.pid)))
+                (fakeTmpGone (or (stringEmpty? frun.tmp) (not (fileExists? frun.tmp))))
                 (_ (pollToEnd! step.guard (+ (nowMs!) 5000)))]
-            (and kept fakeGone))))))
+            (and kept (and fakeGone fakeTmpGone)))))))
+
+; (:m :ref SESSIONPOOL-LOWS-20261112 :do "a guard stopped while its polled ps snapshot is still running leaves no ps child: the ps pid is reaped (a zombie still answers kill 0) and its fd is closed")
+fn ! stopMidSnapProbe! -> (Pair Bool Bool)
+  (match (fr/guardBegin! (list "/bin/sh" "-c" "sleep 5") "/tmp" (list) (fr/limits 20 8))
+    ((err _) (pair false false))
+    ((ok g) (let [(step (fr/guardPoll! g))
+                  (pending (> step.guard.snapPid 0))
+                  (psPid step.guard.snapPid)
+                  (psFd step.guard.snapFd)
+                  (_ (fr/stopGuard! step.guard))
+                  (_ (pathRemove (fr/leasePath step.guard.run.pid)))
+                  (_ (sleepMs 300))
+                  (gone (not (resultOr (procAlive? psPid) false)))
+                  (closed (not (ok? (fdClose psFd))))]
+              (pair pending (and gone closed)))))
 
 fn ! rssKb! -> Int64
   (let [(text (resultOr (fileReadString "/proc/self/status") ""))]
@@ -215,6 +232,7 @@ fn ! runTests -> Bool
         (exGet (fn [(id String)] -> String (optionOr (optionMap (fn [(d (Pair String String))] -> String (pairSecond d)) (listFind (fn [(d (Pair String String))] -> Bool (= (pairFirst d) id)) exDone)) "")))
         (lease (leaseProbe!))
         (staleKept (staleSnapProbe!))
+        (midStop (stopMidSnapProbe!))
         (rss (rssKb!))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
@@ -226,13 +244,15 @@ fn ! runTests -> Bool
       (assert (and (= (listLength (sp/poolDone dead)) 2) (listAll? (fn [(d (Pair String String))] -> Bool (stringContains? (pairSecond d) "unreachable")) (sp/poolDone dead))) "an unreachable hub ends both sessions after bounded tries")
       (assert (match pickWarm ((some s) (= s.id "w2")) ((none) false)) "oldest warm session resumes first")
       (assert (match pickCold ((some s) (= s.id "c2")) ((none) false)) "with no warm session the oldest cold one resumes first")
-      (assert (and (< (pairSecond ex) 900) (= (exGet "_gateEarly") "yes")) (str "the hub session finished in " (stringFromInt64 (pairSecond ex)) "ms while the 1 s gate was still running"))
+      (assert (and (< (pairSecond ex) 600) (= (exGet "_gateEarly") "yes")) (str "the hub session finished in " (stringFromInt64 (pairSecond ex)) "ms while the 1 s gate was still running"))
       (assert (and (stringContains? (exGet "x") ":exit 0") (stringContains? (exGet "x") "gate")) (str "the gate returned its exit and output: " (exGet "x")))
       (assert (and (stringStartsWith? (exGet "k") "(:exec :exit ") (not (stringContains? (exGet "k") ":exit 0 "))) (str "the 30 s process was killed at its 1 s timeout: " (exGet "k")))
       (assert (and (stringContains? forkOut ":verdict :runaway") (< forkMs 15000)) (str "a child forking 12 sleeps past maxDesc 8 is killed as runaway by the polled snapshot, not left to its 20 s timeout: " (stringFromInt64 forkMs) "ms " forkOut))
       (assert (not (stringContains? (exGet "n") ":exit 0 ")) (str "a missing binary is an error reply: " (exGet "n")))
       (assert (and (stringContains? (pairFirst lease) ":ownerBorn 0)") (and (stringContains? (pairSecond lease) ":ownerBorn ") (not (stringContains? (pairSecond lease) ":ownerBorn 0)")))) (str "guardBegin! writes its lease at once and the first polled snapshot adds the owner start time: " (pairFirst lease) " then " (pairSecond lease)))
-      (assert staleKept "a ps snapshot past its 10 s bound is killed and judged as no check: the recorded escapee group survives")
+      (assert staleKept "a ps snapshot past its 10 s bound is killed and judged as no check: the recorded escapee group survives, and the fake guard is stopped with its scratch dir removed")
+      (assert (pairFirst midStop) "the stop probe caught a ps snapshot still running")
+      (assert (pairSecond midStop) "stopGuard! with a ps snapshot running reaps the ps child and closes its fd")
       (assert (or (= rss 0) (< rss 524288)) (str "pool RSS stays under 512 MB: " (stringFromInt64 rss) " kB"))
       (assert removed "temp dir removed")
       true))
