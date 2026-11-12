@@ -157,9 +157,7 @@ fn bodyOf code: Int64 headers: h/HttpHeaders rest: String headersOnly: Bool -> (
         ((ok (some n))
           (if (> n (stringLength rest))
             (err (str "ERR_HTTP_TRUNCATED_BODY: Content-Length " (stringFromInt64 n) ", have " (stringFromInt64 (stringLength rest))))
-            (match (stringSlice rest 0 n)
-              ((none) (err (str "ERR_HTTP_BODY_NOT_TEXT: the first " (stringFromInt64 n) " bytes end inside a character")))
-              ((some b) (ok (Chunked :body b :trailers (list) :rest (sliceFrom rest n))))))))))
+            (ok (Chunked :body (sliceTo rest n) :trailers (list) :rest (sliceFrom rest n))))))))
 
 fn nextWith raw: String headersOnly: Bool -> (Result (Pair h/HttpResponse String) String)
   (if (stringEmpty? raw)
