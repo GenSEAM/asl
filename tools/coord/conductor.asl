@@ -136,10 +136,21 @@ fn formEnd s: String i: Int64 depth: Int64 inStr: Bool esc: Bool -> Int64
         ((= c ")") (if (<= depth 1) (+ i 1) (formEnd s (+ i 1) (- depth 1) inStr false)))
         (else (formEnd s (+ i 1) depth inStr false)))))
 
+fn receiptStart s: String i: Int64 inStr: Bool esc: Bool -> Int64
+  (if (>= i (stringLength s))
+    -1
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (cond
+        (esc (receiptStart s (+ i 1) inStr false))
+        ((and inStr (= c "\\")) (receiptStart s (+ i 1) inStr true))
+        ((= c "\"") (receiptStart s (+ i 1) (not inStr) false))
+        (inStr (receiptStart s (+ i 1) inStr false))
+        ((and (= c "(") (stringStartsWith? (optionOr (stringSlice s i (stringLength s)) "") "(:agentReceipt ")) i)
+        (else (receiptStart s (+ i 1) inStr false)))))
+
 fn nestedReceipt row: String -> String
-  (match (stringIndexOf row "(:agentReceipt ")
-    ((none) "")
-    ((some at) (optionOr (stringSlice row at (formEnd row at 0 false false)) "")))
+  (let [(at (receiptStart row 0 false false))]
+    (if (< at 0) "" (optionOr (stringSlice row at (formEnd row at 0 false false)) "")))
 
 fn servedField out: String key: String -> String
   (let [(k (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
