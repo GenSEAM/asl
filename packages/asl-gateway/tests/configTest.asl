@@ -392,6 +392,19 @@ fn routeOfProfile tbl: cfg/GatewayTable pid: String intent: String -> (Option cf
     ((none) none)
     ((some pr) (routeNamed pr.routes intent)))
 
+; (:m :ref GW-SPREAD-EDIT-GUARD :do "config check on a :spread left with bare entries after an alias removal, (4) and (8): the receipt is status error, one error per bad entry naming it as written and the profile and route, and the intact entry beside them stays valid")
+fn ! testSpreadBareEntriesNamedByCheck -> Bool
+  (let [(head "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1 m2) :spread ")
+        (tail "))))\n  :uses ((:use :for default :profile p1)))")
+        (good (cfg/gatewayConfigCheckText! (str head "((m1 3) (m2 1))" tail) "spreadGuard" ".asl/mem/calibration/index.asn"))
+        (bad (cfg/gatewayConfigCheckText! (str head "((m1 3) (4) (m2 1) (8))" tail) "spreadGuard" ".asl/mem/calibration/index.asn"))]
+    (do (assert (= (pairSecond good) 0) (str "SPREADGUARD: an intact :spread passes the check: " (pairFirst good)))
+        (assert (= (pairSecond bad) 1) "SPREADGUARD: bare (4) and (8) entries fail the check")
+        (assert (stringContains? (pairFirst bad) "profile p1 route any: :spread entry (4) must be (ALIAS WEIGHT)") (str "SPREADGUARD: the (4) entry is named with its profile and route: " (pairFirst bad)))
+        (assert (stringContains? (pairFirst bad) ":spread entry (8) must be (ALIAS WEIGHT)") (str "SPREADGUARD: the (8) entry is named too: " (pairFirst bad)))
+        (assert (not (stringContains? (pairFirst bad) ":spread entry (m1 3)")) "SPREADGUARD: the intact entry is not reported")
+        true))
+
 ; (:m :do "GW-SPREAD-20261017 parse+validate gate: a route's :spread ((ALIAS WEIGHT) ...) sits beside :chain, read back as (alias weight) pairs in file order; :cooldownSec defaults to 60 and is overridable; a zero or negative weight, an alias unknown to :models, and a non-positive :cooldownSec are each a parse error naming the offender, never silently dropped or defaulted past")
 fn ! testSpreadParsesWeightsAndValidates -> Bool
   (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\") (:model :id m2 :provider test :name \"model-b\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1 m2) :spread ((m1 3) (m2 1))))))\n  :uses ((:use :for default :profile p1)))")
@@ -600,6 +613,7 @@ fn ! runTests -> Bool
                               (assert (testGeminiKindParsesAndResolvesEntry) "GEMINIKIND: :kind gemini provider parsing and entry resolution tested")
                               (assert (testRoleCascadeIsConfigOnly) "GW-HARDCODED-CASCADES-20261017: a config-only role cascade edit changes the chosen model")
                               (assert (testSpreadParsesWeightsAndValidates) "GW-SPREAD-20261017: :spread parses with :chain, validates weights and aliases, cooldownSec defaults and overrides")
+                              (assert (testSpreadBareEntriesNamedByCheck) "GW-SPREAD-EDIT-GUARD: config check names bare :spread entries left by an alias removal")
                               (assert (testRouteEntriesCarriesSpread) "GW-SPREAD-LIVE-20261018: gatewayRouteEntries!/gatewayRouteEntriesExact! carry the matched route's :spread/:cooldownSec, defaulting to empty/60 for a route without one")
                               true))
                           (_ (do (assert false "variants is not a list") false))))))))))))))
