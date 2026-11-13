@@ -30,12 +30,13 @@ fn docRow text: String -> String
 fn constOf src: String name: String -> Int64
   (numAfter src (str "fn " name " -> Int64\n  "))
 
-fn ! pairCheck row: String src: String docMarker: String srcMarker: String label: String -> Bool
+fn pairOk? d: Int64 s: Int64 -> Bool
+  (and (>= d 0) (and (>= s 0) (= d s)))
+
+fn ! checkPair row: String src: String docMarker: String srcMarker: String label: String -> Bool
   (let [(d (numAfter row docMarker))
         (s (numAfter src srcMarker))]
-    (do (assert (> d 0) (str label ": the doc row states a number after '" docMarker "'"))
-        (assert (> s 0) (str label ": the source has a number after '" srcMarker "'"))
-        (assert (= d s) (str label ": doc says " (stringFromInt64 d) ", source says " (stringFromInt64 s)))
+    (do (assert (pairOk? d s) (str label ": doc says " (stringFromInt64 d) " after '" docMarker "', source says " (stringFromInt64 s) " after '" srcMarker "'"))
         true))
 
 fn ! runTests -> Bool
@@ -43,14 +44,16 @@ fn ! runTests -> Bool
         (src (srcText))]
     (do (assert (not (stringEmpty? row)) "the gcAsl module doc row is found")
         (assert (not (stringEmpty? src)) "gcAsl.asl is readable")
-        (assert (pairCheck row src "pages with a " "fn pageHeader -> Int64\n  " "pageHeader"))
-        (assert (pairCheck row src "recip " "fn recipAt -> Int64\n  " "recipAt"))
-        (assert (pairCheck row src "the inUse bitmap at " "fn inUseBits -> Int64\n  " "inUseBits"))
-        (assert (pairCheck row src "mark bitmap at " "fn markBits -> Int64\n  " "markBits"))
-        (assert (pairCheck row src "16 words each, " "fn headerUsed -> Int64\n  " "headerUsed"))
-        (assert (pairCheck row src ", slotSize " "(st \"wss\" \"p\" " "slotSize"))
-        (assert (pairCheck row src "slotCount " "(st \"wcnt\" \"p\" " "slotCount"))
-        (assert (pairCheck row src "allocCount " "(ld \"ac\" \"hp\" " "allocCount"))
-        (assert (pairCheck row src "the bump slot index at " "(ld \"b\" \"bp\" " "bump slot index"))
-        (assert (pairCheck row src "the free-slot scan cursor at " "(st \"wc\" \"fp\" " "scan cursor"))
+        (checkPair row src "(here: next " "(ld \"pnx\" \"p\" " "next")
+        (checkPair row src ", nextFree " "(st \"w10\" \"p\" " "nextFree")
+        (checkPair row src "pages with a " "fn pageHeader -> Int64\n  " "pageHeader")
+        (checkPair row src "recip " "fn recipAt -> Int64\n  " "recipAt")
+        (checkPair row src "the inUse bitmap at " "fn inUseBits -> Int64\n  " "inUseBits")
+        (checkPair row src "mark bitmap at " "fn markBits -> Int64\n  " "markBits")
+        (checkPair row src "16 words each, " "fn headerUsed -> Int64\n  " "headerUsed")
+        (checkPair row src ", slotSize " "(st \"wss\" \"p\" " "slotSize")
+        (checkPair row src "slotCount " "(st \"wcnt\" \"p\" " "slotCount")
+        (checkPair row src "allocCount " "(ld \"ac\" \"hp\" " "allocCount")
+        (checkPair row src "the bump slot index at " "(ld \"b\" \"bp\" " "bump slot index")
+        (checkPair row src "the free-slot scan cursor at " "(st \"wc\" \"fp\" " "scan cursor")
         true))
