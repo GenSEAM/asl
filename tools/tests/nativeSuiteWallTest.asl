@@ -5,11 +5,11 @@
 fn decl n: String -> String
   (str "(module m :x [runTests] :i [])\n\nfn suiteWallS -> Int64\n  " n "\n\nfn runTests -> Bool\n  true\n")
 
-; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the declared wall is read from the suite source and clamped: absent or malformed is the 1800 s default, below it is raised to it, above 7200 s is capped; then bin/asl test runs a fixture declaring 2400 s, and the fixture asserts its own lease deadline is 2400 s after its start")
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the declared wall is read from the suite source and clamped: absent or malformed is the 1800 s default, below it is raised to it, above 7200 s is capped; then bin/asl test (waiting for the native CLI, so the fixture never runs on asl-host) runs a fixture declaring 2400 s, and the fixture asserts its own lease deadline is 2400 s after its start")
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (fixture "asl/tools/tests/fixtures/suiteWall/wallProbeTest.asl")
-        (run (fr/runOneLimited (fr/job (list (str root "/bin/asl") "test" fixture) root (fr/childEnv (list))) (fr/limits 1200 32)))]
+        (run (fr/runOneLimited (fr/job (list (str root "/bin/asl") "test" fixture) root (fr/childEnv (list "ASL_NATIVE_CLI_WAIT=1"))) (fr/limits 1200 32)))]
     (do (assert (= (nt/declaredWallS (decl "3600")) (some 3600)) "a declared suiteWallS is read")
         (assert (= (nt/declaredWallS "(module m :x [] :i [])\n") (none)) "no declaration is none")
         (assert (= (nt/declaredWallS (decl "soon")) (none)) "a body that is not an integer is none")
