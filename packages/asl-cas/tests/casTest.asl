@@ -265,7 +265,7 @@ fn ! testDedupGcRace! -> Bool
         (data (stringToBytes "removed between the check and the lock"))
         (h (putOk! c "removed between the check and the lock"))
         (_ (age! (bp c h)))
-        (r (cas/putWith! c data (fn [] -> Unit (let [(_ (cas/gc! c (nowNs)))] ()))))
+        (r (cas/putWith! c data (fn [] -> Unit (let [(_ (cas/gc! c (nowNs)))] ())) (fn [] -> Unit ())))
         (back (cas/has? c h))
         (text (getText! c h))
         (_ (rmTree! dir))]
@@ -302,6 +302,23 @@ fn ! testPublishAndTmpLock! -> Bool
         (assert (listAny? (fn [(e String)] -> Bool (stringContains? e "store lock")) gHeld.errors) (str "the busy lock is reported: " (stringJoin gHeld.errors " | ")))
         (assert (ok? putFree) "after release the same put! succeeds")
         (assert (= gFree.tmpRemoved 1) "after release gc removes the stale tmp file")
+        true))
+
+; (:m :ref DSBLOB-LOWS3 :do "a new blob whose tmp file was written long before the publish (older than graceMs) is touched at publish under the lock, so a gc right after the lock drops keeps it: the staged hook of putWith! ages the tmp, and a publish that kept the tmp mtime would let gc remove a blob put! just reported ok")
+fn ! testPublishTouch! -> Bool
+  (let [(dir (scratch "publishTouch"))
+        (_ (rmTree! dir))
+        (c (openOk! dir 60000))
+        (r (cas/putWith! c (stringToBytes "staged long ago") (fn [] -> Unit ()) (fn [] -> Unit (let [(_ (map (fn [(n String)] -> Bool (age! (str dir "/tmp/" n))) (resultOr (dirList (str dir "/tmp")) (list))))] ()))))
+        (h (resultOr r ""))
+        (g (cas/gc! c (nowNs)))
+        (alive (cas/has? c h))
+        (text (getText! c h))
+        (_ (rmTree! dir))]
+    (do (assert (ok? r) "the put! with an aged tmp is ok")
+        (assert (listEmpty? g.removed) (str "gc right after the publish removes nothing: " (stringJoin g.removed ",")))
+        (assert alive "the published blob is still present after gc")
+        (assert (= text (want "staged long ago")) (str "and reads back: " text))
         true))
 
 ; (:m :ref DS-BLOBSTORE :do "gc rechecks before each removal: a pin! and a dedup put! that land after gc planned (through the gcWith! hook) keep their blobs, while an untouched old unpinned blob in the same pass goes")
@@ -382,5 +399,6 @@ fn ! runTests -> Bool
       (assert (testStoreLock!) "the store lock serialises pin!, dedup put! and gc removal")
       (assert (testDedupGcRace!) "a gc between the intact check and the lock does not leave a dedup put! ok for a missing blob")
       (assert (testPublishAndTmpLock!) "a new-blob put! and gc tmp removal both take the store lock")
+      (assert (testPublishTouch!) "a new blob is touched at publish so gc right after keeps it")
       (assert (testNotFoundKind!) "notFound? follows the typed IoError kind")
       true)
