@@ -32,10 +32,10 @@ fn blank? c: String -> Bool
 fn skipBlank s: String i: Int64 -> Int64
   (if (and (< i (stringLength s)) (blank? (charAt s i))) (skipBlank s (+ i 1)) i)
 
-; (:m :ref FORMS-CYCLE-GATE-LOWS :do "the text after the header's :i key: ':i' standing after whitespace, then any whitespace run (space, newline or tab), then '['; ':in' or ':imports' do not match; empty when the header has no :i list")
+; (:m :ref FORMS-CYCLE-GATE-LOWS :do "the text after the header's :i key: ':i' standing after whitespace, then any whitespace run (space, newline or tab, or none: ':i[' is a header check accepts, FORMS-CYCLE-GATE-LOWS2), then '['; ':in', ':index' or ':impl' do not match; empty when the header has no :i list")
 fn importsAt header: String i: Int64 -> String
   (if (>= i (stringLength header)) ""
-    (if (and (= (optionOr (stringSlice header i (+ i 2)) "") ":i") (and (> i 0) (and (blank? (charAt header (- i 1))) (blank? (charAt header (+ i 2))))))
+    (if (and (= (optionOr (stringSlice header i (+ i 2)) "") ":i") (and (> i 0) (and (blank? (charAt header (- i 1))) (or (blank? (charAt header (+ i 2))) (= (charAt header (+ i 2)) "[")))))
       (let [(j (skipBlank header (+ i 2)))]
         (if (= (charAt header j) "[") (optionOr (stringSlice header (+ j 1) (stringLength header)) "") (importsAt header (+ i 1))))
       (importsAt header (+ i 1))))
@@ -72,11 +72,12 @@ fn ! plantFixture -> (List String)
         (clean (fileWrite (str dir "/clean.asl") "(module asl-forms/clean\n  :x [g]\n  :i [(asl-forms/kernel :a k) (aslGateway/bus :a b)])\n\n; (aslAgent/bus :a bus) mentioned after the header\nfn g -> Int64\n  2\n"))
         (nl (fileWrite (str dir "/nl.asl") "(module asl-forms/nl\n  :x [f]\n  :i\n    [(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
         (tab (fileWrite (str dir "/tab.asl") "(module asl-forms/tab :x [f] :i\t[(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
+        (tight (fileWrite (str dir "/tight.asl") "(module asl-forms/tight :x [f] :i[(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
         (esc (fileWrite (str dir "/esc.asl") "(module asl-forms/esc\n  :doc \"say \\\") hi\"\n  :i [(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
-        (words (fileWrite (str dir "/words.asl") "(module asl-forms/words :x [f] :index [(aslAgent/bus :a bus)] :impl [(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
+        (words (fileWrite (str dir "/words.asl") "(module asl-forms/words :x [f] :index [(aslAgent/bus :a bus)] :impl [(aslAgent/bus :a bus)] :index[(aslAgent/bus :a bus)] :impl[(aslAgent/bus :a bus)])\n\nfn f -> Int64\n  1\n"))
         (found (offenders dir))
         (_ (pathRemove dir))]
-    (if (and (ok? made) (and (ok? camel) (and (ok? kebab) (and (ok? clean) (and (ok? nl) (and (ok? tab) (and (ok? esc) (ok? words)))))))) found (list "fixture not written")))
+    (if (and (ok? made) (and (ok? camel) (and (ok? kebab) (and (ok? clean) (and (ok? nl) (and (ok? tab) (and (ok? tight) (and (ok? esc) (ok? words))))))))) found (list "fixture not written")))
 
 fn ! runTests -> Bool
   (let [(real (offenders "asl/packages/asl-forms/src"))
@@ -84,7 +85,7 @@ fn ! runTests -> Bool
     (do (assert (not (listContains? real "unreadable")) "asl-forms/src is readable")
         (assert (listEmpty? real) (str "asl-forms src imports an agent package: " (stringJoin real "; ")))
         (assert (listEmpty? (manifestAgentDeps)) (str "asl-forms manifest depends on an agent package: " (stringJoin (manifestAgentDeps) " ")))
-        (assert (= planted (list "camel.asl imports aslAgent/bus" "esc.asl imports aslAgent/bus" "kebab.asl imports asl-agent-core/core" "nl.asl imports aslAgent/bus" "tab.asl imports aslAgent/bus")) (str "planted camel and kebab imports are found, the newline, tab and escaped-quote headers are found too, the comment after the header, aslGateway and :index or :impl keys are not: " (stringJoin planted "; ")))
+        (assert (= planted (list "camel.asl imports aslAgent/bus" "esc.asl imports aslAgent/bus" "kebab.asl imports asl-agent-core/core" "nl.asl imports aslAgent/bus" "tab.asl imports aslAgent/bus" "tight.asl imports aslAgent/bus")) (str "planted camel and kebab imports are found, the newline, tab and escaped-quote headers are found too, the comment after the header, aslGateway and :index or :impl keys are not: " (stringJoin planted "; ")))
         (assert (= (agentImportsIn "(module m :i [(aslAgent/x :a x) (aslAgentCore/y :a y) (aslAgentBus/z :a z)])") (list "aslAgent/x" "aslAgentCore/y" "aslAgentBus/z")) "aslAgent, aslAgentCore and aslAgentBus are all flagged")
         (assert (= (headerOf "(module m :x [a] :i [])\n\n(fn)") "(module m :x [a] :i [])") "the header ends at the module form's closing paren")
         true))
