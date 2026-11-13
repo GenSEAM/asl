@@ -44,6 +44,8 @@
       gatewayCliMain
       hubStatusStale?
       tokenSafe?
+      curlArgv
+      hubStatusFetch!
       gatewayHubStatusCli!
       main]
   :i [(asl-json/json :a j)
@@ -517,13 +519,23 @@ fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
 fn hubStatusStale? text: String -> Bool
   (stringContains? text " :configStale ")
 
-; (:m :ref GW-HUB-STATUS-STRICT :do "the bearer is written into a curl config line, so a token holding a double quote, backslash, CR or LF could end the quoted value and add curl options: such a token is refused before curl starts")
+; (:m :ref GW-HUB-STATUS-STRICT :do "the bearer is written into a curl config line, so a token holding a double quote, a backslash or any control byte (below 0x20, or 0x7f) could end the quoted value or add curl options: such a token is refused before curl starts")
+fn tokenBytesSafe? bs: Bytes i: Int64 n: Int64 -> Bool
+  (if (>= i n) true
+    (let [(b (bytesGet bs i))]
+      (if (or (< b 32) (or (= b 127) (or (= b 34) (= b 92)))) false (tokenBytesSafe? bs (+ i 1) n))))
+
 fn tokenSafe? token: String -> Bool
-  (not (or (stringContains? token "\"") (or (stringContains? token "\\") (or (stringContains? token "\n") (stringContains? token "\r")))))
+  (let [(bs (stringToBytes token))]
+    (tokenBytesSafe? bs 0 (bytesLength bs)))
+
+; (:m :ref GW-HUB-STATUS-STRICT :do "the curl argv of the hub status fetch: the scheme is pinned to http and https so a --url cannot reach file:// or other curl protocols, the config (bearer) comes on stdin")
+fn curlArgv url: String -> (List String)
+  (list "-sS" "-m" "10" "--fail" "--proto" "=http,https" "-K" "-" url)
 
 fn ! hubStatusFetch! url: String token: String -> (Result String String)
-  (if (not (tokenSafe? token)) (err "the bearer token holds a quote, backslash or line break")
-  (let [(c0 (proc/withTimeout (proc/cmd "curl" (list "-sS" "-m" "10" "--fail" "--proto" "=http,https" "-K" "-" url)) 15000))
+  (if (not (tokenSafe? token)) (err "the bearer token holds a quote, backslash or control character")
+  (let [(c0 (proc/withTimeout (proc/cmd "curl" (curlArgv url)) 15000))
         (c (proc/withStdin c0 (if (stringEmpty? token) "" (str "header = \"Authorization: Bearer " token "\"\n"))))]
     (match (proc/exec! c)
       ((err e) (err (str "curl: " e)))

@@ -38,6 +38,7 @@ fn ! testRenderAndProbe -> Bool
         (plainStale (cli/gatewayHubStatusCli! (list "--file" sf)))
         (strictClean (cli/gatewayHubStatusCli! (list "--file" cf "--strict")))
         (missing (cli/gatewayHubStatusCli! (list "--file" (str dir "/absent.asn") "--strict")))
+        (refused (cli/hubStatusFetch! "http://127.0.0.1:1/hub/status" "tok\"en"))
         (noTok (cli/gatewayHubStatusCli! (list "--token-env" "ASL_HUBSTATUS_NO_SUCH_VAR_UMEDIA" "--strict")))
         (gone (pathRemove dir))]
     (do (assert (stringContains? stale " :configStale (:error \"profile p1 route any: :spread entry (4) must be (ALIAS WEIGHT)\")") (str "STALE: the stale cache renders :configStale with its error: " stale))
@@ -50,6 +51,9 @@ fn ! testRenderAndProbe -> Bool
         (assert (= strictClean (ok 0)) "STALE: --strict exits 0 on a clean status")
         (assert (= missing (ok 2)) "STALE: an unreadable status file exits 2, not 0")
         (assert (and (cli/tokenSafe? "abc.DEF-123_xyz") (and (not (cli/tokenSafe? "a\"b")) (and (not (cli/tokenSafe? "a\\b")) (and (not (cli/tokenSafe? "a\nb")) (not (cli/tokenSafe? "a\rb")))))) "STALE: a token with a quote, backslash or line break is refused, a plain one passes")
+        (assert (and (cli/tokenSafe? "abc.DEF-123_xyz") (and (not (cli/tokenSafe? "a\u{1}b")) (and (not (cli/tokenSafe? "a\u{7f}b")) (not (cli/tokenSafe? "a\tb"))))) "STALE: a token with a control character (0x01, 0x7f, tab) is refused")
+        (assert (= refused (err "the bearer token holds a quote, backslash or control character")) (str "STALE: hubStatusFetch! refuses a bad token with the refusal text, curl is never started: " refused))
+        (assert (= (cli/curlArgv "http://h/s") (list "-sS" "-m" "10" "--fail" "--proto" "=http,https" "-K" "-" "http://h/s")) "STALE: the curl argv pins --proto =http,https and reads its config from stdin, the url last")
         (assert (= noTok (ok 2)) "STALE: a named token variable that is unset exits 2")
         true))
 
@@ -73,7 +77,7 @@ fn ! testReadErrorIsBadEdit -> Bool
           (do (assert (ok? (pairSecond second)) "READERR: an unreadable file still serves the last good table")
               (assert (not (stringEmpty? (c/profilesStale (pairFirst second)))) (str "READERR: the read error is held as :stale: " (c/profilesStale (pairFirst second))))
               true)
-          (do (assert (ok? (pairSecond second)) "READERR: skipped, this user reads a mode 000 file (root); the last good table is still served")
+          (do (println "hubStatusStaleTest: READERR branch SKIPPED, this user reads a mode 000 file (root); it is not counted as coverage")
               true))))
 
 fn ! runTests -> Bool
