@@ -1,5 +1,5 @@
 (module aslGateway/server
-  :x [gatewayCliMode? failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [gatewayCliMode? hubStatusText! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
@@ -241,7 +241,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 ; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session, models and subs (models sync and subs refresh reach cliDispatch)")
 fn gatewayCliMode? mode: String -> Bool
-  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs" "order") mode)
+  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs" "order" "hubStatus") mode)
 
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))

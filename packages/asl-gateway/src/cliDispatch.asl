@@ -42,6 +42,8 @@
       CliBoundFlags
       cliBoundFlags!
       gatewayCliMain
+      hubStatusStale?
+      gatewayHubStatusCli!
       main]
   :i [(asl-json/json :a j)
       (config :a cfg)
@@ -55,7 +57,8 @@
       (modelSync :a msync)
       (capOrderStats :a cos)
       (subPacing :a space)
-      (subsRefresh :a subsr)])
+      (subsRefresh :a subsr)
+      (asl-proc/process :a proc)])
 
 (schema CliUsage
   (:f inputTokens Int64)
@@ -509,6 +512,31 @@ fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
                                                     (listAppend (listAppend (map ln/refusalLine (ln/refusalsOf rows)) (map ln/capLine newCaps)) (map ln/rpmLine newRpms))) "\n"))
                       (ok 0))))))))))))
 
+; (:m :ref GW-HUB-STATUS-STRICT :do "gateway hubStatus [--file F | --url URL] [--token-env NAME] [--strict]: prints the hub's (:hub ...) status; --strict exits 1 when it carries :configStale (the hub serves its last good config while the file on disk does not parse), 0 when clean, 2 when the status cannot be read; --url defaults to http://127.0.0.1:$ASL_GATEWAY_PORT/hub/status (8765) and is fetched by curl with the bearer read from the named env var and handed over on stdin, never argv; --file reads a saved status text. A read error of gateway.asn counts as a bad edit, the same as a parse error: the last good table keeps serving and :configStale names it")
+fn hubStatusStale? text: String -> Bool
+  (stringContains? text " :configStale ")
+
+fn ! hubStatusFetch! url: String token: String -> (Result String String)
+  (let [(c0 (proc/withTimeout (proc/cmd "curl" (list "-sS" "-m" "10" "--fail" "-K" "-" url)) 15000))
+        (c (proc/withStdin c0 (if (stringEmpty? token) "" (str "header = \"Authorization: Bearer " token "\"\n"))))]
+    (match (proc/exec! c)
+      ((err e) (err (str "curl: " e)))
+      ((ok out) (if (= out.exitCode 0) (ok out.stdout) (err (str "curl exit " (stringFromInt64 out.exitCode) ": " (stringTrim out.stderr)))))))
+
+fn ! gatewayHubStatusCli! args: (List String) -> (Result Int64 String)
+  (let [(url (optionOr (flagValue args "--url") (str "http://127.0.0.1:" (optionOr (envGet "ASL_GATEWAY_PORT") "8765") "/hub/status")))
+        (tokenEnv (optionOr (flagValue args "--token-env") ""))
+        (token (if (stringEmpty? tokenEnv) (some "") (envGet tokenEnv)))
+        (got (match (flagValue args "--file")
+               ((some f) (match (fileReadString f) ((ok t) (ok t)) ((err e) (err (str f ": " e)))))
+               ((none) (match token
+                         ((none) (err (str "--token-env " tokenEnv " names an unset variable")))
+                         ((some t) (hubStatusFetch! url t))))))]
+    (match got
+      ((err e) (do (sys/sayErr! (str "gateway hubStatus: " e)) (ok 2)))
+      ((ok text) (do (sys/say! (stringTrim text))
+                     (ok (if (and (listContains? args "--strict") (hubStatusStale? text)) 1 0))))))
+
 ; (:m :ref GW-HEALTH-REPORT :do "gateway health [--hours N] [--write]: one ASN report of the usage ledger and the request log over the last N hours (default 24, 1..720): per provider and model calls, ok share, upstream 429 against own refusals, latency percentiles, tokens, the request accounting, prune candidates, configured aliases that never served; --write puts it in .asl/run/usage/health/ instead of printing it")
 fn ! gatewayHealthCli! args: (List String) -> (Result Int64 String)
   (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
@@ -546,6 +574,7 @@ fn ! gatewayCliMain args: (List String) -> (Result Int64 String)
       ((= mode "stats") (gatewayStatsCli! (optionOr (listTail args) (list))))
       ((= mode "usage") (gatewayUsageCli! (optionOr (listTail args) (list))))
       ((= mode "learn") (gatewayLearnCli! (optionOr (listTail args) (list))))
+      ((= mode "hubStatus") (gatewayHubStatusCli! (optionOr (listTail args) (list))))
       ((= mode "health") (gatewayHealthCli! (optionOr (listTail args) (list))))
       ((= mode "session") (ses/sessionsCli! (optionOr (listTail args) (list))))
       ((and (= mode "models") (= second "sync")) (msync/modelsSyncCli! (optionOr (listTail (optionOr (listTail args) (list))) (list))))
