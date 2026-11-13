@@ -1,0 +1,16 @@
+(:task :id "stackMachine" :family "C" :difficulty "hard"
+  :entry "stackMachine" :entryPy "stack_machine"
+  :statement "Run a program on a stack machine that starts with an empty stack, and return the value on top of the stack at the end. push n puts n on top. add and mul remove the top two values and put their sum or their product on top. dup puts a copy of the top value on top. swap exchanges the top two values. The run fails when an instruction needs more values than the stack holds, or when the stack is empty at the end."
+  :sigAsl "enum Instr (push n: Int64) (add) (mul) (dup) (swap)\n\nfn stackMachine program: (List Instr) -> (Result Int64 String)"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Push:\n    n: int\n\n@dataclass(frozen=True)\nclass Add:\n    pass\n\n@dataclass(frozen=True)\nclass Mul:\n    pass\n\n@dataclass(frozen=True)\nclass Dup:\n    pass\n\n@dataclass(frozen=True)\nclass Swap:\n    pass\n\nInstr = Push | Add | Mul | Dup | Swap\n\ndef stack_machine(program: list[Instr]) -> int:"
+  :sigTs "type Instr =\n  | { kind: \"push\"; n: number }\n  | { kind: \"add\" }\n  | { kind: \"mul\" }\n  | { kind: \"dup\" }\n  | { kind: \"swap\" };\n\nfunction stackMachine(program: Instr[]): number"
+  :examples (
+    (:args ((list (variant push (n 2)) (variant push (n 3)) (variant add))) :want (ok 5))
+    (:args ((list (variant add))) :want (fails)))
+  :cases (
+    (:args ((list (variant push (n 4)) (variant dup) (variant mul))) :want (ok 16))
+    (:args ((list)) :want (fails))
+    (:args ((list (variant push (n 1)) (variant push (n 2)) (variant swap))) :want (ok 1))
+    (:args ((list (variant push (n 2)) (variant push (n 3)) (variant push (n 4)) (variant mul) (variant add))) :want (ok 14))
+    (:args ((list (variant push (n 5)) (variant add))) :want (fails))
+    (:args ((list (variant push (n 7)))) :want (ok 7))))

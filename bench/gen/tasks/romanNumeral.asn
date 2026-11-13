@@ -1,0 +1,16 @@
+(:task :id "romanNumeral" :family "A" :difficulty "medium"
+  :entry "romanNumeral" :entryPy "roman_numeral"
+  :statement "Write an integer between 1 and 3999 as a Roman numeral in standard subtractive notation (4 is IV, 9 is IX, 40 is XL, 90 is XC, 400 is CD, 900 is CM)."
+  :sigAsl "fn romanNumeral n: Int64 -> String"
+  :sigPy "def roman_numeral(n: int) -> str:"
+  :sigTs "function romanNumeral(n: number): string"
+  :examples (
+    (:args (4) :want "IV")
+    (:args (9) :want "IX"))
+  :cases (
+    (:args (1) :want "I")
+    (:args (3999) :want "MMMCMXCIX")
+    (:args (1994) :want "MCMXCIV")
+    (:args (58) :want "LVIII")
+    (:args (40) :want "XL")
+    (:args (444) :want "CDXLIV")))

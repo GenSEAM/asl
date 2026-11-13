@@ -1,0 +1,10 @@
+fn rleStep acc: (List (Pair String Int64)) c: String -> (List (Pair String Int64))
+  (match (listLast acc)
+    ((none) (list (pair c 1)))
+    ((some p)
+      (if (= (pairFirst p) c)
+        (listAppend (listTake acc (- (listLength acc) 1)) (list (pair c (+ (pairSecond p) 1))))
+        (listAppend acc (list (pair c 1))))))
+
+fn runLengthEncode text: String -> (List (Pair String Int64))
+  (fold rleStep (list) (stringChars text))

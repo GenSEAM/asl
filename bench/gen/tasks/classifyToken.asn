@@ -1,0 +1,16 @@
+(:task :id "classifyToken" :family "C" :difficulty "medium"
+  :entry "classifyToken" :entryPy "classify_token"
+  :statement "Classify a text as one token. A non-empty text of decimal digits only (at most 15 digits) is a number token carrying its integer value. A non-empty text of ASCII letters only is a word token carrying the text. A text of exactly one character that is not a letter, a digit or a space is a symbol token carrying the text. Everything else, including the empty text, is the unknown token."
+  :sigAsl "enum Token (number value: Int64) (word text: String) (symbol text: String) (unknown)\n\nfn classifyToken text: String -> Token"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Number:\n    value: int\n\n@dataclass(frozen=True)\nclass Word:\n    text: str\n\n@dataclass(frozen=True)\nclass Symbol:\n    text: str\n\n@dataclass(frozen=True)\nclass Unknown:\n    pass\n\nToken = Number | Word | Symbol | Unknown\n\ndef classify_token(text: str) -> Token:"
+  :sigTs "type Token =\n  | { kind: \"number\"; value: number }\n  | { kind: \"word\"; text: string }\n  | { kind: \"symbol\"; text: string }\n  | { kind: \"unknown\" };\n\nfunction classifyToken(text: string): Token"
+  :examples (
+    (:args ("42") :want (variant number (value 42)))
+    (:args ("hello") :want (variant word (text "hello"))))
+  :cases (
+    (:args ("+") :want (variant symbol (text "+")))
+    (:args ("") :want (variant unknown))
+    (:args ("abc123") :want (variant unknown))
+    (:args ("007") :want (variant number (value 7)))
+    (:args ("Z") :want (variant word (text "Z")))
+    (:args ("==") :want (variant unknown))))

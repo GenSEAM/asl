@@ -1,0 +1,16 @@
+(:task :id "countVowels" :family "A" :difficulty "easy"
+  :entry "countVowels" :entryPy "count_vowels"
+  :statement "Count the vowels a, e, i, o and u in a text, in either upper or lower case. The text contains only ASCII characters."
+  :sigAsl "fn countVowels text: String -> Int64"
+  :sigPy "def count_vowels(text: str) -> int:"
+  :sigTs "function countVowels(text: string): number"
+  :examples (
+    (:args ("hello") :want 2)
+    (:args ("XYZ") :want 0))
+  :cases (
+    (:args ("") :want 0)
+    (:args ("AEIOU") :want 5)
+    (:args ("Programming Language") :want 7)
+    (:args ("rhythm") :want 0)
+    (:args ("a") :want 1)
+    (:args ("Queue up, Eve!") :want 7)))

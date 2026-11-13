@@ -1,0 +1,6 @@
+(:cards :id "FABLE-LANG-01" :src "asl/llms.txt section The language" :srcSha256 "7f41aacaeda7cc26d79170c5f9c34342511815853d5f42c81ce701a6259fea82" :method "tiktoken 0.12.0 o200k_base on the card file bytes" :date "2026-11-13" :scope "system prompt of each arm; the user prompt is built per task by userPrompt in asl/bench/gen/core.asl" :derive "./bin/asl run asl/bench/gen/run.asl cards --write, then recount :tokens and :sha256 here")
+(:card :arm "py" :file "cards/py.txt" :sha256 "f2f90bd560867639476fc5d27d97dd0dc9facef5f749561d437fd9a48e80b041" :tokens 17 :bytes 71)
+(:card :arm "ts" :file "cards/ts.txt" :sha256 "b64af4338da1fb41d90fcbf3b1ae9c9876a525bab49340a194b1a2a571825e9b" :tokens 24 :bytes 106)
+(:card :arm "asl" :file "cards/asl.txt" :sha256 "f2ee36723d1d6cd639f4b1441548d634583311e7e4b48d4c5ea09c2bd8c2de60" :tokens 799 :bytes 2975)
+(:card :arm "aslParen" :file "cards/aslParen.txt" :sha256 "7c810c574c2aa125ac6a162b025ca5d885d102214fe6d68e0778cb290da86c2f" :tokens 810 :bytes 3033)
+(:card :arm "aslWrapFn" :file "cards/aslWrapFn.txt" :sha256 "87daf9d48e9c8ff1f33e32c1e055b88c617f0785f5c02dfdcb94e63cdbdbdc15" :tokens 802 :bytes 2968)

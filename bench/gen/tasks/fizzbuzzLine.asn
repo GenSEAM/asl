@@ -1,0 +1,16 @@
+(:task :id "fizzbuzzLine" :family "A" :difficulty "easy"
+  :entry "fizzbuzzLine" :entryPy "fizzbuzz_line"
+  :statement "For a positive integer n return the text for line n of FizzBuzz: \"FizzBuzz\" when n is divisible by both 3 and 5, \"Fizz\" when it is divisible only by 3, \"Buzz\" when it is divisible only by 5, and otherwise n written in decimal."
+  :sigAsl "fn fizzbuzzLine n: Int64 -> String"
+  :sigPy "def fizzbuzz_line(n: int) -> str:"
+  :sigTs "function fizzbuzzLine(n: number): string"
+  :examples (
+    (:args (3) :want "Fizz")
+    (:args (4) :want "4"))
+  :cases (
+    (:args (5) :want "Buzz")
+    (:args (15) :want "FizzBuzz")
+    (:args (1) :want "1")
+    (:args (30) :want "FizzBuzz")
+    (:args (9) :want "Fizz")
+    (:args (98) :want "98")))

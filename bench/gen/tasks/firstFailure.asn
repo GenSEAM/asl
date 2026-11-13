@@ -1,0 +1,16 @@
+(:task :id "firstFailure" :family "B" :difficulty "easy"
+  :entry "firstFailure" :entryPy "first_failure"
+  :statement "Each check is a pair of its name and whether it passed. Return the name of the first check in the list that did not pass, or nothing when every check passed or the list is empty."
+  :sigAsl "fn firstFailure checks: (List (Pair String Bool)) -> (Option String)"
+  :sigPy "def first_failure(checks: list[tuple[str, bool]]) -> str | None:"
+  :sigTs "function firstFailure(checks: Array<[string, boolean]>): string | undefined"
+  :examples (
+    (:args ((list (tuple "build" true) (tuple "lint" false) (tuple "test" false))) :want (some "lint"))
+    (:args ((list (tuple "build" true))) :want (none)))
+  :cases (
+    (:args ((list)) :want (none))
+    (:args ((list (tuple "x" false))) :want (some "x"))
+    (:args ((list (tuple "a" true) (tuple "b" true) (tuple "c" true))) :want (none))
+    (:args ((list (tuple "build" true) (tuple "test" true) (tuple "deploy" false))) :want (some "deploy"))
+    (:args ((list (tuple "a" false) (tuple "b" true) (tuple "c" false))) :want (some "a"))
+    (:args ((list (tuple "lint" true) (tuple "unit tests" false))) :want (some "unit tests"))))

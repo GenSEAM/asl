@@ -1,0 +1,16 @@
+(:task :id "isPrime" :family "A" :difficulty "easy"
+  :entry "isPrime" :entryPy "is_prime"
+  :statement "Decide whether an integer is a prime number. Numbers below 2, including negative numbers, are not prime."
+  :sigAsl "fn isPrime n: Int64 -> Bool"
+  :sigPy "def is_prime(n: int) -> bool:"
+  :sigTs "function isPrime(n: number): boolean"
+  :examples (
+    (:args (7) :want true)
+    (:args (8) :want false))
+  :cases (
+    (:args (1) :want false)
+    (:args (2) :want true)
+    (:args (0) :want false)
+    (:args (97) :want true)
+    (:args (91) :want false)
+    (:args (-7) :want false)))

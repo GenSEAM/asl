@@ -1,0 +1,16 @@
+(:task :id "chunk" :family "B" :difficulty "medium"
+  :entry "chunk" :entryPy "chunk"
+  :statement "Split a list of integers into consecutive pieces of the given size, in order; the last piece holds the remaining elements and may be shorter. The size is at least 1. An empty list gives an empty list of pieces."
+  :sigAsl "fn chunk xs: (List Int64) size: Int64 -> (List (List Int64))"
+  :sigPy "def chunk(xs: list[int], size: int) -> list[list[int]]:"
+  :sigTs "function chunk(xs: number[], size: number): number[][]"
+  :examples (
+    (:args ((list 1 2 3 4 5) 2) :want (list (list 1 2) (list 3 4) (list 5)))
+    (:args ((list) 3) :want (list)))
+  :cases (
+    (:args ((list 1 2 3) 3) :want (list (list 1 2 3)))
+    (:args ((list 1 2 3) 1) :want (list (list 1) (list 2) (list 3)))
+    (:args ((list 1 2) 5) :want (list (list 1 2)))
+    (:args ((list 1 2 3 4) 2) :want (list (list 1 2) (list 3 4)))
+    (:args ((list 7) 1) :want (list (list 7)))
+    (:args ((list 1 2 3 4 5 6 7) 3) :want (list (list 1 2 3) (list 4 5 6) (list 7)))))

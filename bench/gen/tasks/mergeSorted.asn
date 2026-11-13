@@ -1,0 +1,16 @@
+(:task :id "mergeSorted" :family "B" :difficulty "easy"
+  :entry "mergeSorted" :entryPy "merge_sorted"
+  :statement "Merge two lists of integers, each already sorted in ascending order, into one list sorted in ascending order that holds every element of both, duplicates included."
+  :sigAsl "fn mergeSorted a: (List Int64) b: (List Int64) -> (List Int64)"
+  :sigPy "def merge_sorted(a: list[int], b: list[int]) -> list[int]:"
+  :sigTs "function mergeSorted(a: number[], b: number[]): number[]"
+  :examples (
+    (:args ((list 1 3) (list 2 4)) :want (list 1 2 3 4))
+    (:args ((list) (list 1)) :want (list 1)))
+  :cases (
+    (:args ((list) (list)) :want (list))
+    (:args ((list 1 1) (list 1)) :want (list 1 1 1))
+    (:args ((list 5) (list 1 2 3)) :want (list 1 2 3 5))
+    (:args ((list 1 2 3) (list 4 5 6)) :want (list 1 2 3 4 5 6))
+    (:args ((list -3 0) (list -2 -1 7)) :want (list -3 -2 -1 0 7))
+    (:args ((list 2) (list)) :want (list 2))))

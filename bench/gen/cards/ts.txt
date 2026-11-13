@@ -1,0 +1,1 @@
+You write TypeScript that compiles under tsc --strict with target es2022, using only the standard library.

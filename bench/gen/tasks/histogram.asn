@@ -1,0 +1,16 @@
+(:task :id "histogram" :family "B" :difficulty "medium"
+  :entry "histogram" :entryPy "histogram"
+  :statement "Given a text of lowercase letters separated by spaces, return a mapping from letter to its number of occurrences that contains only the letters occurring most often. When several letters tie for the highest count, include all of them. An empty text or one with only spaces gives an empty mapping."
+  :sigAsl "fn histogram text: String -> (Map String Int64)"
+  :sigPy "def histogram(text: str) -> dict[str, int]:"
+  :sigTs "function histogram(text: string): Map<string, number>"
+  :examples (
+    (:args ("a b c") :want (dict ("a" 1) ("b" 1) ("c" 1)))
+    (:args ("a b b a") :want (dict ("a" 2) ("b" 2))))
+  :cases (
+    (:args ("a b c a b") :want (dict ("a" 2) ("b" 2)))
+    (:args ("b b b b a") :want (dict ("b" 4)))
+    (:args ("") :want (dict))
+    (:args ("   ") :want (dict))
+    (:args ("a") :want (dict ("a" 1)))
+    (:args ("c c a b c") :want (dict ("c" 3)))))

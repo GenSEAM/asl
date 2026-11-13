@@ -1,0 +1,16 @@
+(:task :id "clampInt" :family "A" :difficulty "easy"
+  :entry "clampInt" :entryPy "clamp_int"
+  :statement "Limit an integer x to the range from lo to hi, both ends included: return lo when x is below lo, hi when x is above hi, and x otherwise. lo is never greater than hi."
+  :sigAsl "fn clampInt x: Int64 lo: Int64 hi: Int64 -> Int64"
+  :sigPy "def clamp_int(x: int, lo: int, hi: int) -> int:"
+  :sigTs "function clampInt(x: number, lo: number, hi: number): number"
+  :examples (
+    (:args (5 0 10) :want 5)
+    (:args (-3 0 10) :want 0))
+  :cases (
+    (:args (15 0 10) :want 10)
+    (:args (0 0 0) :want 0)
+    (:args (10 0 10) :want 10)
+    (:args (-5 -10 -1) :want -5)
+    (:args (-20 -10 -1) :want -10)
+    (:args (7 7 9) :want 7)))

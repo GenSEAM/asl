@@ -1,0 +1,16 @@
+(:task :id "runLengthEncode" :family "B" :difficulty "medium"
+  :entry "runLengthEncode" :entryPy "run_length_encode"
+  :statement "Run-length encode a text: return, in order, one pair for each maximal run of equal characters, holding the character (as a one-character text) and the length of the run. The empty text gives an empty list. The text contains only ASCII characters."
+  :sigAsl "fn runLengthEncode text: String -> (List (Pair String Int64))"
+  :sigPy "def run_length_encode(text: str) -> list[tuple[str, int]]:"
+  :sigTs "function runLengthEncode(text: string): Array<[string, number]>"
+  :examples (
+    (:args ("aaab") :want (list (tuple "a" 3) (tuple "b" 1)))
+    (:args ("") :want (list)))
+  :cases (
+    (:args ("a") :want (list (tuple "a" 1)))
+    (:args ("abc") :want (list (tuple "a" 1) (tuple "b" 1) (tuple "c" 1)))
+    (:args ("aabbaa") :want (list (tuple "a" 2) (tuple "b" 2) (tuple "a" 2)))
+    (:args ("zzzzzzzzzzzz") :want (list (tuple "z" 12)))
+    (:args ("abbbbc") :want (list (tuple "a" 1) (tuple "b" 4) (tuple "c" 1)))
+    (:args ("  x") :want (list (tuple " " 2) (tuple "x" 1)))))

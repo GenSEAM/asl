@@ -1,0 +1,16 @@
+(:task :id "reverseWords" :family "A" :difficulty "easy"
+  :entry "reverseWords" :entryPy "reverse_words"
+  :statement "A text consists of words separated by one or more space characters, possibly with spaces at the start or the end. Return the words in reverse order, joined by single spaces, with no spaces at the start or the end. A text without words gives the empty text."
+  :sigAsl "fn reverseWords text: String -> String"
+  :sigPy "def reverse_words(text: str) -> str:"
+  :sigTs "function reverseWords(text: string): string"
+  :examples (
+    (:args ("hello world") :want "world hello")
+    (:args ("one") :want "one"))
+  :cases (
+    (:args ("") :want "")
+    (:args ("  lead and trail  ") :want "trail and lead")
+    (:args ("a  b   c") :want "c b a")
+    (:args ("   ") :want "")
+    (:args ("x y") :want "y x")
+    (:args ("to be or not to be") :want "be to not or be to")))

@@ -1,0 +1,16 @@
+(:task :id "pointInRect" :family "C" :difficulty "easy"
+  :entry "pointInRect" :entryPy "point_in_rect"
+  :statement "Decide whether a point lies inside a rectangle whose sides are parallel to the axes. The rectangle covers x from left to left plus width and y from top to top plus height; points on the border count as inside. Width and height are 0 or more."
+  :sigAsl "schema Point { x: Int64 y: Int64 }\n\nschema Rect { left: Int64 top: Int64 width: Int64 height: Int64 }\n\nfn pointInRect p: Point r: Rect -> Bool"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Point:\n    x: int\n    y: int\n\n@dataclass(frozen=True)\nclass Rect:\n    left: int\n    top: int\n    width: int\n    height: int\n\ndef point_in_rect(p: Point, r: Rect) -> bool:"
+  :sigTs "type Point = { x: number; y: number };\n\ntype Rect = { left: number; top: number; width: number; height: number };\n\nfunction pointInRect(p: Point, r: Rect): boolean"
+  :examples (
+    (:args ((record Point (x 1) (y 1)) (record Rect (left 0) (top 0) (width 2) (height 2))) :want true)
+    (:args ((record Point (x 3) (y 1)) (record Rect (left 0) (top 0) (width 2) (height 2))) :want false))
+  :cases (
+    (:args ((record Point (x 2) (y 2)) (record Rect (left 0) (top 0) (width 2) (height 2))) :want true)
+    (:args ((record Point (x 0) (y 0)) (record Rect (left 0) (top 0) (width 2) (height 2))) :want true)
+    (:args ((record Point (x 2) (y 3)) (record Rect (left 0) (top 0) (width 2) (height 2))) :want false)
+    (:args ((record Point (x -3) (y -4)) (record Rect (left -5) (top -5) (width 3) (height 3))) :want true)
+    (:args ((record Point (x 1) (y 1)) (record Rect (left 1) (top 1) (width 0) (height 0))) :want true)
+    (:args ((record Point (x -6) (y -4)) (record Rect (left -5) (top -5) (width 3) (height 3))) :want false)))

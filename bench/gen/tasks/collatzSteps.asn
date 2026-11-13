@@ -1,0 +1,16 @@
+(:task :id "collatzSteps" :family "A" :difficulty "easy"
+  :entry "collatzSteps" :entryPy "collatz_steps"
+  :statement "Starting from a positive integer n, repeat: if the number is even, halve it, otherwise replace it by three times the number plus one. Return how many steps it takes to reach 1. For n = 1 the answer is 0."
+  :sigAsl "fn collatzSteps n: Int64 -> Int64"
+  :sigPy "def collatz_steps(n: int) -> int:"
+  :sigTs "function collatzSteps(n: number): number"
+  :examples (
+    (:args (1) :want 0)
+    (:args (6) :want 8))
+  :cases (
+    (:args (2) :want 1)
+    (:args (7) :want 16)
+    (:args (27) :want 111)
+    (:args (16) :want 4)
+    (:args (3) :want 7)
+    (:args (97) :want 118)))

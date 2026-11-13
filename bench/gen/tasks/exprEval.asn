@@ -1,0 +1,16 @@
+(:task :id "exprEval" :family "C" :difficulty "medium"
+  :entry "exprEval" :entryPy "expr_eval"
+  :statement "Evaluate an arithmetic expression tree. A number evaluates to itself, an addition to the sum of its two parts, a multiplication to the product of its two parts, and a negation to minus its part."
+  :sigAsl "enum Expr (num n: Int64) (add l: Expr r: Expr) (mul l: Expr r: Expr) (neg e: Expr)\n\nfn exprEval e: Expr -> Int64"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Num:\n    n: int\n\n@dataclass(frozen=True)\nclass Add:\n    l: \"Expr\"\n    r: \"Expr\"\n\n@dataclass(frozen=True)\nclass Mul:\n    l: \"Expr\"\n    r: \"Expr\"\n\n@dataclass(frozen=True)\nclass Neg:\n    e: \"Expr\"\n\nExpr = Num | Add | Mul | Neg\n\ndef expr_eval(e: Expr) -> int:"
+  :sigTs "type Expr =\n  | { kind: \"num\"; n: number }\n  | { kind: \"add\"; l: Expr; r: Expr }\n  | { kind: \"mul\"; l: Expr; r: Expr }\n  | { kind: \"neg\"; e: Expr };\n\nfunction exprEval(e: Expr): number"
+  :examples (
+    (:args ((variant add (l (variant num (n 2))) (r (variant num (n 3))))) :want 5)
+    (:args ((variant neg (e (variant num (n 4))))) :want -4))
+  :cases (
+    (:args ((variant num (n 0))) :want 0)
+    (:args ((variant mul (l (variant add (l (variant num (n 1))) (r (variant num (n 2))))) (r (variant num (n 4))))) :want 12)
+    (:args ((variant neg (e (variant neg (e (variant num (n 7))))))) :want 7)
+    (:args ((variant add (l (variant mul (l (variant num (n 2))) (r (variant num (n 3))))) (r (variant mul (l (variant num (n 4))) (r (variant num (n 5))))))) :want 26)
+    (:args ((variant mul (l (variant num (n -3))) (r (variant neg (e (variant num (n 3))))))) :want 9)
+    (:args ((variant add (l (variant num (n 1))) (r (variant add (l (variant num (n 2))) (r (variant add (l (variant num (n 3))) (r (variant num (n 4))))))))) :want 10)))

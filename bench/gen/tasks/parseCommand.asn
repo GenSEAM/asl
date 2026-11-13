@@ -1,0 +1,16 @@
+(:task :id "parseCommand" :family "C" :difficulty "medium"
+  :entry "parseCommand" :entryPy "parse_command"
+  :statement "Parse one line of a text adventure into a command. \"look\" and \"quit\" are commands on their own. \"go\" is followed by one space and a direction, which must be north, south, east or west. \"pick\" is followed by one space and an item name, which is a single word of one or more characters without spaces. Every other line fails, including the empty line, a line with extra words and a line with a missing argument."
+  :sigAsl "enum Command (go direction: String) (pick item: String) (look) (quit)\n\nfn parseCommand line: String -> (Result Command String)"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Go:\n    direction: str\n\n@dataclass(frozen=True)\nclass Pick:\n    item: str\n\n@dataclass(frozen=True)\nclass Look:\n    pass\n\n@dataclass(frozen=True)\nclass Quit:\n    pass\n\nCommand = Go | Pick | Look | Quit\n\ndef parse_command(line: str) -> Command:"
+  :sigTs "type Command =\n  | { kind: \"go\"; direction: string }\n  | { kind: \"pick\"; item: string }\n  | { kind: \"look\" }\n  | { kind: \"quit\" };\n\nfunction parseCommand(line: string): Command"
+  :examples (
+    (:args ("go north") :want (ok (variant go (direction "north"))))
+    (:args ("dance") :want (fails)))
+  :cases (
+    (:args ("pick lamp") :want (ok (variant pick (item "lamp"))))
+    (:args ("look") :want (ok (variant look)))
+    (:args ("quit") :want (ok (variant quit)))
+    (:args ("") :want (fails))
+    (:args ("go up") :want (fails))
+    (:args ("look around") :want (fails))))
