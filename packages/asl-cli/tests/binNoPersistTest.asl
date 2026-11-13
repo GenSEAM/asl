@@ -244,6 +244,24 @@ fn ! testModuleLock work: String -> Bool
         (assert (= (pairSecond swept) 1) (str "one entry removed: " (stringFromInt64 (pairSecond swept))))
         true))
 
+; (:m :ref NTLOCK-LOWS :do "a module lock holding a dead pid pins nothing: its entry is not pinned, a young object under it stays only by the age floor and an old one goes with its meta and lock; the locks live in the test work dir, never a real store")
+fn ! testDeadModuleLock work: String -> Bool
+  (let [(mods (str work "/deadlock"))
+        (_ (dirCreate mods))
+        (young (and (put! (str mods "/k2.o") 1000) (and (put! (str mods "/k2.meta") 10) (ok? (fileWrite (str mods "/k2.o.lock") "2147483646\n")))))
+        (old (and (oldFile! (str mods "/k3.o") 1000 100) (and (oldFile! (str mods "/k3.meta") 10 100) (and (ok? (fileWrite (str mods "/k3.o.lock") "2147483646\n")) (ok? (fileUtime (str mods "/k3.o.lock") (- (nowNs) 360000000000000)))))))
+        (entries (nt/moduleEntries! mods))
+        (pinnedAny (listAny? (fn [(e nc/StoreEntry)] -> Bool e.pinned) entries))
+        (swept (nc/sweepEntries! entries 0 3600000000000))
+        (names (resultOr (dirList mods) (list)))]
+    (do (assert (and young old) "the young and the old object each sit under a lock holding a dead pid")
+        (assert (= (listLength entries) 2) (str "k2 and k3 are one entry each: " (stringFromInt64 (listLength entries))))
+        (refute pinnedAny "a lock holding a dead pid pins no entry")
+        (assert (and (listContains? names "k2.o") (listContains? names "k2.meta")) (str "the young object stays by the age floor alone: " (stringJoin names " ")))
+        (refute (or (listContains? names "k3.o") (or (listContains? names "k3.meta") (listContains? names "k3.o.lock"))) (str "the old object goes with its meta and its dead lock: " (stringJoin names " ")))
+        (assert (= (pairSecond swept) 1) (str "one entry removed: " (stringFromInt64 (pairSecond swept))))
+        true))
+
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "an entry is stamped by the newest file inside it: an old dir holding a freshly written file is recent")
 fn ! testInnerStamp work: String -> Bool
   (let [(dir (str work "/inner"))
@@ -351,6 +369,7 @@ fn ! runTests -> Bool
         (recheck (if (ok? made) (testRecheck work) false))
         (inner (if (ok? made) (testInnerStamp work) false))
         (modLock (if (ok? made) (testModuleLock work) false))
+        (deadLock (if (ok? made) (testDeadModuleLock work) false))
         (slotLease (if (ok? made) (testSlotLease work) false))
         (sweepDefault (if (ok? made) (testSweepDefault work) false))
         (freshDead (if (ok? made) (testFreshDeadHead work) false))
@@ -368,6 +387,7 @@ fn ! runTests -> Bool
         (assert recheck "an entry used during the sweep is kept")
         (assert inner "an entry is stamped by its newest inner file")
         (assert modLock "a held module lock pins its object through the sweep")
+        (assert deadLock "a dead-pid module lock pins nothing: a young object stays by age, an old one goes")
         (assert slotLease "a leased slot survives the store sweep")
         (assert sweepDefault "the CLI store sweep is on by default")
         (assert freshDead "with the opt-in marker a fresh dead head goes, without it the floor holds")
