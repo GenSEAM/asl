@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/sharedBucketTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr) (aslGateway/tests/gatewayStartKit :a sk)])
 
 ; (:m :ref ORCH-SHARED-BUCKET :do "gates the one-per-node daemon on a scratch HOME: it listens on the unix socket named in HOME/.asl/hub.asn with mode 0600, a second instance is refused by the lock, and two clients of one model through it share exactly one token bucket; the control runs the same two clients through two separate gateway processes, each with its own bucket, and sees two admissions in the same window")
 (schema StubConn
@@ -102,10 +102,6 @@ fn clientsDone? w: World -> Bool
 fn ok200? w: World -> Bool
   (listAll? (fn [(c Client)] -> Bool (stringStartsWith? c.response "HTTP/1.1 200")) w.clients)
 
-fn ! waitReady! path: String attempts: Int64 -> Bool
-  (if (<= attempts 0) false
-    (if (fileExists? path) true (do (sleepMs 20) (waitReady! path (- attempts 1)))))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -141,7 +137,7 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (daemonCmd (str host " run " (resultOr (realPath "asl/tools/hub/main.asl") "") " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
+        (up (and (> daemonPid 0) (sk/waitFile! (str temp "/hub.ready") daemonPid (str temp "/hub.err"))))
         (w0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (a1 (send! (send! w0 (unixConnect sock) "a") (unixConnect sock) "b"))
         (a2 (pump! a1 (fn [(x World)] -> Bool false) (+ (nowMs!) 3000)))
@@ -152,12 +148,9 @@ fn ! runTests -> Bool
         (killedDaemon (if (> daemonPid 0) (do (fr/killTree! daemonPid) true) false))
         (gwA (start! temp (str host " run " (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") "") " serve --port 0 --upstream " base " --ready " temp "/gwA.ready 1>" temp "/gwA.out 2>" temp "/gwA.err")))
         (gwB (start! temp (str host " run " (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") "") " serve --port 0 --upstream " base " --ready " temp "/gwB.ready 1>" temp "/gwB.out 2>" temp "/gwB.err")))
-        (portOf (fn [(name String)] -> Int64
-                  (if (waitReady! (str temp "/" name ".ready") 12000)
-                    (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str temp "/" name ".ready")) ""))) 0)
-                    0)))
-        (portA (portOf "gwA"))
-        (portB (portOf "gwB"))
+        (portOf (fn [(name String) (pid Int64)] -> Int64 (sk/waitPortErr! (str temp "/" name ".ready") pid (str temp "/" name ".err"))))
+        (portA (portOf "gwA" gwA))
+        (portB (portOf "gwB" gwB))
         (b0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (b1 (send! (send! b0 (tcpConnect portA) "a") (tcpConnect portB) "b"))
         (b2 (pump! b1 (fn [(x World)] -> Bool false) (+ (nowMs!) 3000)))

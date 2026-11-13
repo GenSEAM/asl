@@ -1,6 +1,6 @@
 (module ws/asl/tools/gateway/claudeSmoke
   :x [main]
-  :i [(asl/packages/asl-gateway/src/federation :a f) (asl/packages/asl-gateway/src/secrets :a s) (asl-tools/fleet/run :a fr)])
+  :i [(asl/packages/asl-gateway/src/federation :a f) (asl/packages/asl-gateway/src/secrets :a s) (asl-tools/fleet/run :a fr) (asl/packages/asl-gateway/tests/gatewayStartKit :a sk)])
 
 ; (:m :ref GW-CLAUDE-SESSIONS-MAC :do "asl run asl/tools/gateway/claudeSmoke.asl: one live smoke of the claude :sessions route; one gateway child under fleet/run.asl (300 s, 40 descendants, real HOME for the claude login), two turns of one tiny prompt on one session key through the federation client, prints only status, token counts and whether the vendor session id was reused; two claude calls, then the child tree is killed")
 
@@ -9,12 +9,6 @@ fn ! settle! g: fr/Guarded tries: Int64 -> Bool
     (match st.out
       ((some _) true)
       ((none) (if (<= tries 0) false (do (fdPoll (fr/guardFds st.guard) 20) (settle! st.guard (- tries 1)))))))
-
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 40) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 40) (waitPort! path (- attempts 1))))))
 
 ; (:m :do "the number after a quoted key in a reply body, -1 when absent")
 fn numAfter text: String key: String -> Int64
@@ -55,7 +49,7 @@ fn ! main args: (List String) -> (Result Int64 String)
     (match started
       ((err po) (do (println (str "(:smoke :err gatewayStart :exit " (stringFromInt64 po.exitCode) ")")) (ok 1)))
       ((ok g)
-        (let [(port (waitPort! ready 7000))
+        (let [(port (sk/waitPort! ready g.run.pid))
               (loaded (s/secretsLoad! (str home "/.asl/secrets.asn")))]
           (match loaded
             ((err e) (do (fr/killTree! g.run.pid) (settle! g 100) (println "(:smoke :err secretsLoad)") (ok 1)))

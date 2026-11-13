@@ -72,7 +72,7 @@ fn ! runTests -> Bool
         (warmArgv (list "/bin/sh" "-c" (str "exec " (hostExe!) " run asl/packages/asl-gateway/src/server.asl serve --port 0 --upstream http://127.0.0.1:1/v1 --ready " dir "/ready0 2>" dir "/warm.err")))
         (warm (fr/guardStart! warmArgv "." env (fr/limits 600 40)))
         (warmPort (match warm
-                    ((ok wg) (let [(p (sk/waitPort! (str dir "/ready0") wg.run.pid))] (do (fr/killTree! wg.run.pid) (settle! wg 100) p)))
+                    ((ok wg) (let [(p (sk/waitPortErr! (str dir "/ready0") wg.run.pid (str dir "/warm.err")))] (do (fr/killTree! wg.run.pid) (settle! wg 100) p)))
                     ((err _) 0)))
         (started (if (> warmPort 0) (fr/guardStart! argv "." env (fr/limits 180 40)) (err (fr/ProcOut :exitCode 1 :stdout "" :stderr (str "warm start failed: " (resultOr (fileReadString (str dir "/warm.err")) "")) :timedOut false))))]
     (match started

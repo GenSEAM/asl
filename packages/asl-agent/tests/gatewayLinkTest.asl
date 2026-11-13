@@ -1,6 +1,6 @@
 (module aslAgent/tests/gatewayLinkTest
   :x [runTests]
-  :i [])
+  :i [(aslGateway/tests/gatewayStartKit :a sk)])
 
 fn config base: String -> String
   (str "(:gateway :v 2"
@@ -90,12 +90,6 @@ fn ! pumpUntilExit! r: Pump pid: Int64 deadline: Int64 -> (Pair Pump Int64)
              ((err _) (pumpUntilExit! r pid deadline))
              ((ok ready) (pumpUntilExit! (stepPump! r ready) pid deadline)))))))
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
-
 fn ! spawnSh! command: String env: (List String) -> Int64
   (match (procSpawnv (list "/bin/sh" "-c" command) (none) (some env)) ((ok sp) sp.pid) ((err _) 0))
 
@@ -122,7 +116,7 @@ fn ! runTests -> Bool
         (common (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
                       (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache)))
         (gwPid (spawnSh! (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " temp "/ready 2>" temp "/gateway.err") common))
-        (gwPort (if (> gwPid 0) (waitPort! (str temp "/ready") 3000) 0))
+        (gwPort (if (> gwPid 0) (sk/waitPort! (str temp "/ready") gwPid) 0))
         (url (str "http://127.0.0.1:" (stringFromInt64 gwPort) "/v1/chat/completions"))
         (httpPid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/http.out 2>" temp "/http.err") (listAppend common (list (str "ASL_GATEWAY_URL=" url)))))
         (httpRun (pumpUntilExit! (Pump :listener listener :stubs (list) :seen (list)) httpPid (+ (nowMs!) 60000)))

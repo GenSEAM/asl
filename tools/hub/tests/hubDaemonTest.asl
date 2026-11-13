@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/hubDaemonTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr) (aslGateway/tests/gatewayStartKit :a sk)])
 
 ; (:m :ref ORCH-HUB-DAEMON :do "gates the one-per-node daemon on a scratch HOME: it listens on the unix socket named in HOME/.asl/hub.asn with mode 0600, a second instance is refused by the lock, and two clients of one model through it share exactly one token bucket; the control runs the same two clients through two separate gateway processes, each with its own bucket, and sees two admissions in the same window")
 (schema StubConn
@@ -102,10 +102,6 @@ fn clientsDone? w: World -> Bool
 fn ok200? w: World -> Bool
   (listAll? (fn [(c Client)] -> Bool (stringStartsWith? c.response "HTTP/1.1 200")) w.clients)
 
-fn ! waitReady! path: String attempts: Int64 -> Bool
-  (if (<= attempts 0) false
-    (if (fileExists? path) true (do (sleepMs 20) (waitReady! path (- attempts 1)))))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -148,7 +144,7 @@ fn ! runTests -> Bool
         (hubMain (resultOr (realPath "asl/tools/hub/main.asl") ""))
         (daemonCmd (str host " run " hubMain " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
+        (up (and (> daemonPid 0) (sk/waitFile! (str temp "/hub.ready") daemonPid (str temp "/hub.err"))))
         (mode (match (fileLstat sock) ((ok st) (mod st.mode 512)) ((err _) -1)))
         (second (fr/shellOut (str "(cd " (resultOr (realPath ".") ".") " && env -i PATH=/usr/bin:/bin HOME=" temp " ASL_GATEWAY_ROOT=" temp " " (nativeCliCacheEnvRow!) " " host " run "
                                   hubMain " serve 2>&1; echo EXIT:$?)") 60000))
@@ -158,7 +154,7 @@ fn ! runTests -> Bool
         (firstKilled (killWait! daemonPid))
         (rm1 (pathRemove (str temp "/hub.ready")))
         (daemon2 (start! temp daemonCmd))
-        (up2 (and (> daemon2 0) (waitReady! (str temp "/hub.ready") 12000)))
+        (up2 (and (> daemon2 0) (sk/waitFile! (str temp "/hub.ready") daemon2 (str temp "/hub.err"))))
         (again (if up2 (chatOnce! sock listener) chat))
         (againOk (and up2 (and (clientsDone? again) (ok200? again))))
         (killed2 (killWait! daemon2))

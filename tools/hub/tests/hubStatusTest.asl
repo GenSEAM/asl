@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/hubStatusTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr) (asl-tools/hub/measure :a ms)])
+  :i [(asl-tools/fleet/run :a fr) (aslGateway/tests/gatewayStartKit :a sk) (asl-tools/hub/measure :a ms)])
 
 ; (:m :ref ORCH-HUB-STATUS :do "GET /hub/status on a running hub: idle it reports no streams and no admit samples; with two clients on one rpm 12 model one is parked, so one stream waits and the bucket shows a queue of 1; after both are answered the admit wait has 2 samples with p50 0 and p95 near the 5 s refill")
 (schema StubConn
@@ -102,10 +102,6 @@ fn clientsDone? w: World -> Bool
 fn ok200? w: World -> Bool
   (listAll? (fn [(c Client)] -> Bool (stringStartsWith? c.response "HTTP/1.1 200")) w.clients)
 
-fn ! waitReady! path: String attempts: Int64 -> Bool
-  (if (<= attempts 0) false
-    (if (fileExists? path) true (do (sleepMs 20) (waitReady! path (- attempts 1)))))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -159,7 +155,7 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (daemonCmd (str host " run " (resultOr (realPath "asl/tools/hub/main.asl") "") " serve --ready " temp "/hub.ready 1>" temp "/hub.out 2>" temp "/hub.err"))
         (daemonPid (start! temp daemonCmd))
-        (up (and (> daemonPid 0) (waitReady! (str temp "/hub.ready") 12000)))
+        (up (and (> daemonPid 0) (sk/waitFile! (str temp "/hub.ready") daemonPid (str temp "/hub.err"))))
         (w0 (World :listener listener :stubs (list) :seenMs (list) :clients (list)))
         (idle (statusAt! w0 sock "idle"))
         (c1 (send! (send! idle (unixConnect sock) "a") (unixConnect sock) "b"))
