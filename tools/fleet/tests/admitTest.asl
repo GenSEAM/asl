@@ -76,12 +76,12 @@ fn ! testCap -> Bool
         (owners (listLength (fold (fn [(acc (List Int64)) (e Ev)] -> (List Int64) (if (or (!= e.ev "claim") (listContains? acc e.owner)) acc (cons e.owner acc))) (list) evs)))
         (_ (cleanup dir))]
     (do (assert ready "token dir with 2 tokens written")
+        (assert (<= (peakOf evs) n) (str "open claims never exceed N=2 across the three pools: peak " (peakOf evs)))
         (assert (listAll? (fn [(e fr/ForkEnd)] -> Bool (and (= e.exit 0) (= e.verdict ""))) ends)
                 (str "each of the three pools ran its N children to exit 0: " (stringJoin (map (fn [(e fr/ForkEnd)] -> String (str e.exit e.verdict e.note)) ends) " ")))
         (assert (= (countOf evs "claim") (* 3 n)) (str "the ledger holds one claim per child, 3N: " (countOf evs "claim")))
         (assert (= (countOf evs "release") (* 3 n)) (str "and one release per child: " (countOf evs "release")))
         (assert (= owners 3) (str "the claims come from three processes: " owners))
-        (assert (<= (peakOf evs) n) (str "open claims never exceed N=2 across the three pools: peak " (peakOf evs)))
         (assert (= (peakOf evs) n) (str "and reach N, the pools queue and are not serialized: peak " (peakOf evs)))
         (assert (listAll? (fn [(e Ev)] -> Bool (and (>= e.tok 0) (< e.tok n))) evs) "every row names a token below N")
         (assert (= held 0) (str "no token is left held: " held))
@@ -164,8 +164,8 @@ fn ! testLoadGate -> Bool
         true))
 
 fn ! runTests -> Bool
-  (do (assert (testDefault) "default N")
-      (assert (testCap) "3N children under N tokens")
+  (do (assert (testCap) "3N children under N tokens")
+      (assert (testDefault) "default N")
       (assert (testStale) "stale slot recovery")
       (assert (testDeadline) "queue deadline")
       (assert (testLoadGate) "load gate")
