@@ -721,8 +721,12 @@ fn ! stagedViews! ctx: sys/Context files: (List String) -> (Result (List verify/
             ((ok ss) (match (stagedView! ctx a) ((err e) (err e)) ((ok s) (ok (listAppend ss (list s))))))))
         (ok (list)) files)
 
+; (:m :ref CHECK-REFUSAL-WORDING :do "the same words as command.asl: a bare test would sweep every suite, a bare check every file")
+fn bareSweepNoun verb: String -> String
+  (if (= verb "check") "file" "suite")
+
 fn ! bareSweepRefused! verb: String -> Int64
-  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every suite\")")) 2)
+  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every " (bareSweepNoun verb) "\")")) 2)
 
 fn ! allWithPaths! verb: String -> Int64
   (do (sys/say! (str "(:" verb " :status :failed :error ERR_USAGE :message \"asl " verb " --all takes no paths\")")) 2)
