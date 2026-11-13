@@ -147,7 +147,8 @@ fn isExcludedSegment p: String -> Bool
             (stringSplit p "/"))
 
 fn getDriverCorpora -> (List (Pair String String))
-  (list (pair "tests/acceptance/r1Host/" "tests/acceptance/r1Host/run.sh"))
+  (list (pair "tests/acceptance/r1Host/" "tests/acceptance/r1Host/run.sh")
+        (pair "tests/harnessBench/cases/" "tests/harnessBench/verifyCases.asl"))
 
 fn driverCorpus p: String -> (Option String)
   (match (listHead (filter (fn [(d (Pair String String))] -> Bool (stringStartsWith? p (pairFirst d))) (getDriverCorpora)))
