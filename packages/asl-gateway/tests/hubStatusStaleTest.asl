@@ -49,6 +49,7 @@ fn ! testRenderAndProbe -> Bool
         (assert (= plainStale (ok 0)) "STALE: without --strict the probe only prints, exit 0")
         (assert (= strictClean (ok 0)) "STALE: --strict exits 0 on a clean status")
         (assert (= missing (ok 2)) "STALE: an unreadable status file exits 2, not 0")
+        (assert (and (cli/tokenSafe? "abc.DEF-123_xyz") (and (not (cli/tokenSafe? "a\"b")) (and (not (cli/tokenSafe? "a\\b")) (and (not (cli/tokenSafe? "a\nb")) (not (cli/tokenSafe? "a\rb")))))) "STALE: a token with a quote, backslash or line break is refused, a plain one passes")
         (assert (= noTok (ok 2)) "STALE: a named token variable that is unset exits 2")
         true))
 
@@ -60,14 +61,20 @@ fn ! testReadErrorIsBadEdit -> Bool
         (good "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
         (w1 (fileWrite path good))
         (first (c/gatewayProfilesLoad! (c/emptyProfilesCache) home ".asl/mem/calibration/index.asn"))
-        (chmod (processRun (str "chmod 000 '" path "' && touch -t 202001010000 '" path "'")))
+        (w2 (fileWrite path (str good " ")))
+        (modeOff (fileChmod path 0))
+        (denied (err? (fileReadString path)))
         (second (c/gatewayProfilesLoad! (pairFirst first) home ".asl/mem/calibration/index.asn"))
-        (restore (processRun (str "chmod 600 '" path "'")))
+        (modeOn (fileChmod path 384))
         (gone (pathRemove home))]
     (do (assert (ok? (pairSecond first)) "READERR: the good file loads")
-        (assert (ok? (pairSecond second)) "READERR: an unreadable file still serves the last good table")
-        (assert (not (stringEmpty? (c/profilesStale (pairFirst second)))) (str "READERR: the read error is held as :stale: " (c/profilesStale (pairFirst second))))
-        true))
+        (assert (ok? modeOff) "READERR: the mode change applies")
+        (if denied
+          (do (assert (ok? (pairSecond second)) "READERR: an unreadable file still serves the last good table")
+              (assert (not (stringEmpty? (c/profilesStale (pairFirst second)))) (str "READERR: the read error is held as :stale: " (c/profilesStale (pairFirst second))))
+              true)
+          (do (assert (ok? (pairSecond second)) "READERR: skipped, this user reads a mode 000 file (root); the last good table is still served")
+              true))))
 
 fn ! runTests -> Bool
   (do (assert (testRenderAndProbe) "GW-HUB-STATUS-STRICT: render and strict probe")

@@ -43,6 +43,7 @@
       cliBoundFlags!
       gatewayCliMain
       hubStatusStale?
+      tokenSafe?
       gatewayHubStatusCli!
       main]
   :i [(asl-json/json :a j)
@@ -516,12 +517,17 @@ fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
 fn hubStatusStale? text: String -> Bool
   (stringContains? text " :configStale ")
 
+; (:m :ref GW-HUB-STATUS-STRICT :do "the bearer is written into a curl config line, so a token holding a double quote, backslash, CR or LF could end the quoted value and add curl options: such a token is refused before curl starts")
+fn tokenSafe? token: String -> Bool
+  (not (or (stringContains? token "\"") (or (stringContains? token "\\") (or (stringContains? token "\n") (stringContains? token "\r")))))
+
 fn ! hubStatusFetch! url: String token: String -> (Result String String)
-  (let [(c0 (proc/withTimeout (proc/cmd "curl" (list "-sS" "-m" "10" "--fail" "-K" "-" url)) 15000))
+  (if (not (tokenSafe? token)) (err "the bearer token holds a quote, backslash or line break")
+  (let [(c0 (proc/withTimeout (proc/cmd "curl" (list "-sS" "-m" "10" "--fail" "--proto" "=http,https" "-K" "-" url)) 15000))
         (c (proc/withStdin c0 (if (stringEmpty? token) "" (str "header = \"Authorization: Bearer " token "\"\n"))))]
     (match (proc/exec! c)
       ((err e) (err (str "curl: " e)))
-      ((ok out) (if (= out.exitCode 0) (ok out.stdout) (err (str "curl exit " (stringFromInt64 out.exitCode) ": " (stringTrim out.stderr)))))))
+      ((ok out) (if (= out.exitCode 0) (ok out.stdout) (err (str "curl exit " (stringFromInt64 out.exitCode) ": " (stringTrim out.stderr))))))))
 
 fn ! gatewayHubStatusCli! args: (List String) -> (Result Int64 String)
   (let [(url (optionOr (flagValue args "--url") (str "http://127.0.0.1:" (optionOr (envGet "ASL_GATEWAY_PORT") "8765") "/hub/status")))
