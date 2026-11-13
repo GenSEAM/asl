@@ -1515,15 +1515,19 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(x (Pair Int64 String))] -> Bool (= (pairFirst x) fd)) srv.outbox)))
 
-fn withoutOutbox srv: GatewayLoop fd: Int64 -> GatewayLoop
-  (with srv :outbox (filter (fn [(x (Pair Int64 String))] -> Bool (!= (pairFirst x) fd)) srv.outbox))
+; (:m :ref GW-LINK-CORRELATION :do "a link call reads only the answer rendered for its own connection id. A call that passed its limit leaves its request in flight, so the provider's answer still settles and writes its usage row under that call's tag, and the next call takes the id below every one still in the loop: the late answer lands in the outbox under the old id, where no call reads it. One call waits at a time, so whatever the outbox holds when a call starts or ends belongs to no reader and is dropped")
+fn linkCallFd srv: GatewayLoop -> Int64
+  (- (fold (fn [(low Int64) (cn GatewayConn)] -> Int64 (min low cn.fd)) (+ (linkFd) 1) srv.conns) 1)
+
+fn withoutLinkAnswers srv: GatewayLoop -> GatewayLoop
+  (with srv :outbox (list))
 
 fn pending? srv: GatewayLoop fd: Int64 -> Bool
   (or (listAny? (fn [(cn GatewayConn)] -> Bool (= cn.fd fd)) srv.conns) (not (listEmpty? srv.replies)))
 
 fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop (Result String String))
   (match (outboxFor srv fd)
-    ((some data) (pair (withoutOutbox srv fd) (ok data)))
+    ((some data) (pair (withoutLinkAnswers srv) (ok data)))
     ((none)
       (cond
         ((not (or (pending? srv fd) (pd/poolActive? srv.pools))) (pair srv (err "in-process gateway request ended without a response")))
@@ -1540,5 +1544,6 @@ fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop
 
 fn ! linkSend! srv: GatewayLoop method: String path: String headers: (List (Pair String String)) body: String timeoutMs: Int64 -> (Pair GatewayLoop (Result String String))
   (let [(request (HttpRequest :method method :path path :headers headers :body body))
-        (started (dispatchAuthed! (withoutOutbox srv (linkFd)) (linkFd) "" request))]
-    (linkPump! started (linkFd) (+ (nowMs!) timeoutMs)))
+        (fd (linkCallFd srv))
+        (started (dispatchAuthed! (withoutLinkAnswers srv) fd "" request))]
+    (linkPump! started fd (+ (nowMs!) timeoutMs)))
