@@ -4,8 +4,9 @@
       loadTask loadTasks renderAsl renderPy renderTs snake armLang allArms armKnown?
       aslHarness pyHarness tsHarness extractCode stripModuleHeader parenToBracket bracketToParen toWrapFn fromWrapFn
       normaliseAsl toArm sigFor userPrompt repairPrompt exampleLine conventionFor formatFor
-      languageSection cardFor parenSubs wrapFnSubs loadCards cardOf sha256Of
-      gradeCode! gradeReply! healedPass! runTrial! runAll! trialKey trialRow planTrials planSig callCost reqChars
+      languageSection cardFor parenSubs wrapFnSubs loadCards cardOf sha256Of labArms loadCardsFor
+      infraOf settle! promptShaOf reqPromptSha expectedPromptSha hasWord? definesEntry? rowVerdict
+      gradeCode! gradeReply! healedPass! healedStage! runTrial! runAll! trialKey trialRow planTrials planSig callCost reqChars
       fakeReply! fakeCaller usdToMicro dateOf toolVersion! removeDir! failingOf headerRow usdText priorSpend headOf]
   :i [(asl-tools/fleet/run :a fr)])
 
@@ -47,14 +48,18 @@
   (:f turn Int64)
   (:f system String)
   (:f messages (List (Pair String String)))
-  (:f maxTokens Int64))
+  (:f maxTokens Int64)
+  (:f sendsLeft Int64 :default 8))
 
 (schema Reply
   (:f text String)
   (:f tokIn Int64)
   (:f tokOut Int64)
   (:f served String)
-  (:f error String))
+  (:f error String)
+  (:f abandoned Int64 :default 0)
+  (:f abandonedIn Int64 :default 0)
+  (:f abandonedOut Int64 :default 0))
 
 (schema Config
   (:f root String)
@@ -66,7 +71,9 @@
   (:f priceIn Int64)
   (:f priceOut Int64)
   (:f capPico Int64)
-  (:f checkFirst Bool))
+  (:f checkFirst Bool)
+  (:f infraTries Int64 :default 6)
+  (:f infraWaitMs Int64 :default 20000))
 
 (schema Trial
   (:f idx Int64)
@@ -87,7 +94,10 @@
   (:f served String)
   (:f error String)
   (:f stripped Bool)
-  (:f spent Int64))
+  (:f spent Int64)
+  (:f promptSha String :default "")
+  (:f abandoned Int64 :default 0)
+  (:f abandonedPico Int64 :default 0))
 
 (schema Outcome
   (:f trial Trial)
@@ -100,7 +110,10 @@
   (:f wallMs Int64)
   (:f sysTok Int64)
   (:f stripped Bool)
-  (:f spent Int64))
+  (:f spent Int64)
+  (:f promptSha String :default "")
+  (:f abandoned Int64 :default 0)
+  (:f abandonedPico Int64 :default 0))
 
 (schema RunState
   (:f spent Int64)
@@ -407,8 +420,11 @@ fn renderTs v: Sx -> String
 fn allArms -> (List String)
   (list "py" "ts" "asl" "aslParen" "aslWrapFn")
 
+fn labArms -> (List String)
+  (list "aslCardAsn" "aslCardContrast" "aslCardExample" "aslCardMin")
+
 fn armKnown? arm: String -> Bool
-  (listContains? (allArms) arm)
+  (or (listContains? (allArms) arm) (listContains? (labArms) arm))
 
 fn armLang arm: String -> String
   (cond
@@ -808,6 +824,35 @@ fn ! loadCards root: String -> (Result (List Card) String)
                 (ok (list))
                 forms)))))
 
+fn ! loadCardRows root: String file: String -> (Result (List Card) String)
+  (match (fileReadString (str root "/asl/bench/gen/" file))
+    ((err e) (err e))
+    ((ok text)
+      (match (readForms text)
+        ((err e) (err (str file ": " e)))
+        ((ok forms)
+          (fold (fn [(acc (Result (List Card) String)) (form Sx)] -> (Result (List Card) String)
+                  (match acc
+                    ((err e) (err e))
+                    ((ok cs)
+                      (if (= (headOf form) ":card")
+                        (match (loadCard root (sxItems form))
+                          ((err e) (err e))
+                          ((ok c) (ok (listAppend cs (list c)))))
+                        (ok cs)))))
+                (ok (list))
+                forms)))))
+
+fn ! loadCardsFor root: String arms: (List String) -> (Result (List Card) String)
+  (match (loadCards root)
+    ((err e) (err e))
+    ((ok base)
+      (if (listAny? (fn [(a String)] -> Bool (listContains? (labArms) a)) arms)
+        (match (loadCardRows root "cardLab/cards.asn")
+          ((err e) (err e))
+          ((ok lab) (ok (listAppend base lab))))
+        (ok base))))
+
 fn cardOf cards: (List Card) arm: String -> Card
   (optionOr (listFind (fn [(c Card)] -> Bool (= c.arm arm)) cards) (Card :arm arm :text "" :sha "" :tokens 0))
 
@@ -830,26 +875,59 @@ fn ! toolVersion! argv: (List String) -> String
   (let [(d (child! argv "/" (fr/childEnv (list)) 30))]
     (if (= d.exit 0) (stringTrim d.out) "absent"))
 
+; (:m :ref GENRUN-CROSSWIRE :do "a tool child that says nothing about the program is infrastructure, never a model failure: the launcher reporting a stale or absent native CLI or a refused rebuild, a child ended by the fleet limits (a check waiting on a native CLI rebuild ends at its 30 s limit), and a check that exits non-zero without one diagnostic; the result is the reason, empty when the child judged the program")
+fn infraOf d: fr/Done step: String -> String
+  (cond
+    ((or (stringContains? d.out "ERR_NATIVE_") (stringContains? d.out ":code rebuildRefused")) "nativeCli")
+    ((and (not (stringEmpty? d.verdict)) (!= d.verdict "exit")) d.verdict)
+    ((and (= step "check")
+          (and (!= d.exit 0)
+               (not (or (stringContains? d.out "ERR_") (or (stringContains? d.out ":status :failed") (stringContains? d.out ": parse "))))))
+      "noDiagnostic")
+    (else ""))
+
+fn infraGrade why: String d: fr/Done dir: String -> Grade
+  (Grade :stage "infra" :output (str why ": " (clip (cleanOut d.out dir) 300)) :failing (list))
+
+; (:m :ref GENRUN-CROSSWIRE :do "an infra grade is tried again after a wait, up to the given number of attempts; any other grade is final at once")
+fn ! settle! tries: Int64 waitMs: Int64 attempt: (fn [Int64] -> Grade) n: Int64 -> Grade
+  (let [(g (attempt n))]
+    (if (and (= g.stage "infra") (< n tries))
+      (do (sleepMs waitMs) (settle! tries waitMs attempt (+ n 1)))
+      g))
+
+fn ! cliAlive! cfg: Config -> Bool
+  (= (child! (list cfg.aslBin "version") "/" (fr/childEnv (list)) 30).exit 0)
+
 fn ! runAslFile! cfg: Config dir: String path: String -> Grade
   (let [(env (fr/childEnv (list (str "ASL_ROOT=" dir))))
-        (chk (if cfg.checkFirst (child! (list cfg.aslBin "check" path) dir env 30) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")))]
-    (if (or (!= chk.exit 0) (stringContains? chk.out ":status :failed"))
-      (Grade :stage (if (or (stringContains? chk.out ": parse ") (stringContains? chk.out "ERR_UNBALANCED")) "parse" "check")
-             :output (cleanOut chk.out dir) :failing (list))
-      (let [(run (child! (list cfg.aslBin "test" path) dir env 30))]
-        (cond
-          ((= run.exit 0) (Grade :stage "ok" :output (cleanOut run.out dir) :failing (list)))
-          ((or (stringContains? run.out "FAILCASE") (stringContains? run.out "ERR_ASSERT"))
-            (Grade :stage "correct" :output (cleanOut run.out dir) :failing (failingOf run.out)))
-          ((or (stringContains? run.out ": parse ") (stringContains? run.out "ERR_UNBALANCED")) (Grade :stage "parse" :output (cleanOut run.out dir) :failing (list)))
-          ((and (not cfg.checkFirst) (stringContains? run.out "ERR_")) (Grade :stage "check" :output (cleanOut run.out dir) :failing (list)))
-          (else (Grade :stage "execute" :output (cleanOut run.out dir) :failing (list)))))))
+        (chk (if cfg.checkFirst (child! (list cfg.aslBin "check" path) dir env 30) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")))
+        (chkInfra (infraOf chk "check"))]
+    (cond
+      ((not (stringEmpty? chkInfra)) (infraGrade chkInfra chk dir))
+      ((or (!= chk.exit 0) (stringContains? chk.out ":status :failed"))
+        (Grade :stage (if (or (stringContains? chk.out ": parse ") (stringContains? chk.out "ERR_UNBALANCED")) "parse" "check")
+               :output (cleanOut chk.out dir) :failing (list)))
+      (else (runAslTest! cfg dir path env))))
+
+; (:m :ref GENRUN-CROSSWIRE :do "a test child ended by the limits is the program's own loop when the CLI still answers version, and infrastructure when it does not")
+fn ! runAslTest! cfg: Config dir: String path: String env: (List String) -> Grade
+  (let [(run (child! (list cfg.aslBin "test" path) dir env 30))
+        (runInfra (infraOf run "test"))]
+    (cond
+      ((= run.exit 0) (Grade :stage "ok" :output (cleanOut run.out dir) :failing (list)))
+      ((and (not (stringEmpty? runInfra)) (or (= runInfra "nativeCli") (not (cliAlive! cfg)))) (infraGrade runInfra run dir))
+      ((or (stringContains? run.out "FAILCASE") (stringContains? run.out "ERR_ASSERT"))
+        (Grade :stage "correct" :output (cleanOut run.out dir) :failing (failingOf run.out)))
+      ((or (stringContains? run.out ": parse ") (stringContains? run.out "ERR_UNBALANCED")) (Grade :stage "parse" :output (cleanOut run.out dir) :failing (list)))
+      ((and (not cfg.checkFirst) (stringContains? run.out "ERR_")) (Grade :stage "check" :output (cleanOut run.out dir) :failing (list)))
+      (else (Grade :stage "execute" :output (cleanOut run.out dir) :failing (list)))))
 
 fn ! gradeAsl! cfg: Config dir: String modName: String code: String t: Task cases: (List Case) -> Grade
   (let [(path (str dir "/" modName ".asl"))]
     (match (fileWrite path (aslHarness modName code t cases))
       ((err e) (Grade :stage "harness" :output e :failing (list)))
-      ((ok _) (runAslFile! cfg dir path))))
+      ((ok _) (settle! cfg.infraTries cfg.infraWaitMs (fn [(n Int64)] -> Grade (runAslFile! cfg dir path)) 1))))
 
 fn ! gradePy! cfg: Config dir: String code: String t: Task cases: (List Case) -> Grade
   (let [(path (str dir "/cand.py"))]
@@ -895,17 +973,25 @@ fn ! gradeReply! cfg: Config dir: String arm: String t: Task reply: String -> (P
     ((none) (pair (Grade :stage "extract" :output "The reply holds no complete fenced code block." :failing (list)) false))
     ((some code) (gradeCode! cfg dir arm t t.cases code)))
 
-fn ! healedPass! cfg: Config dir: String arm: String t: Task reply: String -> Bool
+; (:m :ref GENRUN-CROSSWIRE :do "the stage of the healed copy: ok, a failing stage, or infra when the heal child or the grade after it was infrastructure through every attempt")
+fn ! healedStage! cfg: Config dir: String arm: String t: Task reply: String -> String
   (match (extractCode reply)
-    ((none) false)
+    ((none) "extract")
     ((some code)
       (let [(n (normaliseAsl arm code))
             (path (str dir "/candHealed.asl"))]
         (match (fileWrite path (aslHarness "candHealed" (pairFirst n) t t.cases))
-          ((err _) false)
+          ((err _) "harness")
           ((ok _)
-            (let [(healed (child! (list cfg.aslBin "heal" path) dir (fr/childEnv (list (str "ASL_ROOT=" dir))) 30))]
-              (= (runAslFile! cfg dir path).stage "ok")))))))
+            (settle! cfg.infraTries cfg.infraWaitMs
+                     (fn [(k Int64)] -> Grade
+                       (let [(healed (child! (list cfg.aslBin "heal" path) dir (fr/childEnv (list (str "ASL_ROOT=" dir))) 30))
+                             (why (infraOf healed "heal"))]
+                         (if (stringEmpty? why) (runAslFile! cfg dir path) (infraGrade why healed dir))))
+                     1).stage)))))
+
+fn ! healedPass! cfg: Config dir: String arm: String t: Task reply: String -> Bool
+  (= (healedStage! cfg dir arm t reply) "ok")
 
 fn reqChars r: Req -> Int64
   (+ (stringLength r.system) (listSum (map (fn [(m (Pair String String))] -> Int64 (stringLength (pairSecond m))) r.messages)))
@@ -917,29 +1003,37 @@ fn callReserve cfg: Config r: Req -> Int64
   (callCost cfg (/ (reqChars r) 2) r.maxTokens)
 
 fn ! turnLoop! cfg: Config tr: Trial dir: String system: String messages: (List (Pair String String)) turn: Int64 call: (fn [S Req] -> (Pair S Reply)) state: S pr: Prog -> (Pair S Prog)
-  (let [(req (Req :model tr.model :arm tr.arm :task tr.task.id :rep tr.rep :turn turn :system system :messages messages :maxTokens cfg.maxTokens))]
+  (let [(plain (Req :model tr.model :arm tr.arm :task tr.task.id :rep tr.rep :turn turn :system system :messages messages :maxTokens cfg.maxTokens))
+        (req (with plain :sendsLeft (max 1 (/ (- cfg.capPico pr.spent) (max 1 (callReserve cfg plain))))))]
     (if (> (+ pr.spent (callReserve cfg req)) cfg.capPico)
       (pair state (with pr :error "budget"))
       (let [(res (call state req))
             (state2 (pairFirst res))
             (rep (pairSecond res))
-            (spent2 (+ pr.spent (callCost cfg rep.tokIn rep.tokOut)))]
+            (lost (callCost cfg rep.abandonedIn rep.abandonedOut))
+            (spent2 (+ (+ pr.spent (callCost cfg rep.tokIn rep.tokOut)) lost))
+            (pa (with pr :abandoned (+ pr.abandoned rep.abandoned) :abandonedPico (+ pr.abandonedPico lost)))]
         (if (not (stringEmpty? rep.error))
-          (pair state2 (with pr :error (str "call: " rep.error) :spent spent2))
+          (pair state2 (with pa :error (str "call: " rep.error) :spent spent2))
           (let [(gr (gradeReply! cfg dir tr.arm tr.task rep.text))
                 (g (pairFirst gr))
-                (healed (if (= turn 1)
-                          (if (= g.stage "ok")
-                            true
-                            (if (and (= (armLang tr.arm) "asl") (!= g.stage "extract")) (healedPass! cfg dir tr.arm tr.task rep.text) false))
-                          pr.healedPass))
-                (pr2 (with pr :turns (listAppend pr.turns (list (Turn :stage g.stage :tokIn rep.tokIn :tokOut rep.tokOut :reply rep.text)))
-                              :healedPass healed :served rep.served :stripped (or pr.stripped (pairSecond gr)) :spent spent2))]
-            (if (or (= g.stage "ok") (> turn cfg.repairs))
-              (pair state2 pr2)
-              (turnLoop! cfg tr dir system
-                         (listAppend messages (list (pair "assistant" rep.text) (pair "user" (repairPrompt g))))
-                         (+ turn 1) call state2 pr2)))))))
+                (healStage (cond
+                             ((!= turn 1) "kept")
+                             ((= g.stage "ok") "ok")
+                             ((and (= (armLang tr.arm) "asl") (and (!= g.stage "extract") (!= g.stage "infra"))) (healedStage! cfg dir tr.arm tr.task rep.text))
+                             (else "none")))
+                (healed (if (= turn 1) (= healStage "ok") pr.healedPass))
+                (pr2 (with pa :turns (listAppend pr.turns (list (Turn :stage g.stage :tokIn rep.tokIn :tokOut rep.tokOut :reply rep.text)))
+                              :healedPass healed :served rep.served :stripped (or pr.stripped (pairSecond gr)) :spent spent2
+                              :promptSha (if (= turn 1) (reqPromptSha req) pr.promptSha)))]
+            (cond
+              ((= g.stage "infra") (pair state2 (with pa :error (str "infra: " (clip g.output 300)) :spent spent2)))
+              ((= healStage "infra") (pair state2 (with pa :error "infra: the healed copy could not be graded" :spent spent2)))
+              ((or (= g.stage "ok") (> turn cfg.repairs)) (pair state2 pr2))
+              (else
+                (turnLoop! cfg tr dir system
+                           (listAppend messages (list (pair "assistant" rep.text) (pair "user" (repairPrompt g))))
+                           (+ turn 1) call state2 pr2))))))))
 
 fn stageAt turns: (List Turn) i: Int64 -> String
   (match (listGet turns i)
@@ -960,7 +1054,68 @@ fn ! runTrial! cfg: Config cards: (List Card) tr: Trial call: (fn [S Req] -> (Pa
           (Outcome :trial tr :turns pr.turns :rawPass (= (stageAt pr.turns 0) "ok") :healedPass pr.healedPass
                    :solved (and (> n 0) (= (stageAt pr.turns (- n 1)) "ok"))
                    :served pr.served :error pr.error :wallMs (/ (- (monotonicNs) t0) 1000000) :sysTok card.tokens
-                   :stripped pr.stripped :spent pr.spent)))
+                   :stripped pr.stripped :spent pr.spent :promptSha pr.promptSha :abandoned pr.abandoned :abandonedPico pr.abandonedPico)))
+
+; (:m :ref GENRUN-CROSSWIRE :do "a row carries the digest of the prompt its first call sent: sha256 of the card digest, a line break and the user prompt; the scorer rebuilds it from the header card digest and the task and refuses a row whose digest differs")
+fn promptShaOf cardSha: String user: String -> String
+  (sha256Of (str cardSha "\n" user))
+
+fn reqPromptSha r: Req -> String
+  (promptShaOf (sha256Of r.system) (match (listHead r.messages) ((some m) (pairSecond m)) ((none) "")))
+
+fn expectedPromptSha cardSha: String arm: String t: Task -> String
+  (promptShaOf cardSha (userPrompt arm t))
+
+fn wordChar? c: String -> Bool
+  (or (and (>= c "a") (<= c "z")) (or (and (>= c "A") (<= c "Z")) (or (and (>= c "0") (<= c "9")) (= c "_"))))
+
+fn tailrec hasWord? text: String name: String -> Bool
+  (match (if (stringEmpty? name) (none) (stringIndexOf text name))
+    ((none) false)
+    ((some i)
+      (if (and (not (wordChar? (if (= i 0) "" (charAt text (- i 1))))) (not (wordChar? (charAt text (+ i (stringLength name))))))
+        true
+        (hasWord? (sliceFrom text (+ i 1)) name))))
+
+fn definesEntry? text: String name: String -> Bool
+  (or (hasWord? text (str "fn " name)) (or (hasWord? text (str "def " name)) (hasWord? text (str "function " name))))
+
+fn ownEntry arm: String t: Task -> String
+  (if (= (armLang arm) "py") t.entryPy t.entry)
+
+fn otherEntry arm: String t: Task -> String
+  (if (= (armLang arm) "py") t.entry t.entryPy)
+
+fn foreignTask tasks: (List Task) arm: String own: Task reply: String -> String
+  (if (hasWord? reply (ownEntry arm own))
+    ""
+    (match (listFind (fn [(t Task)] -> Bool
+                       (if (= t.id own.id)
+                         (and (!= (otherEntry arm t) (ownEntry arm t)) (definesEntry? reply (otherEntry arm t)))
+                         (or (definesEntry? reply t.entry) (definesEntry? reply t.entryPy))))
+                     tasks)
+      ((some t) (if (= t.id own.id) (str t.id " in another arm") t.id))
+      ((none) "")))
+
+fn tailrec tokInDrop ins: (List Int64) last: Int64 -> Bool
+  (match (listHead ins)
+    ((none) false)
+    ((some v)
+      (cond
+        ((<= v 1) (tokInDrop (listDrop ins 1) last))
+        ((<= v last) true)
+        (else (tokInDrop (listDrop ins 1) v)))))
+
+; (:m :ref GENRUN-CROSSWIRE :do "what a stored trial row says about itself, empty when nothing contradicts its task: a reply that does not name the entry of its task and defines the entry of another task (or of its own task in the spelling of another arm) answers another request; so does a prompt token count that does not grow from one turn to the next, because every turn resends the conversation plus one reply and one repair prompt (a count of 1 marks a reply the runner recorded as cut at max tokens and is skipped)")
+fn rowVerdict tasks: (List Task) arm: String taskId: String replies: (List String) tokIns: (List Int64) -> String
+  (match (listFind (fn [(t Task)] -> Bool (= t.id taskId)) tasks)
+    ((none) "")
+    ((some own)
+      (let [(named (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(r String)] -> String (foreignTask tasks arm own r)) replies)))]
+        (cond
+          ((not (listEmpty? named)) (str "a reply answers task " (optionOr (listHead named) "")))
+          ((tokInDrop tokIns 0) "prompt token counts do not grow turn over turn")
+          (else "")))))
 
 fn trialKey tr: Trial -> String
   (str tr.arm "|" tr.task.id "|" tr.model "|" (stringFromInt64 tr.rep))
@@ -970,6 +1125,10 @@ fn intList xs: (List Int64) -> String
 
 fn boolText b: Bool -> String
   (if b "true" "false")
+
+; (:m :ref GENRUN-CROSSWIRE :do "a request left in flight at its limit is billed by the provider though its answer is never read: the caller reports how many it abandoned with the reserve of one call each (half the prompt characters as tokens in, max tokens out), the trial adds that estimate to its spend so the cap sees it, and the row says so; the request carries how many sends the cap still covers, so retries stop at the cap")
+fn abandonedText o: Outcome -> String
+  (if (= o.abandoned 0) "" (str " :abandoned (:n " (stringFromInt64 o.abandoned) " :estUsd " (asnQuote (usdText o.abandonedPico)) ")"))
 
 fn trialRow o: Outcome cost: Int64 -> String
   (let [(ins (map (fn [(t Turn)] -> Int64 t.tokIn) o.turns))
@@ -987,6 +1146,8 @@ fn trialRow o: Outcome cost: Int64 -> String
          " :tokToGreen " (stringFromInt64 (if o.solved (+ (listSum ins) (listSum outs)) 0))
          " :sysTok " (stringFromInt64 o.sysTok) " :costPico " (stringFromInt64 cost) " :wallMs " (stringFromInt64 o.wallMs)
          " :headerStripped " (boolText o.stripped)
+         " :promptSha " (asnQuote o.promptSha)
+         (abandonedText o)
          " :replies (" (stringJoin (map (fn [(t Turn)] -> String (asnQuote t.reply)) o.turns) " ") "))"))
 
 fn planTrials models: (List String) arms: (List String) tasks: (List Task) reps: Int64 seed: Int64 -> (List Trial)
@@ -1028,8 +1189,13 @@ fn ! stepKnown! cfg: Config cards: (List Card) existing: String total: Int64 cal
                                                 " :doneTrials " (stringFromInt64 (+ rs.done rs.skipped)) " :ofTrials " (stringFromInt64 total)
                                                 " :atKey " (asnQuote (trialKey tr)) ")\n")))]
                 (pair (pairFirst res) (with rs :spent o.spent :stopped "budget"))))
+            ((stringStartsWith? o.error "infra: ")
+              (let [(w (fileAppend cfg.out (str "(:infra :at " (asnQuote (trialKey tr)) " :error " (asnQuote (clip o.error 400))
+                                                " :costPico " (stringFromInt64 (- o.spent rs.spent)) ")\n")))]
+                (pair (pairFirst res) (with rs :spent o.spent :stopped "infra"))))
             ((not (stringEmpty? o.error))
-              (let [(w (fileAppend cfg.out (str "(:callFailed :key " (asnQuote (trialKey tr)) " :error " (asnQuote (clip o.error 400)) ")\n")))
+              (let [(w (fileAppend cfg.out (str "(:callFailed :key " (asnQuote (trialKey tr)) " :error " (asnQuote (clip o.error 400))
+                                                " :costPico " (stringFromInt64 (- o.spent rs.spent)) (abandonedText o) ")\n")))
                     (fails (+ rs.callFails 1))]
                 (pair (pairFirst res) (with rs :spent o.spent :callFails fails :stopped (if (>= fails 3) "callFailures" "")))))
             (else
@@ -1149,4 +1315,4 @@ fn headerRow mode: String models: (List String) arms: (List String) tasks: (List
 fn priorSpend existing: String -> (Result Int64 String)
   (match (readForms existing)
     ((err e) (err (str "existing results are unreadable: " e)))
-    ((ok forms) (ok (listSum (map (fn [(f Sx)] -> Int64 (if (= (headOf f) ":trial") (kwInt (sxItems f) ":costPico") 0)) forms)))))
+    ((ok forms) (ok (listSum (map (fn [(f Sx)] -> Int64 (if (listContains? (list ":trial" ":infra" ":callFailed") (headOf f)) (kwInt (sxItems f) ":costPico") 0)) forms)))))

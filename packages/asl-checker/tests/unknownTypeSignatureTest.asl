@@ -25,6 +25,9 @@ fn ! runTests -> Bool
         (noRet (checkSnippet! "noRet" "(module p/tp :x [g])\n\nfn g x: Any\n  x\n"))]
     (do
       (assert (unknownTypeNamed? ret "Stringing") (str "an unknown return type is ERR_UNKNOWN_TYPE naming it: " (diagnosticsText ret)))
+      (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? d.message "Stringing in function f is neither a known type nor bound in { }; did you mean String")) ret) (str "the nearest known type is suggested: " (diagnosticsText ret)))
+      (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? d.message "did you mean String")) field) (str "a misspelt field type gets the suggestion: " (diagnosticsText field)))
+      (assert (not (listAny? (fn [(d ty/Diagnostic)] -> Bool (stringContains? d.message "did you mean")) enumPayload)) (str "a name with nothing near gets no suggestion: " (diagnosticsText enumPayload)))
       (assert (unknownTypeNamed? param "Intt") (str "an unknown parameter type is ERR_UNKNOWN_TYPE: " (diagnosticsText param)))
       (assert (unknownTypeNamed? field "Strng") (str "an unknown schema field type is ERR_UNKNOWN_TYPE: " (diagnosticsText field)))
       (assert (unknownTypeNamed? enumPayload "Bogus") (str "an unknown enum payload type is ERR_UNKNOWN_TYPE: " (diagnosticsText enumPayload)))

@@ -1,0 +1,17 @@
+#@ task renameSumKahan renameAcrossFiles
+#@ prompt
+Rename the exported function sumKahan of the describe module to sumCompensated everywhere: the definition, the export list, every caller in the package and the tests. Nothing else changes, and the old name must not remain in the sources.
+#@ refAll src/describe.asl
+sumKahan
+#@ with
+sumCompensated
+#@ refAll src/agree.asl
+sumKahan
+#@ with
+sumCompensated
+#@ gradeEditAll tests/describeTest.asl
+sumKahan
+#@ with
+sumCompensated
+#@ absent
+sumKahan

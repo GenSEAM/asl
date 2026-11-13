@@ -2,7 +2,7 @@
   :x [PaceSet RouteEdit fixed3 entryToken calOkRate freeCalScore saturatedQuality qualityOf multiplierOf spreadWeight daysLeft subRemaining subRenews paceRpm pacePatchText modelsPaceCli!]
   :i [(config :a c)
       (localTime :a lt)
-      (asl-cli/system :a sys)])
+      (asl-text/say :a sys)])
 
 ; (:m :ref SUB-MULTIPLIERS :do "asl run cliDispatch.asl models pace: proposes freePool and paidCheap :spread weights = value multiplier x quality and per-model :rpm that spends each subscription's remaining credit evenly until its renews date; reads the config, CAL rows and ~/.asl/subscriptions.asn, writes one patch file, never the config")
 

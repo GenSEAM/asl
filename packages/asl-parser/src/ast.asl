@@ -1020,6 +1020,17 @@ fn oldFieldError text: String bs: Bytes at: Int64 -> ip/IndentError
         (field (optionOr (stringSlice text (+ at 2) end) ""))]
     (ip/IndentError :msg (str "ERR_READ_FIELD (.-" field " x) is retired: write x." field ", or (expr)." field " for an expression") :line pos.line :col pos.col))
 
+; (:m :ref unbalancedFormDiagnostic :do "an item is parsed from its own text, so the opener position inside a closes-opened-at message is item-relative while the error position is file-absolute; the opener is rebased the same way, so the message names the real line of the unmatched opener")
+fn rebaseOpenedAt msg: String line: Int64 col: Int64 -> String
+  (let [(parts (stringSplit msg " opened at "))
+        (lc (stringSplit (optionOr (listGet parts 1) "") ":"))]
+    (if (or (!= (listLength parts) 2) (!= (listLength lc) 2)) msg
+      (match (stringToInt64 (optionOr (listGet lc 0) ""))
+        ((none) msg)
+        ((some ol) (match (stringToInt64 (optionOr (listGet lc 1) ""))
+          ((none) msg)
+          ((some oc) (str (optionOr (listGet parts 0) "") " opened at " (stringFromInt64 (+ line (- ol 1))) ":" (stringFromInt64 (if (= ol 1) (+ col (- oc 1)) oc)))))))))
+
 fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result KidForm ParseError)
   (let [(start node.start)
         (end node.end)
@@ -1035,7 +1046,7 @@ fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result Kid
              (eCol e.col)
              (adjLine (+ line (- eLine 1)))
              (adjCol (if (= eLine 1) (+ col (- eCol 1)) eCol))]
-         (err (ParseError :msg e.msg :line adjLine :col adjCol))))
+         (err (ParseError :msg (rebaseOpenedAt e.msg line col) :line adjLine :col adjCol))))
       ((ok forms)
        (match (listHead forms)
          ((none) (err (ParseError :msg "no form produced" :line line :col col)))

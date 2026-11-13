@@ -1511,7 +1511,7 @@ fn gateSig out: String -> String
 fn ! taskText dir: String u: st/Task -> String
   (match (fileReadString (str dir "/tasks/" u.id ".txt"))
     ((ok t) t)
-    ((err _) (str "Implement plan unit " u.id " exactly as its row in .asl/mem/work/SH/plan.asn says; the gate is: " u.gate)))
+    ((err _) (str "Implement plan unit " u.id " exactly as its row in " (stringJoin (intakeFiles! dir) " or ") " says; the gate is: " u.gate)))
 
 ; (:m :ref CONDHARDEN :do "line count of the owned file at the unit's base and now; -1 when it did not exist there or is gone now")
 fn ! baseLinesOf wt: String base: String path: String -> Int64
@@ -2759,17 +2759,54 @@ fn ! needRows! dir: String -> Int64
                 todo))]
     (listLength todo))
 
+; (:m :ref NODE2-FEED-BACKLOG :do "queue files next to the plan ledger: each (:queue :path P [:base REF] [:channel LANE]) row of the store's ladder.asn names a file in the backlog schema that every service cycle imports after the ledger of ledger.path; a relative P is read under the store's repo.path, :base defaults to main and :channel (the lane of rows without their own) to free; a row with an unknown key, no :path or an empty value is not used, and without any row intake is the ledger alone, as before")
+fn queueErrors row: String -> (List String)
+  (match (st/rowFields row "queue")
+    ((err e) (list e))
+    ((ok fs)
+      (listAppend
+        (if (stringEmpty? (st/textField fs "path")) (list "no :path") (list))
+        (map (fn [(k String)] -> String (str "unknown key " k))
+             (filter (fn [(k String)] -> Bool (not (listContains? (list ":path" ":base" ":channel") k)))
+                     (map (fn [(f asn/AsnField)] -> String f.key) fs))))))
+
+fn ! queueRows! dir: String -> (List (List String))
+  (let [(repo (stringTrim (readOr (repoPath dir))))]
+    (listFlatMap (fn [(l String)] -> (List (List String))
+                   (if (or (not (stringStartsWith? l "(:queue ")) (not (listEmpty? (queueErrors l)))) (list)
+                     (match (st/rowFields l "queue")
+                       ((err _) (list))
+                       ((ok fs)
+                         (let [(given (st/textField fs "path"))
+                               (base (st/textField fs "base"))
+                               (lane (st/textField fs "channel"))]
+                           (list (list (if (or (stringStartsWith? given "/") (stringEmpty? repo)) given (str repo "/" given))
+                                       (if (stringEmpty? base) "main" base)
+                                       (if (stringEmpty? lane) "free" lane))))))))
+                 (map stringTrim (stringLines (readOr (ladderPath dir))))))
+
+; (:m :ref NODE2-FEED-BACKLOG :do "the files a unit's row can come from, for the task text of a unit without tasks/ID.txt: the queue files, then the ledger of ledger.path; none configured names the plan journal as before")
+fn ! intakeFiles! dir: String -> (List String)
+  (let [(ledger (stringTrim (optionOr (listHead (stringLines (readOr (ledgerPath dir)))) "")))
+        (files (listAppend (map (fn [(q (List String))] -> String (optionOr (listGet q 0) "")) (queueRows! dir)) (if (stringEmpty? ledger) (list) (list ledger))))]
+    (if (listEmpty? files) (list ".asl/mem/work/SH/plan.asn") files))
+
+fn ! importFrom! ctx: Ctx path: String base: String lane: String -> Int64
+  (match (fileReadString path)
+    ((err _) 0)
+    ((ok text)
+      (match (pi/planIn! text ctx.dir base false lane)
+        ((err _) 0)
+        ((ok r) (let [(_ (needRows! ctx.dir))] (listLength r.put))))))
+
 fn ! importCycle! ctx: Ctx -> Int64
   (let [(cfg (stringLines (readOr (ledgerPath ctx.dir))))
         (ledger (stringTrim (optionOr (listGet cfg 0) "")))
-        (base (let [(b (stringTrim (optionOr (listGet cfg 1) "")))] (if (stringEmpty? b) "HEAD" b)))]
-    (if (stringEmpty? ledger) 0
-      (match (fileReadString ledger)
-        ((err _) 0)
-        ((ok text)
-          (match (pi/plan! text ctx.dir base false)
-            ((err _) 0)
-            ((ok r) (let [(_ (needRows! ctx.dir))] (listLength r.put))))))))
+        (base (let [(b (stringTrim (optionOr (listGet cfg 1) "")))] (if (stringEmpty? b) "HEAD" b)))
+        (fromLedger (if (stringEmpty? ledger) 0 (importFrom! ctx ledger base "free")))]
+    (fold (fn [(acc Int64) (q (List String))] -> Int64
+            (+ acc (importFrom! ctx (optionOr (listGet q 0) "") (optionOr (listGet q 1) "main") (optionOr (listGet q 2) "free"))))
+          fromLedger (queueRows! ctx.dir)))
 
 ; (:m :ref COND3 :do "no signal handler exists in ASL, so the loop's stop is cooperative: a stop file in the store (written by `conductor stop`, which the service runs as ExecStop) ends the loop after stopAll!; a raw SIGTERM or SIGKILL leaves stage children running and the next start resumes them from the rows")
 fn ! loopOnce! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refresh: (fn ! [] -> Unit) refreshDue: Bool -> Bool

@@ -1,0 +1,13 @@
+ASL:
+
+fn pick a: Int64 xs: (List Int64) -> (Option Int64)
+  (match (listHead xs)
+    ((none) (none))
+    ((some h) (if (= (mod h 2) 0) (some (+ h a)) (pick a (listDrop xs 1)))))
+
+Mistakes:
+1. body is ONE parenthesised form under a bare fn line
+2. = and mod, never == or %
+3. balance parentheses
+4. (listAppend xs (list x)); (list) is empty
+5. camelCase names: listLength, stringFromInt64, (str a b); mapGet gives (some v) or (none)

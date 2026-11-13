@@ -66,7 +66,7 @@
       (asl-parser/ast :a ast)
       (asl-parser/lexer :a lx)
       (asl-parser/reader :a rd)
-      (asl-cli/system :a sys)])
+      (asl-text/say :a sys)])
 
 ; (:m :ref GW-SESSIONS-2 :do "a gateway session is a named handle onto a vendor CLI's own conversation id: every turn runs the vendor headless through fleet/run runGuarded (timeout, descendant limit, allowlisted env) and continues the same context with the vendor's resume flag; no pty, no tmux; flags, id and reply keys come from the (:gateway :sessions ...) row of gateway.asn")
 (schema SessVendor

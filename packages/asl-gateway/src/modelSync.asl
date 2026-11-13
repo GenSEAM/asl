@@ -6,7 +6,7 @@
       (localTime :a lt)
       (modelWindows :a mw)
       (asl-json/json :a j)
-      (asl-cli/system :a sys)])
+      (asl-text/say :a sys)])
 
 ; (:m :ref GW-FREE-MODEL-SYNC :do "asl gateway models sync: GET /models per keyed openai-kind provider, detect free models, diff them against the config's model rows, probe new free ones once, and write the current list, a FREE-SYNC calibration row and a proposed config patch into an out directory; it reads the gateway config and never writes it, and paid models are never proposed")
 

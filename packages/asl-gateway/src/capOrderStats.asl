@@ -5,7 +5,7 @@
       (aslGateway/config :a c)
       (aslGateway/modelSync :a ms)
       (asl-parser/reader :a rd)
-      (asl-cli/system :a sys)])
+      (asl-text/say :a sys)])
 
 ; (:m :ref GW-CAP-ORDER :do "stat readers and the write-back for capability ordering. Ledger side: the gateway call rows exactly as usageLedger parses them, grouped by alias. Journal side: the conductor journal rows (:t :unit ID :from S :to S :stage STAGE :model M :verdict V :at MS); the journal names the writer model of a unit on its write stage row, not a profile or lane, so a model is credited when it equals a chain alias, and a unit counts green when its journal ever shows :to merged (gated, reviewed and merged), the revert-red proof being part of that merge gate rather than a journal field")
 (schema JournalRow

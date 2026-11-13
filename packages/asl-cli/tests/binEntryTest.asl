@@ -93,7 +93,7 @@ fn ! runTests -> Bool
         (assert (and okDeps (not okAfterStamp)) "a source older than the stamp does not")
         (assert (and emptyDeps empty) "an empty deps list is suspect")
         (assert (and (ok? noDeps) absent) "a missing deps file is suspect")
-        (assert (and (<= entryLines 31) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic (cap 31: 29 plus the 2-line no-builder guard, bootstrap debt WT-MAIN-HOME-REBUILD-SH): " (stringFromInt64 entryLines) " lines"))
+        (assert (and (<= entryLines 52) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic (cap 52: 29 plus the 2-line no-builder guard, bootstrap debt WT-MAIN-HOME-REBUILD-SH, plus the 21 lines of the AGENTEFF-03 read-class path, which holds only its own single-flight pid file): " (stringFromInt64 entryLines) " lines"))
         (assert (ok? cleaned) "the private cache was removed")
         (assert (and (listContains? (pairFirst race) "s") (alternates? (pairFirst race)) (listAll? (fn [(o String)] -> Bool (= o "0:served")) (pairSecond race))) (str "two stubs racing on a stale builder build one at a time and both serve: " (stringJoin (pairFirst race) ",") " " (stringJoin (pairSecond race) ",")))
         true))

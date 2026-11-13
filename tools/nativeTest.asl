@@ -141,10 +141,20 @@ fn ! cacheDir! -> String
 fn modulesDirIn cDir: String -> String
   (str cDir "/modules")
 
+; (:m :ref FABLE-BOOTFIX :do "a wrapper imports its suite by a root-relative path, which resolves only under a .asl.config.asn; a tree that is just asl/ (the published subtree, a git archive of asl/) has none at its root or above, so there the wrapper goes under asl/, whose own config names the workspace asl and resolves asl/...")
+fn ! configAbove? dir: String -> Bool
+  (if (fileExists? (str dir "/.asl.config.asn")) true
+    (let [(up (resultOr (realPath (str dir "/..")) dir))]
+      (if (or (= up dir) (= dir "/")) false (configAbove? up))))
+
+fn ! wrapperBase root: String -> String
+  (if (or (configAbove? root) (not (fileExists? (str root "/asl/.asl.config.asn")))) ".asl/cache/nativeTest/entries" "asl/.asl/cache/nativeTest/entries")
+
 fn ! wrapperDirIn cDir: String -> String
-  (let [(full (resultOr (realPath cDir) cDir))]
-    (if (stringStartsWith? (relativeTo (selfRoot) full) "/")
-      (toolPath (str ".asl/cache/nativeTest/entries/" (slotKey "entries" full)))
+  (let [(full (resultOr (realPath cDir) cDir))
+        (base (wrapperBase (selfRoot)))]
+    (if (or (stringStartsWith? base "asl/") (stringStartsWith? (relativeTo (selfRoot) full) "/"))
+      (toolPath (str base "/" (slotKey "entries" full)))
       (str cDir "/entries")))
 
 fn modulesDir! -> String
@@ -222,7 +232,8 @@ fn mainReturnsBareInt64 src: String -> Bool
     ((none) false)
     ((some l) (match (stringIndexOf l "->")
                 ((none) false)
-                ((some i) (= (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")) "Int64")))))
+                ((some i) (let [(t (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")))]
+                            (or (= t "Int64") (stringStartsWith? t "Int64 ")))))))
 
 fn wrapperSourceRunInt64 importPath: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
@@ -2504,6 +2515,9 @@ fn testHeaderParsing -> Bool
         (mainOnly "(module a/c :x [main other] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok 0)\n")
         (bare "(module a/d :i [])\n\nfn f -> Int64\n  (:x [runTests])\n")]
     (do (assert (= (exportsOf src) (list "helper" "runTests")) "exports read across lines of the :x vector")
+        (assert (mainReturnsBareInt64 src) "a main header that ends at -> Int64 returns a bare Int64")
+        (assert (mainReturnsBareInt64 "(module a/e :x [main] :i [])\n\nfn main -> Int64   (+ 1 2)\n") "a body on the header line after -> Int64 is still a bare Int64 main")
+        (refute (mainReturnsBareInt64 mainOnly) "a Result main is not a bare Int64 main")
         (assert (= (entryOf src) (some "runTests")) "runTests is the entry when exported")
         (assert (= (entryOf mainOnly) (some "main")) "main is the entry when runTests is not exported")
         (assert (none? (entryOf bare)) "an :x after the header is not an export")
@@ -2586,6 +2600,9 @@ fn ! testManifestStamp dir: String -> Bool
         (assert (= (wrapperDirIn "rel/cache") "rel/cache/entries") "the entry wrapper lives under a cache root inside the workspace")
         (assert (stringStartsWith? (wrapperDirIn "/c") ".asl/cache/nativeTest/entries/") "a cache root outside the workspace keeps its wrappers inside it, where imports resolve")
         (refute (= (wrapperDirIn "/c") (wrapperDirIn "/d")) "one entries directory per outside cache root")
+        (assert (configAbove? (resultOr (realPath dir) dir)) "a directory inside this workspace has a .asl.config.asn above it")
+        (assert (= (wrapperBase (selfRoot)) ".asl/cache/nativeTest/entries") "a root with a config above keeps its wrappers under its own .asl")
+        (assert (= (wrapperBase (str (resultOr (realPath dir) dir) "/absent")) ".asl/cache/nativeTest/entries") "a root without asl/.asl.config.asn keeps the default")
         true))
 
 fn ! testLock dir: String -> Bool

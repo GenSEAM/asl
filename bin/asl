@@ -105,8 +105,30 @@ native_refresh() {
   NATIVE_LOCKED=""
 }
 
+# (:m :ref AGENTEFF-03 :do "a read-class argv never waits for a rebuild: when the head is suspect it is served by the pinned CLI with one stderr line (:cli stale :serving DIGEST :rebuilding WORD) while one detached, niced bin/asl --fresh version rebuilds under the build lock (single flight by CACHE/bgROOT holding the pid, a dead holder is replaced, a failed rebuild is not retried until a source moves again); the CLI's own stale gate (asl-cli/nativeCli readOnly?) is the fine check. check, test, run, audit, every other verb and --fresh wait as before")
+native_read_only() { local a t h re='^[[:space:]]*(\(:(read|query|observe|tree|tools|help|intel :op outline|intel :outline|mem :op (list|get|query))([[:space:]][^()]*)?\)[[:space:]]*)+$'
+  case "${1-}" in help|-h|--help|version|-v|--version) [ $# -eq 1 ]; return ;; intel) [ "${2-}" = outline ] || return 1; shift 2; for a; do case "$a" in ""|"("*|:*|-*|*\"*) return 1 ;; esac; done; return 0 ;; "") return 1 ;; esac
+  for a; do [[ $a =~ $re ]] || return 1; t=$a
+    for h in "(:intel :op outline" "(:mem :op list" "(:mem :op get" "(:mem :op query" "(:help :op" "(:tools :op"; do t=${t//"$h"/}; done
+    case "$t" in *:op*) return 1 ;; esac
+    while [[ $t =~ :([A-Za-z0-9_-]+) ]]; do case " read query observe tree tools help intel outline mem file symbol anchor limit start end text in dim scope module path spec id depth topic builtin dir target " in *" ${BASH_REMATCH[1]} "*) ;; *) return 1 ;; esac; t=${t#*"${BASH_REMATCH[0]}"}; done
+  done; }
+native_knob() { local l; [ -r "$ASL_WRAPPER_ROOT/.asl.config.asn" ] || return 1; while IFS= read -r l || [ -n "$l" ]; do case "$l" in *":$1 true"*) return 0 ;; esac; done < "$ASL_WRAPPER_ROOT/.asl.config.asn"; return 1; }
+native_background() { local f="$NATIVE_CACHE/bg${ASL_WRAPPER_ROOT//\//_}" p s=true i
+  if [ -e "$f.failed" ] && ! native_suspect "$NATIVE_DIR" "$f.failed"; then s=failed; else
+    for i in 1 2; do
+      set -C; if { echo $$ > "$f"; } 2> /dev/null; then set +C
+        perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' nice -n 15 /bin/sh -c 'f=$1; shift; "$@"; rc=$?; if [ "$rc" -eq 0 ]; then rm -f "$f.failed"; else : > "$f.failed"; fi; rm -f "$f"; exit "$rc"' sh "$f" "$SCRIPT_DIR/asl" --fresh version < /dev/null >> "$NATIVE_CACHE/build.log" 2>&1 &
+        echo $! > "$f"; break
+      fi; set +C; p=; read -r p 2> /dev/null < "$f" || :
+      [ -z "$p" ] || kill -0 "$p" 2> /dev/null || { rm -f "$f"; continue; }; break
+    done
+  fi; p=${NATIVE_DIR##*/}; p=${p#cli-}; echo "(:cli stale :serving ${p:0:12} :rebuilding $s)" >&2; }
+NATIVE_FRESH=; [ "${1-}" != --fresh ] || { NATIVE_FRESH=1; shift; }
 if read -r NATIVE_DIR 2> /dev/null < "$NATIVE_HEAD" && [ -x "$NATIVE_DIR/bin" ]; then
-  native_suspect "$NATIVE_DIR" "$NATIVE_HEAD" && native_refresh
+  if native_suspect "$NATIVE_DIR" "$NATIVE_HEAD"; then
+    if [ -z "$NATIVE_FRESH" ] && native_read_only "$@" && native_knob formsPin; then native_background; else native_refresh; fi
+  fi
   ASL_NATIVE_CLI_DIR="$NATIVE_DIR" ASL_NATIVE_QUIET_PID=$$ exec "$NATIVE_DIR/bin" "$@"
 fi
 # COLDSTART: a fresh clone has no native pointer yet; bootstrap the native CLI straight from the committed seed

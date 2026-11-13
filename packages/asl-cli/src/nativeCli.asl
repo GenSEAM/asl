@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
+  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -331,7 +331,11 @@ fn ! testPinned? root: String dir: String stampPath: String cmd: (List String) -
 
 ; (:m :ref FORMS-PINNED-CLI :do "an argv that is only ASN forms of the edit family (read query observe edit write diff flush discard, intel outline) runs on the newest already-built CLI without a staleness rebuild: such a form reads or stages text and never needs the toolchain edit that made the CLI stale; every keyword of every form, nested ones included, must be in the op's allow-list (allowedKeys) so a :gates, :run or :cmd field never rides along; check, test, run and every other verb keep the staleness rule; only .asl.config.asn :nativeCli :formsPin true turns it on, absent or any other word is off")
 fn formsAllowed -> (List String)
-  (list ":read" ":query" ":observe" ":edit" ":write" ":diff" ":flush" ":discard" ":intel :outline" ":intel :op outline")
+  (listAppend (readHeads) (list ":edit" ":write" ":diff" ":flush" ":discard"))
+
+; (:m :ref AGENTEFF-03 :do "the read class: forms that only read the tree or a ledger (read query observe tree help tools, intel outline, mem list get query) and the bare help and version verbs; a stale CLI serves them whatever moved, and bin/asl answers them without waiting while one background rebuild runs. The write family (edit write diff flush discard) parses and checks staged text, so it is kept only while no toolchain root moved; check, test, run, audit and every other verb always wait for the rebuild")
+fn readHeads -> (List String)
+  (list ":read" ":query" ":observe" ":tree" ":help" ":tools" ":intel :outline" ":intel :op outline" ":mem :op list" ":mem :op get" ":mem :op query")
 
 fn allowedKeys head: String -> (List String)
   (cond
@@ -345,6 +349,10 @@ fn allowedKeys head: String -> (List String)
     ((= head ":discard") (list ":file"))
     ((= head ":intel :outline") (list ":outline" ":file" ":symbol" ":limit" ":module" ":target"))
     ((= head ":intel :op outline") (list ":op" ":file" ":symbol" ":limit" ":module" ":target"))
+    ((= head ":tree") (list ":path" ":depth"))
+    ((= head ":help") (list ":op" ":topic" ":builtin"))
+    ((= head ":tools") (list ":op"))
+    ((stringStartsWith? head ":mem :op ") (list ":op" ":dir" ":file" ":id" ":text" ":limit"))
     (else (list)))
 
 fn charAt s: String i: Int64 -> String
@@ -361,7 +369,7 @@ fn wordAt s: String i: Int64 -> String
 
 fn headAt s: String i: Int64 -> String
   (let [(w (wordAt s (+ i 1)))]
-    (if (= w ":intel")
+    (if (or (= w ":intel") (= w ":mem"))
       (let [(w2 (wordAt s (+ i (+ (stringLength w) 2))))]
         (if (= w2 ":op")
           (str w " " w2 " " (wordAt s (+ i (+ (stringLength w) (+ (stringLength w2) 3)))))
@@ -408,13 +416,37 @@ fn formsOnly? cmd: (List String) -> Bool
                     ((some rows) (and (not (listEmpty? rows)) (listAll? rowOk? rows)))))
                 cmd)))
 
+; (:m :ref AGENTEFF-03 :do "a form keeps its :op once: (:mem :op get :op put) is not a read")
+fn opOnce? rows: (List (Pair String String)) -> Bool
+  (listAll? (fn [(row (Pair String String))] -> Bool
+              (<= (listLength (filter (fn [(r (Pair String String))] -> Bool (and (= (pairFirst r) (pairFirst row)) (= (pairSecond r) ":op"))) rows))
+                  (listLength (filter (fn [(r (Pair String String))] -> Bool (and (= (pairFirst r) (pairFirst row)) (stringEmpty? (pairSecond r)))) rows))))
+            rows)
+
+fn readOnly? cmd: (List String) -> Bool
+  (or (and (= (listLength cmd) 1) (listContains? (list "help" "-h" "--help" "version" "-v" "--version") (optionOr (listHead cmd) "")))
+    (or (and (= (listTake cmd 2) (list "intel" "outline"))
+          (listAll? plainArg? (optionOr (listTail (optionOr (listTail cmd) (list))) (list))))
+      (and (formsOnly? cmd)
+        (listAll? (fn [(a String)] -> Bool
+                    (match (scanForms a 0 (stringLength a) 0 false false "" (list))
+                      ((none) false)
+                      ((some rows) (and (opOnce? rows) (listAll? (fn [(r (Pair String String))] -> Bool (listContains? (readHeads) (pairFirst r))) rows)))))
+                  cmd))))
+
+fn ! toolchainMoved? root: String dir: String -> Bool
+  (let [(deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))]
+    (or (listEmpty? deps)
+      (listAny? (fn [(p String)] -> Bool (and (under? p (toolchainRootPaths)) (not (sameBytes? (underRoot root p) (str dir "/src/" p))))) deps)))
+
 fn formsPinOn? text: String -> Bool
   (= (configWord text "formsPin") "true")
 
 fn ! formsPinned? root: String dir: String cmd: (List String) -> Bool
   (let [(text (resultOr (fileReadString (str root "/.asl.config.asn")) ""))]
     (and (formsPinOn? text)
-      (and (sys/executable? (str dir "/bin")) (formsOnly? cmd))))
+      (and (sys/executable? (str dir "/bin"))
+        (or (readOnly? cmd) (and (formsOnly? cmd) (not (toolchainMoved? root dir)))))))
 
 ; (:m :ref PERF-CLI-REBUILD :do "the one answer the CLI's own stale gate and aslNativeBuild refresh share: a forms-only argv, the relay tool on an unmoved toolchain, or asl test outside the reached files keeps the current CLI")
 fn ! kept? root: String dir: String stampPath: String cmd: (List String) -> Bool

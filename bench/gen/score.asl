@@ -1,5 +1,5 @@
 (module aslBench/gen/score
-  :x [main Row Header ArmStat ScoreOut rowOf headerOf statFor scoreText report! wilson permille pctText isqrt quantile statOf]
+  :x [main Row Header ArmStat ScoreOut rowOf headerOf statFor scoreText scoreTextWith rejectOf report! wilson permille pctText isqrt quantile statOf]
   :i [(aslBench/gen/core :a gc)])
 
 ; (:m :ref FABLE-LANG-01 :do "aggregates bench/gen trial rows into one table row per model and arm with Wilson 95 percent intervals, and prints the H1 to H4 comparisons only when every arm holds every planned trial")
@@ -43,7 +43,8 @@
   (:f complete Bool)
   (:f lines (List String))
   (:f stats (List ArmStat))
-  (:f error String))
+  (:f error String)
+  (:f rejected (List String) :default (list)))
 
 fn rowOf items: (List gc/Sx) -> Row
   (Row :key (gc/kwText items ":key") :arm (gc/kwText items ":arm") :task (gc/kwText items ":task") :model (gc/kwText items ":model")
@@ -172,7 +173,33 @@ fn refusedLine stats: (List ArmStat) -> String
                         (filter (fn [(s ArmStat)] -> Bool (or (> s.missing 0) (!= s.trials s.expected))) stats)) " ")
        "))")
 
+fn cardShaOf head: (List gc/Sx) arm: String -> String
+  (optionOr (listHead (map (fn [(c gc/Sx)] -> String (gc/kwText (gc/sxItems c) ":sha256"))
+                           (filter (fn [(c gc/Sx)] -> Bool (= (gc/kwText (gc/sxItems c) ":arm") arm)) (gc/kwList head ":cards"))))
+            "")
+
+; (:m :ref GENRUN-CROSSWIRE :do "why a trial row is refused, empty when it is accepted: its stored prompt digest differs from the digest rebuilt from the header card digest and its task, or the row itself shows a reply to another request (gc/rowVerdict); a row written before the digest existed is judged by its replies alone")
+fn rejectOf tasks: (List gc/Task) head: (List gc/Sx) items: (List gc/Sx) -> String
+  (let [(arm (gc/kwText items ":arm"))
+        (taskId (gc/kwText items ":task"))
+        (stored (gc/kwText items ":promptSha"))
+        (cardSha (cardShaOf head arm))
+        (expected (match (listFind (fn [(t gc/Task)] -> Bool (= t.id taskId)) tasks)
+                    ((some t) (if (stringEmpty? cardSha) "" (gc/expectedPromptSha cardSha arm t)))
+                    ((none) "")))]
+    (if (and (not (stringEmpty? stored)) (and (not (stringEmpty? expected)) (!= stored expected)))
+      "the stored prompt digest is not the digest of the prompt of this task and arm"
+      (gc/rowVerdict tasks arm taskId
+                     (map gc/sxText (gc/kwList items ":replies"))
+                     (map (fn [(v gc/Sx)] -> Int64 (optionOr (stringToInt64 (gc/sxText v)) 0)) (gc/kwList items ":tokIn")))))
+
+fn rejectedLine rejected: (List String) -> String
+  (str "(:score :status :refused :reason \"rows that do not belong to their task are left out, so their arms miss trials\" :rejected (" (stringJoin rejected " ") "))")
+
 fn scoreText text: String -> ScoreOut
+  (scoreTextWith text (list))
+
+fn scoreTextWith text: String tasks: (List gc/Task) -> ScoreOut
   (match (gc/readForms text)
     ((err e) (ScoreOut :complete false :lines (list) :stats (list) :error (str "results are unreadable: " e)))
     ((ok forms)
@@ -180,15 +207,23 @@ fn scoreText text: String -> ScoreOut
         ((none) (ScoreOut :complete false :lines (list) :stats (list) :error "results hold no (:run ...) header row"))
         ((some head)
           (let [(h (headerOf (gc/sxItems head)))
-                (rows (fold uniqueStep (list) (map (fn [(f gc/Sx)] -> Row (rowOf (gc/sxItems f))) (filter (fn [(f gc/Sx)] -> Bool (= (gc/headOf f) ":trial")) forms))))
+                (judged (map (fn [(f gc/Sx)] -> (Pair (List gc/Sx) String) (pair (gc/sxItems f) (rejectOf tasks (gc/sxItems head) (gc/sxItems f))))
+                             (filter (fn [(f gc/Sx)] -> Bool (= (gc/headOf f) ":trial")) forms)))
+                (rejected (map (fn [(p (Pair (List gc/Sx) String))] -> String
+                                 (str "(:key " (gc/asnQuote (gc/kwText (pairFirst p) ":key")) " :why " (gc/asnQuote (pairSecond p)) ")"))
+                               (filter (fn [(p (Pair (List gc/Sx) String))] -> Bool (not (stringEmpty? (pairSecond p)))) judged)))
+                (rows (fold uniqueStep (list) (map (fn [(p (Pair (List gc/Sx) String))] -> Row (rowOf (pairFirst p)))
+                                                   (filter (fn [(p (Pair (List gc/Sx) String))] -> Bool (stringEmpty? (pairSecond p))) judged))))
                 (stats (listFlatMap (fn [(m String)] -> (List ArmStat) (map (fn [(a String)] -> ArmStat (statFor h rows m a)) h.arms)) h.models))
                 (complete (and (not (listEmpty? stats)) (listAll? (fn [(s ArmStat)] -> Bool (and (= s.missing 0) (= s.trials s.expected))) stats)))]
             (ScoreOut :complete complete
                       :lines (listAppend (map armLine stats)
-                                         (if complete
-                                           (listFlatMap (fn [(m String)] -> (List String) (compareLines stats m)) h.models)
-                                           (list (refusedLine stats))))
-                      :stats stats :error ""))))))
+                                         (listAppend
+                                           (if (listEmpty? rejected) (list) (list (rejectedLine rejected)))
+                                           (if complete
+                                             (listFlatMap (fn [(m String)] -> (List String) (compareLines stats m)) h.models)
+                                             (list (refusedLine stats)))))
+                      :stats stats :error "" :rejected rejected))))))
 
 fn ! readAll! paths: (List String) -> (Result String String)
   (fold (fn [(acc (Result String String)) (p String)] -> (Result String String)
@@ -201,16 +236,24 @@ fn ! readAll! paths: (List String) -> (Result String String)
         (ok "")
         paths)
 
+; (:m :ref GENRUN-CROSSWIRE :do "the report loads the task rows of the tree it runs in, so every row is checked against its task before it is counted; without them it refuses to score")
+fn ! tasksHere! -> (Result (List gc/Task) String)
+  (let [(given (optionOr (envGet "ASL_CLI_ROOT") "."))]
+    (gc/loadTasks (resultOr (realPath given) given)))
+
 fn ! report! paths: (List String) -> (Result Int64 String)
   (match (readAll! paths)
     ((err e) (err e))
     ((ok text)
-      (let [(out (scoreText text))]
+     (match (tasksHere!)
+      ((err e) (err (str "score refused: the task rows do not load, so rows cannot be checked against their task: " e)))
+      ((ok tasks)
+      (let [(out (scoreTextWith text tasks))]
         (if (not (stringEmpty? out.error))
           (err out.error)
           (do
             (println (stringJoin out.lines "\n"))
-            (if out.complete (ok 0) (err "score refused: an arm has missing trials")))))))
+            (if out.complete (ok 0) (err "score refused: an arm has missing trials")))))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (if (listEmpty? args)

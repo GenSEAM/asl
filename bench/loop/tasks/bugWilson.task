@@ -1,0 +1,29 @@
+#@ task bugWilson bugfixFromFailingTest
+#@ prompt
+The test suite of this statistics package fails. Find the defect in the library source and fix it. Do not change the tests.
+#@ seed src/interval.asl
+(/ z2 (* (* 4.0 nf) nf))
+#@ with
+(/ z2 (* 4.0 nf))
+#@ ref src/interval.asl
+(/ z2 (* 4.0 nf))
+#@ with
+(/ z2 (* (* 4.0 nf) nf))
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/interval :a iv)])
+
+fn near? a: Float64 b: Float64 eps: Float64 -> Bool
+  (< (abs (- a b)) eps)
+
+fn nearPair? r: (Result (Pair Float64 Float64) String) lo: Float64 hi: Float64 -> Bool
+  (match r
+    ((ok p) (and (near? (pairFirst p) lo 1.0e-9) (near? (pairSecond p) hi 1.0e-9)))
+    ((err _) false))
+
+fn runTests -> Bool
+  (do
+    (assert (nearPair? (iv/wilson 50 100 0.95) 0.4038315303659956 0.5961684696340044) "Wilson 95% for 50/100")
+    (assert (nearPair? (iv/wilson 3 7 0.9) 0.18644319036395635 0.7105229089864067) "Wilson 90% for 3/7")
+    true)

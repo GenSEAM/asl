@@ -1,5 +1,5 @@
 (module aslBench/gen/run
-  :x [main]
+  :x [main liveCall! liveCallWith! linkIdle? readyLink!]
   :i [(aslBench/gen/core :a gc)
       (aslBench/gen/score :a sc)
       (asl-json/json :a j)
@@ -98,7 +98,7 @@ fn ! plan! args: (List String) mode: String -> (Result Plan String)
                     (match (gc/loadTasks root)
                       ((err e) (err e))
                       ((ok allTasks)
-                        (match (gc/loadCards root)
+                        (match (gc/loadCardsFor root arms)
                           ((err e) (err e))
                           ((ok cards)
                             (let [(picked (if (listEmpty? taskFilter)
@@ -171,27 +171,48 @@ fn replyOf text: String -> gc/Reply
 fn transient? e: String -> Bool
   (or (stringContains? e "http 429") (stringContains? e "http 503") (stringContains? e "http 504") (stringContains? e "cooldown") (stringContains? e "link: "))
 
+; (:m :ref GENRUN-CROSSWIRE :do "the call limit and the back-off before a retry are arguments, so a test drives the real link with short ones; the pilot keeps 8 tries, 300 s and 30 s")
 fn ! liveCall! l: gs/GatewayLoop r: gc/Req -> (Pair gs/GatewayLoop gc/Reply)
-  (liveRetry! l r 8)
+  (liveCallWith! l r 8 300000 30000)
 
-fn ! liveRetry! l: gs/GatewayLoop r: gc/Req tries: Int64 -> (Pair gs/GatewayLoop gc/Reply)
-  (let [(out (liveOnce! l r))
-        (rep (pairSecond out))]
+fn ! liveCallWith! l: gs/GatewayLoop r: gc/Req tries: Int64 timeoutMs: Int64 backoffMs: Int64 -> (Pair gs/GatewayLoop gc/Reply)
+  (liveLoop! l r (min tries (max 1 r.sendsLeft)) timeoutMs backoffMs 0)
+
+; (:m :ref GENRUN-CROSSWIRE :do "a send that ends on a link error with its request still on the loop was abandoned in flight: the provider bills it and nobody reads its answer, so the reply reports the count and the reserve of one call each (half the prompt characters as tokens in, max tokens out); sends are capped by the request's sendsLeft, the number the budget still covers")
+fn withAbandoned rep: gc/Reply r: gc/Req gone: Int64 -> gc/Reply
+  (if (= gone 0) rep (with rep :abandoned gone :abandonedIn (* gone (/ (gc/reqChars r) 2)) :abandonedOut (* gone r.maxTokens)))
+
+fn ! liveLoop! l: gs/GatewayLoop r: gc/Req tries: Int64 timeoutMs: Int64 backoffMs: Int64 gone: Int64 -> (Pair gs/GatewayLoop gc/Reply)
+  (let [(out (liveOnce! l r timeoutMs))
+        (rep (pairSecond out))
+        (lost (if (and (stringStartsWith? rep.error "link: ") (not (linkIdle? (pairFirst out)))) (+ gone 1) gone))]
     (cond
       ((stringContains? rep.error "ERR_EMPTY_LENGTH")
-        (pair (pairFirst out) (gc/Reply :text "" :tokIn 1 :tokOut r.maxTokens :served "truncatedAtMaxTokens" :error "")))
+        (pair (pairFirst out) (withAbandoned (gc/Reply :text "" :tokIn 1 :tokOut r.maxTokens :served "truncatedAtMaxTokens" :error "") r lost)))
       ((and (> tries 1) (transient? rep.error))
-        (do (sleepMs 30000) (liveRetry! (pairFirst out) r (- tries 1))))
-      (else out)))
+        (do (sleepMs backoffMs) (liveLoop! (pairFirst out) r (- tries 1) timeoutMs backoffMs lost)))
+      (else (pair (pairFirst out) (withAbandoned rep r lost)))))
 
-fn ! liveOnce! l: gs/GatewayLoop r: gc/Req -> (Pair gs/GatewayLoop gc/Reply)
+; (:m :ref GENRUN-CROSSWIRE :do "root cause of the cross-wired rows: gs/linkSend! gives every call the same connection id, and a call that passes its limit returns while its request stays in flight on the loop; the loop then hands the next finished answer to whichever call is waiting, so a late answer to task A is read by the call for task B, and from then on answers are read in completion order. The link carries no request id to match on, so correlation is by connection: a call starts only on a loop that holds no request, answer or pool reply of an earlier call, and a loop that holds one is dropped for a fresh one opened from the same env, home and root (its breaker and spread state start empty); the abandoned request ends on its own upstream timeout and its answer is never read")
+fn linkIdle? l: gs/GatewayLoop -> Bool
+  (and (listEmpty? l.conns) (and (listEmpty? l.replies) (listEmpty? l.outbox)))
+
+fn ! readyLink! l: gs/GatewayLoop -> (Result gs/GatewayLoop String)
+  (if (linkIdle? l) (ok l) (gs/linkOpen! l.env l.home l.rootDir l.families))
+
+fn ! liveOnce! l: gs/GatewayLoop r: gc/Req timeoutMs: Int64 -> (Pair gs/GatewayLoop gc/Reply)
+  (match (readyLink! l)
+    ((err e) (pair l (failed (str "linkReopen: " (gc/clip e 300)))))
+    ((ok ready) (liveSend! ready r timeoutMs)))
+
+fn ! liveSend! l: gs/GatewayLoop r: gc/Req timeoutMs: Int64 -> (Pair gs/GatewayLoop gc/Reply)
   (let [(msgs (listAppend (list (message "system" r.system))
                           (map (fn [(p (Pair String String))] -> j/Json (message (pairFirst p) (pairSecond p))) r.messages)))
         (body (pv/pyJsonDumps (j/jobj (list (pair "model" (j/jstr r.model)) (pair "intent" (j/jstr "code")) (pair "messages" (j/jarr msgs))
                                             (pair "max_tokens" (j/jint r.maxTokens)) (pair "temperature" (j/jfloat 0.2))))))
         (headers (list (pair "Content-Type" "application/json") (pair "Accept" "application/json") (pair "X-ASL-Consumer" "benchGen")
                        (pair "Content-Length" (stringFromInt64 (bytesLength (stringToBytes body))))))
-        (out (gs/linkSend! l "POST" "/v1/chat/completions" headers body 300000))]
+        (out (gs/linkSend! l "POST" "/v1/chat/completions" headers body timeoutMs))]
     (pair (pairFirst out)
           (match (pairSecond out)
             ((err e) (failed (str "link: " (gc/clip e 300))))
@@ -351,7 +372,7 @@ fn ! prompt! args: (List String) -> (Result Int64 String)
     (match (gc/loadTask root (optionOr (flagValue args "--task") "gcd"))
       ((err e) (err e))
       ((ok t)
-        (match (gc/loadCards root)
+        (match (gc/loadCardsFor root (list arm))
           ((err e) (err e))
           ((ok cards)
             (do

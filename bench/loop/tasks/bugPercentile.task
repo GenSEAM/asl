@@ -1,0 +1,28 @@
+#@ task bugPercentile bugfixFromFailingTest
+#@ prompt
+The test suite of this statistics package fails. Find the defect in the library source and fix it. Do not change the tests.
+#@ seed src/describe.asl
+(h (/ (* (int64ToFloat64 (- n 1)) p) 100.0))
+#@ with
+(h (/ (* (int64ToFloat64 n) p) 100.0))
+#@ ref src/describe.asl
+(h (/ (* (int64ToFloat64 n) p) 100.0))
+#@ with
+(h (/ (* (int64ToFloat64 (- n 1)) p) 100.0))
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/describe :a ds)])
+
+fn val r: (Result Float64 String) -> Float64
+  (match r
+    ((ok v) v)
+    ((err e) (do (assert false e) -999.0)))
+
+fn runTests -> Bool
+  (do
+    (assert (= (val (ds/percentile (list 1.0 2.0 3.0 4.0 5.0) 50.0)) 3.0) "p50 of 1..5 is 3")
+    (assert (= (val (ds/percentile (list 10.0 20.0) 50.0)) 15.0) "p50 of two values is their mean")
+    (assert (= (val (ds/percentile (list 10.0 20.0) 100.0)) 20.0) "p100 is the maximum")
+    (assert (= (val (ds/median (list 7.0))) 7.0) "median of one value")
+    true)

@@ -1,0 +1,60 @@
+#@ task refactorIntervalRecord typedApiChange
+#@ prompt
+Replace the (lo, hi) pair returned by wilson, clopperPearson and meanCi with a named record. Add an exported schema Interval with Float64 fields lo and hi to the interval module and return it, inside the Result, from the three functions. Update the tests to the new shape so the suite passes.
+#@ ref src/interval.asl
+:x [BootResult wilson
+#@ with
+:x [BootResult Interval wilson
+#@ ref src/interval.asl
+fn confOk? c: Float64 -> Bool
+#@ with
+schema Interval
+  (:f lo Float64)
+  (:f hi Float64)
+
+fn confOk? c: Float64 -> Bool
+#@ refAll src/interval.asl
+-> (Result (Pair Float64 Float64) String)
+#@ with
+-> (Result Interval String)
+#@ ref src/interval.asl
+(ok (pair (max 0.0 (- center half)) (min 1.0 (+ center half))))
+#@ with
+(ok (Interval :lo (max 0.0 (- center half)) :hi (min 1.0 (+ center half))))
+#@ ref src/interval.asl
+(ok (pair lo hi))
+#@ with
+(ok (Interval :lo lo :hi hi))
+#@ ref src/interval.asl
+(ok (pair (- m h) (+ m h)))
+#@ with
+(ok (Interval :lo (- m h) :hi (+ m h)))
+#@ gradeEdit tests/intervalTest.asl
+fn pr r: (Result (Pair Float64 Float64) String) -> (Pair Float64 Float64)
+  (match r
+    ((ok p) p)
+#@ with
+fn pr r: (Result iv/Interval String) -> (Pair Float64 Float64)
+  (match r
+    ((ok p) (pair p.lo p.hi))
+#@ gradeEdit tests/intervalTest.asl
+fn errP r: (Result (Pair Float64 Float64) String) -> String
+#@ with
+fn errP r: (Result iv/Interval String) -> String
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/interval :a iv)])
+
+fn width r: (Result iv/Interval String) -> Float64
+  (match r
+    ((ok w) (- w.hi w.lo))
+    ((err _) -1.0))
+
+fn runTests -> Bool
+  (do
+    (assert (and (> (width (iv/wilson 8 10 0.95)) 0.45) (< (width (iv/wilson 8 10 0.95)) 0.46)) "wilson returns an Interval")
+    (assert (> (width (iv/clopperPearson 8 10 0.95)) (width (iv/wilson 8 10 0.95))) "clopperPearson returns an Interval")
+    (assert (> (width (iv/meanCi (list 1.0 2.0 3.0 4.0) 0.95)) 0.0) "meanCi returns an Interval")
+    (assert (= (width (iv/wilson 11 10 0.95)) -1.0) "errors are unchanged")
+    true)

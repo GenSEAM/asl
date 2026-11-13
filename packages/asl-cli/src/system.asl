@@ -1,6 +1,6 @@
 (module asl-cli/system
   :x [Context Captured context! childEnv! execv! run! runWith! runMerged! runAt! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
-  :i [])
+  :i [(asl-text/say :a out)])
 
 (schema Context
   (:f root String)
@@ -21,10 +21,10 @@
   (:f errText String))
 
 fn say! text: String -> Bool
-  (do (println text) true)
+  (out/say! text)
 
 fn sayErr! text: String -> Bool
-  (do (eprintln text) true)
+  (out/sayErr! text)
 
 fn envOr! name: String -> String
   (optionOr (envGet name) "")
