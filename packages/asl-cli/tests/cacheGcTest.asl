@@ -14,11 +14,16 @@ fn ! words -> Bool
       (let [(a (cg/parseArgs "/r" (list) 99))
             (b (cg/parseArgs "/r" (list "--dir" "/s" "--cap" "1M" "--older-than" "2h" "--dry-run") 99))
             (c (cg/parseArgs "/r" (list "--cap" "huge") 99))
-            (d (cg/parseArgs "/r" (list "--bogus") 99))]
+            (d (cg/parseArgs "/r" (list "--bogus") 99))
+            (up (cg/parseArgs "/r" (list "--release" "..") 99))
+            (sl (cg/parseArgs "/r" (list "--release" "v1/../..") 99))
+            (rel (cg/parseArgs "/r" (list "--release" "v0.0.5") 99))]
         (do (assert (and (= a.dir "/r/.asl/cache/nativeTest") (= a.capBytes 99)) "the default is the tree's own cache and the configured cap")
             (assert (and (= b.dir "/s") (and (= b.capBytes 1048576) (and (= b.olderNs 7200000000000) b.dryRun))) "every flag parsed")
             (assert (stringContains? c.error "--cap") "a bad cap is a usage error")
             (assert (stringContains? d.error "--bogus") "an unknown flag is a usage error")
+            (assert (and (stringContains? up.error "--release") (stringContains? sl.error "--release")) "a --release of .. or with a slash is a usage error")
+            (assert (and (stringEmpty? rel.error) (stringEndsWith? rel.dir "/.asl/releases/v0.0.5/.asl/cache/nativeTest")) "a plain version names its release cache")
             true)))
 
 fn entry name: String stamp: Int64 bytes: Int64 pinned: Bool -> ncli/StoreEntry
@@ -35,14 +40,17 @@ fn ! plans -> Bool
                       (pair (entry "c" (- now 1000000000) 500 false) false)
                       (pair (entry "d" (- now (* 9 hour)) 300 true) false)
                       (pair (entry "e" (- now (* 2 hour)) 50 false) true)))
-        (capped (cg/planGc tagged now 400 4611686018427387904))
-        (aged (cg/planGc tagged now 100000 (* 3 hour)))
-        (roomy (cg/planGc tagged now 100000 4611686018427387904))]
+        (fresh 600000000000)
+        (capped (cg/planGc tagged now 400 4611686018427387904 fresh))
+        (aged (cg/planGc tagged now 100000 (* 3 hour) fresh))
+        (roomy (cg/planGc tagged now 100000 4611686018427387904 fresh))
+        (slow (cg/planGc tagged now 400 4611686018427387904 (* 3 hour)))]
     (do (assert (= (names capped.drop) (list "a" "b" "e")) (str "over the cap: the dead-origin entry and the oldest unprotected ones go, the fresh and the leased stay: " (stringJoin (names capped.drop) " ")))
         (assert (= (ncli/storeBytes capped.keep) 800) "the rest is protected, so the kept bytes may stay over the cap")
         (assert (= (names aged.drop) (list "a" "b" "e")) "older than 3 h goes without cap pressure, the leased old one stays")
         (assert (= (names roomy.drop) (list "e")) "under the cap only the dead-origin entry goes")
         (assert (and (= roomy.deadOrigin 1) (= roomy.pinned 2)) "the plan counts dead-origin and protected entries")
+        (assert (= (names slow.drop) (list "a" "b")) (str "a :storeMinAge of 3 h protects the 2 h old dead-origin entry the 600 s default would drop: " (stringJoin (names slow.drop) " ")))
         (assert (stringContains? (cg/receipt (cg/GcArgs :dir "/s" :capBytes 400 :olderNs 0 :dryRun false :error "") capped 3 350) ":freedBytes 350") "the receipt names the freed bytes")
         true))
 
@@ -70,6 +78,8 @@ fn ! store! base: String -> String
         (_ (put! (str livePkg "/m.asl") 200))
         (_ (cg/recordOrigin! livePkg (str base "/liveRoot")))
         (_ (put! (str s "/modules/" (hex "f") ".o") 1000))
+        (_ (put! (str s "/modules/" (hex "c") ".o") 1000))
+        (_ (fileWrite (str s "/modules/" (hex "c") ".o.lock") (stringFromInt64 (procSelf))))
         (_ (sh! (list "/usr/bin/find" s "-exec" "/usr/bin/touch" "-h" "-t" "202601010000" "{}" "+")))]
     s)
 
@@ -100,10 +110,28 @@ fn ! runs base: String -> Bool
         (assert (= tight 0) "gc over the cap exits 0")
         (assert (and (not (fileExists? slotA)) (and (not (fileExists? livePkg)) (not (fileExists? (str s "/modules/" (hex "f") ".o"))))) "over the cap every unleased old entry goes")
         (assert (fileExists? (str slotB "/bin")) "the slot a live run leases stays")
+        (assert (fileExists? (str s "/modules/" (hex "c") ".o")) "a module object whose KEY.o.lock a live compile holds stays")
         (assert lockFree "gc releases sweep.lock")
         (assert (and (ok? busyLock) (= busy 1)) "a held sweep.lock is a busy exit 1")
         (assert (= usage 2) "a bad flag is exit 2")
         (assert (= verb 2) "a sub command other than gc is exit 2")
+        true))
+
+; (:m :ref DS-NATIVECACHEGC :do "re-stamp: a plan made from old stamps drops both entries, one file is then touched as a concurrent build would, and applyGc! keeps it and removes only the untouched one")
+fn ! restamp base: String -> Bool
+  (let [(d (str base "/restamp"))
+        (_ (sh! (list "/bin/mkdir" "-p" d)))
+        (_ (put! (str d "/kept.o") 100))
+        (_ (put! (str d "/gone.o") 100))
+        (_ (sh! (list "/usr/bin/find" d "-exec" "/usr/bin/touch" "-h" "-t" "202601010000" "{}" "+")))
+        (es (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str d "/" n)) false)) (list "kept.o" "gone.o")))
+        (plan (cg/planGc (map (fn [(e ncli/StoreEntry)] -> (Pair ncli/StoreEntry Bool) (pair e false)) es) (nowNs) 0 4611686018427387904 600000000000))
+        (touched (fileUtime (str d "/kept.o") (nowNs)))
+        (done (cg/applyGc! plan 600000000000))]
+    (do (assert (= (listLength plan.drop) 2) "the plan from old stamps drops both")
+        (assert (ok? touched) "one entry is touched after the plan")
+        (assert (and (fileExists? (str d "/kept.o")) (not (fileExists? (str d "/gone.o")))) "applyGc! re-stamps: the touched entry stays, the untouched one goes")
+        (assert (= (pairFirst done) 1) "one entry removed")
         true))
 
 fn ! runTests -> Bool
@@ -112,6 +140,7 @@ fn ! runTests -> Bool
         (ok1 (words))
         (ok2 (plans))
         (ok3 (runs base))
+        (ok4 (restamp base))
         (_ (sh! (list "/bin/rm" "-rf" "--" base)))]
     (do (assert (not (fileExists? base)) "the scratch store is removed")
-        (and ok1 (and ok2 ok3))))
+        (and ok1 (and ok2 (and ok3 ok4)))))

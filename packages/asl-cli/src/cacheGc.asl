@@ -2,13 +2,10 @@
   :x [GcPlan GcArgs parseArgs sizeValue ageValue originFile recordOrigin! deadOrigin? gcEntries! planGc applyGc! receipt cacheCmd!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a ncli) (asl-tools/nativeTest :a nt) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
-; (:m :ref DS-NATIVECACHEGC :do "asl cache gc bounds a native test cache: an outsidePkg mirror whose recorded source root is gone goes first, then every unleased entry older than --older-than, then the oldest unleased entries until the store fits --cap; an entry a live run leases (a slot lock, a module claim lock) or that changed in the last 600 s (a concurrent stager) is never removed; one receipt names what was freed and what stayed")
+; (:m :ref DS-NATIVECACHEGC :do "asl cache gc bounds a native test cache: an outsidePkg mirror whose recorded source root is gone goes first, then every unleased entry older than --older-than, then the oldest unleased entries until the store fits --cap; an entry a live run leases (a slot lock, a module claim lock) or that changed within the store's :native :storeMinAge (a concurrent stager) is never removed, and each entry is re-stamped right before it is removed; one receipt names what was freed and what stayed")
 (schema GcArgs (:f dir String) (:f capBytes Int64) (:f olderNs Int64) (:f dryRun Bool) (:f error String))
 
 (schema GcPlan (:f drop (List ncli/StoreEntry)) (:f keep (List ncli/StoreEntry)) (:f deadOrigin Int64) (:f pinned Int64))
-
-fn freshNs -> Int64
-  600000000000
 
 fn noLimit -> Int64
   4611686018427387904
@@ -43,6 +40,10 @@ fn ageValue s: String -> (Option Int64)
 fn argErr a: GcArgs msg: String -> GcArgs
   (with a :error msg)
 
+; (:m :ref DS-NATIVECACHEGC :do "a release name is one path component: not empty, not . or .., no slash, so --release cannot reach outside ~/.asl/releases")
+fn releaseName? v: String -> Bool
+  (and (not (stringEmpty? v)) (and (not (stringContains? v "/")) (not (or (= v ".") (= v "..")))))
+
 fn parseFrom args: (List String) a: GcArgs -> GcArgs
   (match (listHead args)
     ((none) a)
@@ -52,7 +53,7 @@ fn parseFrom args: (List String) a: GcArgs -> GcArgs
         (cond
           ((= flag "--dry-run") (parseFrom (listDrop args 1) (with a :dryRun true)))
           ((= flag "--dir") (if (stringEmpty? value) (argErr a "--dir needs a directory") (parseFrom rest2 (with a :dir value))))
-          ((= flag "--release") (if (stringEmpty? value) (argErr a "--release needs a version") (parseFrom rest2 (with a :dir (str (optionOr (envGet "HOME") "") "/.asl/releases/" value "/.asl/cache/nativeTest")))))
+          ((= flag "--release") (if (not (releaseName? value)) (argErr a (str "--release takes a version name without / or .., got " value)) (parseFrom rest2 (with a :dir (str (optionOr (envGet "HOME") "") "/.asl/releases/" value "/.asl/cache/nativeTest")))))
           ((= flag "--cap") (match (sizeValue value) ((some v) (parseFrom rest2 (with a :capBytes v))) ((none) (argErr a (str "--cap takes a size like 2G, got " value)))))
           ((= flag "--older-than") (match (ageValue value) ((some v) (parseFrom rest2 (with a :olderNs v))) ((none) (argErr a (str "--older-than takes an age like 7d, got " value)))))
           (else (argErr a (str "unknown argument " flag)))))))
@@ -80,13 +81,17 @@ fn ! deadOrigin? mirrorDir: String -> Bool
 fn ! liveLockIn? paths: (List String) -> Bool
   (listAny? (fn [(p String)] -> Bool (and (stringEndsWith? p ".lock") (nt/lockLive? p))) paths)
 
+; (:m :ref DS-NATIVECACHEGC :do "a module object is claimed while a live KEY.o.lock sits beside it: moduleEntries! groups by the stem before the last dot, so KEY.o and KEY.o.lock fall in different groups and the lock must be looked up per path")
+fn ! claimedIn? paths: (List String) -> Bool
+  (listAny? (fn [(p String)] -> Bool (nt/lockLive? (str p ".lock"))) paths)
+
 fn ! dirEntries! dir: String -> (List ncli/StoreEntry)
   (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str dir "/" n)) false))
        (filter (fn [(n String)] -> Bool (not (stringStartsWith? n "."))) (resultOr (dirList dir) (list))))
 
 ; (:m :ref DS-NATIVECACHEGC :do "the entries of one store: build slots (leased by slot/lock), module objects grouped by key (leased by a live KEY.o.lock), staged outsidePkg mirrors and outside files, and eval sources")
 fn ! gcEntries! dir: String -> (List ncli/StoreEntry)
-  (let [(mods (map (fn [(e ncli/StoreEntry)] -> ncli/StoreEntry (with e :pinned (or e.pinned (liveLockIn? e.paths)))) (nt/moduleEntries! (str dir "/modules"))))]
+  (let [(mods (map (fn [(e ncli/StoreEntry)] -> ncli/StoreEntry (with e :pinned (or e.pinned (or (liveLockIn? e.paths) (claimedIn? e.paths))))) (nt/moduleEntries! (str dir "/modules"))))]
     (listAppend (nt/slotEntries! dir)
       (listAppend mods
         (listAppend (dirEntries! (str dir "/outsidePkg"))
@@ -98,10 +103,10 @@ fn ! underDir? e: ncli/StoreEntry dir: String -> Bool
 fn ! deadEntry? dir: String e: ncli/StoreEntry -> Bool
   (and (underDir? e (str dir "/outsidePkg")) (deadOrigin? (optionOr (listHead e.paths) "")))
 
-; (:m :ref DS-NATIVECACHEGC :do "the plan is pure over stamped entries: protected = leased or changed within 600 s; dead-origin and older-than entries drop first, then the oldest of the rest until the kept bytes fit the cap")
-fn planGc tagged: (List (Pair ncli/StoreEntry Bool)) now: Int64 capBytes: Int64 olderNs: Int64 -> GcPlan
+; (:m :ref DS-NATIVECACHEGC :do "the plan is pure over stamped entries: protected = leased or changed within minAgeNs (the store's :storeMinAge); dead-origin and older-than entries drop first, then the oldest of the rest until the kept bytes fit the cap")
+fn planGc tagged: (List (Pair ncli/StoreEntry Bool)) now: Int64 capBytes: Int64 olderNs: Int64 minAgeNs: Int64 -> GcPlan
   (let [(entries (map pairFirst tagged))
-        (protected? (fn [(e ncli/StoreEntry)] -> Bool (or e.pinned (< (- now e.stamp) (freshNs)))))
+        (protected? (fn [(e ncli/StoreEntry)] -> Bool (or e.pinned (< (- now e.stamp) minAgeNs))))
         (split (fold (fn [(acc (Pair (List ncli/StoreEntry) (List ncli/StoreEntry))) (t (Pair ncli/StoreEntry Bool))] -> (Pair (List ncli/StoreEntry) (List ncli/StoreEntry))
                        (let [(e (pairFirst t))]
                          (if (and (not (protected? e)) (or (pairSecond t) (> (- now e.stamp) olderNs)))
@@ -119,9 +124,10 @@ fn planGc tagged: (List (Pair ncli/StoreEntry Bool)) now: Int64 capBytes: Int64 
             :deadOrigin (listLength (filter (fn [(t (Pair ncli/StoreEntry Bool))] -> Bool (and (pairSecond t) (not (protected? (pairFirst t))))) tagged))
             :pinned (listLength (filter protected? entries))))
 
-fn ! applyGc! plan: GcPlan -> (Pair Int64 Int64)
+; (:m :ref DS-NATIVECACHEGC :do "each planned entry is re-stamped right before removal, as sweepEntries! does: one changed within minAgeNs since the plan (a stager or a build reusing it) stays")
+fn ! applyGc! plan: GcPlan minAgeNs: Int64 -> (Pair Int64 Int64)
   (fold (fn [(acc (Pair Int64 Int64)) (e ncli/StoreEntry)] -> (Pair Int64 Int64)
-          (if (ncli/dropEntry! e) (pair (+ (pairFirst acc) 1) (+ (pairSecond acc) e.bytes)) acc))
+          (if (and (> (- (nowNs) (ncli/storeEntry! e.paths false).stamp) minAgeNs) (ncli/dropEntry! e)) (pair (+ (pairFirst acc) 1) (+ (pairSecond acc) e.bytes)) acc))
         (pair 0 0) plan.drop)
 
 fn receipt a: GcArgs plan: GcPlan removed: Int64 freed: Int64 -> String
@@ -131,7 +137,7 @@ fn receipt a: GcArgs plan: GcPlan removed: Int64 freed: Int64 -> String
          " :removed " (stringFromInt64 removed) " :freedBytes " (stringFromInt64 freed)
          " :keptBytes " (stringFromInt64 kept) " :capBytes " (stringFromInt64 a.capBytes)
          " :deadOrigin " (stringFromInt64 plan.deadOrigin) " :protected " (stringFromInt64 plan.pinned)
-         (if (> kept a.capBytes) " :note \"over cap: the rest is leased or changed in the last 600 s\"" "") ")"))
+         (if (> kept a.capBytes) " :note \"over cap: the rest is leased or changed within :storeMinAge\"" "") ")"))
 
 ; (:m :ref DS-NATIVECACHEGC :do "one gc at a time per store and never beside nativeTest's own sweep: both take DIR/sweep.lock; a held lock is a :busy receipt and exit 1")
 fn ! cacheCmd! ctx: sys/Context args: (List String) -> Int64
@@ -143,9 +149,10 @@ fn ! cacheCmd! ctx: sys/Context args: (List String) -> Int64
         ((not (sys/isDir? a.dir)) (do (sys/say! (str "(:cacheGc :dir \"" a.dir "\" :entries 0 :removed 0 :freedBytes 0 :note \"no cache here\")")) 0))
         ((not (nt/takeLock! (str a.dir "/sweep.lock") 1)) (do (sys/say! (str "(:cacheGc :dir \"" a.dir "\" :status :busy :message \"another sweep holds sweep.lock\")")) 1))
         (else
-          (let [(entries (gcEntries! a.dir))
+          (let [(minAge (nb/storeMinAgeNs! ctx.root))
+                (entries (gcEntries! a.dir))
                 (tagged (map (fn [(e ncli/StoreEntry)] -> (Pair ncli/StoreEntry Bool) (pair e (deadEntry? a.dir e))) entries))
-                (plan (planGc tagged (nowNs) a.capBytes a.olderNs))
-                (done (if a.dryRun (pair (listLength plan.drop) (ncli/storeBytes plan.drop)) (applyGc! plan)))
+                (plan (planGc tagged (nowNs) a.capBytes a.olderNs minAge))
+                (done (if a.dryRun (pair (listLength plan.drop) (ncli/storeBytes plan.drop)) (applyGc! plan minAge)))
                 (_ (pathRemove (str a.dir "/sweep.lock")))]
             (do (sys/say! (receipt a plan (pairFirst done) (pairSecond done))) 0))))))
