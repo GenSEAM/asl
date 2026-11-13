@@ -52,7 +52,7 @@ fn footBar -> h/Node
         [(h/a [(h/href "/") (h/cls "mark")] [(markNode) (h/span [] [(h/text "AgentSlang")])])
          (h/p [] [(h/text "A language and data notation written by models, for models. Dual-licensed MIT or Apache-2.0.")])
          (h/p [(h/cls "micro") (h/id "built-with")] [(h/text "This site is an ASL program: markup, styles and event handlers compiled to WebAssembly.")])])
-       (footCol "Language" [(pair "Docs" "/docs") (pair "llms.txt" "/llms.txt") (pair "Install script" "/install.sh")])
+       (footCol "Language" [(pair "Docs" "/docs") (pair "llms.txt" "/llms.txt") (pair "Install script (not ready)" "/install.sh")])
        (footCol "Project" [(pair "Source" "https://github.com/GenSEAM/asl") (pair "Blog" "/blog") (pair "RSS" "/rss.xml")])])])
 
 fn eyebrow index: String label: String -> h/Node

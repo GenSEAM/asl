@@ -22,9 +22,9 @@ fn toc -> h/Node
 
 fn install -> (List h/Node)
   (topic "install" "Install"
-    [(para "AgentSlang has not been released yet. The installer is under development: there are no release binaries, and the script below is the one that will ship.")
-     (listing ["curl -fsSL https://aslang.dev/install.sh | sh"])
-     (para "To try the language before then, clone the repository and build the stage-0 host with host/build.sh; host/out/asl-host check, test and run work on it directly.")])
+    [(para "AgentSlang has not been released. There are no release binaries, the script at /install.sh has not been run end to end on a fresh machine and should not be relied on yet, and Windows is not supported.")
+     (para "Building from source is not ready either. The launcher asl/bin/asl builds the native CLI from a committed seed with clang, but on a clean copy of the published tree that build stops at an unresolved import (checked on macOS, 2026-11-13). Until that is fixed there is no supported way to run ASL outside the project's own workspace.")
+     (para "The commands on this page are the ones that work in that workspace, where asl is the launcher. Each example below was run there with asl check, asl test or asl run before this page was built.")])
 
 fn body -> (List h/Node)
   (listAppend
@@ -52,12 +52,13 @@ fn body -> (List h/Node)
                (listing ["(match (fileReadString path)" "  ((ok text) (stringLength text))" "  ((err e) 0))"])])
             (listAppend
               (topic "effects" "Effects"
-                [(para "A function that prints, reads a file or runs a process marks it, either with ! after fn or as a name ending in !. The checker rejects an unmarked effect:")
-                 (listing ["fn ! main -> Int64" "  (do (print \"hello\") 0)" "" "ERR_EFFECT_UNMARKED fn main names effectful print: mark it (fn ! main ...) or rename it main!"])])
+                [(para "A function that prints, reads a file or runs a process is marked, either with ! after fn or with a name ending in !, so a reader sees from the header that it does more than compute.")
+                 (listing ["fn ! main -> Int64" "  (do (print \"hello\") 0)"])
+                 (para "This is a convention today, not a check: asl check accepts the same function without the mark. Rejecting an unmarked effect is planned.")])
               (listAppend
                 (topic "tests" "Tests"
-                  [(para "A test module exports runTests, which returns true after at least one (assert cond \"msg\") or refute. The stage-0 host is the strict reference: it checks names, arity and enums before running anything.")
-                   (listing ["fn runTests -> Bool" "  (do (assert (= (area (square 3)) 9) \"square\") true)" "" "host/out/asl-host check fileTest.asl" "host/out/asl-host test fileTest.asl"])])
+                  [(para "A test module exports runTests, which returns true after at least one (assert cond \"msg\") or refute. asl check resolves names and checks call arity before anything runs (ERR_UNKNOWN_SYMBOL, ERR_ARITY); a file with an unclosed delimiter fails first with ERR_UNBALANCED and a proposed (:fix). asl test prints the number of assertions executed and exits non-zero on a failure.")
+                   (listing ["fn runTests -> Bool" "  (do (assert (= (area (square 3)) 9) \"square\") true)" "" "asl check fileTest.asl" "asl test fileTest.asl"])])
                 (listAppend
                   (topic "toolbelt" "The toolbelt"
                     [(para "asl '<form> <form> ...' runs file operations on the git repository that holds the working directory. The forms of one call run as one batch, and every form answers with an ASN receipt.")
@@ -68,11 +69,11 @@ fn body -> (List h/Node)
                      (para "This site is built that way. Its markup, styles and event handlers are ASL in web/site; web/tools/build.asl prerenders every page and compiles the same modules into site.wasm, and a short JavaScript bridge forwards clicks to the module's update export.")
                      (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])])
                   (topic "targets" "JavaScript, TypeScript, HTML and CSS"
-                    [(para "asl-target-js lowers the same linked program to one ES module: Int is BigInt and traps on int64 overflow, strings keep their UTF-8 byte semantics, and output, exit codes and trap codes match the host on its test fixtures. Unlike wasm32 it can read clocks; files, processes and the environment are refused at compile time.")
+                    [(para "asl-target-js lowers the same linked program to one ES module: Int is BigInt and traps on int64 overflow, strings keep their UTF-8 byte semantics, and its test fixtures compare output, exit codes and trap codes with the native build. Unlike wasm32 it can read clocks; files, processes and the environment are refused at compile time.")
                      (para "TypeScript callers get declarations generated from the module's signatures: a schema becomes a readonly interface, an enum a union tagged by variant name, Int bigint, and type variables generics. A test checks a consumer against tsc --strict.")
-                     (listing ["ENTRY=asl/app/main.asl OUT=app.mjs asl/host/out/asl-host run asl/web/tools/jsc.asl" "# app.mjs and app.d.mts"])
+                     (listing ["ENTRY=asl/examples/fib.asl OUT=app.mjs asl run asl/web/tools/jsc.asl" "# app.mjs and app.d.mts"])
                      (para "asl-html is typed HTML5 and CSS: one constructor per element, escaping by construction, styles as data with media, supports, layer, container, keyframes and font-face rules. This site is written with it.")])))))))))))
 
 fn docsPage -> h/Node
-  (l/document (l/docs) "AgentSlang docs: the language on one page" "The AgentSlang (ASL) language on one page: modules, functions, enums, no nil or exceptions, marked effects, tests, the agent toolbelt and WebAssembly."
+  (l/document (l/docs) "AgentSlang docs: the language on one page" "The AgentSlang (ASL) language on one page: modules, functions, enums, no nil or exceptions, effect marks, tests, the agent toolbelt and WebAssembly."
     [(h/div [(h/cls "shell page")] [(h/article [(h/cls "prose")] (body))])])

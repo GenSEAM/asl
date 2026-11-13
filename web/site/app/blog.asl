@@ -14,7 +14,11 @@ fn blogIndexPage posts: (List Post) -> h/Node
   (l/document (l/blog) "AgentSlang blog" "Notes on AgentSlang (ASL): language design for model-written code, the wire protocol, the toolbelt and the WebAssembly target."
     [(h/div [(h/cls "shell page")]
       [(h/div [(h/cls "head")] [(l/eyebrow "BLOG" "Engineering notes") (h/h1 [(h/cls "h2")] [(h/text "Notes from building a language for models.")])])
+       (h/div [(h/cls "head")] [(staleNotice)])
        (h/ul [(h/cls "posts")] (map postItem posts))])])
+
+fn staleNotice -> h/Node
+  (h/p [(h/cls "notice")] [(h/text "These notes were written in September 2026, before the C host was removed, and describe designs as well as shipped behaviour. Where a post says asl-host check or asl-host test, the command today is asl check or asl test; ERR_READ_UNBALANCED is now ERR_UNBALANCED; and the current checker does not reject an unmarked effect (ERR_EFFECT_UNMARKED). Figures are the ones measured on the date each post gives. ") (h/a [(h/href "/docs")] [(h/text "Current docs")])])
 
 fn metaLine? line: String -> Bool
   (or (stringStartsWith? line "*Published on") (stringStartsWith? line "*Canonical URL"))
@@ -24,7 +28,7 @@ fn postPage p: Post -> h/Node
     [(h/div [(h/cls "shell page")]
       [(h/article [(h/cls "prose")]
         (listAppend
-          [(h/a [(h/href "/blog") (h/cls "micro")] [(h/text "← All posts")]) (h/h1 [] [(h/text p.title)]) (byline p)]
+          [(h/a [(h/href "/blog") (h/cls "micro")] [(h/text "← All posts")]) (h/h1 [] [(h/text p.title)]) (byline p) (staleNotice)]
           (md/blocks (filter (fn [(line String)] -> Bool (not (metaLine? line))) (stringLines p.content)))))])])
 
 fn notFoundPage -> h/Node
