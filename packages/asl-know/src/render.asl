@@ -1,5 +1,5 @@
 (module asl-know/render
-  :x [Card Group q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard groupsOf groupsOf! effectiveGroups groupFile indexText groupIndexText indexFiles missingOf allCards!]
+  :x [Card Group q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard groupsOf groupsOf! effectiveGroups orphanMembers otherMembers shortIdIn groupMarker groupFile indexText groupIndexText indexFiles missingOf allCards!]
   :i [(asl-know/scan :a sc)])
 
 ; (:m :tags (know) :note "L0 index, L1 cards and L2 symbol rows as single-line ASN frames; token figures are bytes/4, labelled :tokensBy bytes36")
@@ -245,6 +245,23 @@ fn effectiveGroups groups: (List Group) cards: (List Card) -> (List Group)
         (left (filter (fn [(i String)] -> Bool (not (listContains? placed i))) ids))]
     (if (listEmpty? left) base (listAppend base (list (Group :id "other" :purpose "cards no groups.asn row lists, add them to a group" :members left)))))
 
+; (:m :ref KNOW-TIER-LOWS2 :do "group rows whose member names no card are dropped from the index without a word: each is listed as GROUP/MEMBER so gen can report it")
+fn orphanMembers groups: (List Group) cards: (List Card) -> (List String)
+  (let [(ids (map (fn [(c Card)] -> String c.id) cards))]
+    (listFlatMap (fn [(g Group)] -> (List String)
+                   (map (fn [(m String)] -> String (str g.id "/" m)) (filter (fn [(m String)] -> Bool (not (listContains? ids m))) g.members)))
+                 groups))
+
+; (:m :ref KNOW-TIER-LOWS2 :do "the cards that fall to index-other, because no groups.asn row lists them (a removed group's members land here): gen reports them")
+fn otherMembers groups: (List Group) cards: (List Card) -> (List String)
+  (match (listHead (filter (fn [(g Group)] -> Bool (= g.id "other")) (effectiveGroups groups cards)))
+    ((some g) g.members)
+    ((none) (list)))
+
+; (:m :ref KNOW-TIER-LOWS2 :do "every index-GROUP.asn this generator writes opens with this head, which is how a later gen tells its own stale file from a hand-made index-*.asn it must never delete")
+fn groupMarker -> String
+  "(:know :tier L0g :group "
+
 fn shortId id: String -> String
   (cond
     ((stringStartsWith? id "core/") (optionOr (stringSlice id 5 (stringLength id)) id))
@@ -270,7 +287,7 @@ fn indexText groups: (List Group) cards: (List Card) -> String
          (stringJoin lines "\n") "\n"))
 
 fn groupIndexText g: Group cards: (List Card) -> String
-  (str "(:know :tier L0g :group " (q g.id) " :cards " (listLength g.members) " :tokensBy bytes36)\n"
+  (str (groupMarker) (q g.id) " :cards " (listLength g.members) " :tokensBy bytes36)\n"
        (stringJoin (map indexLine (filter (fn [(c Card)] -> Bool (listContains? g.members c.id)) cards)) "\n") "\n")
 
 fn indexFiles groups: (List Group) cards: (List Card) -> (List (Pair String String))

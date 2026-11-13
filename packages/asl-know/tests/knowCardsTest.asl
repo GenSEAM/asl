@@ -135,7 +135,7 @@ fn ! indexDistinct root: String -> Bool
 
 ; (:m :ref KNOW-TIER-LOWS :do "L0 member names are unique across groups (core/parquet and asl-parquet both keep their full id), the word memory leads exactly one group purpose, and gen's dropStaleIndexes! deletes an index-GROUP.asn whose group is gone while keeping rendered index files and other card files")
 fn ! memberNames root: String -> (List String)
-  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))]
+  (let [(index (r/indexText (r/groupsOf! root) (r/allCards! root)))]
     (listFlatMap (fn [(l String)] -> (List String)
                    (if (stringStartsWith? l "(:g \"")
                      (stringSplit (optionOr (listHead (stringSplit (optionOr (listLast (stringSplit l "(")) "") ")")) "") " ")
@@ -159,11 +159,16 @@ fn ! tierLows root: String -> Bool
         (assert (stringContains? (stringJoin names " ") "core/parquet") "the colliding core card keeps its full id")
         (assert (stringContains? (stringJoin names " ") "asl-parquet") "the colliding package card keeps its full id")
         (assert (= (listLength memory) 1) (str "memory appears in exactly one group purpose, got " (listLength memory)))
+        (assert (and (= (r/shortIdIn "core/parquet" (list "core/parquet" "asl-parquet")) "core/parquet") (= (r/shortIdIn "asl-parquet" (list "core/parquet" "asl-parquet")) "asl-parquet")) "a short name shared by two cards keeps both full ids")
+        (assert (and (= (r/shortIdIn "asl-json" (list "asl-json" "core/lang")) "json") (= (r/shortIdIn "core/lang" (list "asl-json" "core/lang")) "lang")) "an unshared card gets its short name")
+        (assert (= (r/orphanMembers (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "g/ghost")) "a group member naming no card is reported as an orphan")
+        (assert (= (r/otherMembers (list) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "a")) "a card no group lists is reported as falling to other")
         (assert (ok? (dirCreate dir)) "scratch dir made")
-        (assert (and (ok? (fileWrite (str dir "/index-gone.asn") "x")) (and (ok? (fileWrite (str dir "/index-keep.asn") "x")) (ok? (fileWrite (str dir "/core-lang.asn") "x")))) "scratch files written")
+        (assert (and (ok? (fileWrite (str dir "/index-gone.asn") (str (r/groupMarker) "\"gone\" :cards 0 :tokensBy bytes36)\n"))) (and (ok? (fileWrite (str dir "/index-keep.asn") "x")) (and (ok? (fileWrite (str dir "/core-lang.asn") "x")) (ok? (fileWrite (str dir "/index-hand.asn") "(:hand made)\n"))))) "scratch files written")
         (assert (= (kn/dropStaleIndexes! dir (list (pair "index-keep.asn" "x") (pair "core-lang.asn" "x"))) (ok 2)) "dropStaleIndexes! reports the rendered count")
         (assert (not (fileExists? (str dir "/index-gone.asn"))) "the index file of a removed group is deleted")
         (assert (and (fileExists? (str dir "/index-keep.asn")) (fileExists? (str dir "/core-lang.asn"))) "rendered index and other card files stay")
+        (assert (fileExists? (str dir "/index-hand.asn")) "a hand-made index-*.asn without the generator's head survives gen")
         (assert (ok? (pathRemove dir)) "scratch dir removed")
         true))
 
@@ -183,5 +188,14 @@ fn ! queries root: String -> Bool
       true))
 
 fn ! runTests -> Bool
-  (let [(root (resultOr (realPath ".") "."))]
-    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (tiersReach root) (tierLows root) (indexDistinct root) (queries root)))
+  (let [(root (resultOr (realPath ".") "."))
+        (a (examplesRun))
+        (b (cardsFresh root))
+        (c (ratchetShrinks root))
+        (d (examplesEmbedded root))
+        (e (budgets root))
+        (f (tiersReach root))
+        (g (tierLows root))
+        (h (indexDistinct root))
+        (i (queries root))]
+    (and a (and b (and c (and d (and e (and f (and g (and h i)))))))))

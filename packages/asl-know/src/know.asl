@@ -1,5 +1,5 @@
 (module asl-know/know
-  :x [dropStaleIndexes! rendered! cardsDir staleFiles! ratchetRows! ratchetDiff writeCards! know! main]
+  :x [generatedIndex? genReport! dropStaleIndexes! rendered! cardsDir staleFiles! ratchetRows! ratchetDiff writeCards! know! main]
   :i [(asl-know/render :a r) (asl-know/query :a qy)])
 
 ; (:m :tags (know) :note "asl know: gen writes asl-know/cards from source, check fails on any byte drift, q answers an intent query from the written cards")
@@ -37,12 +37,27 @@ fn ratchetDiff listed: (List String) computed: (List String) -> (Pair (List Stri
   (pair (filter (fn [(m String)] -> Bool (not (listContains? listed m))) computed)
         (filter (fn [(m String)] -> Bool (not (listContains? computed m))) listed))
 
-; (:m :ref KNOW-TIER-LOWS :do "gen removes an index-GROUP.asn whose group is gone: any index-*.asn in the cards dir that is not among the rendered files is deleted, so a dropped group leaves no stale file for check to report")
+; (:m :ref KNOW-TIER-LOWS2 :do "a file is this generator's own when it opens with the L0g group head that indexFiles writes; a hand-made index-*.asn lacks it and is never deleted (check still reports it as unexpected)")
+fn ! generatedIndex? path: String -> Bool
+  (match (fileReadString path)
+    ((err _) false)
+    ((ok text) (stringStartsWith? text (r/groupMarker))))
+
+; (:m :ref KNOW-TIER-LOWS :ref KNOW-TIER-LOWS2 :do "gen removes an index-GROUP.asn whose group is gone: an index-*.asn in the cards dir that is not among the rendered files and carries the generator's head is deleted, so a dropped group leaves no stale file for check to report; one without the head is a foreign file and stays")
 fn ! dropStaleIndexes! dir: String files: (List (Pair String String)) -> (Result Int64 String)
-  (let [(stale (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "index-") (and (stringEndsWith? n ".asn") (not (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) n)) files)))))
+  (let [(stale (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "index-") (and (stringEndsWith? n ".asn") (and (not (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) n)) files)) (generatedIndex? (str dir "/" n))))))
                        (resultOr (dirList dir) (list))))
         (failed (filter (fn [(n String)] -> Bool (err? (pathRemove (str dir "/" n)))) stale))]
     (if (listEmpty? failed) (ok (listLength files)) (err (str "cannot remove " (optionOr (listHead failed) "")))))
+
+; (:m :ref KNOW-TIER-LOWS2 :do "what gen says beyond the file count: group members that name no card (dropped from the index) and the cards that fell to index-other; empty when there is nothing to report")
+fn ! genReport! root: String -> String
+  (let [(groups (r/groupsOf! root))
+        (cards (r/allCards! root))
+        (orphans (r/orphanMembers groups cards))
+        (other (r/otherMembers groups cards))]
+    (str (if (listEmpty? orphans) "" (str " :orphans (" (stringJoin (map r/q orphans) " ") ")"))
+         (if (listEmpty? other) "" (str " :other (" (stringJoin (map r/q other) " ") ")"))))
 
 fn ! writeCards! root: String -> (Result Int64 String)
   (let [(files (rendered! root)) (dir (cardsDir root))]
@@ -77,7 +92,7 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) "help"))
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))]
     (cond
-      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :gen :files " n ")")) (ok 0)))))
+      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :gen :files " n (genReport! root) ")")) (ok 0)))))
       ((= cmd "ratchet") (match (writeRatchet! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :ratchet :rows " n ")")) (ok 0)))))
       ((= cmd "check")
         (let [(stale (staleFiles! root))]
