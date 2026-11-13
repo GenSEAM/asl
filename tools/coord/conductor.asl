@@ -1411,19 +1411,19 @@ fn jobserverPace dir: String allowance: (fn [String] -> Int64) -> Pace
   (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance)
 
 ; (:m :ref SCHED :do "the light pool: without ~/.asl/conductor/sched.asn it is the jobserver token count and nothing adapts; with one the slots come from the store's slots.asn, sampled at most once a minute from the gateway ledger, free RAM and load; gates and builds keep the jobserver class writer tokens")
-; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings passed in: conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
-fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: Int64 -> Int64
+; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings and the disk passed in (CONDUCTORTEST-SCHED-RED: the real disk at 86% was level low and halved :start 7 to 3): conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
+fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: Int64 disk: sc/Disk -> Int64
   (let [(txt (readOr (str home "/.asl/conductor/sched.asn")))]
     (if (stringEmpty? txt)
       (poolSize "")
       (let [(cfg (sc/parseCfg txt))
             (now (/ (nowNs) 1000000))]
         (if (sc/slotsDue? dir now 60000)
-          (sc/schedTick! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) freeMB load cores)
+          (sc/schedTickDisk! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) freeMB load cores disk)
           (pairFirst (sc/slotsRead! dir))))))
 
 fn ! lightSlots! dir: String home: String -> Int64
-  (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1))
+  (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1) (sc/probeDisk! dir))
 
 fn schedPace dir: String home: String -> Pace
   (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited)
