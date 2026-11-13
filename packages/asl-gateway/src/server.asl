@@ -1,5 +1,5 @@
 (module aslGateway/server
-  :x [gatewayCliMode? hubStatusText! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [gatewayCliMode? hubStatusText! staleHeaderName staleHeaderLine staleMarked addConn requeueWriting stepWriting! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
@@ -504,13 +504,32 @@ fn reqMark srv: GatewayLoop fd: Int64 data: String -> GatewayLoop
     srv
     (with srv :reqs (map (fn [(r rq/ReqInfo)] -> rq/ReqInfo (if (and (= r.fd fd) (stringEmpty? r.outcome)) (with r :outcome (rq/outcomeOfWire data) :status (rq/statusOfWire data)) r)) srv.reqs)))
 
+; (:m :ref GW-CONFIG-STALE-LOUD :do "while the hub serves its last good config because the file on disk does not load, every reply it writes carries the header X-Asl-Config-Stale with the one-line error (file and cause, line breaks folded, 300 characters at most): a client sees it on every call, not only in hub status. The error text is the loader's own, a path and a parse message, never a key value. Only the first write of a reply (the one that starts with the HTTP status line) gets the header, the rest of a streamed body and a partial write are untouched, and a reply that already holds it is left alone")
+fn staleHeaderName -> String
+  "X-Asl-Config-Stale"
+
+fn staleHeaderLine err: String -> String
+  (str (staleHeaderName) ": " (let [(flat (stringReplace (stringReplace err "\r" " ") "\n" " "))] (optionOr (stringSlice flat 0 (min 300 (stringLength flat))) "")) "\r\n")
+
+fn staleMarked stale: String data: String -> String
+  (if (or (stringEmpty? stale) (or (not (stringStartsWith? data "HTTP/1.")) (stringContains? data (str "\r\n" (staleHeaderName) ":"))))
+    data
+    (match (stringIndexOf data "\r\n")
+      ((none) data)
+      ((some i) (str (optionOr (stringSlice data 0 (+ i 2)) "") (staleHeaderLine stale) (optionOr (stringSlice data (+ i 2) (stringLength data)) "")))))
+
+; (:m :ref GW-CONFIG-STALE-LOUD :do "the unwritten rest of a reply goes back on the socket as it is: only the first write of a reply is marked, so a body chunk that happens to start with HTTP/1. is never rewritten")
+fn requeueWriting srv: GatewayLoop fd: Int64 rest: String -> GatewayLoop
+  (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase (connWriting rest)))))
+
 fn addConn srv: GatewayLoop fd: Int64 phase: ConnPhase -> GatewayLoop
   (match phase
-    ((connWriting data)
-      (let [(marked (reqMark srv fd data))]
+    ((connWriting raw)
+      (let [(data (staleMarked (c/profilesStale srv.profiles) raw))
+            (marked (reqMark srv fd data))]
         (if (<= fd (linkFd))
           (with marked :outbox (listAppend marked.outbox (list (pair fd data))))
-          (loopConns marked (listAppend marked.conns (list (GatewayConn :fd fd :input "" :phase phase)))))))
+          (loopConns marked (listAppend marked.conns (list (GatewayConn :fd fd :input "" :phase (connWriting data))))))))
     (_ (loopConns srv (listAppend srv.conns (list (GatewayConn :fd fd :input "" :phase phase))))))
 
 fn linkFd -> Int64
@@ -1233,7 +1252,7 @@ fn ! stepWriting! srv: GatewayLoop conn: GatewayConn data: String ready: (List (
       ((ok n)
         (let [(rest (optionOr (stringSlice data n (stringLength data)) ""))]
           (if (stringEmpty? rest) (finishReq! srv conn false)
-            (addConn srv conn.fd (connWriting rest)))))))
+            (requeueWriting srv conn.fd rest))))))
 
 fn ! stepHttp! srv: GatewayLoop conn: GatewayConn tag: String call: u/UpstreamCall k: (fn [ch/ChatOutcome] -> ch/ChatStep) slot: String provider: String startMs: Int64 model: String intent: String params: ul/CallParams profile: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
   (if (u/upstreamCallFirstByteExpired? call (nowMs!))

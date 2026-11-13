@@ -1,13 +1,145 @@
-# EXPERIMENT.md — Pre-registered protocol for AgentSlang concept validation
+# EXPERIMENT.md: ASL against Python and TypeScript, generation baseline
 
-**Status: PRE-REGISTERED. Nothing has been run.**
-Written before any generation, so results cannot retroactively reshape the criteria.
+**Status: PRE-REGISTERED, protocol v2 of 2026-11-13. No baseline arm has run. Running it spends model budget and needs the principal's approval.**
 
-Amendments to this file must be dated, appended under §9, and must state whether they were made
-before or after seeing results. An amendment made after seeing results invalidates the
-pre-registration for the affected metric — say so rather than quietly editing.
+Integrity note: v2 was written after ASL-only results had been seen (462 trials of one arithmetic family, 145 raw passes, 420 after heal, 2026-10-15; no comparator arm). No Python or TypeScript generation result existed when the thresholds below were set. Protocol v1 and its amendments are kept unedited in the appendix; v2 supersedes them wherever they differ.
+
+Amendments are dated, appended under "Amendments" in the appendix, and state whether they were made before or after seeing results. An amendment made after results invalidates the pre-registration for the metric it touches.
+
+Paths are relative to this repository; paths starting with `tools/` or `.asl/` are in the development workspace and are named where the published tree has no equivalent yet.
+
+## 1. Question
+
+Do models write correct ASL about as reliably, and at about the same token cost, as they write Python and TypeScript, on the same tasks, with the same models and budget? This has never been measured. Two dialect questions ride on the same tasks: brackets against parens only, and the bare function header against a parenthesised one.
+
+## 2. Hypotheses and decision rule
+
+| ID | Hypothesis | Refuted when |
+|---|---|---|
+| **H1** (primary) | ASL is generated competitively | healed pass@1 of arm `asl` is more than **15 points** below raw pass@1 of `py` **or** of `ts`, on either model |
+| **H2** (primary) | ASL costs no more to get to green | tokens per solved task of `asl`, language card excluded, exceed **1.5 times** that of `py` or `ts`, on either model |
+| **H3** | brackets generate better than parens only | `aslParen` raw pass@1 is not below `asl` (paired by task, Holm-adjusted p < 0.05, difference of 10 points or more counts as an effect) |
+| **H4** | a parenthesised `(fn ...)` header generates better than the bare column-0 line | `aslWrapFn` raw pass@1 is not above `asl` by the same test |
+
+The 15 point threshold is the one v1 fixed. The 1.5 factor and the 10 point effect size are new in v2.
+
+Decisions, applied in a dated row in `bench/publishedClaims.asn`:
+
+- H1 or H2 refuted: language surface work stops. Effort moves to the harness and toolbelt on existing Python and TypeScript repositories. No prompt, card or grammar iteration to rescue the number.
+- H1 and H2 hold with a 95% interval that still crosses a threshold: run phase B (section 8) before claiming anything.
+- H3 or H4 shows an effect: the winning surface is adopted (for H4, the parser accepts both headers) and manifesto, README and `llms.txt` are aligned. No effect: the current surface stays and the question is closed.
+
+## 3. Tasks
+
+30 tasks in 3 families of 10. Each task has a language-neutral statement, one idiomatic signature per language, 2 example cases shown to the model and 6 graded cases (at least one edge case) that are not shown.
+
+| Family | Tasks |
+|---|---|
+| A, arithmetic and strings | `sumDigits` `gcd` `isPrime` `fizzbuzzLine` `collatzSteps` `clampInt` `powMod` `countVowels` `reverseWords` `romanNumeral` |
+| B, lists and options | `maxOf` `secondLargest` `indexOf` `dedupeKeepOrder` `runLengthEncode` `mergeSorted` `chunk` `histogram` `firstFailure` `lookupChain` |
+| C, records and enums | `shapeArea` `exprEval` `trafficLightNext` `accountApply` `parseCommand` `inventoryTotal` `pointInRect` `classifyToken` `stackMachine` `updateUser` |
+
+Absence and failure are expressed the way each language does it: `Option` and `Result` in ASL, `T | None` and `ValueError` in Python, `T | undefined` and a thrown `Error` in TypeScript. `histogram` is the existing `bench/tasks/histogram.asn`.
+
+Files to write before any model call, one per task: `bench/gen/tasks/<id>.asn` (statement, signatures, cases) and hand-written reference solutions `bench/gen/ref/<id>.{asl,py,ts}`. Reference solutions are written by hand, not generated. A task whose ASL reference cannot be written is a language finding, logged in `bench/gen/results/inexpressible.asn`, and is replaced before the run.
+
+## 4. Arms
+
+| Arm | Language shown to the model | Checked by |
+|---|---|---|
+| `py` | Python 3.13 with type hints, no card | `python3 -I` on solution plus graded cases |
+| `ts` | TypeScript, no card | `tsc --strict --target es2022`, then `node` on the output |
+| `asl` | current surface: `[ ]` lists and bindings, bare `fn name a: T -> R` header | `bin/asl check`, then `bin/asl test` |
+| `aslParen` | parens only: `(let ((x e)) ...)`, no brackets | normalised to the current surface, then as `asl` |
+| `aslWrapFn` | `(fn name [a: T] -> R body)` as one form | normalised to the current surface, then as `asl` |
+
+- The ASL card is the section "The language" of `llms.txt` at the run commit, with its sha256 recorded (the whole file is 1569 `o200k_base` tokens on 2026-11-13). The two variant cards are that text with the one construct substituted mechanically; nothing else changes.
+- Normalisers for the variant arms start from `rewriteLetShape` and `normalizeHeader` in the workspace's `tools/synProbes.asl`. Each must turn the variant spelling of all 30 reference solutions into text that passes the graded cases before any arm runs; a normaliser defect is a harness defect, not a model failure.
+- Every ASL arm is scored twice: raw, and after `bin/asl heal`. Python and TypeScript get no repair tool, so raw against raw is the like-for-like comparison and healed ASL is its best case. Both are published.
+
+## 5. Procedure
+
+One trial is one task, one arm, one model, one repetition:
+
+1. Turn 1: system prompt (card for ASL arms, one line naming the language otherwise), task statement, signature, 2 example cases. The reply must hold one fenced code block.
+2. Stages, in order, first failure recorded: `extract`, `parse`, `check`, `execute`, `correct` (all graded cases pass).
+3. If not correct, a repair turn sends back the first 2000 characters of the tool output and the names of failing cases. At most 3 repair turns, so 4 calls per trial.
+4. The trial ends green or exhausted.
+
+Fixed settings: temperature 0.2, at most 1200 output tokens, 5 repetitions, seed recorded where the provider takes one. Trial order is shuffled with a recorded seed so that provider drift falls on all arms alike. Calls are plain chat completions through the gateway (`/v1/chat/completions`), not through the agent loop: this measures the language, not an agent's write discipline. Token counts are the gateway's usage rows, not a local tokenizer.
+
+Children (python3, node, tsc, `bin/asl`) run through `tools/fleet/run.asl` with a 30 second limit and a descendant limit; nothing starts the running executable.
+
+## 6. Models
+
+Named by gateway alias; the provider's exact model id and the date are recorded per call from the gateway usage row.
+
+| Slot | Alias | Why |
+|---|---|---|
+| M1 | `synDs41Flash` | the project's main writer model |
+| M2 | `ocClaudeHaiku55` | a second family at small-model price |
+| M3 (optional) | `opus` | frontier check on 10 tasks (families B and C, 5 each), 3 repetitions |
+
+An alias that is absent or fails its first call is replaced by another model of the same class before the run, in an amendment; never during it.
+
+## 7. Metrics
+
+Per arm and model, over 150 trials (30 tasks, 5 repetitions):
+
+- **raw pass@1**: turn 1 is correct with no repair and no heal.
+- **healed pass@1** (ASL arms): turn 1 is correct after `bin/asl heal`.
+- **solved**: green within 4 calls.
+- **tokens-to-green**: prompt plus completion tokens summed over the calls of a solved trial; median and quartiles.
+- **tokens per solved task**: all tokens the arm spent, solved or not, divided by solved trials. This is the headline cost figure; it is reported with the card counted and with the card excluded, side by side.
+- **repair turns per solved task**, and the stage of first failure.
+
+Intervals: 95%, by bootstrap over tasks (10000 resamples), since repetitions of one task are not independent. H3 and H4 are paired by task with Holm adjustment over the two comparisons.
+
+## 8. Size, cost and cap
+
+Pilot (this protocol): 30 tasks, 5 arms, 2 models, 5 repetitions = **1500 trials**, at most 6000 calls. M3 adds 150 trials (10 tasks, 5 arms, 3 repetitions).
+
+Token estimate, both models together; these are assumptions until the pilot measures them (prompt 300 tokens without card, 1900 with it; 250 output tokens per call; each repair turn adds about 600 prompt tokens):
+
+| Case | Input tokens | Output tokens |
+|---|---|---|
+| expected, 2 calls per trial on average | about 4.7 M | about 0.75 M |
+| worst, 4 calls on every trial | about 13 M | about 1.5 M |
+
+Money is input M times input price plus output M times output price, with the prices of the gateway's model rows on the day. At the cheap-tier prices in `bench/harness/config.example.asn` (0.15 and 0.60 USD per million, an assumption, not a quote) that is about 1.2 USD expected and 2.9 USD worst. M3 at frontier prices is the larger item and is priced separately before it is approved.
+
+**Cap:** the runner tracks cumulative spend from gateway usage rows and aborts mid-run at the cap the principal sets (proposed: 15 USD for M1 and M2 together). The 0.20 USD cap of amendment 2026-08-20-c applied to a 3-task smoke run and is superseded for this pilot. A subscription-backed alias still counts against the cap at its list price.
+
+Phase B, only if the pilot is inconclusive: 30 more tasks in the same families (60 in all), same arms and models, a separate approval.
+
+## 9. What must exist before the first call
+
+None of this spends model budget.
+
+1. The 30 task files and 90 reference solutions (section 3).
+2. A runner, `bench/gen/run.asl`, with these entry points:
+
+   ```sh
+   bin/asl run bench/gen/run.asl verify               # every reference passes in every arm, normalisers included; no model call
+   bin/asl run bench/gen/run.asl dry                  # canned replies reach every stage, including a check failure and an exhausted trial
+   bin/asl run bench/gen/run.asl pilot --model synDs41Flash --cap-usd N --seed S
+   bin/asl run bench/gen/run.asl report               # recomputes every table from bench/gen/results/<date>/trials.asn
+   ```
+
+   It does not exist on 2026-11-13: `bench/harness/` holds only `config.example.asn`, `bench/tasks/` holds 5 files and no runner. The workspace's `tools/synProbes.asl` (trial directories, check, test and heal under limits) is the starting point; its model call goes through the agent loop and must be replaced by a plain gateway call.
+3. A gate for the runner: red before, green after, and red on a mutant that swaps two arm labels.
+4. `python3`, `node` and `tsc` versions recorded in the results header.
+
+## 10. Record and grading
+
+- Raw rows: `bench/gen/results/<date>/trials.asn`, one row per trial with arm, task, model id, repetition, stage of first failure per turn, tokens per call, and the reply text.
+- `report` is rerun from those rows by a grader who did not write the runner, in a clean checkout; the tables published are the grader's.
+- `bench/publishedClaims.asn` gains one measured row per headline figure, naming the results file. The status line of this file changes only then.
+- Everything is published, including a refuted H1.
 
 ---
+
+# Appendix: protocol v1 and its amendments (superseded where v2 differs, text unedited)
 
 ## 1. What is being tested
 
@@ -278,3 +410,26 @@ is C (`host/src`); the native compiler `asl1` is written in ASL and lowers throu
 prototypes, and the differential gate that amendment describes is not identified in the tree today.
 H5 is left as last stated; restating it over the backends that now produce runnable output
 (LLVM IR, native and `wasm32-unknown-unknown`) is a decision for a later amendment.
+
+### 2026-11-13-a — protocol v2 (made BEFORE any baseline result, AFTER ASL-only results)
+
+No Python, TypeScript or other comparator arm has run. ASL-only generation results existed and had
+been read when this was written: 462 trials of one parametric arithmetic family on free models,
+145 raw passes and 420 after a mechanical heal pass (2026-10-15), with no baseline arm. The
+thresholds for the new metrics were set knowing those numbers and not knowing any baseline number.
+
+**What changes.** Sections 1 to 10 at the top of this file replace §1 to §8 and the benchmark,
+comparator, pilot scope and spend cap of amendments 2026-08-20-b and 2026-08-20-c: tasks are 30
+small functions in three families instead of HumanEval or terminal-bench; comparators are Python
+and TypeScript; arms for the bracket and the function-header questions are added; the metric set
+gains raw and healed pass, tokens-to-green and tokens per solved task; the pilot is 1500 trials
+with a cap the principal sets. H4 (lexer probe) and H5 (transpiler agreement) of v1 are dropped
+from this experiment: the compiler is now written in ASL and compiles itself, which answers H4,
+and the source-to-source targets H5 named are prototypes outside the core scope.
+
+**What does not change.** The 15 point threshold on the primary gate, and the rule that a missed
+gate is reported and not iterated on.
+
+**Stale facts in earlier entries, left as written.** 2026-10-14-a says the stage-0 host is C
+(`host/src`) with a seed for `arm64-apple-darwin` only. The C host had been deleted on 2026-10-13;
+`host/` holds a build script and tests, and `seed/` holds three triples.

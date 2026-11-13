@@ -85,10 +85,10 @@ fn ! touchIntact! cas: Cas dest: String h: String -> (Result Bool String)
 
 ; (:m :ref DS-BLOBSTORE :do "a blob already present is kept when it still hashes to its name (dedup, its mtime refreshed so a pending gc sees it young) and replaced when it does not; a new blob is written to tmp/, fsynced, renamed into place and its directory fsynced, so a crash leaves at most a tmp file gc removes and never a partial blob")
 fn ! put! cas: Cas data: Bytes -> (Result String String)
-  (putWith! cas data (fn [] -> Unit ()))
+  (putWith! cas data (fn [] -> Unit ()) (fn [] -> Unit ()))
 
 ; (:m :ref DSBLOB-LOWS2 :do "put! with a hook run after the unlocked intact check and before the store lock, where a gc can remove the blob: the dedup touch rereads under the lock, so such a put rewrites the blob instead of returning ok for a missing one")
-fn ! putWith! cas: Cas data: Bytes between: (fn ! [] -> Unit) -> (Result String String)
+fn ! putWith! cas: Cas data: Bytes between: (fn ! [] -> Unit) staged: (fn ! [] -> Unit) -> (Result String String)
   (let [(h (bytesSha256 data))
         (dest (blobFile cas h))
         (fan (str cas.root "/blobs/" (fanOf h)))
@@ -105,7 +105,7 @@ fn ! putWith! cas: Cas data: Bytes between: (fn ! [] -> Unit) -> (Result String 
               ((ok _)
                 (match (fileFsync tmp)
                   ((err e) (do (pathRemove tmp) (err (str "fsync " tmp ": " e))))
-                  ((ok _) (publish! cas tmp dest fan h))))))))))))
+                  ((ok _) (let [(_ (staged))] (publish! cas tmp dest fan h)))))))))))))
 
 ; (:m :ref DSBLOB-LOWS2 :do "a new blob is renamed into place and given a fresh mtime under the store lock, so gc, which removes under the same lock, sees it young and never removes a blob between the rename and the return of put!; a busy lock removes the tmp file and is an err")
 fn ! publish! cas: Cas tmp: String dest: String fan: String h: String -> (Result String String)

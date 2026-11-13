@@ -2,10 +2,10 @@
   :x [utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
-  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
+  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -1699,9 +1699,24 @@ fn ! stalledProfilesOf dir: String id: String -> (List String)
                (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:stalledProfile :unit " (st/q id) " "))) (stringLines (readOr (stalledProfilePath dir))))))
 
 fn writeProfile rc: RealCfg lane: String -> String
-  (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") lane))) (stringLines (readOr rc.lanes))))
+  (writeProfileIn rc (readOr rc.lanes) lane)
+
+fn writeProfileIn rc: RealCfg lanesText: String lane: String -> String
+  (let [(rows (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") lane))) (stringLines lanesText)))
         (given (match (listHead rows) ((some l) (sp/tokAfter l ":profile")) ((none) "")))]
     (cond ((not (stringEmpty? given)) given) ((= lane "paid") "paidCheap") ((= lane "strong") "strong") (else rc.profile)))
+
+; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "a receipt naming no served model (Leon without servedAlias or servedModel) journalled the write under the literal unknown, so review could never place the writer; the write is journalled under the model the stage dispatched instead: the --writer-model pin, else the write profile it ran")
+fn dispatchedModel served: String pin: String prof: String -> String
+  (cond ((!= served "unknown") served) ((not (stringEmpty? pin)) pin) (else prof))
+
+; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "a unit whose journalled writer is already the literal unknown reviews outside every family its write could have run on: the pin, else the profiles of the tier's :writeProfiles row and its base profile, joined with + so selection excludes all their families; when one of them resolves to no family the writer stays unknown and the review keeps awaiting writerFamily, so a table that cannot name the writer's family never reviews its own work")
+fn unknownWriterFor rc: RealCfg gatewayText: String lanesText: String lane: String -> String
+  (let [(rows (l/familyRows (rs/tableFor lanesText)))
+        (row (optionOr (listHead (filter (fn [(x String)] -> Bool (and (stringContains? x "(:writeProfiles ") (= (sp/tokAfter x ":tier") lane))) (stringLines lanesText))) ""))
+        (cs (if (stringEmpty? rc.writerModel) (listAppend (listAfter row ":profiles") (list (writeProfileIn rc lanesText lane))) (list rc.writerModel)))
+        (as (map (fn [(p String)] -> String (rs/writerAliasFor gatewayText lanesText p)) (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) cs)))]
+    (if (or (listEmpty? as) (listAny? (fn [(a String)] -> Bool (listEmpty? (l/familiesIn rows a))) as)) "unknown" (stringJoin as "+")))
 
 fn ! writeProfileFor rc: RealCfg dir: String id: String lane: String -> String
   (pickWriteProfileX (readOr rc.lanes) id lane (writeProfile rc lane) (readOr (str dir "/providerHealth.asn")) (stalledProfilesOf dir id))
@@ -2257,7 +2272,7 @@ fn ! writeResWith run: (fn ! [RealCfg String String String String String (List S
               (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns (if (stringEmpty? u.gate) (list) (list u.gate)) (withToolRoot! (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u)) rc.repo)))))))
               (d (pairFirst pv))
               (_ (leonReceiptSave! dir u.id d.out))
-              (model (servedModel d.out))
+              (model (dispatchedModel (servedModel d.out) rc.writerModel prof))
               ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
               (vacuous (and (pairSecond pv) (not (commitsPast? p (baseRef u)))))
               (stop (stopOf d.out))
@@ -2284,6 +2299,7 @@ fn ! mergeEnv -> (List String)
   (fr/childEnv (list "ASL_E2E=0"))
 
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "dev sat at ace2ae8ec all day while main moved, until the lead fast-forwarded it by hand; before each train main is brought into dev: fast-forward when dev has nothing of its own, else a merge commit, and a conflict refuses the train rather than merging onto a stale dev")
+; (:m :ref NODE2-DEV-DOC-ROWS :do "the dev clone on node2 has no merge.asnRows.driver, so a plain merge conflicted on package doc.asn files both sides appended to and every train was refused; the merge passes the row driver of the conductor checkout the way the train does, and a configured driver is left as it is")
 fn ! promoteDev! rc: RealCfg -> String
   (if (= rc.devRepo rc.repo) "same"
     (let [(f (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo "+refs/heads/main:refs/heads/srcMain")))]
@@ -2292,7 +2308,7 @@ fn ! promoteDev! rc: RealCfg -> String
         ((= (gitOut rc.devRepo (list "merge-base" "--is-ancestor" "srcMain" "HEAD")).exit 0) "current")
         ((= (gitOut rc.devRepo (list "merge" "--ff-only" "--quiet" "srcMain")).exit 0) "fastForward")
         (else
-          (let [(m (gitOut rc.devRepo (list "merge" "--no-ff" "--quiet" "-m" "(:c :a coord :do \"bring main into dev before a train\" :ev (CONDUCTOR-ZERO-MERGE))" "srcMain")))]
+          (let [(m (gitOut rc.devRepo (listAppend (trn/rowDriverArgs rc.devRepo (resultOr (realPath rc.repo) rc.repo)) (list "merge" "--no-ff" "--quiet" "-m" "(:c :a coord :do \"bring main into dev before a train\" :ev (CONDUCTOR-ZERO-MERGE))" "srcMain"))))]
             (if (= m.exit 0) "merged"
               (let [(_ (gitOut rc.devRepo (list "merge" "--abort")))] "conflict")))))))
 
@@ -2476,8 +2492,8 @@ fn ! offeredRung! dir: String id: String -> String
     (let [(_ (pathRemove (offerPath dir id)))] "R3")
     "")
 
-; (:m :ref AHEAD-WRITER-UNKNOWN :do "a unit that entered gating through the ahead check has no model on its write-to-gating row, and its failed or blocked write rows, which the stage journals with the served model, were ignored, so the writer stayed unknown and R1 deferred on writerFamily for ever (LL-BUF-RT, STD-CHECKSUMS): every write-stage row from writing counts, failed ones too, except a failed one that names no known model (a crashed run says unknown and must not hide an earlier known writer)")
-; (:m :ref REVIEW-DEFER :do "the writer of the work under review: the newest write-to-gating journal row of the unit that names a writer: its served alias, else its model, unknown included so selection waits rather than fall back to an older round's writer; only a write the ahead check passed (model empty, no alias) is skipped, so the writer before it counts; the unit row's model when the journal names none")
+; (:m :ref AHEAD-WRITER-UNKNOWN :do "a unit that entered gating through the ahead check has no model on its write-to-gating row, and its failed or blocked write rows, which the stage journals with the served model, were ignored, so the writer stayed unknown and R1 deferred on writerFamily for ever (LL-BUF-RT, STD-CHECKSUMS): every write-stage row from writing counts, failed ones too, except a failed one that names no known model (a crashed run says unknown and must not hide an earlier known writer) (superseded in part by NODE2-WRITER-LITERAL-UNKNOWN: a literal unknown writer is resolved to its write profiles families in realReview)")
+; (:m :ref REVIEW-DEFER :do "the writer of the work under review: the newest write-to-gating journal row of the unit that names a writer: its served alias, else its model, unknown included so selection waits rather than fall back to an older round's writer; only a write the ahead check passed (model empty, no alias) is skipped, so the writer before it counts; the unit row's model when the journal names none NODE2-WRITER-LITERAL-UNKNOWN: the write stage now journals the dispatched model when the receipt names none, and realReview resolves a literal unknown writer to the + join of the tier write profiles (unknownWriterFor), so this function only returns unknown for a unit whose profiles name no family; selection then still waits.")
 fn ! writerOf! dir: String c: CUnit -> String
   (let [(head (str "(:t :unit " (st/q c.id) " "))
         (pick (fn [(l String)] -> String (let [(a (quotedAfter l ":alias \""))] (if (stringEmpty? a) (quotedAfter l ":model \"") a))))
@@ -2542,6 +2558,11 @@ fn ! rememberDeadLanes! dir: String ttlSec: Int64 nowMs: Int64 rows: (List Strin
                               fresh))]
                   (ok (listLength fresh))))))))))
 
+; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "the writer string a review excludes: the journalled writer, a profile id resolved to the aliases of its gateway chains (writerAliasFor), and a literal unknown resolved through unknownWriterFor; realReview takes its writer only from here")
+fn ! reviewWriterOf! rc: RealCfg dir: String c: CUnit gatewayText: String lanesText: String -> String
+  (let [(w (rs/writerAliasFor gatewayText lanesText (l/reviewWriter (writerOf! dir c) rc.writerAlias)))]
+    (if (= w "unknown") (unknownWriterFor rc gatewayText lanesText c.lane) w))
+
 fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (let [(gatewayText (readOr (str rc.home "/.asl/gateway.asn")))
         (lanesText (readOr rc.lanes))
@@ -2550,7 +2571,7 @@ fn ! realReview rc: RealCfg dir: String u: st/Task c: CUnit -> Res
         (diff (if (worktreeValid? c.wt) (gitOut c.wt (list "diff" (str (baseRef u) "...HEAD"))) (fr/Done :idx 0 :exit 128 :out "worktree gone" :ms 0 :verdict "exit")))
         (riskRaw (stringTrim (readOr (str dir "/tasks/" u.id ".risk"))))
         (risk (if (stringEmpty? riskRaw) "low" riskRaw))
-        (writer (rs/writerAliasFor gatewayText lanesText (l/reviewWriter (writerOf! dir c) rc.writerAlias)))
+        (writer (reviewWriterOf! rc dir c gatewayText lanesText))
         (ru (l/ReviewUnit :id u.id :task (taskText dir u) :risk risk :closureChanged false :writerAlias writer :writerChannel u.channel
                           :startRung (offeredRung! dir u.id) :fixesUsed c.fails :prior (list)))
         (call (skipDead dir (nowMs) (rs/callModelFor! rc.repo usage (rs/costRows gatewayText lanesText))))]

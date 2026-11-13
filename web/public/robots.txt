@@ -3,8 +3,6 @@
 
 User-agent: *
 Allow: /
-Disallow: /api/
-Disallow: /private/
 
 # Explicit permissions and guidance for AI Search & Agent Indexers
 User-agent: GPTBot
@@ -37,6 +35,4 @@ Allow: /
 # Canonical Sitemaps and AI Agent Entrypoints
 Sitemap: https://aslang.dev/sitemap.xml
 
-# Machine-Readable AI Agent Handbooks (GEO: Generative Engine Optimization)
-# Agents start at /llms.txt
-Link: <https://aslang.dev/llms.txt>; rel="alternate"; type="text/plain"
+# Agents start at https://aslang.dev/llms.txt

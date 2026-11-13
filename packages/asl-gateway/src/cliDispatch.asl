@@ -43,6 +43,8 @@
       cliBoundFlags!
       gatewayCliMain
       hubStatusStale?
+      hubStaleWarning
+      configCheckFailLine
       tokenSafe?
       curlArgv
       hubStatusFetch!
@@ -384,7 +386,7 @@ fn gatewayUtf8UnexpectedEndError bs: Bytes pos: Int64 -> String
          (gatewayHexDigit (/ b 16)) (gatewayHexDigit (mod b 16))
          " in position " (stringFromInt64 pos) ": unexpected end of data"))
 
-fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
+fn ! gatewayConfigCheckRun! path: String -> (Result Int64 String)
   (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
         (registryEnv (optionOr (envGet "ASL_CALIBRATION_INDEX") ""))
         (registry (if (stringEmpty? registryEnv) (str root "/.asl/mem/calibration/index.asn") registryEnv))
@@ -519,6 +521,29 @@ fn ! gatewayLearnCli! args: (List String) -> (Result Int64 String)
 fn hubStatusStale? text: String -> Bool
   (stringContains? text " :configStale ")
 
+fn ! gatewayConfigCheckCli! path: String -> (Result Int64 String)
+  (let [(root (optionOr (envGet "ASL_GATEWAY_ROOT") (optionOr (envGet "ROOT_DIR") ".")))
+        (home (optionOr (envGet "HOME") root))
+        (source (if (stringEmpty? path) (cfg/gatewayProfilesPath home) path))]
+    (match (gatewayConfigCheckRun! path)
+      ((ok 0) (ok 0))
+      ((ok code) (do (sys/sayErr! (configCheckFailLine source)) (ok code)))
+      ((err e) (err e))))
+
+; (:m :ref GW-CONFIG-STALE-LOUD :do "the one warning line a status client prints per call while the hub reports :configStale: it names the error (file and cause, as the loader wrote it) and says what the hub is serving; empty when the status is clean. It never repeats a key value, the loader's error holds a path and a parse message only")
+fn hubStaleWarning text: String -> String
+  (let [(mark ":configStale (:error \"")]
+    (match (stringIndexOf text mark)
+      ((none) "")
+      ((some i)
+        (let [(rest (optionOr (stringSlice text (+ i (stringLength mark)) (stringLength text)) ""))
+              (end (optionOr (stringIndexOf rest "\")") (stringLength rest)))]
+          (str "gateway: WARNING the hub serves its last good config, the file on disk does not load: " (optionOr (stringSlice rest 0 end) ""))))))
+
+; (:m :ref GW-CONFIG-STALE-LOUD :do "the loud line configCheck adds on stderr when the edited file fails, beside the receipt on stdout: the file, that the check failed, and what a reload of it would do")
+fn configCheckFailLine source: String -> String
+  (str "gateway configCheck: FAILED " source ": do not reload this file, a running hub keeps its last good config and reports :configStale, a fresh start refuses it")
+
 ; (:m :ref GW-HUB-STATUS-STRICT :do "the bearer is written into a curl config line, so a token holding a double quote, a backslash or any control byte (below 0x20, or 0x7f) could end the quoted value or add curl options: such a token is refused before curl starts")
 fn tokenBytesSafe? bs: Bytes i: Int64 n: Int64 -> Bool
   (if (>= i n) true
@@ -553,6 +578,7 @@ fn ! gatewayHubStatusCli! args: (List String) -> (Result Int64 String)
     (match got
       ((err e) (do (sys/sayErr! (str "gateway hubStatus: " e)) (ok 2)))
       ((ok text) (do (sys/say! (stringTrim text))
+                     (if (hubStatusStale? text) (sys/sayErr! (hubStaleWarning text)) true)
                      (ok (if (and (listContains? args "--strict") (hubStatusStale? text)) 1 0))))))
 
 ; (:m :ref GW-HEALTH-REPORT :do "gateway health [--hours N] [--write]: one ASN report of the usage ledger and the request log over the last N hours (default 24, 1..720): per provider and model calls, ok share, upstream 429 against own refusals, latency percentiles, tokens, the request accounting, prune candidates, configured aliases that never served; --write puts it in .asl/run/usage/health/ instead of printing it")

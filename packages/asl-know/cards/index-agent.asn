@@ -3,7 +3,7 @@
 (:c "asl-agent-bus" "in-memory agent-to-agent..." (makeBusEnvelope makeSequencedBusEnvelope))
 (:c "asl-agent-core" "execution core, onion..." (makeMessage makeAgentContext))
 (:c "asl-coord" "Shared worktree scope..." (claimsStore! claimsAt))
-(:c "asl-gateway" "L7 Cognitive Gateway &..." (gatewayCliMode? failureReason))
+(:c "asl-gateway" "L7 Cognitive Gateway &..." (gatewayCliMode? staleHeaderName))
 (:c "asl-harness" "asl launch in ASL:..." (readAll readOne))
 (:c "asl-mem" "vector memory store and..." (makeEngine enginePutVector))
 (:c "asl-mesh" "Agent Mesh Orchestrator,..." (schedulePartitions allocateWorkerWorktree))

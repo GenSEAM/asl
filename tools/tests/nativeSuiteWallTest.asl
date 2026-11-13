@@ -1,11 +1,15 @@
 (module asl-tools/tests/nativeSuiteWallTest
   :x [runTests]
-  :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr) (asl-parser/ast :a ast)])
 
 fn decl n: String -> String
   (str "(module m :x [runTests] :i [])\n\nfn suiteWallS -> Int64\n  " n "\n\nfn runTests -> Bool\n  true\n")
 
 ; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the declared wall is read from the suite source and clamped: absent or malformed is the 1800 s default, below it is raised to it, above 7200 s is capped; then bin/asl test and nativeTest's own runner (waiting for the native CLI, so the fixture never runs on asl-host) runs a fixture declaring 2400 s, and the fixture asserts its own lease deadline is 2400 s after its start")
+; (:m :ref SUITEWALL-DECL-PARSE :do "a source whose only suiteWallS text sits inside a multi-line string literal")
+fn quoted -> String
+  (str "(module m :x [runTests] :i [])\n\nfn note -> String\n  \"x\nfn suiteWallS -> Int64\n  6000\n\"\n\nfn runTests -> Bool\n  true\n")
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (fixture "asl/tools/tests/fixtures/suiteWall/wallProbeTest.asl")
@@ -14,6 +18,10 @@ fn ! runTests -> Bool
     (do (assert (= (nt/declaredWallS (decl "3600")) (some 3600)) "a declared suiteWallS is read")
         (assert (= (nt/declaredWallS "(module m :x [] :i [])\n") (none)) "no declaration is none")
         (assert (= (nt/declaredWallS (decl "soon")) (none)) "a body that is not an integer is none")
+        (assert (ok? (ast/parse (quoted))) "the quoted-declaration source parses")
+        (assert (= (nt/declaredWallS (quoted)) (none)) "declaration text inside a string literal is no declaration")
+        (assert (= (nt/declaredWallS "(module m :x [runTests] :i [])\n\nfn otherWallS -> Int64\n  3000\n") (none)) "an integer fn under another name is no declaration")
+        (assert (= (nt/declaredWallS "fn suiteWallS -> Int64\n  2400\n\nfn runTests -> Bool\n  true\n") (some 2400)) "a headerless script's top-level suiteWallS is read")
         (assert (= (nt/suiteWall (decl "3600")) 3600) "a declared 3600 s wall is used")
         (assert (= (nt/suiteWall "(module m :x [] :i [])\n") 1800) "an absent declaration keeps the 1800 s default")
         (assert (= (nt/suiteWall (decl "60")) 1800) "a declaration below the default is raised to it")
