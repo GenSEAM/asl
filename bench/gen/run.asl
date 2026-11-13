@@ -168,7 +168,23 @@ fn replyOf text: String -> gc/Reply
           (gc/Reply :text (jtext (jpath js (list "choices" "0" "message" "content"))) :tokIn tokIn :tokOut tokOut
                     :served (jtext (jpath js (list "model"))) :error "")))))
 
+fn transient? e: String -> Bool
+  (or (stringContains? e "http 429") (stringContains? e "http 503") (stringContains? e "http 504") (stringContains? e "cooldown") (stringContains? e "link: "))
+
 fn ! liveCall! l: gs/GatewayLoop r: gc/Req -> (Pair gs/GatewayLoop gc/Reply)
+  (liveRetry! l r 8)
+
+fn ! liveRetry! l: gs/GatewayLoop r: gc/Req tries: Int64 -> (Pair gs/GatewayLoop gc/Reply)
+  (let [(out (liveOnce! l r))
+        (rep (pairSecond out))]
+    (cond
+      ((stringContains? rep.error "ERR_EMPTY_LENGTH")
+        (pair (pairFirst out) (gc/Reply :text "" :tokIn 1 :tokOut r.maxTokens :served "truncatedAtMaxTokens" :error "")))
+      ((and (> tries 1) (transient? rep.error))
+        (do (sleepMs 30000) (liveRetry! (pairFirst out) r (- tries 1))))
+      (else out)))
+
+fn ! liveOnce! l: gs/GatewayLoop r: gc/Req -> (Pair gs/GatewayLoop gc/Reply)
   (let [(msgs (listAppend (list (message "system" r.system))
                           (map (fn [(p (Pair String String))] -> j/Json (message (pairFirst p) (pairSecond p))) r.messages)))
         (body (pv/pyJsonDumps (j/jobj (list (pair "model" (j/jstr r.model)) (pair "intent" (j/jstr "code")) (pair "messages" (j/jarr msgs))
