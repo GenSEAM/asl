@@ -122,8 +122,30 @@ fn receiptRowOf out: String -> String
   (optionOr (listLast (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:") (stringContains? l ":usage")))
                               (map stringTrim (stringLines out)))) "")
 
+; (:m :ref REVIEW-DEFER :do "Leon's output wraps the receipt as (:agent :receipt (:agentReceipt ... :servedAlias A ...)), so the served keys sit one form down; nestedReceipt is the balanced (:agentReceipt ...) text of a row, empty when none, string literals skipped")
+fn formEnd s: String i: Int64 depth: Int64 inStr: Bool esc: Bool -> Int64
+  (if (>= i (stringLength s))
+    (stringLength s)
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (cond
+        (esc (formEnd s (+ i 1) depth inStr false))
+        ((and inStr (= c "\\")) (formEnd s (+ i 1) depth inStr true))
+        ((= c "\"") (formEnd s (+ i 1) depth (not inStr) false))
+        (inStr (formEnd s (+ i 1) depth inStr false))
+        ((= c "(") (formEnd s (+ i 1) (+ depth 1) inStr false))
+        ((= c ")") (if (<= depth 1) (+ i 1) (formEnd s (+ i 1) (- depth 1) inStr false)))
+        (else (formEnd s (+ i 1) depth inStr false)))))
+
+fn nestedReceipt row: String -> String
+  (match (stringIndexOf row "(:agentReceipt ")
+    ((none) "")
+    ((some at) (optionOr (stringSlice row at (formEnd row at 0 false false)) "")))
+
 fn servedField out: String key: String -> String
-  (al/rowText (receiptRowOf out) (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
+  (let [(k (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
+        (row (receiptRowOf out))
+        (top (al/rowText row k))]
+    (if (stringEmpty? top) (al/rowText (nestedReceipt row) k) top))
 
 fn servedAliasOf out: String -> String
   (servedField out ":servedAlias")

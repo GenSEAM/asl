@@ -2409,3 +2409,4 @@
 (:doc :symbol "asl/tools/affectedSuites.asl#reasonText" :text "a chain of keys joined as suite <- item <- ... <- changed symbol")
 (:doc :symbol "asl/tools/affectedSuites.asl#main" :text "run with --base=REV and optional --changed=PATH rows; prints (:affected :selected N :suites ((path reason) ...))")
 (:doc :symbol "tools/tests/affectedSuitesTest.asl#runTests" :text "fixture-source gates: symbol selection, word bounds, export list, importers only, form edge, reasons, changed files and fixtures, changed items")
+(:doc :symbol "asl/tools/coord/tests/conductorServedNestedTest.asl#runTests" :text "no args: checks that servedModel and servedAliasOf read the served alias from a nested :agentReceipt row, ignore an echoed earlier line, and stay unknown when none is named")
