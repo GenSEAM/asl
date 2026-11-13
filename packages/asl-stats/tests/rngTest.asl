@@ -72,7 +72,7 @@ fn ! testDraws! -> Bool
       (let [(tiny (betas! 0.001 0.001 300 r))]
         (do (assert (not (listAny? isNan? tiny)) "beta(0.001, 0.001) draws are never NaN: the gamma draws underflow, their logs do not")
             (assert (listAll? (fn [(x Float64)] -> Bool (and (>= x 0.0) (<= x 1.0))) tiny) "every tiny-shape beta draw is inside [0, 1]")
-            (assert (near? (mean tiny) 0.5 0.09) "beta(0.001, 0.001) is nearly a fair coin between 0 and 1: within 3 sd (0.029) of 1/2 over 300 draws")))
+            (assert (near? (mean tiny) 0.5120148474893873 1.0e-9) (str "beta(0.001, 0.001) from seed 42, 300 draws: mean 0.5120148474893873 (measured 2026-11-13; over 12 seeds the mean of 300 draws is 0.453 to 0.533, sd 0.026, so this stream sits 0.5 sd from a fair coin), got " (stringFromFloat64 (mean tiny))))))
       true))
 
 fn ones xs: (List Float64) -> Int64
@@ -100,6 +100,7 @@ fn ! testTinySeeded! -> Bool
     (do
       (assert (= k 150) (str "beta(0.001, 0.001) from seed 2026: 150 of 300 draws above 1/2, got " (stringFromInt64 k)))
       (assert (= s "1010010010000101100001100011000000000110") (str "beta(0.001, 0.001) from seed 2026: sides of the first 40 draws, got " s))
+      (assert (near? (mean tiny) 0.49978918471704586 1.0e-9) (str "beta(0.001, 0.001) from seed 2026, 300 draws: mean 0.49978918471704586, got " (stringFromFloat64 (mean tiny))))
       (assert (= k (ones (betas! 0.001 0.001 300 (rg/rngSeed 2026)))) "the same seed gives the same count")
       true))
 

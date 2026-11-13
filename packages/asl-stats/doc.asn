@@ -49,7 +49,7 @@
 (:doc :symbol "asl/packages/asl-stats/src/rng.asl#gammaLoop!" :text "Marsaglia-Tsang accept/reject loop")
 (:doc :symbol "asl/packages/asl-stats/src/rng.asl#gammaDraw" :text "Gamma(alpha,1) by Marsaglia-Tsang, shape below 1 boosted through shape+1; err statsRange for a shape not above 0")
 (:doc :symbol "asl/packages/asl-stats/src/rng.asl#logGammaDraw" :text "log of a Gamma(alpha,1) draw; for a shape below 1 log g + log(u)/alpha with u clamped to 1e-300, finite where the draw underflows")
-(:doc :symbol "asl/packages/asl-stats/src/rng.asl#betaDraw" :text "Beta(a,b) as 1/(1+exp(log y - log x)) of two log gamma draws, never NaN for tiny shapes")
+(:doc :symbol "asl/packages/asl-stats/src/rng.asl#betaDraw" :text "Beta(a,b) as 1/(1+exp(log y - log x)) of two log gamma draws, never NaN for tiny shapes; the logistic form can differ from x/(x+y) in the last bit, which moves no value pinned to 1e-9 and no seed-pinned side or count")
 (:doc :symbol "asl/packages/asl-stats/src/rng.asl#Rng" :text "four Int64 state words s0..s3")
 (:doc :symbol "asl/packages/asl-stats/src/interval.asl#" :text "Confidence intervals and a sample-size formula: Wilson, Clopper-Pearson, Student t mean interval, seeded percentile bootstrap, two-proportion sample size")
 (:doc :symbol "asl/packages/asl-stats/src/interval.asl#confOk?" :text "conf strictly inside (0,1)")
