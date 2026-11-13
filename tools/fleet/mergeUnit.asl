@@ -96,9 +96,13 @@ fn ! gatesOf! unit: String cfg: Cfg -> (List String)
 ; (:m :ref BASH-EXIT-MERGE :do "the neighbour tests of a change, as merge4 found them: for each file changed on the branch since main under */src/*.asl, the module named on its line 1, then every pkg/tests/*.asl that mentions (MODULE  and contains runTests; each becomes the gate cfg.testCmd + path")
 fn ! moduleOf! path: String -> String
   (match (fileReadString path)
-    ((ok text) (let [(l (optionOr (listHead (stringLines text)) ""))]
-                 (if (stringStartsWith? l "(module ") (optionOr (listHead (stringSplit (stringReplace (stringReplace l "(module " "") ")" "") " ")) "") "")))
+    ((ok text) (moduleOfText text))
     ((err _) ""))
+
+; (:m :ref AFFWIRE-LOWS2 :do "the module named on line 1 of a file's text, empty when line 1 is not a module header")
+fn moduleOfText text: String -> String
+  (let [(l (optionOr (listHead (stringLines text)) ""))]
+    (if (stringStartsWith? l "(module ") (optionOr (listHead (stringSplit (stringReplace (stringReplace l "(module " "") ")" "") " ")) "") ""))
 
 fn ! testsFor! wt: String file: String -> (List String)
   (let [(pkg (optionOr (listHead (stringSplit file "/src/")) ""))
@@ -194,13 +198,14 @@ fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String S
     ((err why) (importerGates! cfg unit wt changes why)))
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the import-scan suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk; the fallback of the symbol selector")
-; (:m :ref AFFWIRE-LOWS :do "a deleted .asl file counts too: its module name is read from the main checkout, where it still exists, so the suites importing the removed module run")
+; (:m :ref AFFWIRE-LOWS :do "a deleted .asl file counts too, so the suites importing the removed module run")
+; (:m :ref AFFWIRE-LOWS2 :do "a gone module's name is read at the merge base (baseText!), where the branch deleted or renamed it from, not at the main tip, which may have moved, deleted or renamed it since")
 fn ! importerGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) why: String -> (List String)
   (let [(paths (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (!= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
         (tests (filter (fn [(p String)] -> Bool (suite? wt p)) paths))
         (gone (map pairSecond (filter (fn [(c (Pair String String))] -> Bool (and (= (pairFirst c) "D") (stringEndsWith? (pairSecond c) ".asl"))) changes)))
         (names (listAppend (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str wt "/" p)) p))) (list) paths)
-                           (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOf! (str cfg.main "/" p)) p))) (list) gone)))
+                           (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOfText (baseText! cfg wt p)) p))) (list) gone)))
         (imps (if (listEmpty? names) (list) (importersIn! wt (uniq names))))
         (all (uniq (listAppend tests imps)))
         (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"direct\" :why " (q why) " :n " (stringFromInt64 (listLength all)))))
@@ -215,8 +220,8 @@ fn ! liveSuites! cfg: Cfg -> (List String)
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "the selected suites of a unit: the direct suites, or with cfg.neighbours the graph selection; a live suite is dropped with SKIPPED-LIVE unless the change touches cfg.liveRoot; the rest is capped to the budget by cost")
 fn ! selectedGates! cfg: Cfg unit: String wt: String -> (List String)
-  (let [(d (gitOut! wt (list "diff" "--name-status" (str cfg.branch "...HEAD"))))
-        (changes (map changeOf (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines d.out))))
+  (let [(d (gitOut! wt (list "diff" "--name-status" "-M" (str cfg.branch "...HEAD"))))
+        (changes (changesOf d.out))
         (remote (listAny? (fn [(c (Pair String String))] -> Bool (stringStartsWith? (pairSecond c) cfg.liveRoot)) changes))
         (live (liveSuites! cfg))
         (sel (if cfg.neighbours (neighbourSets! cfg unit wt) (let [(ds (directGates! cfg unit wt changes))] (pair ds ds))))
@@ -311,6 +316,16 @@ fn docFile? path: String -> Bool
 fn changeOf line: String -> (Pair String String)
   (let [(parts (stringSplit line "\t"))]
     (pair (optionOr (stringSlice (optionOr (listHead parts) "") 0 1) "") (optionOr (listLast parts) "")))
+
+; (:m :ref AFFWIRE-LOWS2 :do "the changes of a git diff --name-status output for gate selection: a rename (R) is its new path and also a D of its old path, so the suites importing the old module name are selected")
+fn changesOf out: String -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (l String)] -> (List (Pair String String))
+          (let [(parts (stringSplit l "\t"))
+                (c (changeOf l))]
+            (if (and (= (pairFirst c) "R") (= (listLength parts) 3))
+              (listAppend acc (list c (pair "D" (optionOr (listGet parts 1) ""))))
+              (listAppend acc (list c)))))
+        (list) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines out)))
 
 ; (:m :ref MERGEDOC-LOWS :do "the file as it was where the branch left main (git merge-base), not at main's tip: a main that moved on, or that already deleted or rewrote the file, must not hide what the branch deleted or changed")
 fn ! baseText! cfg: Cfg wt: String path: String -> String
