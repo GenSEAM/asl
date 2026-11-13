@@ -1164,6 +1164,7 @@ fn ! hubStatusText! srv: GatewayLoop -> String
     (str "(:hub :uptimeSec " (stringFromInt64 (/ (- now srv.startMs) 1000))
          " :streams " (stringFromInt64 (listLength flying))
          " :waiting " (stringFromInt64 (listLength (filter hubParked? flying)))
+         (if (stringEmpty? (c/profilesStale srv.profiles)) "" (str " :configStale (:error " (hubAsnStr (wire/asnEscape (c/profilesStale srv.profiles))) ")"))
          " :requests " (stringFromInt64 (listLength srv.reqs))
          " :stuck " (stringFromInt64 (listLength (filter (fn [(r rq/ReqInfo)] -> Bool (> (- now r.startMs) (* 1000 (rq/requestDeadlineFromText (optionOr srv.wiringText ""))))) srv.reqs)))
          " :buckets (" (stringJoin (map (fn [(p (Pair String u/TokenBucket))] -> String (hubBucketRow (pairFirst p) (pairSecond p) nowSec)) srv.buckets.buckets) " ") ")"

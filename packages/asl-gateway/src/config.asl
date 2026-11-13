@@ -92,6 +92,7 @@
       gatewayLoadWarningLines
       emptyProfilesCache
       gatewayProfilesLoad!
+      profilesStale
       gatewayProfileName
       gatewayProfileSelect
       gatewayProfileModels
@@ -2602,7 +2603,8 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 
 (schema ProfilesCache
   (:f key (Option ConfigKey))
-  (:f result (Result GatewayTable String)))
+  (:f result (Result GatewayTable String))
+  (:f stale String))
 
 (schema ProfileSelection
   (:f name String)
@@ -2873,14 +2875,15 @@ fn gatewayLoadWarningLines path: String table: GatewayTable -> (List String)
   (map (fn [(w String)] -> String (str "[Gateway Config] " path ": " w)) table.warnings)
 
 fn emptyProfilesCache -> ProfilesCache
-  (ProfilesCache :key (none) :result (err "gateway profiles not loaded"))
+  (ProfilesCache :key (none) :result (err "gateway profiles not loaded") :stale "")
 
 fn cacheHit? cache: ProfilesCache key: ConfigKey -> Bool
   (match cache.key
     ((none) false)
     ((some k) (configKeyEqual? k key)))
 
-fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
+; (:m :ref GW-CONFIG-LAST-GOOD :do "a changed file that fails to parse keeps serving the table loaded earlier in this process: the error is logged once per file key and held in :stale for hub status; a process that never loaded a good table still fails typed, and the next good file clears :stale")
+fn ! gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
   (let [(path (gatewayProfilesPath home))
         (exists (fileExists? path))
         (key (if exists (gatewayConfigKey! path registryPath) (keyBuiltin)))]
@@ -2888,13 +2891,19 @@ fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -
       (pair cache cache.result)
       (let [(text (if exists (fileReadString path) (err "not read")))
             (result (gatewayProfilesLoadText! path exists text registryPath))]
-        (do
-          (match result
-            ((ok tbl)
-              (let [(lines (gatewayLoadWarningLines path tbl))]
-                (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())))
-            ((err _) ()))
-          (pair (ProfilesCache :key (some key) :result result) result)))))
+        (match result
+          ((ok tbl)
+            (let [(lines (gatewayLoadWarningLines path tbl))]
+              (do (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())
+                  (pair (ProfilesCache :key (some key) :result result :stale "") result))))
+          ((err e)
+            (if (ok? cache.result)
+              (do (eprintln (str "[Gateway Config] " e " (serving the last good config)"))
+                  (pair (ProfilesCache :key (some key) :result cache.result :stale e) cache.result))
+              (pair (ProfilesCache :key (some key) :result result :stale "") result)))))))
+
+fn profilesStale cache: ProfilesCache -> String
+  cache.stale
 
 ; (:m :ref HRN-DECISION-LAYER :do "a decision point is switched per row (:gateway ... :decides ((:decide :point P :mode off|static|model|shadow :model M :threshold T))); a point with no valid row of its own runs static (no outward call); shadow and model, the modes that send error lines to a provider, come only from an explicit valid row for that point, and a malformed row of another point never changes this one; keyFiles ride along so a caller resolves the provider key through keyFileLookup! and not the environment first")
 (schema DecidePoint
