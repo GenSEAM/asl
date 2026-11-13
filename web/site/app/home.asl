@@ -1,14 +1,11 @@
 (module aslSite/app/home
-  :x [Stats placeholderStats installLine batchLine homeContent homePage]
+  :x [Stats placeholderStats batchLine homeContent homePage]
   :i [(asl-html/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
 
 (schema Stats (:f wasmBytes Int64) (:f aslLines Int64) (:f bridgeLines Int64))
 
 fn placeholderStats -> Stats
   (Stats :wasmBytes 0 :aslLines 0 :bridgeLines 0)
-
-fn installLine -> String
-  "git clone https://github.com/GenSEAM/asl.git"
 
 fn batchLine -> String
   "asl '(:tools)'"
