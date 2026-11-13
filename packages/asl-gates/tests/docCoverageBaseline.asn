@@ -635,7 +635,6 @@
 (:gap "asl/web/site/app/docs.asl#docsPage")
 (:gap "asl/web/site/app/home.asl#Stats")
 (:gap "asl/web/site/app/home.asl#placeholderStats")
-(:gap "asl/web/site/app/home.asl#installLine")
 (:gap "asl/web/site/app/home.asl#batchLine")
 (:gap "asl/web/site/app/home.asl#homeContent")
 (:gap "asl/web/site/app/home.asl#homePage")
