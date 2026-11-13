@@ -1,6 +1,6 @@
 (module aslAgent/tests/gatewayLinkTest
   :x [runTests]
-  :i [(asl-tools/fleet/readyWait :a sk)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 fn config base: String -> String
   (str "(:gateway :v 2"
@@ -112,9 +112,10 @@ fn ! runTests -> Bool
         (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (driver (resultOr (realPath "asl/packages/asl-agent/tests/gatewayLinkDriver.asl") ""))
-        (nativeCliCache (str (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli"))))
-        (common (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
-                      (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache)))
+        ; (:m :ref GATEWAYLINK-MAIN-RED :do "every HOME-keyed cache row (fr/cacheEnv!), not the native CLI cache alone: the config-less run has its own HOME, and without ASL_NATIVE_TEST_CACHE it compiled the driver cold, measured 89 s against 3 s warm at load 30-40 on 2026-11-13, past its 60 s deadline, so bare.out stayed empty")
+        (caches (fr/cacheEnv!))
+        (common (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
+                      (str "ASL_CALIBRATION_INDEX=" temp "/absent.asn") "FIXA_KEY=aKey" (str "TMPDIR=" temp)) caches))
         (gwPid (spawnSh! (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " temp "/ready 2>" temp "/gateway.err") common))
         (gwPort (if (> gwPid 0) (sk/waitPort! (str temp "/ready") gwPid) 0))
         (url (str "http://127.0.0.1:" (stringFromInt64 gwPort) "/v1/chat/completions"))
@@ -124,7 +125,7 @@ fn ! runTests -> Bool
         (linkPid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/link.out 2>" temp "/link.err") common))
         (linkRun (pumpUntilExit! (pairFirst httpRun) linkPid (+ (nowMs!) 60000)))
         (barePid (spawnSh! (str "exec " host " run " driver " " temp "/work >" temp "/bare.out 2>" temp "/bare.err")
-                   (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" bare) (str "TMPDIR=" temp) (str "ASL_NATIVE_CLI_CACHE=" nativeCliCache))))
+                   (listAppend (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" bare) (str "TMPDIR=" temp)) caches)))
         (bareRun (pumpUntilExit! (pairFirst linkRun) barePid (+ (nowMs!) 60000)))
         (closed (do (fdClose listener) true))
         (seen (pairFirst bareRun).seen)
