@@ -147,7 +147,12 @@ fn notRun wt: String why: String -> MutantOut
 fn ! mutantRun! wt: String scratch: String m: Mutant gate: String lim: fr/Limits -> MutantOut
   (mutantRunIn! wt scratch (cacheDir!) m gate lim)
 
+; (:m :ref FABLE-GATE-ADMIT :do "a mutant starts only under the load gate of the admission config (fr/admitLoad!, 2 times the cores by default): above it the run waits, and past the wait it is not run and says loadWait, which is neither red nor pass")
+; (:m :ref GATEINTEGRITY-TIMEOUT-PASSES :do "a mutant gate the runner ended at its timeout has verdict timeout and is never red, whatever it printed before")
 fn ! mutantRunIn! wt: String scratch: String cache: String m: Mutant gate: String lim: fr/Limits -> MutantOut
+  (let [(la (fr/admitLoad! lim.jsDir))]
+    (if (= la.state "expired")
+      (MutantOut :applied false :exit -1 :executed 0 :out (fr/loadNote la) :wt "" :verdict "loadWait" :red false :cli "")
   (let [(_ (dirCreate scratch))
         (_ (sweepIn! scratch wt cache))
         (head (stringTrim (git wt (list "rev-parse" "HEAD")).out))
@@ -165,8 +170,8 @@ fn ! mutantRunIn! wt: String scratch: String cache: String m: Mutant gate: Strin
                            (pinned (and (seedable pin (depsOf! pin) files) (seedHead! cache pin scratch name path)))
                            (d (fr/runShell! gate path (fr/childEnv (list)) lim))
                            (ex (optionOr (fr/executedOf d.out) 0))
-                           (v (verdictOf d.exit ex d.out))]
+                           (v (if (= (fr/gateVerdict d) "timeout") "timeout" (verdictOf d.exit ex d.out)))]
                        (MutantOut :applied true :exit d.exit :executed ex :out d.out :wt path :verdict v :red (= v "red") :cli (if pinned "pinned" "cold"))))))
             (_ (dropHead! scratch cache name))
             (_ (dropCopy! path))]
-        res)))
+        res)))))
