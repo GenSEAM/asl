@@ -36,9 +36,13 @@ fn indexPurposeBytes -> Int64
 fn brandWords -> (List String)
   (list "100%" "Self-Hosted" "Self-Contained" "Pure" "AgentSlang" "ASL" "Aslany" "Native" "Standalone" "Sovereign" "Standard" "Universal" "Autonomous" "Unified")
 
+; (:m :ref KNOW-INDEX-FILLER :do "praise adjectives that lead a purpose (High-performance vector memory, Zero-Cost Schema) say nothing the 24 index bytes need; trimmed in render, not in each package manifest, because the full purpose stays on the L1 card and the manifests belong to their packages; compared lower-cased")
+fn fillerWords -> (List String)
+  (list "high-performance" "high-frequency" "zero-cost" "lightweight" "fast" "efficient" "robust" "powerful" "modern" "comprehensive" "seamless" "advanced")
+
 fn dropBrand words: (List String) -> (List String)
   (match (listHead words)
-    ((some w) (if (listContains? (brandWords) w) (dropBrand (optionOr (listTail words) (list))) words))
+    ((some w) (if (or (listContains? (brandWords) w) (listContains? (fillerWords) (stringLower w))) (dropBrand (optionOr (listTail words) (list))) words))
     ((none) words))
 
 ; (:m :ref KNOW-INDEX-BRANDING :do "the purpose an index line shows: the card purpose without its leading branding words, the whole purpose when nothing else is left, cut at a word within indexPurposeBytes")

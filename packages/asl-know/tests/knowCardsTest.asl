@@ -76,16 +76,28 @@ fn bareIndexLine? line: String -> Bool
 fn brandLed? line: String -> Bool
   (listContains? (brandOnly) (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) ""))
 
+; (:m :ref KNOW-INDEX-FILLER :do "a fixed praise list, independent of render fillerWords, so dropping the render trim or emptying its list goes red here")
+fn fillerOnly -> (List String)
+  (list "high-performance" "high-frequency" "zero-cost")
+
+fn fillerLed? line: String -> Bool
+  (listContains? (fillerOnly) (stringLower (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) "")))
+
 fn ! indexDistinct root: String -> Bool
   (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \"")) (stringSplit index "\n")))
         (bare (filter bareIndexLine? lines))
         (led (filter brandLed? lines))
+        (filler (filter fillerLed? lines))
         (empty (filter (fn [(l String)] -> Bool (stringEmpty? (stringTrim (indexPurposeOf l)))) lines))]
     (do
       (assert (> (listLength lines) 80) (str "index lists every card, got " (listLength lines)))
       (assert (listEmpty? bare) (str (listLength bare) " index lines show only a branding prefix: " (stringJoin (listTake bare 6) " ")))
       (assert (listEmpty? led) (str (listLength led) " index lines spend their purpose bytes on a branding word first: " (stringJoin (listTake led 6) " ")))
+      (assert (listEmpty? filler) (str (listLength filler) " index lines lead with a praise word: " (stringJoin (listTake filler 6) " ")))
+      (assert (= (r/indexPurpose "High-performance vector memory store") "vector memory store") "a leading praise word is dropped before the cut")
+      (assert (= (r/indexPurpose "Pure AgentSlang Zero-Cost Schema, Codec") "Schema, Codec") "brand and praise words drop together")
+      (assert (= (r/indexPurpose "Fast") "Fast") "a purpose of only a praise word is kept whole")
       ; (:m :ref KNOW-INTEL-PURPOSE :do "an empty purpose leaves a model only the card id: a description the scan blanks (it names a retired path) shows up here, not as a missing card")
       (assert (listEmpty? empty) (str (listLength empty) " index lines carry an empty purpose: " (stringJoin (listTake empty 6) " ")))
       true))
