@@ -185,6 +185,7 @@ fn ! testLadderWiring -> Bool
         (zeroFree (stringReplace (stringReplace (stringReplace zero ":alias orNemotronUltraFree :tier free :quality 0 :allowance 3" ":alias orNemotronUltraFree :tier free :quality 0 :allowance 0") ":alias ocLongcat :tier free :quality 0 :allowance 3" ":alias ocLongcat :tier free :quality 0 :allowance 0") "x" "x"))
         (awaiting (rs/reviewUnit! (gatewayText) zeroFree (list) "." "/nonexistent" (unit) "+ a" good call))
         (stealth (rs/reviewUnit! (gatewayText) (lanesText "zzNewModel") (pacesAt "20") "." "/nonexistent" (with (unit) :writerAlias "zzNewModel") "+ a" good call))
+        (litUnknown (rs/reviewUnit! (gatewayText) (lanesText "") (pacesAt "20") "." "/nonexistent" (with (unit) :writerAlias "unknown") "+ a" good call))
         (unlisted (rs/reviewUnit! (gatewayText) (lanesText "") (pacesAt "20") "." "/nonexistent" (with (unit) :writerAlias "zzNewModel") "+ a" good call))]
     (do (assert (match merged ((ok r) (= r.action "merge")) ((err _) false)) (str "two free reviewers pass with a redBefore receipt: " (match merged ((ok r) r.action) ((err e) e))))
         (assert (match merged ((ok r) (and (stringContains? r.models "+") (not (listEmpty? r.rows)))) ((err _) false)) "two models reviewed and a grade row came back")
@@ -192,6 +193,7 @@ fn ! testLadderWiring -> Bool
         (assert (match awaiting ((ok r) (and (= r.action "await") (not (stringEmpty? r.sig)))) ((err _) false)) (str "out-of-allowance free lanes await and name the lane: " (match awaiting ((ok r) (str r.action " " r.sig)) ((err e) e))))
         (assert (match stealth ((ok r) (= r.action "merge")) ((err _) false)) (str "a writer listed :unknown is its own family and known lanes review it: " (match stealth ((ok r) (str r.action " " r.sig)) ((err e) e))))
         (assert (match unlisted ((ok r) (and (= r.action "await") (stringContains? r.sig "writerFamily"))) ((err _) false)) (str "an unlisted writer with no family still waits: " (match unlisted ((ok r) (str r.action " " r.sig)) ((err e) e))))
+        (assert (match litUnknown ((ok r) (= r.action "merge")) ((err _) false)) (str "a writer that is the literal unknown gets a review lane, not a writerFamily await (NODE2-WRITER-LITERAL-UNKNOWN): " (match litUnknown ((ok r) (str r.action " " r.sig)) ((err e) e))))
         (assert (and (= (cd/rulingVerdict "merge") "pass") (= (cd/rulingVerdict "await") "defer")) "ruling maps to review verdicts")
         true))
 
