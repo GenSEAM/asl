@@ -75,12 +75,12 @@ fn ! watch! launcher: Int64 sentinel: Int64 child: Int64 deadlineNs: Int64 tick:
         (if (> c 0) (do (fr/killTree! c) 1) 0)
         (do (sleepMs 250) (watch! launcher sentinel c deadlineNs (+ tick 1))))))
 
-; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a forked sentinel in its own group watches this launcher: a kill of the launcher alone (SIGKILL included, which no handler sees) leaves the command's group, which fleet/run.asl puts outside the launcher's, running with ppid 1; the sentinel kills it within about a second; it lives at most SECS plus 60 s; forkLimited! leases it to the launcher, so any reaper on the machine would kill it the moment the launcher dies, before it acts (seen: the command survived); its lease is rewritten to name itself as owner, so only its deadline reaps it")
+; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a forked sentinel in its own group watches this launcher: a kill of the launcher alone (SIGKILL included, which no handler sees) leaves the command's group, which fleet/run.asl puts outside the launcher's, running with ppid 1; the sentinel kills it within about a second; it lives at most SECS plus 60 s; forkLimited! leases it to the launcher, so any reaper on the machine would kill it the moment the launcher dies, before it acts (seen: the command survived); its lease is rewritten to name itself as owner (born now, it was just forked; no ps before the command starts), so only its deadline reaps it")
 fn ! sentinel! launcher: Int64 secs: Int64 -> (Result fr/Forked String)
   (match (fr/forkLimited! "/dev/null" (fr/Limits :timeoutMs (* (+ secs 60) 1000) :maxDesc 16 :class "" :jsDir "")
            (fn [] -> Int64 (watch! launcher (procSelf) 0 (+ (monotonicNs) (* (+ secs 60) 1000000000)) 0)))
     ((ok f) (let [(now (monotonicNs))
-                  (_ (fr/writeLease! f.pid f.pid now (+ now (* (+ secs 60) 1000000000))))]
+                  (_ (fr/writeLeaseAt! f.pid f.pid now (+ now (* (+ secs 60) 1000000000)) (nowNs) (/ (nowNs) 1000000000) (/ (nowNs) 1000000000)))]
               (ok f)))
     ((err e) (err e)))
 
