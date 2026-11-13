@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
 
 (schema Job
@@ -668,17 +668,40 @@ fn orphanTestAgeSec -> Int64
 fn nativeTestExe? path: String -> Bool
   (or (stringContains? path "/.asl/run/nativeTest/") (stringContains? path "/.asl/cache/nativeTest/"))
 
-fn orphanTestRow uid: Int64 minAge: Int64 acc: (List Int64) line: String -> (List Int64)
+; (:m :ref REAPALL-LOWS :do "the text of a ps line after its first n columns, inner spaces kept, so an args column whose path holds a space stays whole")
+fn columnsAfter line: String n: Int64 -> String
+  (let [(t (stringTrim line))]
+    (if (<= n 0)
+      t
+      (match (stringIndexOf t " ")
+        ((none) "")
+        ((some i) (columnsAfter (optionOr (stringSlice t i (stringLength t)) "") (- n 1))))))
+
+; (:m :ref REAPALL-LOWS :do "argv0 of an args column whose executable may hold spaces: the shortest prefix, grown one space-separated word at a time, that is an absolute path under a native test cache and that isFile? accepts; empty when none, so an argument that only names a cache path never passes for the executable")
+fn argsExe args: String isFile?: (Fn [String] Bool) -> String
+  (let [(words (stringSplit args " "))
+        (n (listLength words))]
+    (if (not (stringStartsWith? args "/"))
+      ""
+      (optionOr (listFind (fn [(c String)] -> Bool (and (nativeTestExe? c) (isFile? c)))
+                  (map (fn [(k Int64)] -> String (stringJoin (listTake words k) " ")) (range 1 (+ n 1))))
+        "")))
+
+fn orphanTestRow uid: Int64 minAge: Int64 isFile?: (Fn [String] Bool) acc: (List Int64) line: String -> (List Int64)
   (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
         (num (fn [(i Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (listGet ws i) "")) -1)))
         (age (etimeSeconds (optionOr (listGet ws 3) "")))]
-    (if (and (> (num 0) 1) (and (= (num 1) 1) (and (>= uid 0) (and (= (num 2) uid) (and (>= age minAge) (nativeTestExe? (optionOr (listGet ws 4) "")))))))
+    (if (and (> (num 0) 1) (and (= (num 1) 1) (and (>= uid 0) (and (= (num 2) uid) (and (>= age minAge) (not (stringEmpty? (argsExe (columnsAfter line 4) isFile?))))))))
       (cons (num 0) acc)
       acc))
 
-; (:m :ref PROC-REAPER-ALL :do "the orphaned test binaries of a ps text with the columns pid ppid uid etime args")
-fn orphanTestPids text: String uid: Int64 minAge: Int64 -> (List Int64)
-  (listReverse (fold (fn [(acc (List Int64)) (line String)] -> (List Int64) (orphanTestRow uid minAge acc line)) (list) (stringLines text)))
+; (:m :ref REAPALL-LOWS :do "orphanTestPids with the file check given, so a fixture ps text is judged without real binaries")
+fn orphanTestPidsWith text: String uid: Int64 minAge: Int64 isFile?: (Fn [String] Bool) -> (List Int64)
+  (listReverse (fold (fn [(acc (List Int64)) (line String)] -> (List Int64) (orphanTestRow uid minAge isFile? acc line)) (list) (stringLines text)))
+
+; (:m :ref PROC-REAPER-ALL :do "the orphaned test binaries of a ps text with the columns pid ppid uid etime args; the executable must be a file on disk")
+fn ! orphanTestPids text: String uid: Int64 minAge: Int64 -> (List Int64)
+  (orphanTestPidsWith text uid minAge (fn [(p String)] -> Bool (match (fileStat p) ((ok st) st.isFile) ((err _) false))))
 
 fn sweepEveryNs -> Int64
   300000000000
