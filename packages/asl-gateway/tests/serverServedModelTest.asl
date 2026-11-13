@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverServedModelTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVED-MODEL-HEADER :do "a real gateway whose balancer picks mB while the caller's chain names mA answers with x-asl-served-model: mB/m-b; a pick equal to the hint adds no header")
 (schema Stub (:f fd Int64) (:f input String) (:f born Int64))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/noConfigTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (aslGateway/config :a cfg) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (aslGateway/config :a cfg) (asl-tools/fleet/run :a fr)])
 
 (schema Probe
   (:f response String)

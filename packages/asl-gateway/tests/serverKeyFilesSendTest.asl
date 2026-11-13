@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverKeyFilesSendTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr) (server :a srv) (aslGateway/config :a cfg)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr) (server :a srv) (aslGateway/config :a cfg)])
 
 ; (:m :ref GW-KEYFILES-SEND :do "a key held in a (:gateway :keyFiles) file wins over a stale process env value and is the bearer a real gateway sends; env-only and neither cases leave the env as it was")
 (schema Stub (:f fd Int64) (:f input String))

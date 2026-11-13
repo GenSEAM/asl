@@ -1,7 +1,8 @@
-(module aslGateway/tests/gatewayStartKit
+(module asl-tools/fleet/readyWait
   :x [waitReady! waitPort! waitPortErr! waitFile! readyPort! startDeadlineMs tailOf]
   :i [(asl-tools/fleet/run :a fr)])
 
+; (:m :ref GW-KIT-HOME :do "a generic child ready-file wait beside run.asl, imported by the gateway, hub and agent suites and tools/gateway/claudeSmoke")
 ; (:m :ref GW-TEST-WAITREADY-SWEEP :do "the one wait every gateway suite uses for its scratch-HOME gateway child (RETRYCONC-FLAKE): the child compiles server.asl to native on a cold cache before it writes its --ready file, silently, measured 8.8 to 22.5 s and once over 120 s at load 120-154 on the Mac, 2026-11-12; the fixed 10 to 30 s polls each suite carried failed there with an empty stderr")
 
 fn ! nowMs! -> Int64
@@ -60,5 +61,5 @@ fn ! waitStart! path: String pid: Int64 errPath: String needPort: Bool -> Int64
         (w (waitTick! path pid (+ start (startDeadlineMs)) needPort 0))]
     (if (> (pairFirst w) 0)
       (pairFirst w)
-      (do (eprintln (str "(:gatewayStart :state \"" (pairSecond w) "\" :ms " (stringFromInt64 (- (nowMs!) start)) " :ready \"" path "\" :stderr \"" (stringReplace (stringReplace (tailOf (resultOr (fileReadString errPath) "") 600) "\"" "'") "\n" " ") "\")"))
+      (do (eprintln (str "(:childReady :state \"" (pairSecond w) "\" :ms " (stringFromInt64 (- (nowMs!) start)) " :ready \"" path "\" :stderr \"" (stringReplace (stringReplace (tailOf (resultOr (fileReadString errPath) "") 600) "\"" "'") "\n" " ") "\")"))
           0)))

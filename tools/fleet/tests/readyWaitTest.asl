@@ -1,6 +1,6 @@
-(module aslGateway/tests/gatewayStartKitTest
+(module asl-tools/fleet/tests/readyWaitTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-TEST-KILLTREE-PIDREUSE :do "the kit's wait against real children of this test, each started through fleet/run.asl and stopped and reaped here: a child that exits without a ready file is reported exited and left unreaped, so its pid stays this test's until the teardown reaps it; a live child with no ready file ends on the deadline branch at the deadline, not before it and within 5 s of it")
 
@@ -8,7 +8,7 @@ fn ! nowMs! -> Int64
   (/ (monotonicNs) 1000000)
 
 fn ! scratch! -> String
-  (str (optionOr (envGet "TMPDIR") "/tmp") "/gatewayStartKitTest-" (stringFromInt64 (procSelf)) "-absent-ready")
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/readyWaitTest-" (stringFromInt64 (procSelf)) "-absent-ready")
 
 fn ! runTests -> Bool
   (let [(ready (scratch!))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/federationLiveTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (federation :a f) (secrets :a s) (upstream :a u) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (federation :a f) (secrets :a s) (upstream :a u) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-FED-REAL-INSTANCE :do "a real asl-gateway process (the host side) serves on a loopback port with a gatewayServeToken in its HOME's secrets file and one provider pointing at a stub API in this process; the VPS side is federation's remote provider with its own secrets store; one thread drives the client call, the stub and nothing else, every wait is bounded and the child dies with its tree")
 (schema Stub (:f fd Int64) (:f input String))

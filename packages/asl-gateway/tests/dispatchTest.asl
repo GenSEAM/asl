@@ -1,6 +1,6 @@
 (module aslGateway/tests/dispatchTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
+  :i [(asl-tools/fleet/readyWait :a sk) (aslGateway/dispatch :a dp) (aslGateway/config :a cfg) (aslGateway/upstream :a u) (aslGateway/plugin :a p)
       (aslGateway/budget :a bgt) (aslGateway/fleet :a fl) (aslGateway/tests/fixtures/launch/launchFixture :a lf) (asl-parser/reader :a rd) (asl-json/json :a j)])
 
 fn wiringConfig base: String withRouter: Bool -> String

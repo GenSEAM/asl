@@ -1,6 +1,6 @@
 (module aslAgent/tests/gatewayLinkTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk)])
+  :i [(asl-tools/fleet/readyWait :a sk)])
 
 fn config base: String -> String
   (str "(:gateway :v 2"
@@ -130,13 +130,14 @@ fn ! runTests -> Bool
         (seen (pairFirst bareRun).seen)
         (httpOut (stringSplit (stringTrim (readOr (str temp "/http.out"))) "\n"))
         (linkOut (stringSplit (stringTrim (readOr (str temp "/link.out"))) "\n"))
+        (gwErr (readOr (str temp "/gateway.err")))
         (gwRows (rowsOf (readOr (str temp "/gateway.err"))))
         (linkRows (rowsOf (readOr (str temp "/link.err"))))
         (bareOut (readOr (str temp "/bare.out")))
         (diag (str " http.err=" (readOr (str temp "/http.err")) " link.err=" (readOr (str temp "/link.err")) " gateway.err=" (readOr (str temp "/gateway.err"))))
         (removed (= (processRun (str "/bin/rm -rf " temp)).exitCode 0))]
     (do
-      (assert (and wrote (> gwPort 0)) (str "the HTTP gateway serves on a free port" diag))
+      (assert (and wrote (> gwPort 0)) (str "the HTTP gateway serves on a free port: gateway.err=" (sk/tailOf gwErr 600) diag))
       (assert (and (= (pairSecond httpRun) 0) (= (pairSecond linkRun) 0)) (str "both drivers finish: http " (stringFromInt64 (pairSecond httpRun)) " link " (stringFromInt64 (pairSecond linkRun)) diag))
       (assert (= (listLength seen) 2) (str "each path reaches the fixture upstream once, the config-less run never: " (stringFromInt64 (listLength seen)) diag))
       (assert (and (= (optionOr (listGet seen 0) (Seen :path "" :body "")).path "/v1/chat/completions") (= (optionOr (listGet seen 1) (Seen :path "" :body "")).path "/v1/chat/completions")) "both paths call the upstream's chat endpoint")

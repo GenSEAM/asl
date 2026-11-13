@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverReserveTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVE-KEYFILES :do "a real gateway whose only copy of a provider key is in a (:gateway :keyFiles) file sends that key as the bearer to the stub; the key is in no process env and no log")
 (schema Stub (:f fd Int64) (:f input String) (:f born Int64))

@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/hubLearnedTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr) (aslGateway/tests/gatewayStartKit :a sk) (aslGateway/server :a srv)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/readyWait :a sk) (aslGateway/server :a srv)])
 
 ; (:m :ref ORCH-HUB-STATUS :do "GET /hub/status on a running hub: idle it reports no streams and no admit samples; with two clients on one rpm 12 model one is parked, so one stream waits and the bucket shows a queue of 1; after both are answered the admit wait has 2 samples with p50 0 and p95 near the 5 s refill")
 (schema StubConn

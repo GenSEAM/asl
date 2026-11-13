@@ -1,6 +1,6 @@
 (module asl-tools/hub/tests/hubDaemonTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr) (aslGateway/tests/gatewayStartKit :a sk)])
+  :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/readyWait :a sk)])
 
 ; (:m :ref ORCH-HUB-DAEMON :do "gates the one-per-node daemon on a scratch HOME: it listens on the unix socket named in HOME/.asl/hub.asn with mode 0600, a second instance is refused by the lock, and two clients of one model through it share exactly one token bucket; the control runs the same two clients through two separate gateway processes, each with its own bucket, and sees two admissions in the same window")
 (schema StubConn

@@ -1,6 +1,6 @@
 (module aslGateway/tests/claudeProviderE2eTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (federation :a f) (secrets :a s) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (federation :a f) (secrets :a s) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-CLAUDE-PROVIDER-E2E :do "a real asl-gateway process (the Mac side) serves the claude CLI provider with a stub claude binary and a :sessions vendor row: a federation client (node2 Leon's hop) and a second plain client post through it; the client's X-ASL-Session is bound to the vendor session id, so the second turn passes --resume with the id the first turn answered with, a different session key starts a fresh vendor session, and every reply comes back through the bearer-checked federation hop")
 fn ! nowMs! -> Int64

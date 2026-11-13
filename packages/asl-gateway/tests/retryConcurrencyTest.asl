@@ -1,6 +1,6 @@
 (module aslGateway/tests/retryConcurrencyTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "an end-to-end sanity companion to serverTest.asl's testEffSleepMsDoesNotBlockReactor, which is the actual red/green proof of non-blocking (a deterministic 5000 ms timing bound with no network or jitter involved). Since GW-FREE-RETRY-3, the stub's Retry-After: 2 header is honored (headers now flow through u/UpstreamResponse/u/httpFailure into retryAfterSecOf), so aDoneMs below has a real minimum-wait assertion instead of only the always-true ordering check; this is still kept as a live-process check that the whole retry-then-succeed path (429, backoff, retried call, success) works end to end alongside a second concurrent client, not as the sole concurrency proof")
 

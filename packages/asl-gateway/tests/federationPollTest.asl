@@ -1,6 +1,6 @@
 (module aslGateway/tests/federationPollTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-BALANCER-POLL-WIRE :do "a real gateway process with a balancer section and two polled endpoint budgets; after its first request the reactor must send each due poll as a GET with the poll provider's own key to the stub in this process, consume the reply (a 500 leaves one log note, a 200 none), poll each budget once inside its interval, and never print a key")
 (schema Stub (:f fd Int64) (:f input String))

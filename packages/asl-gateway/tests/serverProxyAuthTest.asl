@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverProxyAuthTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref AUDIT12-B10 :do "with a serve token loaded, a request the gateway proxies to its upstream (not chat, not omni) arrives there without the caller's Authorization header; the token reaches the stub nowhere")
 (schema Stub (:f fd Int64) (:f input String))

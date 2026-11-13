@@ -1,6 +1,6 @@
 (module aslGateway/poolDispatchTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 (schema StubSeen
   (:f path String)

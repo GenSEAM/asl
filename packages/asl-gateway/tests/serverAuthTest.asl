@@ -1,6 +1,6 @@
 (module aslGateway/tests/serverAuthTest
   :x [runTests]
-  :i [(aslGateway/tests/gatewayStartKit :a sk) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref GW-SERVE-AUTH-HEALTH-EXEMPT :do "a real gateway whose secrets file is named by (:gateway :secretsFile) holds gatewayServeToken; GET /health answers 200 with status only and no bearer, every other path answers 401 without the bearer and passes the check with it; the token is read from the overridden path, so a server that ignored :secretsFile would answer 200 everywhere")
 fn ! writeAll! fd: Int64 data: String -> Bool
