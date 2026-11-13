@@ -1,5 +1,9 @@
 (module asl-cli/binAslStaleTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc)])
 
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "two CLI builds run here, about 1250 to 1800 s under load, past the 1800 s default wall")
+fn suiteWallS -> Int64
+  3600
+
 fn probe -> String
   "asl/packages/asl-cli/tests/fixtures/servedBy/servedProbe.asl"
 

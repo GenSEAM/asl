@@ -550,7 +550,7 @@ fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
     (match built.binary
       ((some binPath)
         (let [(bin (if (stringStartsWith? binPath "/") binPath (str ctx.root "/" binPath)))
-              (out (nt/runProcIn (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
+              (out (nt/runProcWithin (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff)))) (nt/suiteWall (resultOr (fileReadString (str ctx.root "/" rel)) ""))))
               (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
           (do (print out.stdout)
               (eprintText v.stderr)
