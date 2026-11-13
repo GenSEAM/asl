@@ -540,7 +540,7 @@ fn lowLevelForm headTok: String tailArgs: (List rd/SExpr) restFrames: (List Infe
 
 ; (:m :ref LL-SIZED-CHECK-2 :do "a bit operator whose resolved operand type is a sized integer (U8 .. I16) is unrouted: the lowering has bit operators for Int64 only; returns the sized type name or empty")
 fn sizedBitOperand cname: String argsDone: (List ty/Type) fm: FrameMachine -> String
-  (if (listContains? (ll/bitOperatorNames) cname)
+  (if (or (listContains? (ll/bitOperatorNames) cname) (listContains? (ll/wrapOperatorNames) cname))
     (let [(pv (popValue fm))
           (names (map (fn [(t ty/Type)] -> String (match (u/applySubst fm.state.subst t) ((ty/tyCon n _ _ _) n) (_ ""))) (cons (pairFirst pv) argsDone)))]
       (optionOr (listHead (filter (fn [(n String)] -> Bool (listContains? (ll/sizedIntNames) n)) names)) ""))

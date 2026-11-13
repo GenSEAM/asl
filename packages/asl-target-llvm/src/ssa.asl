@@ -2924,8 +2924,12 @@ fn emitErrorBuiltin lhs: String dest: String name: String args: (List String) ->
 
 fn mathBuiltin? name: String n: Int64 -> Bool
   (or (and (= n 1) (or (= name "abs") (or (= name "int64ToFloat64") (or (= name "float64ToInt64") (= name "~")))))
-      (or (and (= n 2) (or (= name "min") (or (= name "max") (or (= name "<<") (or (= name ">>") (or (= name "&") (or (= name "|") (= name "^"))))))))
+      (or (and (= n 2) (or (= name "min") (or (= name "max") (or (= name "<<") (or (= name ">>") (or (= name "&") (or (= name "|") (or (= name "^") (wrapName? name)))))))))
           (and (= n 3) (= name "clamp"))))
+
+; (:m :ref LOWLEVEL-WRAP-NATIVE :do "mulWrap addWrap subWrap rotateLeft rotateRight lower over Int64 only, like the bit operators: add mul sub with no nsw or nuw so the result is the product or sum modulo 2^64, a rotate masks its amount with 63 and ors a shl with an lshr by the masked negation, which LLVM matches to its rotate; sized integers stay unrouted in check")
+fn wrapName? name: String -> Bool
+  (listContains? (list "mulWrap" "addWrap" "subWrap" "rotateLeft" "rotateRight") name)
 
 fn mathSym name: String -> String
   (cond ((= name "<<") "@mathrt.shiftLeft")
@@ -2944,6 +2948,7 @@ fn mathConstants -> (List (Pair String String))
        (list (pair "@.mathrt.who.abs" "abs") (pair "@.mathrt.who.min" "min") (pair "@.mathrt.who.max" "max") (pair "@.mathrt.who.clamp" "clamp")
              (pair "@.mathrt.who.int64ToFloat64" "int64ToFloat64") (pair "@.mathrt.who.float64ToInt64" "float64ToInt64")
              (pair "@.mathrt.who.shiftLeft" "<<") (pair "@.mathrt.who.shiftRight" ">>")
+             (pair "@.mathrt.who.mulWrap" "mulWrap") (pair "@.mathrt.who.addWrap" "addWrap") (pair "@.mathrt.who.subWrap" "subWrap") (pair "@.mathrt.who.rotateLeft" "rotateLeft") (pair "@.mathrt.who.rotateRight" "rotateRight")
              (pair "@.mathrt.who.bitAnd" "&") (pair "@.mathrt.who.bitOr" "|") (pair "@.mathrt.who.bitXor" "^") (pair "@.mathrt.who.bitNot" "~")
              (pair "@.mathrt.want" "%s expects %s, got %s") (pair "@.mathrt.pair" "%s expects two Int or two Float, got %s and %s")
              (pair "@.mathrt.clampRange" "clamp: lo <= hi required, got lo=%f hi=%f") (pair "@.mathrt.absMin" "abs of INT64_MIN")))
@@ -3136,6 +3141,11 @@ fn mathFunctions -> (List (Pair String String))
            "  ret %Val %noneVal\n}"))
     (pair "@mathrt.shiftLeft" (mathShift "shiftLeft" "shl"))
     (pair "@mathrt.shiftRight" (mathShift "shiftRight" "ashr"))
+    (pair "@mathrt.mulWrap" (mathBitwise "mulWrap" "mul"))
+    (pair "@mathrt.addWrap" (mathBitwise "addWrap" "add"))
+    (pair "@mathrt.subWrap" (mathBitwise "subWrap" "sub"))
+    (pair "@mathrt.rotateLeft" (mathRotate "rotateLeft" "shl" "lshr"))
+    (pair "@mathrt.rotateRight" (mathRotate "rotateRight" "lshr" "shl"))
     (pair "@mathrt.bitAnd" (mathBitwise "bitAnd" "and"))
     (pair "@mathrt.bitOr" (mathBitwise "bitOr" "or"))
     (pair "@mathrt.bitXor" (mathBitwise "bitXor" "xor"))
@@ -3153,6 +3163,21 @@ fn mathBitwise who: String instr: String -> String
        (mathWant "b" who 2 "apply")
        "apply:\n"
        "  %r = " instr " i64 %a.bits, %b.bits\n"
+       "  %v = insertvalue %Val { i64 2, i64 0 }, i64 %r, 1\n"
+       "  ret %Val %v\n}")
+
+fn mathRotate who: String near: String far: String -> String
+  (str "define internal %Val @mathrt." who "(%Val %a, %Val %b) {\nentry:\n"
+       (mathWant "a" who 2 "second")
+       "second:\n"
+       (mathWant "b" who 2 "rotate")
+       "rotate:\n"
+       "  %count = and i64 %b.bits, 63\n"
+       "  %neg = sub i64 0, %count\n"
+       "  %inv = and i64 %neg, 63\n"
+       "  %hi = " near " i64 %a.bits, %count\n"
+       "  %lo = " far " i64 %a.bits, %inv\n"
+       "  %r = or i64 %hi, %lo\n"
        "  %v = insertvalue %Val { i64 2, i64 0 }, i64 %r, 1\n"
        "  ret %Val %v\n}")
 
