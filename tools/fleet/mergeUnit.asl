@@ -1,5 +1,5 @@
 (module asl-tools/fleet/mergeUnit
-  :x [capNeighbours clipWhy directGates! mergeBatch! claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
+  :x [capNeighbours clipWhy directGates! directGatesRenamed! renamedFrom mergeBatch! claimDir! exportHeader baseText! Cfg defaultCfg mvDir! releaseLock! takeOver! ownerOf! gateKey gateOrder lockDirOf withLock! waitPid! emit! gateRun! gateVerdict! mergeUnit! mergeUnitWith! mainBuild! parseArgs main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/fleet/brief :a br) (asl-tools/vcs/git :a vg) (asl-gates/suiteTimes :a st)])
 
 ; (:m :ref BASH-EXIT-MERGE :do "bin/asl run asl/tools/fleet/mergeUnit.asl [--main DIR] [--worktrees DIR] [--brief-dir DIR] [--after PID] [--audit CMD|none] [--gate-secs N] [--audit-secs N] [--lock DIR] [--log FILE] UNIT...: per unit, in order: rebase the worktree asex-UNIT onto main (REBASE-CONFLICT stops the unit), build its host when asl/host/build.sh exists, run every :gates entry of the brief UNIT-leon.asn as a bounded sh -c child under env -u ASL_ROOT -u ASL_PRELUDE; a red gate is rerun in the main repo: red there too is BASE-RED and does not block, green there is NEW-RED and blocks (GATE-FAIL); then the audit command, then a fast-forward merge into main with up to 3 rebase retries when main moved, then the main host rebuild under a mkdir lock; one (:merge :unit U :event E ...) line per event; every child starts through fleet/run.asl, waiting is on a pid or a lock, never on a process name")
@@ -186,15 +186,23 @@ fn changesAsl? changes: (List (Pair String String)) -> Bool
   (listAny? (fn [(c (Pair String String))] -> Bool (stringEndsWith? (pairSecond c) ".asl")) changes)
 
 ; (:m :ref AFFSYM-WIRE :do "the direct suites of a change: by default the symbol-level selector's answer (only suites reaching a changed item, each logged as SELECTED with its reason chain); when it cannot answer, answers no suite for a change to an .asl file, or with cfg.symbolSelect off, the import scan below runs instead and NEIGHBOUR-SELECTOR names why")
+; (:m :ref AFFWIRE-LOWS3 :do "a non-empty symbol pick also runs the importers of the old module name of every renamed .asl file, named at the merge base, each logged SELECTED with why renamedFrom, since the selector follows the new name only, so a suite still importing the old name would merge unrun")
 fn ! directGates! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) -> (List String)
+  (directGatesRenamed! cfg unit wt changes (list))
+
+fn ! directGatesRenamed! cfg: Cfg unit: String wt: String changes: (List (Pair String String)) renamed: (List String) -> (List String)
   (match (if cfg.symbolSelect (symbolSuites! cfg wt) (err "off"))
     ((ok picked)
       (let [(kept (filter (fn [(p (Pair String String))] -> Bool (suite? wt (pairFirst p))) picked))]
         (if (and (listEmpty? kept) (changesAsl? changes))
           (importerGates! cfg unit wt changes "emptySelection")
-          (let [(_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"symbol\" :n " (stringFromInt64 (listLength kept)))))
-                (_ (map (fn [(p (Pair String String))] -> Bool (emit! cfg unit "SELECTED" (str ":suite " (q (pairFirst p)) " :why " (q (clipWhy (pairSecond p)))))) kept))]
-            (map (fn [(t String)] -> String (str cfg.testCmd " " t)) (uniq (map pairFirst kept)))))))
+          (let [(keptPaths (uniq (map pairFirst kept)))
+                (oldNames (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (importNames (moduleOfText (baseText! cfg wt p)) p))) (list) renamed))
+                (olds (filter (fn [(t String)] -> Bool (not (listContains? keptPaths t))) (if (listEmpty? oldNames) (list) (importersIn! wt (uniq oldNames)))))
+                (_ (emit! cfg unit "NEIGHBOUR-SELECTOR" (str ":by \"symbol\" :n " (stringFromInt64 (+ (listLength kept) (listLength olds))))))
+                (_ (map (fn [(p (Pair String String))] -> Bool (emit! cfg unit "SELECTED" (str ":suite " (q (pairFirst p)) " :why " (q (clipWhy (pairSecond p)))))) kept))
+                (_ (map (fn [(t String)] -> Bool (emit! cfg unit "SELECTED" (str ":suite " (q t) " :why \"renamedFrom\""))) olds))]
+            (map (fn [(t String)] -> String (str cfg.testCmd " " t)) (uniq (listAppend keptPaths olds)))))))
     ((err why) (importerGates! cfg unit wt changes why)))
 
 ; (:m :ref MERGE-TRAIN-SLOW :do "2026-11-12 principal: merge mostly with affected tests; the import-scan suites of a change are the suites it adds or changes and the suites that import a module it adds or changes, wherever they live; no transitive graph walk; the fallback of the symbol selector")
@@ -224,7 +232,7 @@ fn ! selectedGates! cfg: Cfg unit: String wt: String -> (List String)
         (changes (changesOf d.out))
         (remote (listAny? (fn [(c (Pair String String))] -> Bool (stringStartsWith? (pairSecond c) cfg.liveRoot)) changes))
         (live (liveSuites! cfg))
-        (sel (if cfg.neighbours (neighbourSets! cfg unit wt) (let [(ds (directGates! cfg unit wt changes))] (pair ds ds))))
+        (sel (if cfg.neighbours (neighbourSets! cfg unit wt) (let [(ds (directGatesRenamed! cfg unit wt changes (renamedFrom d.out)))] (pair ds ds))))
         (keep? (fn [(g String)] -> Bool (or remote (not (listContains? live (gateKey cfg g))))))
         (_ (map (fn [(g String)] -> Bool (emit! cfg unit "SKIPPED-LIVE" (str ":cmd " (q g) " :why \"the change touches nothing under " cfg.liveRoot "\"")))
                 (filter (fn [(g String)] -> Bool (not (keep? g))) (pairSecond sel))))]
@@ -327,6 +335,16 @@ fn changesOf out: String -> (List (Pair String String))
               (listAppend acc (list c)))))
         (list) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines out)))
 
+; (:m :ref AFFWIRE-LOWS3 :do "the old paths of the .asl files a git diff --name-status -M output renames")
+fn renamedFrom out: String -> (List String)
+  (fold (fn [(acc (List String)) (l String)] -> (List String)
+          (let [(parts (stringSplit l "\t"))
+                (old (optionOr (listGet parts 1) ""))]
+            (if (and (stringStartsWith? (optionOr (listHead parts) "") "R") (and (= (listLength parts) 3) (stringEndsWith? old ".asl")))
+              (listAppend acc (list old))
+              acc)))
+        (list) (stringLines out))
+
 ; (:m :ref MERGEDOC-LOWS :do "the file as it was where the branch left main (git merge-base), not at main's tip: a main that moved on, or that already deleted or rewrote the file, must not hide what the branch deleted or changed")
 fn ! baseText! cfg: Cfg wt: String path: String -> String
   (let [(mb (gitOut! wt (list "merge-base" cfg.branch "HEAD")))
@@ -347,9 +365,10 @@ fn ! needsLedger? cfg: Cfg wt: String c: (Pair String String) -> Bool
               (was (if (= status "A") "" (exportHeader (baseText! cfg wt path))))]
           (!= now was)))))
 
+; (:m :ref AFFWIRE-LOWS3 :do "the ledger trigger reads renames like gate selection: -M, and a rename is its new path and a D of its old one, so a renamed export header is judged on both sides")
 fn ! ledgerGates! cfg: Cfg wt: String -> (List String)
-  (let [(d (gitOut! wt (list "diff" "--name-status" (str cfg.branch "...HEAD"))))
-        (changes (map changeOf (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines d.out))))]
+  (let [(d (gitOut! wt (list "diff" "--name-status" "-M" (str cfg.branch "...HEAD"))))
+        (changes (changesOf d.out))]
     (if (listAny? (fn [(c (Pair String String))] -> Bool (needsLedger? cfg wt c)) changes)
       (list (str cfg.testCmd " asl/packages/asl-gates/tests/docLedgerTest.asl"))
       (list)))
