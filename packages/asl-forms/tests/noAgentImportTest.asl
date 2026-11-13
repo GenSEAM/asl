@@ -35,7 +35,7 @@ fn skipBlank s: String i: Int64 -> Int64
 ; (:m :ref FORMS-CYCLE-GATE-LOWS :do "the text after the header's :i key: ':i' standing after whitespace, then any whitespace run (space, newline or tab, or none: ':i[' is a header check accepts, FORMS-CYCLE-GATE-LOWS2), then '['; ':in', ':index' or ':impl' do not match; empty when the header has no :i list")
 fn importsAt header: String i: Int64 -> String
   (if (>= i (stringLength header)) ""
-    (if (and (= (optionOr (stringSlice header i (+ i 2)) "") ":i") (and (> i 0) (and (blank? (charAt header (- i 1))) (or (blank? (charAt header (+ i 2))) (= (charAt header (+ i 2)) "[")))))
+    (if (and (= (optionOr (stringSlice header i (+ i 2)) "") ":i") (and (> i 0) (blank? (charAt header (- i 1)))))
       (let [(j (skipBlank header (+ i 2)))]
         (if (= (charAt header j) "[") (optionOr (stringSlice header (+ j 1) (stringLength header)) "") (importsAt header (+ i 1))))
       (importsAt header (+ i 1))))
@@ -87,5 +87,9 @@ fn ! runTests -> Bool
         (assert (listEmpty? (manifestAgentDeps)) (str "asl-forms manifest depends on an agent package: " (stringJoin (manifestAgentDeps) " ")))
         (assert (= planted (list "camel.asl imports aslAgent/bus" "esc.asl imports aslAgent/bus" "kebab.asl imports asl-agent-core/core" "nl.asl imports aslAgent/bus" "tab.asl imports aslAgent/bus" "tight.asl imports aslAgent/bus")) (str "planted camel and kebab imports are found, the newline, tab and escaped-quote headers are found too, the comment after the header, aslGateway and :index or :impl keys are not: " (stringJoin planted "; ")))
         (assert (= (agentImportsIn "(module m :i [(aslAgent/x :a x) (aslAgentCore/y :a y) (aslAgentBus/z :a z)])") (list "aslAgent/x" "aslAgentCore/y" "aslAgentBus/z")) "aslAgent, aslAgentCore and aslAgentBus are all flagged")
+        (assert (listEmpty? (agentImportsIn "(module m :x [f]x:i[(aslAgent/bus :a bus)])")) "an :i[ glued to a non-blank (x:i[) is not the imports key")
+        (assert (listEmpty? (agentImportsIn "(module m :x [f] :xi[(aslAgent/bus :a bus)])")) "a :xi[ key is not the imports key")
+        (assert (listEmpty? (agentImportsIn "(module m :x [f] :iz[(aslAgent/bus :a bus)])")) "a look-alike :iz[ is not the imports key")
+        (assert (= (agentImportsIn "(module m :x [f] :i[(aslAgent/bus :a bus)])") (list "aslAgent/bus")) "control: a blank-led :i[ is the imports key")
         (assert (= (headerOf "(module m :x [a] :i [])\n\n(fn)") "(module m :x [a] :i [])") "the header ends at the module form's closing paren")
         true))
