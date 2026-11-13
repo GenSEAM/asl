@@ -212,11 +212,10 @@ fn ! callModelFor! root: String usagePath: String prices: (List (Pair String Int
               ((ok (none)) (err "empty reply"))))))))
 
 ; (:m :ref WRITERFAMILY-UNKNOWN-POLICY :do "a writer alias the lane file lists :unknown (a stealth vendor such as kiloGlyphCluster) is its own pseudo-family unknown:ALIAS for review selection only, so every known-family lane may review it; node2 2026-11-13 TEXT-WRAP deferred on writerFamily for good; the startup coverage gate keeps the plain table, so a listed unknown still never becomes a lane")
-; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "the literal writer unknown (Leon receipt naming no served model: STD-DURATION, CACHE-BY-TURN on node2) is a pseudo-family too, so a known-family lane reviews it instead of the unit re-awaiting writerFamily every tick; an empty writer still means no evidence and the plain table")
 fn reviewTableFor lanesText: String writer: String -> String
   (let [(base (tableFor lanesText))
         (run (stringJoin (l/tokensOf writer) " "))]
-    (if (or (stringEmpty? run) (not (or (= writer "unknown") (listContains? (unknownOf lanesText) writer)))) base
+    (if (or (stringEmpty? run) (not (listContains? (unknownOf lanesText) writer))) base
       (str (optionOr (stringSlice base 0 (- (stringLength base) 1)) base) " (:f :match \"" run "\" :family \"unknown:" writer "\"))")))
 
 fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) root: String usagePath: String ru: l/ReviewUnit diff: String receipt: String call: (fn ! [String String] -> (Result String String)) -> (Result RevOut String)
