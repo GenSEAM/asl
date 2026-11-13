@@ -1,8 +1,8 @@
 (module aslAgent/runOps
   :x [RVal rStr rInt rBool rList Proc Procs Snap OpResult KillOut RunCtx
       makeRunCtx newProcs execRunOp! execManageOp! execDeleteOp! killSpawned! rebaseWritten! drainProcs!
-      checkRunGitGuard outsideRootVerdict! jailCacheEnv! spawnEnv! jailHome shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
-  :i [(aslAgent/core :a c) (aslAgent/gitOps :a g)])
+      checkRunGitGuard outsideRootVerdict! jailCacheEnv! spawnEnv! spawnEnvOf! withNet withScratch jailHome shellWords runOutward runReadOnly hiddenVars logTail insideRoot! serRec]
+  :i [(aslAgent/core :a c) (aslAgent/gitOps :a g) (aslAgent/jail :a jl)])
 
 enum RVal
   (rStr text: String)
@@ -16,7 +16,9 @@ enum RVal
   (:f session String)
   (:f timeoutSec Int64)
   (:f hidden (List String))
-  (:f toolRoot String))
+  (:f toolRoot String)
+  (:f net Bool :default false)
+  (:f scratch (List String) :default (list)))
 
 (schema Proc
   (:f sid String)
@@ -30,7 +32,8 @@ enum RVal
   (:f log (List String))
   (:f logSize Int64)
   (:f code (Option Int64))
-  (:f signalled Bool))
+  (:f signalled Bool)
+  (:f sandbox String :default ""))
 
 (schema Mark
   (:f rel String)
@@ -65,6 +68,14 @@ enum RVal
 
 fn makeRunCtx root: String owns: (List String) session: String timeoutSec: Int64 hidden: (List String) toolRoot: String -> RunCtx
   (RunCtx :root root :owns owns :session session :timeoutSec timeoutSec :hidden hidden :toolRoot toolRoot)
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "a unit child has no network beyond loopback unless the unit row declares :net true; the flag comes from the run arguments, never from a step the model writes")
+fn withNet ctx: RunCtx net: Bool -> RunCtx
+  (with ctx :net net)
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "directories outside the root the harness itself lets a unit child write; empty unless the caller adds one")
+fn withScratch ctx: RunCtx dirs: (List String) -> RunCtx
+  (with ctx :scratch dirs)
 
 fn newProcs -> Procs
   (Procs :ids (list) :table (list) :base (none) :blocked (list))
@@ -650,43 +661,31 @@ fn drainProcs! procs: Procs -> Procs
 fn envKey row: String -> String
   (match (stringIndexOf row "=") ((some i) (c/sliceOf row 0 i)) ((none) row))
 
-; (:m :ref LEON-RUN-HOME-JAIL :do "the child of a run op gets HOME and TMPDIR inside <root>/.asl/run/agentLoop/home, created here; the real HOME is never passed")
 fn jailHome absRoot: String -> String
-  (str absRoot "/.asl/run/agentLoop/home")
-
-; (:m :ref LEON-RUN-HOME-JAIL :do "a jailed child must still reuse the rebuildable caches (an uncached ./bin/asl test rebuilds the native CLI and prelude for minutes and gigabytes): the six cache variables of fleet/run#cacheRows name the real home's cache directories, each only when it exists, never overriding a value already set; the test compile cache only in a linked worktree, where its default would follow HOME; no config file, key or repo path of the real home is named")
-fn jailCacheRows -> (List (Pair String String))
-  (list (pair "ASL_NATIVE_CLI_CACHE" "/.asl/run/nativeCli") (pair "ASL_HOST_CACHE_DIR" "/.asl/run/hosts")
-        (pair "ASL_NATIVE_ASL1_CACHE" "/.asl/run/asl1") (pair "ASL_CHECK_CACHE" "/.asl/cache/check") (pair "ASL_CORPUS_CACHE" "/.asl/run/corpusCache")
-        (pair "ASL_NATIVE_TEST_CACHE" "/.asl/run/nativeTest"))
+  (jl/jailHome absRoot)
 
 fn ! jailCacheEnv! absRoot: String realHome: String present: (List String) -> (List String)
-  (let [linked (isFile! (str absRoot "/.git"))
-        wanted (filter (fn [r] (and (not (memberOf (pairFirst r) present)) (or (!= (pairFirst r) "ASL_NATIVE_TEST_CACHE") linked))) (jailCacheRows))]
-    (if (stringEmpty? realHome)
-      (list)
-      (map (fn [r] (str (pairFirst r) "=" realHome (pairSecond r)))
-        (filter (fn [r] (isDir! (str realHome (pairSecond r)))) wanted))))
+  (jl/jailCacheEnv! absRoot realHome present)
+
+fn spawnEnvOf! ctx: RunCtx absRoot: String inherited: (List String) -> (List String)
+  (jl/childEnv! absRoot inherited ctx.hidden)
 
 fn spawnEnv! ctx: RunCtx absRoot: String -> (List String)
-  (let [home (jailHome absRoot)
-        made (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp"))))
-        kept (filter (fn [r] (not (memberOf (envKey r) (list "PWD" "HOME" "TMPDIR" "TMP" "TEMP")))) (envList))
-        caches (jailCacheEnv! absRoot (optionOr (envGet "HOME") "") (map envKey kept))
-        base (listAppend (listAppend kept caches) (list (str "PWD=" absRoot) (str "HOME=" home) (str "TMPDIR=" home "/tmp")))
-        shown (filter (fn [r] (not (memberOf (envKey r) ctx.hidden))) base)]
-    (listAppend (filter (fn [r] (!= (envKey r) "PYTHONDONTWRITEBYTECODE")) shown) (list "PYTHONDONTWRITEBYTECODE=1")))
+  (spawnEnvOf! ctx absRoot (envList))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "the shell of a run or manage op starts inside the OS sandbox of jail#jailOf! when one applies; the mode (os or lexical) stays on the Proc for the receipt")
 fn spawnProc! sid: String cmd: String ctx: RunCtx stdin: Bool -> (Result Proc String)
   (let [absRoot (pyAbspath! (rootOrDot ctx.root))]
     (if (not (isDir! absRoot))
       (err (str "no directory " absRoot))
-      (match (procSpawnv (list "/bin/sh" "-c" cmd) (some absRoot) (some (spawnEnv! ctx absRoot)))
-        ((err kind) (err kind))
-        ((ok sp)
-          (let [inOpen (if stdin (ok? (fdNonBlocking sp.stdin true)) (do (fdClose sp.stdin) false))]
-            (ok (Proc :sid sid :pid sp.pid :inFd sp.stdin :outFd sp.stdout :errFd sp.stderr
-                  :inOpen inOpen :outOpen true :errOpen true :log (list) :logSize 0 :code (none) :signalled false)))))))
+      (let [rows (spawnEnv! ctx absRoot)
+            jail (jl/jailOf! absRoot (jailHome absRoot) rows (list ctx.toolRoot) ctx.scratch ctx.net)]
+        (match (procSpawnv (jl/jailWrap! jail (list "/bin/sh" "-c" cmd)) (some absRoot) (some rows))
+          ((err kind) (err kind))
+          ((ok sp)
+            (let [inOpen (if stdin (ok? (fdNonBlocking sp.stdin true)) (do (fdClose sp.stdin) false))]
+              (ok (Proc :sid sid :pid sp.pid :inFd sp.stdin :outFd sp.stdout :errFd sp.stderr
+                    :inOpen inOpen :outOpen true :errOpen true :log (list) :logSize 0 :code (none) :signalled false :sandbox jail.mode))))))))
 
 fn sortMarks ms: (List Mark) -> (List Mark)
   (listSortBy (fn [m] m.rel) ms)
@@ -1261,6 +1260,13 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
                 (OpResult :rec (needsConfirm rid "run" (str "not run: " why "; the run goes on") cmd) :procs procs)
                 (runSpawned! cmd ctx procs rid onKeep))))))))))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "every run receipt names its boundary (:sandbox os or lexical); a failed run whose output shows the sandbox refusing an operation also carries ERR_RUN_SANDBOX and says what a unit process may reach")
+fn sandboxFields p: Proc ctx: RunCtx exitCode: Int64 timedOut: Bool tail: String -> (List (Pair String RVal))
+  (listAppend (list (rs "sandbox" p.sandbox))
+    (if (and (= p.sandbox "os") (and (not timedOut) (and (!= exitCode 0) (jl/denialText? tail))))
+      (list (rs "error" "ERR_RUN_SANDBOX") (rs "message" (jl/sandboxNote (jl/lexicalJail ctx.root ctx.net))))
+      (list)))
+
 fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [sid (str (sidPrefix ctx) "-run" rid)]
     (match (spawnSession! sid cmd ctx false procs)
@@ -1282,7 +1288,8 @@ fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [Str
                 :rec (listAppend
                        (list (rs "id" rid) (rs "op" "run") (rs "status" (if (= exitCode 0) "ok" "failed")) (rs "cmd" cmd) (ri "exit" exitCode)
                          (rs "stdout" tail) (rl "restored" s.restored) (rl "flushed" s.kept) (rb "persisted" (not (listEmpty? s.kept))))
-                       (if timedOut (list (rb "timeout" true) (rs "message" (str "killed after " (itos t) " s"))) (list)))
+                       (listAppend (sandboxFields final ctx exitCode timedOut tail)
+                         (if timedOut (list (rb "timeout" true) (rs "message" (str "killed after " (itos t) " s"))) (list))))
                 :procs s.procs)))))))
 
 fn manageActions -> (List String)

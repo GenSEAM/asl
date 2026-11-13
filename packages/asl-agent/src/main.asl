@@ -142,6 +142,7 @@
   (:f contextTokens (Option Int64))
   (:f plan Bool)
   (:f commit Bool :default false)
+  (:f net Bool :default false)
   (:f inheritedBase String :default "")
   (:f attractor String :default "")
   (:f nativeTools String :default "")
@@ -154,7 +155,7 @@
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events" "inheritedBase")
+        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events" "inheritedBase" "net")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -376,7 +377,7 @@ fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List
     ((= key "inputTokenBudget") (pair (paramSet ps key (intParam v 0)) none))
     ((= key "timeout") (pair (paramSet ps key (intParam v 600)) none))
     ((= key "queueTimeout") (pair (paramSet ps key (intParam v 1200)) none))
-    ((or (= key "dryRun") (= key "commit"))
+    ((or (= key "dryRun") (or (= key "commit") (= key "net")))
       (pair (paramSet ps key (j/jbool (match v ((j/jbool b) b) ((j/jstr s) (= s "true")) (_ false)))) none))
     ((= key "contextTokens")
       (pair (paramSet ps key (match (pyIntOf v) ((some i) (j/jint i)) ((none) (j/jnull)))) none))
@@ -2171,9 +2172,9 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
         user ask.user
         prefill ask.prefill
         watcher (parentWatch! ra.parentPid path turn (min 86400 (+ (+ ra.timeout ra.queueTimeout) 300)))
-        routeEnvFor (fn [root] (ex/makeExecEnv root repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
+        routeEnvFor (fn [root] (ex/withNet (ex/makeExecEnv root repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
           ra.gates (resultOr (tx/loadEffects! repoRoot) (list)) "" (list) (ctx/readPayloadChars (optionOr state.contextTokens 24000))
-          ra.timeout none run.session none))
+          ra.timeout none run.session none) ra.net))
         routeLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
         modelStartNs (monotonicNs)
         retried (match ra.route
@@ -2235,9 +2236,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   servedCtx (if state.explicitContext state.contextTokens
                     (match (servedContextTokens response.meta ra.backend) ((some t) (some t)) ((none) state.contextTokens)))
                   effects (resultOr (tx/loadEffects! repoRoot) (list))
-                  execEnv (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
+                  execEnv (ex/withNet (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
                     ra.gates effects "" (list) (ctx/readPayloadChars (optionOr servedCtx 24000))
-                    ra.timeout none run.session none)
+                    ra.timeout none run.session none) ra.net)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
                   malformedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw)))
@@ -2646,7 +2647,7 @@ fn resumed ra: RunArgs st: ResumeState -> RunArgs
            :inheritedBase ra.inheritedBase
            :remote ra.remote
            :contextTokens (match ra.contextTokens ((some t) (if (= t 0) st.contextTokens (some t))) ((none) st.contextTokens))
-           :plan ra.plan :commit ra.commit :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
+           :plan ra.plan :commit ra.commit :net ra.net :attractor ra.attractor :nativeTools ra.nativeTools :prefix ra.prefix :resume (some st) :pool ra.pool :parentPid ra.parentPid :route ra.route)
 
 ; (:m :ref LIVELOOP-COMMIT-RED :do "a run commits only when its form says :commit true (COMMIT-REQUEST-EXPLICIT dropped the task-prose scan and left the live path at :commit false); the flag reaches LoopEnv.commit and survives a resume")
 ; (:m :ref SE3-POOL-DRIVER :do "the run arguments of an invocation's parameters, as dispatch builds them, so a pool driver starts a run from the same parameters")
@@ -2663,7 +2664,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
                     :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :unit (textValue (paramOr ps "unit" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
-                    :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false)) :inheritedBase (textValue (paramOr ps "inheritedBase" (j/jstr "")))
+                    :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false)) :net (match (paramOr ps "net" (j/jbool false)) ((j/jbool b) b) (_ false)) :inheritedBase (textValue (paramOr ps "inheritedBase" (j/jstr "")))
                     :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
 

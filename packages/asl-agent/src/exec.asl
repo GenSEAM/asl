@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv withNet execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -41,7 +41,8 @@ enum Val
   (:f runTimeout Int64)
   (:f deadlineAt (Option Float64))
   (:f session String)
-  (:f env (Option (List String))))
+  (:f env (Option (List String)))
+  (:f net Bool :default false))
 
 (schema ExecOut
   (:f rec (List (Pair String Val)))
@@ -51,6 +52,10 @@ fn makeExecEnv root: String repoRoot: String mode: String owns: (List String) wr
   (ExecEnv :root root :repoRoot repoRoot :mode mode :owns owns :writesPersisted writesPersisted :defaultBase defaultBase
     :gates gates :effects effects :hiddenRaw hiddenRaw :hiddenValues hiddenValues :readCap readCap :runTimeout runTimeout
     :deadlineAt deadlineAt :session session :env env)
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "the unit's :net true, from the run arguments; without it run and manage children have no network beyond loopback")
+fn withNet env: ExecEnv net: Bool -> ExecEnv
+  (with env :net net)
 
 ; (:m :adopted NormativeAndEmpiricalAreNotMixed)
 fn rawRequiredBytes -> Int64
@@ -807,7 +812,7 @@ fn eo rec: (List (Pair String Val)) procs: r/Procs -> ExecOut
   (ExecOut :rec rec :procs procs)
 
 fn ! runCtx! env: ExecEnv -> r/RunCtx
-  (r/makeRunCtx env.root env.owns env.session (stepTimeout! env) (r/hiddenVars env.hiddenRaw) env.repoRoot)
+  (r/withNet (r/makeRunCtx env.root env.owns env.session (stepTimeout! env) (r/hiddenVars env.hiddenRaw) env.repoRoot) env.net)
 
 fn ! aslOp! op: (List (Pair String c/KvVal)) env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
   (mapRec (o/execAslOpMemo! op env.owns env.root env.session newId snap run env.readCap (o/budgetLeft env.deadlineAt (o/nowMono))) fromAsl)

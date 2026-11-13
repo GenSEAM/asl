@@ -115,7 +115,9 @@ fn runCase! base: String kv: (List (Pair String c/KvVal)) formats: (Map String S
         (pair (subBase base (g/serRecs "gates" (g/runGates! (map (fn [x] (pair "ID" x)) (listed kv "g")) root (getI kv "t") env (none)))) formats))
       ((= fnName "runGatesGroup")
         (let [recs (g/runGates! (map (fn [x] (pair "ID" (withBase base x))) (listed kv "g")) root (getI kv "t") env (none))
-              pid (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str base "/bg.pid")) ""))) 0)]
+              pidFile (str root "/.asl/run/agentLoop/home/tmp/bg.pid")
+              pid (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString pidFile) ""))) 0)
+              dropped (pathRemove pidFile)]
           (pair (str (subBase base (g/serRecs "gates" recs)) " (alive " (if (pidAlive! pid 100) "true" "false") ")") formats)))
       ((= fnName "preflight")
         (let [bad (g/gatePreflight! (listed kv "g") root env)]

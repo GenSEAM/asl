@@ -85,6 +85,10 @@ fn journalText! logPath: String -> String
                  (list) rows)]
     (str "(journal" (c/joinAll (map (fn [p] (str " " (pairSecond p))) firsts)) ")"))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "a run receipt names its boundary, (sandbox \"os\") or (sandbox \"lexical\") by what the machine offers; the recorded originals predate the field and do not depend on the machine, so it is dropped before comparing; runOsJailTest gates the field itself. The recorded scenarios write their pid files to <base>/pids, outside the root, which the jail refuses unless the harness names that directory as scratch")
+fn noSandbox text: String -> String
+  (stringReplace (stringReplace text " (sandbox \"os\")" "") " (sandbox \"lexical\")" "")
+
 fn snapFile! logPath: String root: String rel: String -> Bool
   (let [full (str root "/" rel)]
     (match (fileReadString full)
@@ -137,7 +141,7 @@ fn runSteps! base: String ctx: r/RunCtx logPath: String kv: (List (Pair String c
 
 fn scenario! base: String kv: (List (Pair String c/KvVal)) id: String -> String
   (let [root (withBase base (getS kv "root"))
-        ctx (r/makeRunCtx root (listed kv "o") (getS kv "session") (getI kv "t") (r/hiddenVars (getS kv "hidden")) (str base "/tool"))
+        ctx (r/withScratch (r/makeRunCtx root (listed kv "o") (getS kv "session") (getI kv "t") (r/hiddenVars (getS kv "hidden")) (str base "/tool")) (list (str base "/pids")))
         logPath (str base "/journal-" id ".log")
         cleared (fileWrite logPath "")
         steps (runSteps! base ctx logPath kv 0 (getI kv "steps") (r/newProcs) (list))
@@ -187,7 +191,7 @@ fn replay! base: String lines: (List String) acc: (List (Pair String Bool)) -> (
           t0 (monotonicNs)
           raw (subBase base (runCase! base kv))
           ms (/ (- (monotonicNs) t0) 1000000)
-          got (if (and (> maxMs 0) (> ms maxMs)) (str raw " (slow " (stringFromInt64 ms) " ms)") raw)
+          got (noSandbox (if (and (> maxMs 0) (> ms maxMs)) (str raw " (slow " (stringFromInt64 ms) " ms)") raw))
           same (= got want)
           at (firstDiff got want 0)]
       (do

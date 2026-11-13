@@ -1,6 +1,6 @@
 (module aslAgent/tests/runHomeJailTest
   :x [runTests]
-  :i [(aslAgent/runOps :a r) (aslAgent/core :a c)
+  :i [(aslAgent/runOps :a r) (aslAgent/core :a c) (aslAgent/jail :a jl)
       (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "node2 2026-11-03: the repo every worktree links to was deleted while Leon units ran with the real HOME; run ops get HOME and TMPDIR inside the root and refuse rm, mv, ln, chmod, cd and git -C/--git-dir/--work-tree outside :root, absolute paths under the real HOME other than :root, rm or mv of .git, git worktree remove/prune and git gc --prune")
@@ -47,6 +47,47 @@ fn stillAllowed -> (List String)
     "nice -n 19 rm -rf build" "env -i rm -rf build" "timeout 5 rm -rf build" "sudo -u x rm -rf build" "nohup rm -rf build" "stdbuf -oL cat a" "FOO=1 rm -rf build"
     "echo hi | cat" "git log | head" "bash build.sh" "python3 gen.py" "python3 --version" "xargs echo" "echo a | xargs echo" "git status" "git -c user.name=x status" "GIT_DIR=.git git status" "GIT_WORK_TREE=. git status" "git -C sub status" "rm link")
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the env of a unit child is an allowlist and its jail is a generated sandbox profile; the end-to-end escapes are in runOsJailTest, which also compiles on the tree before the sandbox")
+fn namesOf rows: (List String) -> (List String)
+  (map jl/envKey rows)
+
+fn ! allowlistGates! root: String -> Bool
+  (let [ctx (r/makeRunCtx root (list) "homeJail" 20 (list) root)
+        fed (list "OPENAI_API_KEY=v" "ASL_GATEWAY_TOKEN=v" "MY_SECRET=v" "ASL_ROOT=/x" "ASL_PRELUDE=/x" "EDITOR=vi" "PATH=/usr/bin:/bin" "LANG=C" "LC_ALL=C" "HOME=/real" "ASL_FLEET_TAG=t")
+        fedRows (r/spawnEnvOf! ctx root fed)
+        fedNames (namesOf fedRows)
+        hiddenNames (namesOf (r/spawnEnvOf! (r/makeRunCtx root (list) "homeJail" 20 (list "LANG") root) root fed))
+        dropped (list "OPENAI_API_KEY" "ASL_GATEWAY_TOKEN" "MY_SECRET" "ASL_ROOT" "ASL_PRELUDE" "EDITOR")
+        closed (jl/Jail :mode "os" :tool "sandbox-exec" :root "/r/unit" :writes (list "/r/unit" "/r/unit/.asl/run/agentLoop/home") :reads (list "/h/repo/.git") :lists (list "/h/work") :realHome "/h" :net false)
+        open (with closed :net true)
+        profile (jl/seatbeltProfile closed)
+        linux (with closed :tool "/usr/bin/bwrap")
+        argv (jl/bwrapArgs linux)
+        netCtx (r/withNet ctx true)]
+    (do
+      (assert (not (listAny? (fn [n] (listContains? dropped n)) fedNames)) (str "inherited rows outside the allowlist are dropped, kept " (c/joinSep fedNames " ")))
+      (assert (and (listContains? fedNames "PATH") (and (listContains? fedNames "LANG") (and (listContains? fedNames "LC_ALL") (listContains? fedNames "ASL_FLEET_TAG")))) "allowlisted rows pass")
+      (assert (and (listContains? fedRows (str "HOME=" (r/jailHome root))) (not (listContains? fedRows "HOME=/real"))) "the inherited HOME is replaced by the jail home")
+      (assert (not (listContains? hiddenNames "LANG")) "a name the run hides is dropped from the allowlisted rows")
+      (assert (and (jl/secretName? "ASL_MODAL_API_KEY") (and (jl/secretName? "github_token") (not (jl/secretName? "PATH")))) "names that look like credentials are recognised in any case")
+      (assert (not (jl/passName? "ASL_NATIVE_CLI_CACHE_KEY")) "a credential-like name never passes, even with an allowlisted prefix")
+      (assert (not ctx.net) "a run context denies network by default")
+      (assert netCtx.net "withNet carries the unit's :net true")
+      (assert (stringContains? profile "(deny network*)") "the default profile denies network")
+      (assert (stringContains? profile "(allow network-outbound (remote ip \"localhost:*\"))") "the default profile keeps loopback")
+      (assert (not (stringContains? (jl/seatbeltProfile open) "network")) "a :net true profile has no network rule")
+      (assert (stringContains? profile "(deny file-write*)(allow file-write* (subpath \"/r/unit\") (subpath \"/r/unit/.asl/run/agentLoop/home\")") "writes are denied and re-allowed for the root and the jail home")
+      (assert (stringContains? profile "(deny file-write* (subpath \"/r/unit/.git\"))") "the root's .git is denied after the root is allowed")
+      (assert (stringContains? profile "(deny file-read* (subpath \"/h\"))") "reads under the real HOME are denied")
+      (assert (stringContains? profile "(allow file-read* (literal \"/h/work\"))") "an ancestor of the root is listable, not its subtree")
+      (assert (= (jl/jailWrap! closed (list "/bin/sh" "-c" "true")) (list "/usr/bin/sandbox-exec" "-p" profile "/bin/sh" "-c" "true")) "the child argv is wrapped in sandbox-exec with the profile")
+      (assert (= (jl/jailWrap! (jl/lexicalJail "/r/unit" false) (list "/bin/sh" "-c" "true")) (list "/bin/sh" "-c" "true")) "a lexical jail leaves the argv alone")
+      (assert (and (listContains? argv "--unshare-net") (not (listContains? (jl/bwrapArgs (with linux :net true)) "--unshare-net"))) "bwrap unshares the network unless :net true")
+      (assert (= (listTake argv 6) (list "/usr/bin/bwrap" "--die-with-parent" "--unshare-pid" "--ro-bind" "/" "/")) "bwrap starts from its own process namespace and a read-only file system")
+      (assert (stringContains? (c/joinSep argv " ") "--tmpfs /h --ro-bind /h/repo/.git /h/repo/.git --bind /r/unit /r/unit") "bwrap hides the real HOME, then binds reads read-only and writes read-write")
+      (assert (jl/denialText? "sh: x: Operation not permitted") "a seatbelt refusal is recognised in the output")
+      true))
+
 fn ! runTests -> Bool
   (let [root (rk/freshRecorderRoot! "homeJail")
         repo (gk/initGitRepo! root "homeJail" "home-jail@example.invalid")
@@ -73,6 +114,7 @@ fn ! runTests -> Bool
         okRun (runCmd! root "echo fine > ok.txt")
         homeSeen (resultOr (fileReadString (str root "/home.txt")) "")
         okSeen (resultOr (fileReadString (str root "/ok.txt")) "")
+        allowlist (allowlistGates! root)
         cleaned (pathRemove root)
         cleanedOut (pathRemove outside)
         cleanedFake (pathRemove fakeHome)
