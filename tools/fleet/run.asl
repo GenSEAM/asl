@@ -678,6 +678,7 @@ fn columnsAfter line: String n: Int64 -> String
         ((some i) (columnsAfter (optionOr (stringSlice t i (stringLength t)) "") (- n 1))))))
 
 ; (:m :ref REAPALL-LOWS :do "argv0 of an args column whose executable may hold spaces: the shortest prefix, grown one space-separated word at a time, that is an absolute path under a native test cache and that isFile? accepts; empty when none, so an argument that only names a cache path never passes for the executable")
+; (:m :ref REAPALL-LOWS2 :do "the words are split on one space and a prefix is rejoined with one space, which gives back the exact column text even for a path holding two or more spaces (split keeps the empty words between them); the first prefix that passes is the shortest, so a plain file whose path is a prefix of a longer executable path with a space ('.../x/foo' beside '.../x/foo bar/t') is returned instead of the executable: both lie under a native test cache and the sweep reads only whether the result is empty, so the verdict is the same, and the value is pinned in reapAllTest as the shortest file prefix")
 fn argsExe args: String isFile?: (Fn [String] Bool) -> String
   (let [(words (stringSplit args " "))
         (n (listLength words))]
