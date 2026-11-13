@@ -31,7 +31,7 @@ These work on any git repository; no one has to adopt the language first.
 Balanced delimiters carry structure, names are whole words, one notation (ASN) serves code, data and messages, and nothing fails silently: no null, no exceptions, no truthiness.
 
 - **Untested:** whether models write ASL as reliably as Python or TypeScript. No baseline arm has run; [`EXPERIMENT.md`](EXPERIMENT.md) is the protocol.
-- **Measured:** token savings hold against pretty-printed JSON only; against minified JSON, ASN is within about 10%, and ASL code costs about 1.3 to 1.8 times the tokens of typed Python (tiktoken o200k, audit of 2026-11-13; see [`README.md`](README.md)).
+- **Measured:** token savings hold against pretty-printed JSON only; against minified JSON, keyed ASN was 9% to 17% larger on a 100-record fixture, and ASL code costs about 1.3 to 1.8 times the tokens of typed Python (tiktoken o200k, 2026-11-13; rows in [`bench/publishedClaims.asn`](bench/publishedClaims.asn)).
 - **Open:** the function header is a bare column-0 line with an indented body, the one whitespace-significant construct and the dominant generation failure. It is an arm of the experiment.
 
 ## 4. Infrastructure SEAM: a direction

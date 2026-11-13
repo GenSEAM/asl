@@ -19,7 +19,7 @@ AgentSlang is three things, in the order the evidence supports them:
 
 ## Status (2026-11-13)
 
-Pre-release; build from a checkout.
+Pre-release. There are no binaries, and a plain clone of this repository does not build its CLI today (see Quickstart); the toolchain builds and runs inside the development workspace.
 
 - **Self-hosted.** The compiler (`asl1`) is written in ASL and compiles itself through LLVM IR (`asl-target-llvm`). The C host interpreter was deleted on 2026-10-13; `host/` holds a build script and tests, no C. The runtime archive `libaslrt.a` is ASL lowered to LLVM IR and compiled by clang.
 - **Targets that ship:** native code and `wasm32-unknown-unknown`, both through LLVM. [aslang.dev](https://aslang.dev) is built that way from [`web/`](web/).
@@ -29,7 +29,7 @@ Pre-release; build from a checkout.
 
 ## What is measured and what is not
 
-Every figure the project publishes is listed with its status in [`bench/publishedClaims.asn`](bench/publishedClaims.asn). The figures below were counted with tiktoken 0.12.0 by an independent audit of this tree on 2026-11-13; the audit record lives in the workspace ledger, not in this repository.
+Every figure below is listed with its method, scope, date and status in [`bench/publishedClaims.asn`](bench/publishedClaims.asn): `:standards` holds the older published figures, `:recounts` the ones on this page. Rows marked `measuredUntracked` rest on a record that is not in this repository.
 
 **Generation correctness: untested.** No experiment has compared models writing ASL with models writing Python or TypeScript. The only data has no comparator arm: on one family of one-line arithmetic tasks, 145 of 462 raw generations passed (31%) and 420 after a mechanical heal pass (`packages/asl-forms`, heal), 2026-10-15. The protocol that would settle it is [`EXPERIMENT.md`](EXPERIMENT.md); it has not been run.
 
@@ -77,11 +77,11 @@ fn runTests -> Bool
   (do (assert (= (area (square 3)) 9) "square") (assert (= (area (circle 1)) 3) "circle") true)
 ```
 
-A function header is a bare column-0 line with its body indented below: the one place where layout matters, and the most common generation failure in the data above (all 38 programs the heal pass could not repair lacked it). Whether to accept a parenthesised `(fn ...)` form is an arm of [`EXPERIMENT.md`](EXPERIMENT.md). Inside a form whitespace carries no meaning. There is no nil, exception or `try`: fallible builtins return `(some v)`/`(none)` or `(err e)`, taken apart with `match`. User and builtin names are camelCase, predicates end in `?` (`listLength`, `stringContains?`). The full rules are in [`llms.txt`](llms.txt).
+A function header is a bare column-0 line with its body indented below: the one place where layout matters, and the most common generation failure in the data above (all 38 programs the heal pass could not repair lacked it). Whether to accept a parenthesised `(fn ...)` form is an arm of [`EXPERIMENT.md`](EXPERIMENT.md). Inside a form whitespace carries no meaning. There is no nil, exception or `try`: fallible builtins return `(some v)`/`(none)` or `(err e)`, taken apart with `match`. User and builtin names are camelCase, predicates end in `?` (`listLength`, `stringContains?`). [`llms.txt`](llms.txt) is the entry for models; on 2026-11-13 it still names the deleted `asl-host` binary, so use `bin/asl check` and `bin/asl test` where it says otherwise.
 
 ## Quickstart
 
-There are no prebuilt binaries in this repository. From a checkout, with clang:
+There are no prebuilt binaries, and **building from a plain clone does not work yet**: on 2026-11-13 `sh host/build.sh` in an export of this repository exits 1 at the native CLI step (`ERR_UNRESOLVED_IMPORT` in `packages/asl-forms/src/gate.asl`: `asl/packages/asl-gates/src/dyck` is not declared). The commands below are what the build is meant to be and what works inside the development workspace, with clang:
 
 ```sh
 CC=$(command -v clang) sh host/build.sh   # builds host/out/libaslrt.a and the native CLI from seed/<triple>
@@ -92,7 +92,7 @@ bin/asl build file.asl -o out             # native binary
 bin/asl '(:tools)'                        # the agent-plane operation catalogue; also bin/asl -f FILE and bin/asl - (forms on stdin)
 ```
 
-`bin/asl` is a launcher that execs the native CLI and rebuilds it when its sources change. `(...)` forms, `-f FILE` and `-` go to the toolbelt (`packages/asl-forms`), `asl intel ...` to `packages/asl-intel`, everything else to the CLI (`packages/asl-cli`). It works from a plain clone; inside the larger workspace the same paths resolve under `asl/`. `asl help` lists the CLI commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
+`bin/asl` is a launcher that execs the native CLI and rebuilds it when its sources change. `(...)` forms, `-f FILE` and `-` go to the toolbelt (`packages/asl-forms`), `asl intel ...` to `packages/asl-intel`, everything else to the CLI (`packages/asl-cli`). Inside the development workspace the same paths resolve under `asl/`. `asl help` lists the CLI commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
 
 ## Packages
 
