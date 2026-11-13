@@ -2,43 +2,43 @@
 
 > **"LLM first."**
 
-AgentSlang (ASL) is a language and toolset for software written by language models. The problem it is built against: **a model hallucinates when its attention is short or spread thin.** Noisy context, ambiguous structure, contradictory instructions and lost state all dilute attention. Each principle below removes one of those causes.
+AgentSlang (ASL) is a harness, a toolbelt and a language for software written by language models. The problem it is built against: **a model hallucinates when its attention is short or spread thin.** Noisy context, ambiguous structure, contradictory instructions and lost state all dilute attention.
+
+The pillars are ordered by the evidence behind them (2026-11-13).
 
 ---
 
-## 1. LLM first
-
-The model is the main author and reader of the code, so the language is designed for it.
-
-- **Structure that cannot be misread.** Forms are balanced trees; the written form mirrors the tree, so a model never guesses where a form ends.
-- **Few tokens per idea.** Whole words the model already knows, no ceremony for human eyes, one notation (ASN) for code, data, messages and memory.
-- **No silent failure.** No null, no exceptions, effects visible to the checker: the model learns it is wrong at the place it is wrong.
-
-## 2. Infrastructure SEAM
-
-The language, its runtime and its tools are one seamless infrastructure: one place to describe, build and run a whole system.
-
-- SQL, JavaScript, HTML, CSS and other languages live inside ASL as checked blocks.
-- The compiler is written in ASL, compiles itself, and targets native code and WebAssembly; source-to-source targets cover ecosystems that need source.
-- A foreign-function interface (on the roadmap) makes any library or binary usable from ASL.
-- Engineers govern from above the code with lenses (topology, coupling, complexity, effect boundaries, intent coverage, the same lenses agents use to focus) and gates that count only after they have failed on a seeded defect.
-
-## 3. Non-restrictive harness
+## 1. Non-restrictive harness
 
 Constraints belong in the program and the environment, not in the prompt.
 
-- **Enforce, don't instruct.** Permissions, sandboxes, file ownership, checkers and gates make the wrong action impossible or visible; a prompt full of prohibitions only competes with the task for attention.
+- **Enforce, don't instruct.** Permissions, sandboxes, file ownership, checkers and gates make the wrong action impossible or visible; a prompt full of prohibitions competes with the task for attention.
+- **A gate counts only after it has failed**: red before the change, green after it, red on revert.
+- **Separated duties.** A writer does not grade its own work.
 - **No roles.** A persona is a bias, not a capability.
-- **Separated duties.** A writer does not grade its own work; the environment assigns grading to another agent.
-- **Intents, lenses and attractors** state what must become true, show the task from several sides, keep attention on the goal, and route each request to the model that fits it.
 
-## 4. Agent-assistive tools
-
-Tools built for how agents work and fail:
+## 2. Agent-assistive tools
 
 - read by symbol and slice, batch independent operations, stage edits and flush them as one transaction;
 - typed, compact receipts that say what to do next;
-- memory the model keeps for itself (notes, scratchpads, to-do lists, its own guidelines) and project memory in tiers, so focus survives long tasks and compaction;
-- onboarding from a small index in one request;
+- memory kept outside the context, so focus survives long tasks and compaction;
 - every claim tied to a check that ran, with its exit code and executed assertions.
 
+These work on any git repository; no one has to adopt the language first.
+
+## 3. LLM-first language: a bet, not yet a result
+
+Balanced delimiters carry structure, names are whole words, one notation (ASN) serves code, data and messages, and nothing fails silently: no null, no exceptions, no truthiness.
+
+- **Untested:** whether models write ASL as reliably as Python or TypeScript. No baseline arm has run; [`EXPERIMENT.md`](EXPERIMENT.md) is the protocol.
+- **Measured:** token savings hold against pretty-printed JSON only; against minified JSON, ASN is within about 10%, and ASL code costs about 1.3 to 1.8 times the tokens of typed Python (tiktoken o200k, audit of 2026-11-13; see [`README.md`](README.md)).
+- **Open:** the function header is a bare column-0 line with an indented body, the one whitespace-significant construct and the dominant generation failure. It is an arm of the experiment.
+
+## 4. Infrastructure SEAM: a direction
+
+- **Real:** the compiler is written in ASL and compiles itself through LLVM IR to native code and WebAssembly; there is no C host.
+- **Missing:** foreign functions, package fetching, executed SQL ([`ROADMAP.md`](ROADMAP.md)).
+
+## Scope
+
+Core: parser, checker, IR, LLVM target, CLI and toolbelt, gates, gateway, agent loop. Everything else under `packages/` is experimental until a tier manifest says otherwise. Published figures and their status are in [`bench/publishedClaims.asn`](bench/publishedClaims.asn); capabilities, including the ones that lie, in [`grammar/capabilities.asn`](grammar/capabilities.asn).
