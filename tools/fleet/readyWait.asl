@@ -44,7 +44,7 @@ fn dirOf path: String -> String
   (let [(parts (stringSplit path "/"))]
     (stringJoin (listTake parts (- (listLength parts) 1)) "/"))
 
-; (:m :ref GW-TEST-WAITREADY-SWEEP :do "the port of the child pid's ready file, 0 when it never came; a miss prints one (:gatewayStart ...) line to stderr with the state, the elapsed ms and the tail of the child stderr file (gateway.err next to the ready file unless waitPortErr! or waitFile! name one), so a red start names its cause")
+; (:m :ref GW-TEST-WAITREADY-SWEEP :do "the port of the child pid's ready file, 0 when it never came; a miss prints one (:childReady ...) line to stderr with the state (exited adds :exit :byTeardown: the kit never reaps, so the exit code is read by the caller teardown, GW-KIT-LOWS2B), the elapsed ms and the tail of the child stderr file (gateway.err next to the ready file unless waitPortErr! or waitFile! name one), so a red start names its cause")
 fn ! waitPort! path: String pid: Int64 -> Int64
   (waitStart! path pid (str (dirOf path) "/gateway.err") true)
 
@@ -61,5 +61,5 @@ fn ! waitStart! path: String pid: Int64 errPath: String needPort: Bool -> Int64
         (w (waitTick! path pid (+ start (startDeadlineMs)) needPort 0))]
     (if (> (pairFirst w) 0)
       (pairFirst w)
-      (do (eprintln (str "(:childReady :state \"" (pairSecond w) "\" :ms " (stringFromInt64 (- (nowMs!) start)) " :ready \"" path "\" :stderr \"" (stringReplace (stringReplace (tailOf (resultOr (fileReadString errPath) "") 600) "\"" "'") "\n" " ") "\")"))
+      (do (eprintln (str "(:childReady :state \"" (pairSecond w) "\"" (if (= (pairSecond w) "exited") " :exit :byTeardown" "") " :ms " (stringFromInt64 (- (nowMs!) start)) " :ready \"" path "\" :stderr \"" (stringReplace (stringReplace (tailOf (resultOr (fileReadString errPath) "") 600) "\"" "'") "\n" " ") "\")"))
           0)))
