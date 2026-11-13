@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/fleet/run :a fr)])
 
-; (:m :ref KILLEDLAUNCHER-HANG :do "a blocking procWaitPid right after a SIGKILL returns: own sleepers (per-run unique seconds) are killed and waited for, up to 1500 times or 45 s; on Darwin the one-shot NOTE_EXIT can come before waitpid can reap the child, and the old wait then blocked in kevent forever (seen within 800 to 2800 rounds at load 20); a watchdog sh SIGKILLs this test at 150 s, so a hang ends red, never stuck")
+; (:m :ref KILLEDLAUNCHER-HANG :do "a blocking procWaitPid right after a SIGKILL returns: own sleepers (per-run unique seconds) are killed and waited for, up to 20000 times or 45 s (the fixed wait runs about 5000 rounds in 10 s, so the deadline, not the count, usually ends it); on Darwin the one-shot NOTE_EXIT can come before waitpid can reap the child, and the old wait then blocked in kevent forever (seen within 800 to 2800 rounds at load 20); a watchdog sh SIGKILLs this test at 150 s, so a hang ends red, never stuck")
 
 fn ! sleeper! secs: String -> Int64
   (match (fr/spawnSep (list "sleep" secs) "." (fr/childEnv (list)))
@@ -23,7 +23,7 @@ fn ! runTests -> Bool
         (dog (match (fr/spawnSep (list "sh" "-c" (str "sleep 150; kill -KILL " (stringFromInt64 (procSelf)))) "." (fr/childEnv (list)))
                ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) r.pid))
                ((err _) -1)))
-        (done (rounds! secs 0 1500 (+ (monotonicNs) 45000000000) 0))
+        (done (rounds! secs 0 20000 (+ (monotonicNs) 45000000000) 0))
         (_ (if (> dog 1) (do (fr/killTree! dog) (procWaitPid dog true) true) true))
         (leftover (resultOr (fr/shellOut (str "pgrep -f '^sleep " secs "$' | wc -l") 10000) "?"))]
     (do (assert (> dog 1) (str "the watchdog started: " (stringFromInt64 dog)))
