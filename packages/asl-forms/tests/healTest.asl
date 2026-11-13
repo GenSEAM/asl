@@ -86,7 +86,9 @@ fn testTestPredicate -> Bool
 
 fn testRetiredSpelling -> Bool
   (and (healsTo? "retiredSpelling" (str (hdr) "fn f n: Int64 -> Int64\n  (mt n (1 2) (_ (if (== n 3) 4 (if (not= n 5) 6 7))))\n") (str (hdr) "fn f n: Int64 -> Int64\n  (match n (1 2) (_ (if (= n 3) 4 (if (!= n 5) 6 7))))\n") (list))
-       (untouched? "retiredSpelling near-miss" (str (hdr) "fn f n: Int64 -> String\n  (if (= n 1) \"(mt (== x))\" \"match\")\n")))
+       (and (untouched? "retiredSpelling near-miss" (str (hdr) "fn f n: Int64 -> String\n  (if (= n 1) \"(mt (== x))\" \"match\")\n"))
+            (and (untouched? "retiredSpelling let binder named %" (str (hdr) "fn f a: Int64 -> Int64\n  (let [(% 5)] (+ a %))\n"))
+                 (untouched? "retiredSpelling own fn %" (str (hdr) "fn % a: Int64 b: Int64 -> Int64\n  (+ a b)\n\nfn f -> Int64\n  (% 2 3)\n")))))
 
 fn testSymbolRename -> Bool
   (and (healsTo? "symbolRename" (str (hdr) "fn f n: Int64 -> Int64\n  (if (isSome (some n)) 1 0)\n") (str (hdr) "fn f n: Int64 -> Int64\n  (if (some? (some n)) 1 0)\n") (list))
