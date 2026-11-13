@@ -75,7 +75,7 @@
 (:sym "setDifference" :mod "asl-runtime/collections" :sig "setDifference s1: PureSet s2: PureSet -> PureSet" :doc "Returns the set difference s1 without elements from s2 (alias for setDiff).")
 (:sym "setToList" :mod "asl-runtime/collections" :sig "setToList s: PureSet -> (List Str)" :doc "Converts PureSet to a list of elements.")
 (:sym "setSize" :mod "asl-runtime/collections" :sig "setSize s: PureSet -> Int64" :doc "Returns the cardinal count of elements in set.")
-(:sym "PureMap" :mod "asl-runtime/collections" :kind type :sig "(schema PureMap (:f entries (List (pair Str Str))))" :pit (record))
+(:sym "PureMap" :mod "asl-runtime/collections" :kind type :sig "(schema PureMap (:f entries (List (Pair Str Str))))" :pit (record))
 (:sym "makeMap" :mod "asl-runtime/collections" :sig "makeMap -> PureMap" :doc "Constructs an empty PureMap.")
 (:sym "mapPut" :mod "asl-runtime/collections" :sig "mapPut m: PureMap key: Str val: Str -> PureMap" :doc "Associates key with val, updating existing key if present.")
 (:sym "mapGet" :mod "asl-runtime/collections" :sig "mapGet m: PureMap key: Str -> (Option Str)" :doc "Retrieves value associated with key, or none if absent." :pit (option))

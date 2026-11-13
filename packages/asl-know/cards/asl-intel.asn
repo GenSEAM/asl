@@ -220,7 +220,7 @@
 (:sym "makeEdgeFromRef" :mod "aslIntel/preload" :sig "makeEdgeFromRef ref: ex/SymbolRef -> g/GraphEdge")
 (:sym "hydrateGraphInto" :mod "aslIntel/preload" :sig "hydrateGraphInto g: g/SymbolGraph fileSyms: (List ex/FileSymbols) -> g/SymbolGraph")
 (:sym "hydrateGraphFromFileSymbols" :mod "aslIntel/preload" :sig "hydrateGraphFromFileSymbols fileSyms: (List ex/FileSymbols) -> g/SymbolGraph")
-(:sym "hydrateGraphFromSources" :mod "aslIntel/preload" :sig "hydrateGraphFromSources sources: (List (Tuple Str Str)) -> g/SymbolGraph")
+(:sym "hydrateGraphFromSources" :mod "aslIntel/preload" :sig "hydrateGraphFromSources sources: (List (Pair Str Str)) -> g/SymbolGraph")
 (:sym "hydrateGraphFromFiles!" :mod "aslIntel/preload" :sig "hydrateGraphFromFiles! filePaths: (List Str) -> g/SymbolGraph" :pit (effect))
 (:sym "defaultWorkspaceFiles!" :mod "aslIntel/preload" :sig "defaultWorkspaceFiles! -> (List Str)" :pit (effect))
 (:sym "intelPreloadFiles!" :mod "aslIntel/preload" :sig "intelPreloadFiles! filePaths: (List Str) target: Str depth: I64 tokenBudget: I64 -> PreloadedHorizon" :pit (effect))

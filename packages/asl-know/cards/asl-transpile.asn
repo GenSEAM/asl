@@ -48,7 +48,7 @@
 (:sym "CssSpecificity" :mod "asl-transpile/cssCascade" :kind type :sig "(schema CssSpecificity (:f inline I64) (:f ids I64) (:f classes I64) (:f tags I64))" :pit (record))
 (:sym "CssProperty" :mod "asl-transpile/cssCascade" :kind type :sig "(schema CssProperty (:f name Str) (:f value Str) (:f important Bool))" :pit (record))
 (:sym "CssRule" :mod "asl-transpile/cssCascade" :kind type :sig "(schema CssRule (:f selector Str) (:f specificity CssSpecificity) (:f properties (List CssProperty)) (:f sourceOrder I64))" :pit (record))
-(:sym "ComputedStyle" :mod "asl-transpile/cssCascade" :kind type :sig "(schema ComputedStyle (:f selector Str) (:f properties (List (pair Str Str))) (:f resolvedVariables (List (pair Str Str))))" :pit (record))
+(:sym "ComputedStyle" :mod "asl-transpile/cssCascade" :kind type :sig "(schema ComputedStyle (:f selector Str) (:f properties (List (Pair Str Str))) (:f resolvedVariables (List (Pair Str Str))))" :pit (record))
 (:sym "calcSpecificity" :mod "asl-transpile/cssCascade" :sig "calcSpecificity selector: Str -> CssSpecificity")
 (:sym "compareSpecificity" :mod "asl-transpile/cssCascade" :sig "compareSpecificity a: CssSpecificity b: CssSpecificity -> I64")
 (:sym "extractCssVariables" :mod "asl-transpile/cssCascade" :sig "extractCssVariables cssText: Str -> (List (Pair Str Str))")

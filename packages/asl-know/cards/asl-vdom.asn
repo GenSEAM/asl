@@ -41,7 +41,7 @@
 (:sym "partitionDiff" :mod "aslVdom/vdom" :sig "partitionDiff route: String records: (List MutationRecord) -> DomDiff")
 (:sym "domDiff" :mod "aslVdom/vdom" :sig "domDiff oldTree: VNode newTree: VNode route: String -> DomDiff")
 (:sym "formatDiffFrame" :mod "aslVdom/vdom" :sig "formatDiffFrame diff: DomDiff -> String")
-(:sym "SvgNode" :mod "aslVdom/asnSvg" :kind type :sig "(schema SvgNode (:f kind Str) (:f attrs (List (pair Str Str))) (:f children (List SvgNode)) (:f textContent Str))" :pit (record))
+(:sym "SvgNode" :mod "aslVdom/asnSvg" :kind type :sig "(schema SvgNode (:f kind Str) (:f attrs (List (Pair Str Str))) (:f children (List SvgNode)) (:f textContent Str))" :pit (record))
 (:sym "SvgResult" :mod "aslVdom/asnSvg" :kind type :sig "(schema SvgResult (:f svg Str) (:f success Bool) (:f errorMsg Str))" :pit (record))
 (:sym "asnToSvg" :mod "aslVdom/asnSvg" :sig "asnToSvg rawAsn: Str -> SvgResult")
 (:sym "parseAllChildren" :mod "aslVdom/asnSvg" :sig "parseAllChildren src: Str -> (List SvgNode)")
