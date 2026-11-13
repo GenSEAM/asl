@@ -878,7 +878,7 @@ fn ! toolVersion! argv: (List String) -> String
 ; (:m :ref GENRUN-CROSSWIRE :do "a tool child that says nothing about the program is infrastructure, never a model failure: the launcher reporting a stale or absent native CLI or a refused rebuild, a child ended by the fleet limits (a check waiting on a native CLI rebuild ends at its 30 s limit), and a check that exits non-zero without one diagnostic; the result is the reason, empty when the child judged the program")
 fn infraOf d: fr/Done step: String -> String
   (cond
-    ((or (stringContains? d.out "ERR_NATIVE_") (stringContains? d.out ":code rebuildRefused")) "nativeCli")
+    ((or (and (stringContains? d.out "ERR_NATIVE_") (not (stringContains? d.out "compile unit failed: cand."))) (stringContains? d.out ":code rebuildRefused")) "nativeCli")
     ((and (not (stringEmpty? d.verdict)) (!= d.verdict "exit")) d.verdict)
     ((and (= step "check")
           (and (!= d.exit 0)

@@ -19,6 +19,7 @@ fn ! testInfraPure -> Bool
     (assert (= (gc/infraOf (done 1 "" "exit") "check") "noDiagnostic") "a check that fails without one diagnostic is infrastructure")
     (assert (= (gc/infraOf (done 1 "cand.asl:4:4: ERR_UNKNOWN_SYMBOL unbound symbol: nosuch\n(:audit :sub check :status :failed)" "exit") "check") "") "a check that names an error judged the program")
     (assert (= (gc/infraOf (done 1 "" "exit") "test") "") "a test that fails silently is the program's own failure")
+    (assert (= (gc/infraOf (done 1 "FAIL cand.asl: ERR_NATIVE_UNSUPPORTED: compile unit failed: cand.nonEmpty@/x/cand.asl:3:1: [ERR_LOWER_UNKNOWN_CONSTRUCTOR] unknown construct" "exit") "test") "") "a candidate whose own unit fails to compile is the program's failure, not infrastructure")
     (assert (= (gc/infraOf (done 0 "" "") "check") "") "a skipped check is not infrastructure")
     (assert (and (= recovers.stage "ok") (= recovers.output "3")) (str "an infra grade is retried until the tool answers, here on attempt 3: " recovers.stage " " recovers.output))
     (assert (and (= givesUp.stage "infra") (= givesUp.output "2")) (str "after the last attempt the grade stays infra: " givesUp.stage " " givesUp.output))
