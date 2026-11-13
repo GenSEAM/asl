@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/wrapLowerTest
   :x [runTests]
-  :i [])
+  :i [(asl-target-llvm :a llvm)])
 
 ; (:m :ref LOWLEVEL-WRAP-NATIVE :do "mulWrap addWrap subWrap rotateLeft rotateRight over Int64 lower natively and agree with two's complement modular arithmetic on the edges: INT64_MAX, MIN, -1, 0, 1, a 64-bit pattern, and rotate amounts 0, 1, 63, 64, 65, negative, 127, MIN and MAX which wrap modulo 64; expected values come from python big-integer arithmetic, not from this lowering")
 fn wrapOf op: Int64 a: Int64 b: Int64 -> Int64
@@ -342,8 +342,23 @@ fn ! testVariables! -> Bool
     (assert (= (wrapOf 2 (wrapOf 1 1311768467463790320 -7046029254386353131) -7046029254386353131) 1311768467463790320) "subWrap undoes addWrap across the wrap")
     true)
 
+fn rotSource -> String
+  (stringJoin (list "fn main -> Int64" "  (rotateRight (rotateLeft 5 3) 3)") "\n")
+
+; (:m :ref WRAPNAT-ROT-MASK-PIN :do "rotate inverse count must be (0 - count) and 63 in the emitted IR: a 64 - count form shifts by 64 at count 0, observationally equal but poison in LLVM")
+fn ! testRotateIrMask! -> Bool
+  (match (llvm/emitLlvmSource (rotSource) "main")
+    ((err ds) (do (assert false "rotate source emits") false))
+    ((ok text)
+      (do
+        (assert (stringContains? text "%count = and i64 %b.bits, 63") "rotate masks the count with 63")
+        (assert (stringContains? text "%neg = sub i64 0, %count") "rotate negates the masked count")
+        (assert (stringContains? text "%inv = and i64 %neg, 63") "rotate masks the inverse count with 63")
+        true)))
+
 fn ! runTests -> Bool
   (do
     (testLiterals!)
     (testVariables!)
+    (testRotateIrMask!)
     true)
