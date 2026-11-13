@@ -134,6 +134,25 @@ fn ! restamp base: String -> Bool
         (assert (= (pairFirst done) 1) "one entry removed")
         true))
 
+; (:m :ref DS-NATIVECACHEGC :do "the configured minimum age reaches asl cache gc: a root whose .asl.config.asn sets :native :storeMinAge 48h keeps an entry last touched a day ago even over the cap, which the 60m default and a zero age would remove, and removes the entry from 2026-01-01")
+fn ! configuredAge base: String -> Bool
+  (let [(r (str base "/ageRoot"))
+        (s (str r "/store"))
+        (dayOld (str s "/outside/" (hex "1")))
+        (old (str s "/outside/" (hex "2")))
+        (_ (sh! (list "/bin/mkdir" "-p" (str s "/outside"))))
+        (cfg (fileWrite (str r "/.asl.config.asn") "(:aslConfig :native (:storeMinAge 48h))\n"))
+        (_ (put! dayOld 100))
+        (_ (put! old 100))
+        (_ (sh! (list "/usr/bin/touch" "-t" "202601010000" old)))
+        (dayTouch (fileUtime dayOld (- (nowNs) 86400000000000)))
+        (code (gc! r (list "--dir" s "--cap" "1")))]
+    (do (assert (and (ok? cfg) (ok? dayTouch)) "the configured root and the day-old entry were made")
+        (assert (= code 0) "gc on the configured store exits 0")
+        (assert (fileExists? dayOld) "an entry a day old stays under a configured :storeMinAge of 48h, even over the cap")
+        (assert (not (fileExists? old)) "the old entry still goes")
+        true))
+
 fn ! runTests -> Bool
   (let [(base0 (optionOr (listHead (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (list (optionOr (envGet "ASL_RUN_TMP") "") (optionOr (envGet "TMPDIR") "")))) "/tmp"))
         (base (str base0 "/cacheGcTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
@@ -141,6 +160,7 @@ fn ! runTests -> Bool
         (ok2 (plans))
         (ok3 (runs base))
         (ok4 (restamp base))
+        (ok5 (configuredAge base))
         (_ (sh! (list "/bin/rm" "-rf" "--" base)))]
     (do (assert (not (fileExists? base)) "the scratch store is removed")
-        (and ok1 (and ok2 (and ok3 ok4)))))
+        (and ok1 (and ok2 (and ok3 (and ok4 ok5))))))
