@@ -664,8 +664,8 @@ fn envKey row: String -> String
 fn jailHome absRoot: String -> String
   (jl/jailHome absRoot)
 
-fn ! jailCacheEnv! absRoot: String realHome: String present: (List String) -> (List String)
-  (jl/jailCacheEnv! absRoot realHome present)
+fn ! jailCacheEnv! absRoot: String home: String -> (List String)
+  (jl/jailCacheEnv! absRoot home)
 
 fn spawnEnvOf! ctx: RunCtx absRoot: String inherited: (List String) -> (List String)
   (jl/childEnv! absRoot inherited ctx.hidden)
@@ -1263,9 +1263,11 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
 ; (:m :ref LEON-RUN-HOME-JAIL :do "every run receipt names its boundary (:sandbox os or lexical); a failed run whose output shows the sandbox refusing an operation also carries ERR_RUN_SANDBOX and says what a unit process may reach")
 fn sandboxFields p: Proc ctx: RunCtx exitCode: Int64 timedOut: Bool tail: String -> (List (Pair String RVal))
   (listAppend (list (rs "sandbox" p.sandbox))
-    (if (and (= p.sandbox "os") (and (not timedOut) (and (!= exitCode 0) (jl/denialText? tail))))
-      (list (rs "error" "ERR_RUN_SANDBOX") (rs "message" (jl/sandboxNote (jl/lexicalJail ctx.root ctx.net))))
-      (list)))
+    (cond
+      ((= p.sandbox "refused") (list (rs "error" "ERR_RUN_SANDBOX_ABSENT") (rs "message" "not run: no OS sandbox applies on this machine and the lexical guard alone is not opted into (<HOME>/.asl/config.asn :agentLoop (:jailLexicalOnly true))")))
+      ((and (= p.sandbox "os") (and (not timedOut) (and (!= exitCode 0) (jl/denialText? tail))))
+        (list (rs "error" "ERR_RUN_SANDBOX") (rs "message" (jl/sandboxNote (jl/lexicalJail ctx.root ctx.net)))))
+      (else (list))))
 
 fn runSpawned! cmd: String ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [sid (str (sidPrefix ctx) "-run" rid)]
