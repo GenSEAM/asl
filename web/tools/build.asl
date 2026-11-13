@@ -1,5 +1,5 @@
 (module aslSite/tools/build
-  :x [main]
+  :x [main layoutPrefix prefixIn! webDir distDir]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm :a llvm)
@@ -15,11 +15,18 @@
       (aslSite/tools/posts :a posts)
       (aslSite/tools/feeds :a feeds)])
 
-fn web -> String
-  "asl/web"
+; (:m :ref SITE-BUILD-EXPORT-LAYOUT :do "the workspace holds this tree under asl/, the exported repo holds it at its root; the build finds its own file to pick the prefix every path takes")
+fn layoutPrefix workspace: Bool exported: Bool -> (Option String)
+  (if workspace (some "asl/") (if exported (some "") (none)))
 
-fn dist -> String
-  "asl/web/dist"
+fn ! prefixIn! base: String -> (Option String)
+  (layoutPrefix (fileExists? (str base "/asl/web/tools/build.asl")) (fileExists? (str base "/web/tools/build.asl")))
+
+fn webDir prefix: String -> String
+  (str prefix "web")
+
+fn distDir prefix: String -> String
+  (str prefix "web/dist")
 
 fn quoteSh s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -68,7 +75,7 @@ fn argList params: String -> String
 fn exportShim e: (Pair String String) -> String
   (stringJoin ["" (str "define i64 @" (pairFirst e) "(" (pairSecond e) ") {") "entry:" (str "  %r = call i64 @aslSite$2Fmain$2E" (pairFirst e) "(" (argList (pairSecond e)) ")") "  ret i64 %r" "}"] "\n")
 
-fn withExports part: String ir: (Result String (List irTy/IrDiag)) -> (Result String (List irTy/IrDiag))
+fn withExports web: String part: String ir: (Result String (List irTy/IrDiag)) -> (Result String (List irTy/IrDiag))
   (match ir
     ((err ds) (err ds))
     ((ok text)
@@ -76,10 +83,10 @@ fn withExports part: String ir: (Result String (List irTy/IrDiag)) -> (Result St
         (cond
           ((not (= part "main")) (ok text))
           ((listEmpty? missing) (ok (str text (stringJoin (map exportShim (exports)) "") "\n")))
-          (else (err (map (fn [(e (Pair String String))] -> irTy/IrDiag (irTy/makeIrDiag "ERR_SITE_EXPORT" (str "aslSite/main no longer defines " (exportDefine e) "...), which boot.js calls") "asl/web/site/main.asl")) missing)))))))
+          (else (err (map (fn [(e (Pair String String))] -> irTy/IrDiag (irTy/makeIrDiag "ERR_SITE_EXPORT" (str "aslSite/main no longer defines " (exportDefine e) "...), which boot.js calls") (str web "/site/main.asl"))) missing)))))))
 
-fn ! object! llc: String work: String part: String lowered: (Result String (List irTy/IrDiag)) -> Bool
-  (match (withExports part lowered)
+fn ! object! web: String llc: String work: String part: String lowered: (Result String (List irTy/IrDiag)) -> Bool
+  (match (withExports web part lowered)
     ((err ds) (do (eprintln (str "build: lowering " part " failed\n" (diagText ds))) false))
     ((ok text)
       (let [(ll (str work "/" part ".ll"))]
@@ -87,45 +94,53 @@ fn ! object! llc: String work: String part: String lowered: (Result String (List
           (fileWrite ll (portableIr text))
           (ok! (str "llc " part) (sh! (str (quoteSh llc) " -O2 -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory,+tail-call -filetype=obj " (quoteSh ll) " -o " (quoteSh (str ll ".o")))))))))
 
-fn ! compileWasm! work: String out: String -> Bool
+fn ! compileWasm! prefix: String work: String out: String -> Bool
   (let [(llc (llc!))
-        (program (match (lk/linkEntry! (str (web) "/site/main.asl"))
+        (web (webDir prefix))
+        (program (match (lk/linkWith! (str web "/site/main.asl") (str prefix "prelude/prelude.asl"))
                    ((err ds) (err ds))
                    ((ok m) (llvm/emitLlvmProgramForTarget (wasmFacts) (target/wasm32TargetFacts) m (str m.name ".main")))))]
-    (and (object! llc work "main" program)
-      (and (object! llc work "runtime" (llvm/emitLlvmRuntimeForTarget (wasmFacts) (target/wasm32TargetFacts)))
-        (and (object! llc work "support" (llvm/emitLlvmSupportForTarget (wasmFacts) (target/wasm32TargetFacts)))
+    (and (object! web llc work "main" program)
+      (and (object! web llc work "runtime" (llvm/emitLlvmRuntimeForTarget (wasmFacts) (target/wasm32TargetFacts)))
+        (and (object! web llc work "support" (llvm/emitLlvmSupportForTarget (wasmFacts) (target/wasm32TargetFacts)))
           (ok! "wasm-ld" (wl/linkWasm32 (wasmLd!) [(str work "/main.ll.o") (str work "/runtime.ll.o") (str work "/support.ll.o")] (map pairFirst (exports)) out))))))
 
 fn ! lineCount! path: String -> Int64
   (match (fileReadString path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
 
-fn ! aslLines! -> Int64
-  (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (web) "/site asl/packages/asl-html/src -name '*.asl'")).stdout "\n")))]
+fn ! aslLines! prefix: String -> Int64
+  (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (quoteSh (str (webDir prefix) "/site")) " " (quoteSh (str prefix "packages/asl-html/src")) " -name '*.asl'")).stdout "\n")))]
     (listSum (map lineCount! files)))
 
-fn ! writePage! route: String node: h/Node -> Bool
-  (let [(dir (if (= route "/") (dist) (str (dist) route)))]
+fn ! writePage! dist: String route: String node: h/Node -> Bool
+  (let [(dir (if (= route "/") dist (str dist route)))]
     (and (ok! (str "mkdir " dir) (sh! (str "mkdir -p " (quoteSh dir))))
       (ok? (fileWrite (str dir "/index.html") (h/renderDocument node)))))
 
 fn ! main -> Int64
-  (let [(work (str (dist) "/.work"))
-        (wasm (str (dist) "/site.wasm"))]
-    (if (not (and (ok! "clean" (sh! (str "rm -rf " (quoteSh (dist)) " && mkdir -p " (quoteSh work) " && cp -R " (quoteSh (str (web) "/public/.")) " " (quoteSh (dist)) " && cp " (quoteSh (str (web) "/bridge/boot.js")) " asl/llms.txt " (quoteSh (dist)))))
-                  (compileWasm! work wasm)))
+  (match (prefixIn! ".")
+    ((none) (do (eprintln "build: neither asl/web/tools/build.asl nor web/tools/build.asl is under the current directory; run from the workspace root or the exported repo root") 1))
+    ((some prefix) (buildSite! prefix)))
+
+fn ! buildSite! prefix: String -> Int64
+  (let [(web (webDir prefix))
+        (dist (distDir prefix))
+        (work (str dist "/.work"))
+        (wasm (str dist "/site.wasm"))]
+    (if (not (and (ok! "clean" (sh! (str "rm -rf " (quoteSh dist) " && mkdir -p " (quoteSh work) " && cp -R " (quoteSh (str web "/public/.")) " " (quoteSh dist) " && cp " (quoteSh (str web "/bridge/boot.js")) " " (quoteSh (str prefix "llms.txt")) " " (quoteSh dist))))
+                  (compileWasm! prefix work wasm)))
       1
-      (let [(stats (home/Stats :wasmBytes (resultOr (fileSize wasm) 0) :aslLines (aslLines!) :bridgeLines (lineCount! (str (web) "/bridge/boot.js"))))
-            (all (posts/loadPosts! (str (web) "/content/blog")))
+      (let [(stats (home/Stats :wasmBytes (resultOr (fileSize wasm) 0) :aslLines (aslLines! prefix) :bridgeLines (lineCount! (str web "/bridge/boot.js"))))
+            (all (posts/loadPosts! (str web "/content/blog")))
             (pages (listAppend [(pair "/" (home/homePage stats)) (pair "/docs" (docs/docsPage)) (pair "/blog" (blog/blogIndexPage all))]
                                (map (fn [(p blog/Post)] -> (Pair String h/Node) (pair (str "/blog/" p.slug) (blog/postPage p))) all)))
-            (wrote (and (ok? (fileWrite (str (dist) "/site.css") (theme/stylesheet)))
-                     (and (ok? (fileWrite (str (dist) "/favicon.svg") (h/render (mascot/iconSvg))))
-                     (and (ok? (fileWrite (str (dist) "/404.html") (h/renderDocument (blog/notFoundPage))))
-                       (and (ok? (fileWrite (str (dist) "/sitemap.xml") (feeds/sitemapXml all)))
-                         (and (ok? (fileWrite (str (dist) "/rss.xml") (feeds/rssXml all)))
-                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! (pairFirst page) (pairSecond page))) pages)))))))]
+            (wrote (and (ok? (fileWrite (str dist "/site.css") (theme/stylesheet)))
+                     (and (ok? (fileWrite (str dist "/favicon.svg") (h/render (mascot/iconSvg))))
+                     (and (ok? (fileWrite (str dist "/404.html") (h/renderDocument (blog/notFoundPage))))
+                       (and (ok? (fileWrite (str dist "/sitemap.xml") (feeds/sitemapXml all)))
+                         (and (ok? (fileWrite (str dist "/rss.xml") (feeds/rssXml all)))
+                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! dist (pairFirst page) (pairSecond page))) pages)))))))]
         (do
           (sh! (str "rm -rf " (quoteSh work)))
-          (println (str "built " (dist) ": " (stringFromInt64 (listLength pages)) " pages, site.wasm " (stringFromInt64 stats.wasmBytes) " bytes, " (stringFromInt64 stats.aslLines) " lines of ASL"))
+          (println (str "built " dist ": " (stringFromInt64 (listLength pages)) " pages, site.wasm " (stringFromInt64 stats.wasmBytes) " bytes, " (stringFromInt64 stats.aslLines) " lines of ASL"))
           (if (and wrote (> (listLength all) 0)) 0 1)))))
