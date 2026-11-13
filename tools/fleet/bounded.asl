@@ -64,21 +64,33 @@ fn launcherGone? alive: Bool snap: (List fr/Proc) launcher: Int64 sentinel: Int6
       (and (not (listEmpty? snap))
            (not (listAny? (fn [(p fr/Proc)] -> Bool (and (= p.pid sentinel) (= p.ppid launcher))) snap))))
 
+; (:m :ref BOUNDED-STALE-PID :do "the start second (wall clock less ps age) of pid in snap, -1 when it is not there or not its own group leader any more")
+fn bornOf snap: (List fr/Proc) pid: Int64 wallSec: Int64 -> Int64
+  (optionOr (optionMap (fn [(p fr/Proc)] -> Int64 (- wallSec p.age)) (listHead (filter (fn [(p fr/Proc)] -> Bool (and (= p.pid pid) (and (= p.pgid pid) (>= p.age 0)))) snap))) -1)
+
+; (:m :ref BOUNDED-STALE-PID :do "the remembered command is killed only if the last snapshot still shows that pid leading its own group with the start second it had when first seen (2 s ps slack): a command that ended before its launcher died leaves a pid the kernel may have handed to anything")
+fn sameCommand? snap: (List fr/Proc) pid: Int64 born: Int64 wallSec: Int64 -> Bool
+  (let [(now (bornOf snap pid wallSec))
+        (d (- now born))]
+    (and (> pid 0) (and (>= born 0) (and (>= now 0) (<= (if (< d 0) (- 0 d) d) 2)))))
+
 ; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the sentinel's loop: every 250 ms a kill-0 probe of the launcher, a snapshot every tick until the command shows and every 4th tick after, each naming the oldest candidate; once the launcher is gone the command's whole tree is killed and the sentinel ends; it ends on its own at deadlineNs, as nobody judges it when the launcher is dead")
-fn ! watch! launcher: Int64 sentinel: Int64 child: Int64 deadlineNs: Int64 tick: Int64 -> Int64
+fn ! watch! launcher: Int64 sentinel: Int64 child: Int64 born: Int64 deadlineNs: Int64 tick: Int64 -> Int64
   (if (> (monotonicNs) deadlineNs) 0
     (let [(alive (resultOr (procAlive? launcher) false))
           (snap (if (or (not alive) (or (= child 0) (= (mod tick 4) 0))) (fr/procSnapshot) (list)))
           (seen (childOf snap launcher sentinel))
-          (c (if (> seen 0) seen child))]
+          (wall (/ (nowNs) 1000000000))
+          (c (if (> seen 0) seen child))
+          (cBorn (if (> seen 0) (bornOf snap seen wall) born))]
       (if (launcherGone? alive snap launcher sentinel)
-        (if (> c 0) (do (fr/killTree! c) 1) 0)
-        (do (sleepMs 250) (watch! launcher sentinel c deadlineNs (+ tick 1))))))
+        (if (sameCommand? snap c cBorn wall) (do (fr/killTree! c) 1) 0)
+        (do (sleepMs 250) (watch! launcher sentinel c cBorn deadlineNs (+ tick 1))))))
 
 ; (:m :ref BOUNDED-LAUNCHER-GROUP :do "a forked sentinel in its own group watches this launcher: a kill of the launcher alone (SIGKILL included, which no handler sees) leaves the command's group, which fleet/run.asl puts outside the launcher's, running with ppid 1; the sentinel kills it within about a second; it lives at most SECS plus 60 s; forkLimited! leases it to the launcher, so any reaper on the machine would kill it the moment the launcher dies, before it acts (seen: the command survived); its lease is rewritten to name itself as owner (born now, it was just forked; no ps before the command starts), so only its deadline reaps it")
 fn ! sentinel! launcher: Int64 secs: Int64 -> (Result fr/Forked String)
   (match (fr/forkLimited! "/dev/null" (fr/Limits :timeoutMs (* (+ secs 60) 1000) :maxDesc 16 :class "" :jsDir "")
-           (fn [] -> Int64 (watch! launcher (procSelf) 0 (+ (monotonicNs) (* (+ secs 60) 1000000000)) 0)))
+           (fn [] -> Int64 (watch! launcher (procSelf) 0 -1 (+ (monotonicNs) (* (+ secs 60) 1000000000)) 0)))
     ((ok f) (let [(now (monotonicNs))
                   (_ (fr/writeLeaseAt! f.pid f.pid now (+ now (* (+ secs 60) 1000000000)) (nowNs) (/ (nowNs) 1000000000) (/ (nowNs) 1000000000)))]
               (ok f)))
