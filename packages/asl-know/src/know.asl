@@ -12,7 +12,7 @@ fn cardText c: r/Card -> String
 
 fn ! rendered! root: String -> (List (Pair String String))
   (let [(cards (r/allCards! root))]
-    (cons (pair "index.asn" (r/indexText cards))
+    (listAppend (r/indexFiles (r/groupsOf! root) cards)
           (map (fn [(c r/Card)] -> (Pair String String) (pair (r/cardFile c.id) (cardText c))) cards)))
 
 fn ! staleFiles! root: String -> (List String)
@@ -56,6 +56,11 @@ fn ! writeRatchet! root: String -> (Result Int64 String)
 fn ! know! root: String query: String budget: Int64 -> String
   (qy/answer (qy/loadEntries! (cardsDir root)) query budget)
 
+fn indexFileOf group: (Option String) -> String
+  (match group
+    ((some g) (if (or (stringContains? g "/") (stringContains? g "..")) "index.asn" (str "index-" g ".asn")))
+    ((none) "index.asn"))
+
 fn budgetArg args: (List String) -> Int64
   (match (listIndexOf args "--budget")
     ((none) 1200)
@@ -73,5 +78,5 @@ fn ! main args: (List String) -> (Result Int64 String)
             (do (println "(:know :check :status ok)") (ok 0))
             (do (println (str "(:know :check :status stale :files (" (stringJoin (map r/q stale) " ") "))")) (ok 1)))))
       ((= cmd "q") (do (println (know! root (stringJoin (listTake (listDrop args 2) (optionOr (optionMap (fn [(i Int64)] -> Int64 (- i 2)) (listIndexOf args "--budget")) (listLength args))) " ") (budgetArg args))) (ok 0)))
-      ((= cmd "index") (do (println (resultOr (fileReadString (str (cardsDir root) "/index.asn")) "(:know :error \"no index; run gen\")")) (ok 0)))
-      (else (do (println "(:know :usage \"gen ROOT | check ROOT | ratchet ROOT | index ROOT | q ROOT words... [--budget N]\")") (ok 2)))))
+      ((= cmd "index") (do (println (resultOr (fileReadString (str (cardsDir root) "/" (indexFileOf (listGet args 2)))) "(:know :error \"no such index; run gen, groups are listed in index.asn\")")) (ok 0)))
+      (else (do (println "(:know :usage \"gen ROOT | check ROOT | ratchet ROOT | index ROOT [GROUP] | q ROOT words... [--budget N]\")") (ok 2)))))

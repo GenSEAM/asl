@@ -57,7 +57,8 @@ fn ! budgets root: String -> Bool
             (langTokens (tok/countTokens! t lang))]
         (do
           (assert (> indexTokens 0) "index is non-empty")
-          (assert (<= indexTokens 2000) (str "L0 index fits 2000 o200k tokens, got " indexTokens))
+          ; (:m :ref KNOW-INDEX-SCALE :do "L0 is one line per group: 82 cards measured 1766 o200k tokens as a flat index, the group index is a quarter of that, so 2x the packages still fits the 700 cap; the cap is adopted, the figure is measured at the 2026-11-13 render")
+          (assert (<= indexTokens 700) (str "L0 group index fits 700 o200k tokens, got " indexTokens))
           (assert (<= langTokens 1500) (str "language card fits 1500 o200k tokens, got " langTokens))
           true))))
 
@@ -83,9 +84,39 @@ fn fillerOnly -> (List String)
 fn fillerLed? line: String -> Bool
   (listContains? (fillerOnly) (stringLower (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) "")))
 
+fn ! groupIds root: String -> (List String)
+  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))]
+    (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) ""))
+         (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:g \"")) (stringSplit index "\n"))))
+
+fn ! groupLines root: String gid: String -> (List String)
+  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \""))
+          (stringSplit (resultOr (fileReadString (str (kn/cardsDir root) "/index-" gid ".asn")) "") "\n"))
+
+fn ! cardLines root: String -> (List String)
+  (listFlatMap (fn [(g String)] -> (List String) (groupLines root g)) (groupIds root))
+
+; (:m :ref KNOW-INDEX-SCALE :do "every card is reachable L0 to its group file: each group named by L0 has a file, each card id appears in exactly one group file, the L0 group counts equal the file line counts, and no card fell into the other group (a package missing from groups.asn)")
+fn ! tiersReach root: String -> Bool
+  (let [(es (qy/loadEntries! (kn/cardsDir root)))
+        (ids (map (fn [(e qy/Entry)] -> String e.id) es))
+        (gids (groupIds root))
+        (lines (cardLines root))
+        (listed (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) "")) lines))
+        (index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
+        (counts (listFlatMap (fn [(l String)] -> (List Int64) (if (stringStartsWith? l "(:g \"") (list (optionOr (stringToInt64 (stringTrim (optionOr (listGet (stringSplit l "\"") 2) ""))) -1)) (list))) (stringSplit index "\n")))
+        (fileCounts (map (fn [(g String)] -> Int64 (listLength (groupLines root g))) gids))]
+    (do
+      (assert (> (listLength gids) 1) "L0 lists several groups")
+      (assert (not (listContains? gids "other")) (str "every card has a group in groups.asn, other holds: " (stringJoin (filter (fn [(i String)] -> Bool (not (listContains? (listFlatMap (fn [(g String)] -> (List String) (if (= g "other") (list) (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) "")) (groupLines root g)))) gids) i))) ids) ", ")))
+      (assert (= (listLength listed) (listLength ids)) (str "group files list every card once: " (listLength listed) " lines for " (listLength ids) " cards"))
+      (assert (listAll? (fn [(i String)] -> Bool (listContains? listed i)) ids) "each card id is reachable through one group file")
+      (assert (= counts fileCounts) "L0 group counts equal the lines of each group file")
+      (assert (> (listLength gids) 0) "L0 lists groups")
+      true))
+
 fn ! indexDistinct root: String -> Bool
-  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
-        (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \"")) (stringSplit index "\n")))
+  (let [(lines (cardLines root))
         (bare (filter bareIndexLine? lines))
         (led (filter brandLed? lines))
         (filler (filter fillerLed? lines))
@@ -119,4 +150,4 @@ fn ! queries root: String -> Bool
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))]
-    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (indexDistinct root) (queries root)))
+    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (tiersReach root) (indexDistinct root) (queries root)))

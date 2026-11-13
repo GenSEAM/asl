@@ -1,0 +1,7 @@
+(:know :tier L0g :group "tooling" :cards 6 :tokensBy bytes36)
+(:c "asl-cli" "CLI Toolchain" (formatVersion formatHelp))
+(:c "asl-gates" "Verification Gate..." (verifySourceSyntax verifyForeignExt))
+(:c "asl-help" "Machine-Readable ASN..." (canonicalTools catalogSize))
+(:c "asl-hypergraph" "Codebase Hypergraph..." (makeHyperNode makeHyperEdge))
+(:c "asl-intel" "Code intelligence graph,..." (runIntel! dispatchIntel!))
+(:c "asl-know" "Tiered knowledge surface..." (cardsDir ratchetDiff))

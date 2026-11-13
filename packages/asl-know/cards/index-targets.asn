@@ -1,0 +1,8 @@
+(:know :tier L0g :group "targets" :cards 7 :tokensBy bytes36)
+(:c "asl-target-c" "C11 Backend consuming..." (emitC11Module emitC11Type))
+(:c "asl-target-go" "Go backend: lowers a..." (compileEntry! compilePackage!))
+(:c "asl-target-js" "JavaScript (ES2020..." (compileEntry! compileWithTypes!))
+(:c "asl-target-llvm" "LLVM IR Backend..." (emitLlvmModule emitLlvmProgram))
+(:c "asl-target-py" "Python 3 backend: lowers..." (compileEntry! diagText))
+(:c "asl-target-sh" "Shell, PowerShell, and..." (formatShScript formatShStmt))
+(:c "asl-target-swift" "Swift 6 & SwiftUI native..." (emitSwiftStruct emitSwiftStructWithPairs))

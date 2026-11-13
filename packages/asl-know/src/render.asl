@@ -1,5 +1,5 @@
 (module asl-know/render
-  :x [Card q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard indexText missingOf allCards!]
+  :x [Card Group q unquoteRow tokensOf brandWords indexPurpose camelId cardFile exampleText pitTags packageCard areaCards langCard groupsOf groupsOf! effectiveGroups groupFile indexText groupIndexText indexFiles missingOf allCards!]
   :i [(asl-know/scan :a sc)])
 
 ; (:m :tags (know) :note "L0 index, L1 cards and L2 symbol rows as single-line ASN frames; token figures are bytes/4, labelled :tokensBy bytes36")
@@ -217,10 +217,59 @@ fn langCard spec: String ex: String -> Card
                    (exampleField ex) ")"))]
     (Card :id "core/lang" :purpose "how to write ASL: syntax, effects, matching, records" :keys (list "module" "fn" "match" "let") :line line :rows (list) :missing (list)))
 
-fn indexText cards: (List Card) -> String
-  (let [(lines (map (fn [(c Card)] -> String (str "(:c " (q c.id) " " (q (indexPurpose c.purpose)) " (" (stringJoin (listTake c.keys 2) " ") "))")) cards))
-        (body (stringJoin lines "\n"))]
-    (str "(:know :tier L0 :cards " (listLength cards) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; a card id or exact symbol returns its card\")\n" body "\n"))
+; (:m :ref KNOW-INDEX-SCALE :do "tiered L0: index.asn holds one (:g id count purpose (members)) line per group, index-GROUP.asn one (:c id purpose (keys)) line per card of that group, so L0 grows by groups, not packages; groups come from groups.asn rows, core/* cards form the core group, a card no row lists lands in other")
+(schema Group (:f id String) (:f purpose String) (:f members (List String)))
+
+fn groupsOf text: String -> (List Group)
+  (listFlatMap (fn [(l String)] -> (List Group)
+                 (if (stringStartsWith? l "(:group ")
+                   (list (Group :id (optionOr (sc/fieldAfter l ":id") "") :purpose (optionOr (sc/fieldAfter l ":purpose") "")
+                                :members (filter (fn [(m String)] -> Bool (not (stringEmpty? m))) (stringSplit (optionOr (sc/fieldAfter l ":members") "") " "))))
+                   (list)))
+               (stringLines text))
+
+fn ! groupsOf! root: String -> (List Group)
+  (groupsOf (resultOr (fileReadString (str root "/asl/packages/asl-know/groups.asn")) ""))
+
+fn coreCard? c: Card -> Bool
+  (stringStartsWith? c.id "core/")
+
+; (:m :ref KNOW-INDEX-SCALE :do "the groups L0 lists: core first (every core/* card), then groups.asn rows with members that name no card dropped, then other for any card no row lists")
+fn effectiveGroups groups: (List Group) cards: (List Card) -> (List Group)
+  (let [(ids (map (fn [(c Card)] -> String c.id) cards))
+        (core (Group :id "core" :purpose "the language and its builtins, no import: syntax, strings, lists, maps, bytes, io, numbers, option and result"
+                     :members (map (fn [(c Card)] -> String c.id) (filter coreCard? cards))))
+        (real (map (fn [(g Group)] -> Group (Group :id g.id :purpose g.purpose :members (filter (fn [(m String)] -> Bool (listContains? ids m)) g.members))) groups))
+        (base (cons core (filter (fn [(g Group)] -> Bool (not (listEmpty? g.members))) real)))
+        (placed (listFlatMap (fn [(g Group)] -> (List String) g.members) base))
+        (left (filter (fn [(i String)] -> Bool (not (listContains? placed i))) ids))]
+    (if (listEmpty? left) base (listAppend base (list (Group :id "other" :purpose "cards no groups.asn row lists, add them to a group" :members left)))))
+
+fn shortId id: String -> String
+  (cond
+    ((stringStartsWith? id "core/") (optionOr (stringSlice id 5 (stringLength id)) id))
+    ((stringStartsWith? id "asl-") (optionOr (stringSlice id 4 (stringLength id)) id))
+    (else id))
+
+fn groupFile g: Group -> String
+  (str "index-" g.id ".asn")
+
+fn indexLine c: Card -> String
+  (str "(:c " (q c.id) " " (q (indexPurpose c.purpose)) " (" (stringJoin (listTake c.keys 2) " ") "))")
+
+fn indexText groups: (List Group) cards: (List Card) -> String
+  (let [(gs (effectiveGroups groups cards))
+        (lines (map (fn [(g Group)] -> String (str "(:g " (q g.id) " " (listLength g.members) " " (q g.purpose) " (" (stringJoin (map shortId g.members) " ") "))")) gs))]
+    (str "(:know :tier L0 :cards " (listLength cards) " :groups " (listLength gs) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; asl know index ROOT GROUP lists the cards of one group, a card id or exact symbol returns its card\")\n"
+         (stringJoin lines "\n") "\n"))
+
+fn groupIndexText g: Group cards: (List Card) -> String
+  (str "(:know :tier L0g :group " (q g.id) " :cards " (listLength g.members) " :tokensBy bytes36)\n"
+       (stringJoin (map indexLine (filter (fn [(c Card)] -> Bool (listContains? g.members c.id)) cards)) "\n") "\n")
+
+fn indexFiles groups: (List Group) cards: (List Card) -> (List (Pair String String))
+  (cons (pair "index.asn" (indexText groups cards))
+        (map (fn [(g Group)] -> (Pair String String) (pair (groupFile g) (groupIndexText g cards))) (effectiveGroups groups cards)))
 
 fn missingOf cards: (List Card) -> (List String)
   (listSort (listFlatMap (fn [(c Card)] -> (List String) c.missing) cards))
