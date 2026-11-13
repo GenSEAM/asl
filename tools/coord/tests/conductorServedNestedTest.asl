@@ -10,6 +10,8 @@ fn ! runTests -> Bool
         (none "(:agent :receipt (:agentReceipt :turns 3 :usage (:input 1)))")
         (parenStr "(:agent :receipt (:agentReceipt :lastStep (:turn 1 :op \"gate)\") :servedAlias \"realAlias\" :usage (:input 1)))")
         (quoteStr "(:agent :note \"saw (:agentReceipt :servedAlias fake) here\" :receipt (:agentReceipt :servedAlias \"realAlias\" :usage (:input 1)))")
+        (pool "(:receipt :unit \"U-1\" :state \"done\" :exit 0 :result \"(:agentReceipt :status :done :servedAlias \\\"ccZAiGlm53Flash\\\" :servedModel \\\"z-ai/glm-5.3-flash\\\" :usage (:input 1))\")")
+        (poolModel "(:receipt :unit \"U-2\" :state \"done\" :exit 0 :result \"(:agentReceipt :servedModel \\\"z-ai/glm-5.3-flash\\\" :usage (:input 1))\")")
         (escStr "(:agent :receipt (:agentReceipt :msg \"a \\\" ) b\" :servedAlias \"realAlias\" :usage (:input 1)))")]
     (do
       (assert (= (cd/servedAliasOf real) "nimNemotronUltra") "a nested receipt names its served alias")
@@ -20,4 +22,7 @@ fn ! runTests -> Bool
       (assert (= (cd/servedAliasOf parenStr) "realAlias") "a paren inside a string does not end the receipt early")
       (assert (= (cd/servedAliasOf quoteStr) "realAlias") "(:agentReceipt inside an earlier string does not start the receipt")
       (assert (= (cd/servedAliasOf escStr) "realAlias") "an escaped quote and a paren in a string are skipped")
+      (assert (= (cd/servedAliasOf pool) "ccZAiGlm53Flash") "a pool receipt's :result string names the served alias")
+      (assert (= (cd/servedModel pool) "ccZAiGlm53Flash") "the journalled model of a pool receipt is the alias")
+      (assert (= (cd/servedModel poolModel) "z-ai/glm-5.3-flash") "a pool receipt with only :servedModel gives that model")
       true))

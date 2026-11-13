@@ -152,11 +152,16 @@ fn nestedReceipt row: String -> String
   (let [(at (receiptStart row 0 false false))]
     (if (< at 0) "" (optionOr (stringSlice row at (formEnd row at 0 false false)) "")))
 
+; (:m :ref NODE2-REVIEW-WRITERFAMILY :do "a Leon pool receipt carries the agent receipt as the string value of :result, (:receipt :unit U :state done :result \"(:agentReceipt ... :servedAlias A ...)\"); node2 2026-11-13 journalled STD-DURATION STD-QUERYSTRING STD-TOMLLITE as model unknown from it and their reviews deferred on writerFamily, so the unescaped :result is searched last")
 fn servedField out: String key: String -> String
   (let [(k (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
         (row (receiptRowOf out))
-        (top (al/rowText row k))]
-    (if (stringEmpty? top) (al/rowText (nestedReceipt row) k) top))
+        (top (al/rowText row k))
+        (nested (al/rowText (nestedReceipt row) k))
+        (inner (al/rowText row "result"))]
+    (cond ((not (stringEmpty? top)) top)
+          ((not (stringEmpty? nested)) nested)
+          (else (al/rowText (nestedReceipt inner) k))))
 
 fn servedAliasOf out: String -> String
   (servedField out ":servedAlias")
