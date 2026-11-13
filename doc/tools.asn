@@ -1771,7 +1771,7 @@
 (:doc :symbol "asl/tools/svdImport.asl#regKeys" :text "name:offset:size keys of registers, for comparing with a hand table")
 (:doc :symbol "asl/tools/svdImport.asl#fieldKeysOf" :text "name:bitOffset:bitWidth keys of one register's fields, empty when the register is absent")
 (:doc :symbol "asl/tools/tests/svdImportTest.asl#runTests" :text "pins parseSvd on a GPIOA and GPIOB fixture against a hand table, that swapped ODR and BSRR offsets fail the comparison, and that a mismatched close tag reports its line")
-(:doc :symbol "asl/tools/tests/nativeSuiteWallTest.asl#runTests" :text "NATIVETEST-PER-SUITE-WALL gate: suiteWallS parsed and clamped to 1800..7200 s, and bin/asl test runs a fixture declaring 2400 s whose own lease deadline is 2400 s")
+(:doc :symbol "asl/tools/tests/nativeSuiteWallTest.asl#runTests" :text "NATIVETEST-PER-SUITE-WALL gate: suiteWallS parsed and clamped to 1800..7200 s, and both bin/asl test and nativeTest's own runner run a fixture declaring 2400 s whose own lease deadline is 2400 s")
 (:doc :symbol "asl/tools/nativeTest.asl#runProcWithin" :text "runProcIn with a wall in seconds: the spawned binary's lease deadline is wallS after its start, so a suite runs under its declared wall")
 (:doc :symbol "asl/tools/nativeTest.asl#declaredWallS" :text "the wall in seconds a suite source declares as a top-level fn suiteWallS -> Int64 with one integer line, none when absent or not an integer")
 (:doc :symbol "asl/tools/nativeTest.asl#suiteWall" :text "the wall a suite binary runs under: 1800 s, raised to a declared suiteWallS, capped at 7200 s")
