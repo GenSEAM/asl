@@ -1509,6 +1509,32 @@ fn ! testRequeue -> Bool
         (assert (stringContains? jr "(:t :unit \"RA\" :from blocked :to queued :stage requeue ") (str "one requeue move is journalled: " jr))
         true))
 
+; (:m :ref CONDUCTOR-CLOSE-CMD :do "close moves a blocked unit to merged with one journal row, leaves a unit mid-stage and an unknown id alone, consumes its request file, and releases a dependent")
+fn ! testClose -> Bool
+  (let [(dir (scratch "close"))
+        (_ (cleanup dir))
+        (units (list (task "CA" (list "p/ca") (list) (greenGate) "free") (task "CB" (list "p/cb") (list) (greenGate) "free")))
+        (put (putAll! dir units))
+        (_ (cd/writeCUnit! dir (cuBlocked "CA" "lead")))
+        (_ (cd/writeCUnit! dir (inStage (cuBlocked "CB" "free"))))
+        (ctx (ctxOf dir "none" 0 0 400))
+        (asked (cd/requestClose! dir (list "CA" "CB" "NOPE")))
+        (had (fileExists? (cd/closePath dir)))
+        (n1 (cd/closeDrain! ctx))
+        (n2 (cd/closeDrain! ctx))
+        (a (cuOf dir "CA"))
+        (b (cuOf dir "CB"))
+        (jr (stringJoin (journalLines dir) "\n"))
+        (_ (cleanup dir))]
+    (do (assert (and put asked had) "units put and the close request file written")
+        (assert (= n1 1) (str "only the blocked unit is closed: " (stringFromInt64 n1)))
+        (assert (= n2 0) "the request file is consumed: a second drain closes nothing")
+        (assert (and (= a.st "merged") (= a.fails 0) (stringEmpty? a.sig)) (str "CA is merged and clean: " a.st))
+        (assert (and (= b.st "writing") (= b.fails 3)) (str "a unit in a stage is left alone: " b.st))
+        (assert (stringContains? jr "(:t :unit \"CA\" :from blocked :to merged :stage close ") (str "one close move is journalled: " jr))
+        (assert (not (stringContains? jr "\"CB\" :from writing")) "no move is journalled for the writing unit")
+        true))
+
 fn quiet c: cd/CUnit st: String -> cd/CUnit
   (with c :st st :sig "" :fails 0 :await "")
 
@@ -1992,6 +2018,7 @@ fn ! runTests -> Bool
         (assert (testSignatureReset bin) "a new signature resets the count")
         (assert (testWake bin) "wake moves a parked unit")
         (assert (testRequeue) "requeue puts a blocked unit back to queued once")
+        (assert (testClose) "close moves a blocked unit to merged, ignores a unit in a stage and an unknown id")
         (assert (testDepWake) "a dependent blocked on deps wakes when its root leaves blocked")
         (assert (testDeadHolder) "a dead holder's lease is reaped and the units it blocked get one retry")
         (assert (testImpossible) "admission refuses units that can never be written, before any claim")
