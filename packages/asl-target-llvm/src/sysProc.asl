@@ -1143,6 +1143,7 @@ fn fwdSetupInstrs k: (Map String Int64) -> (List ty/SsaInstr)
         (listAppend (addrAt "oldP" "bI" "oldOff")
           (list (rC "emptied" (ty/tyI32) "sigemptyset" (list "setP")))))))
 
+; (:m :ref KILLEDLAUNCHER-HANG :do "after any kevent wake the wait polls waitpid every 10 ms instead of blocking with no timeout: XNU posts the one-shot NOTE_EXIT before the child is a zombie waitpid can reap, so right after a SIGKILL waitpid could still say running, the spent event never came again and kevent blocked forever (boundedTest killedLauncher!, 31 min, 2026-11-13)")
 fn waitFwdDarwinFn k: (Map String Int64) -> ty/SsaFunction
   (rFn "procWaitFwd" (list (pI "pid") (pI "stI")) (ty/tyI64)
     (appendAll
@@ -1172,7 +1173,7 @@ fn waitFwdDarwinFn k: (Map String Int64) -> ty/SsaFunction
             (rBr "nNeg" "kevErr" "scan0"))
           (rB "kevErr" (list (errnoInstr "ke") (rI "eintr3" (kf k "EINTR")) (rP "kIntr" (ty/tyI1) "eqInt" (list "ke" "eintr3"))) (rBrA "kIntr" "loop" (list "tmo") "plainWait" (list)))
           (rB "scan0" (list) (rJ "scan" (list "z")))
-          (rBP "scan" (list (pI "j")) (list (rP "scanned" (ty/tyI1) "geInt" (list "j" "nI"))) (rBrA "scanned" "loop" (list "tmo") "evt" (list)))
+          (rBP "scan" (list (pI "j")) (list (rP "scanned" (ty/tyI1) "geInt" (list "j" "nI"))) (rBrA "scanned" "loop" (list "tsI") "evt" (list)))
           (rB "evt" (listAppend (list (rI "ks" (kf k "kevent.size")) (rP "base" (ty/tyI64) "mulInt" (list "j" "ks")) (rI "filtOff" (kf k "kevent.filter")) (rP "fo" (ty/tyI64) "addInt" (list "base" "filtOff")))
                       (listAppend (ld32 "word" "outP" "fo")
                         (list (rI "low16" 65535) (rP "filt" (ty/tyI64) "rawAndI64" (list "word" "low16")) (rI "sigFilt" (wrap16 (kf k "EVFILT_SIGNAL")))
