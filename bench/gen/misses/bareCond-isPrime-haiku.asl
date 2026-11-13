@@ -1,0 +1,13 @@
+fn hasDivisor d: Int64 n: Int64 -> Bool
+  (cond
+    ((> d (/ n d)) false)
+    ((= (- n (* (/ n d) d)) 0) true)
+    (else (hasDivisor (+ d 1) n)))
+
+fn isPrime n: Int64 -> Bool
+  (cond
+    ((< n 2) false)
+    ((< n 4) true)
+    ((= (- n (* (/ n 2) 2)) 0) false)
+    ((hasDivisor 3 n) false)
+    (else true))

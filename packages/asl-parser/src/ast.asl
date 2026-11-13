@@ -454,7 +454,34 @@ fn retiredHeadMessage x: String -> String
     ((= x "mt") "ERR_READ_SPELLING (mt subject arm ...) is retired: write (match subject arm ...)")
     ((= x "==") "ERR_READ_SPELLING (== a b) is retired: write (= a b)")
     ((= x "not=") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)")
+    ((= x "%") "ERR_READ_SPELLING (% a b) is not ASL: write (mod a b)")
     (else ""))
+
+; (:m :ref MISS-ABSORB :do "foreign heads the reader takes as their canonical spelling instead of failing: every model of the 2026-11-13 generation bench wrote (== a b) and (% a b), and a rejection costs a model turn while the meaning is not in doubt; spellingErrors and retiredFormErrors still report them, so audits of stored text and asl heal keep the corpus canonical")
+fn acceptedHead x: String -> String
+  (cond ((= x "==") "= ") ((= x "%") "mod") (else ""))
+
+fn acceptedSpelling? e: ParseError -> Bool
+  (or (stringStartsWith? e.msg "ERR_READ_SPELLING (== ") (stringStartsWith? e.msg "ERR_READ_SPELLING (% "))
+
+fn swapHeadAt ln: String col: Int64 -> String
+  (let [(n (stringLength ln))
+        (from (optionOr (stringSlice ln (- col 1) n) ""))
+        (was (if (stringStartsWith? from "==") "==" (if (stringStartsWith? from "%") "%" "")))]
+    (if (stringEmpty? was)
+      ln
+      (str (optionOr (stringSlice ln 0 (- col 1)) "") (acceptedHead was) (optionOr (stringSlice from (stringLength was) (stringLength from)) ""))))
+
+; (:m :ref MISS-ABSORB :do "errs arrive sorted by position; the swaps of one line are applied right to left so an earlier column stays valid after (% grows to (mod")
+fn acceptSwaps src: String errs: (List ParseError) -> String
+  (if (listEmpty? errs)
+    src
+    (stringJoin
+      (map (fn [(p (Pair Int64 String))] -> String
+             (fold (fn [(ln String) (e ParseError)] -> String (if (= e.line (+ (pairFirst p) 1)) (swapHeadAt ln e.col) ln))
+                   (pairSecond p) (listReverse errs)))
+           (zip (range 0 (listLength (stringSplit src "\n"))) (stringSplit src "\n")))
+      "\n"))
 
 fn spellingErr msg: String t: lx/Token -> ParseError
   (ParseError :msg msg :line t.line :col t.col)
@@ -482,13 +509,25 @@ fn retiredFormErrors src: String -> (List ParseError)
   (listReverse (spellingScan src).errs)
 
 fn mayHoldRetiredHead? src: String -> Bool
-  (or (stringContains? src "mt") (or (stringContains? src "==") (stringContains? src "not=")))
+  (or (stringContains? src "mt") (or (stringContains? src "==") (or (stringContains? src "not=") (stringContains? src "(%"))))
 
 fn retiredSpelling src: String -> (Option ParseError)
   (if (mayHoldRetiredHead? src) (listHead (scanErrors (spellingScan src))) (none))
 
 fn retiredSource src: String -> (Option ParseError)
   (match (retiredProse src) ((some e) (some e)) ((none) (retiredSpelling src)))
+
+; (:m :ref MISS-ABSORB :do "the text the parser reads: a retired form is an error, an accepted foreign head is swapped for its canonical spelling; (== keeps every column, (% moves the rest of its line right by two")
+fn readableSource src: String -> (Result String ParseError)
+  (match (retiredProse src)
+    ((some e) (err e))
+    ((none)
+      (if (not (mayHoldRetiredHead? src))
+        (ok src)
+        (let [(errs (scanErrors (spellingScan src)))]
+          (match (listFind (fn [(e ParseError)] -> Bool (not (acceptedSpelling? e))) errs)
+            ((some e) (err e))
+            ((none) (ok (acceptSwaps src errs))))))))
 
 ; (:m :ref SHEBANG :do "a first line starting with #! is blanked before reading, its newline kept so every later line keeps its number; only line 1 is looked at")
 fn shebangless src: String -> String
@@ -497,18 +536,18 @@ fn shebangless src: String -> String
     src)
 
 fn parse raw: String -> (Result (List TopForm) ParseError)
-  (let [(src (shebangless raw))] (match (retiredSource src)
-    ((some e) (err e))
-    ((none) (match (parseLegacy src)
+  (match (readableSource (shebangless raw))
+    ((err e) (err e))
+    ((ok src) (match (parseLegacy src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr forms))))))
+      ((ok forms) (rejectBareLiteralTopExpr forms)))))
 
 fn parseForTypeCheck raw: String -> (Result (List TopForm) ParseError)
-  (let [(src (shebangless raw))] (match (retiredSource src)
-    ((some e) (err e))
-    ((none) (match (parseForChecker src)
+  (match (readableSource (shebangless raw))
+    ((err e) (err e))
+    ((ok src) (match (parseForChecker src)
       ((err e) (err e))
-      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms)))))))
+      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
   (match (parseForChecker src)

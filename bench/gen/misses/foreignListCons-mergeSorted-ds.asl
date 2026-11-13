@@ -1,0 +1,16 @@
+fn mergeSorted a: (List Int64) b: (List Int64) -> (List Int64)
+  (match (listHead a)
+    ((none) b)
+    ((some x)
+      (match (listHead b)
+        ((none) a)
+        ((some y)
+          (cond
+            ((<= x y)
+              (match (listTail a)
+                ((some ta) (cons x (mergeSorted ta b)))
+                ((none) (cons x b))))
+            (else
+              (match (listTail b)
+                ((some tb) (cons y (mergeSorted a tb)))
+                ((none) (cons y a)))))))))

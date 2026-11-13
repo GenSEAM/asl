@@ -1,0 +1,25 @@
+fn dedupeKeepOrder xs: (List Int64) -> (List Int64)
+  (dedupeGo (list) xs)
+
+fn dedupeGo seen: (List Int64) -> (List Int64) -> (List Int64)
+  (cond ((= (listLength xs) 0) (list))
+        (else
+          (match (listGet xs 0)
+            ((some h)
+              (cond ((dedupeMember h seen)
+                      (dedupeGo seen (dedupeTail xs)))
+                    (else
+                      (cons h (dedupeGo (cons h seen) (dedupeTail xs))))))
+            ((none) (list)))))
+
+fn dedupeTail xs: (List Int64) -> (List Int64)
+  (match (listTail xs)
+    ((some t) t)
+    ((none) (list)))
+
+fn dedupeMember v: Int64 -> (List Int64) -> Bool
+  (cond ((= (listLength xs) 0) false)
+        (else
+          (match (listGet xs 0)
+            ((some h) (cond ((= v h) true) (else (dedupeMember v (dedupeTail xs)))))
+            ((none) false)))))

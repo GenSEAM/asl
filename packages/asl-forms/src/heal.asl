@@ -1,7 +1,7 @@
 (module asl-forms/heal
   :x [HealResult Sx Edit healRuleNames healSource healSourceWith healSourceRules heal! healDiags healScore lowerDiags readSx applyEdits
       preludeVocab! vocabFromSource formatHealReceipt diagText symbolCandidates editDistance retiredHeadFor healSourceEnv ruleRetiredSpelling ruleImportAdd]
-  :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-forms/repair :a rep) (asl-checker/hints :a hn)])
+  :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-forms/repair :a rep) (asl-checker/hints :a hn) (asl-forms/indent :a ind)])
 
 ; (:m :do "the one heal pipeline for generated ASL (HEAL 2026-10-15): a text that already checks and lowers is returned unchanged; otherwise named rules run in order and an edit is kept only when it strictly lowers the diagnostic score, until no rule improves; the receipt is (:repaired (rule ...) :left (diag ...))")
 
@@ -14,7 +14,7 @@
 (schema Edit (:f start Int64) (:f end Int64) (:f with String))
 
 fn healRuleNames -> (List String)
-  (list "delimiterBalance" "lineHeader" "freeComment" "retiredSpelling" "fnHeaderUnwrap" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "exportAdd" "importAdd" "symbolRename" "effectMark")
+  (list "bareForm" "delimiterBalance" "indentBalance" "lineHeader" "freeComment" "retiredSpelling" "fnHeaderUnwrap" "headerParens" "bodyIndent" "condClauses" "letBindingVector" "testPredicate" "argShape" "exportAdd" "importAdd" "symbolRename" "effectMark")
 
 ; (:m :do "reader: byte-offset S-expressions; strings and ; comments are skipped as atoms/blank so edits never land inside them")
 
@@ -222,6 +222,7 @@ fn retiredHeadFor name: String -> (Option String)
   (cond ((= name "mt") (some "match"))
         ((= name "==") (some "="))
         ((= name "not=") (some "!="))
+        ((= name "%") (some "mod"))
         (else (none)))
 
 fn retiredSpellingEdit x: Sx -> (List Edit)
@@ -481,7 +482,7 @@ fn ruleSymbolRename text: String ds: (List ty/Diagnostic) vocab: (List String) -
   (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String)
           (match (unboundName d)
             ((none) acc)
-            ((some name) (listAppend acc (map (fn [(c String)] -> String (renameAtoms text name c)) (symbolCandidates name (renamedHintOf d) vocab))))))
+            ((some name) (listAppend acc (map (fn [(c String)] -> String (renameAtoms text name c)) (listAppend (hn/priorNames name) (symbolCandidates name (renamedHintOf d) vocab)))))))
         (list) ds)
 
 ; (:m :do "rules exportAdd and importAdd (STATICHINT 2026-10-28): exportAdd appends to the module header :x a name this text declares when every diagnostic is an export one (rule-13 declared here and not exported, or ERR_NOT_EXPORTED naming this module); importAdd qualifies an unbound name with the alias of the one module whose :x lists it and adds (mod :a alias) to :i; both kept only on a strict score drop like every rule")
@@ -585,10 +586,186 @@ fn ruleEffectMark text: String ds: (List ty/Diagnostic) -> (List String)
         (next (stringJoin (fold (fn [(ls (List String)) (d ty/Diagnostic)] -> (List String) (markLine ls d.line)) (stringLines text) marks) "\n"))]
     (if (= next text) (list) (list next)))
 
+; (:m :ref MISS-ABSORB :do "rule bareForm: a body written the way the header is, without the outer parens and with indentation as the structure (cond / match x / let [...] on a line of their own, a bare call such as go xs 0), gets the parens its indentation states: a line of a fn block that starts with a symbol and has a second item or deeper lines below opens a form, closed at the end of its last deeper line; a line inside an original paren is only taken when its head is a special form or its parent is such a bare line; a second candidate reruns the indentation-guided closer repair, since the closers a model adds after such a body are guesses")
+(schema BareLine (:f indent Int64) (:f blank Bool) (:f bare Bool) (:f head String) (:f items Int64) (:f delta Int64))
+
+(schema BareState (:f frames (List (Pair Int64 Int64))) (:f depth Int64) (:f out (List String)) (:f hits Int64))
+
+fn tailrec bareScan bs: Bytes n: Int64 i: Int64 depth: Int64 items: Int64 low: Bool -> (Pair Int64 Int64)
+  (if (>= i n)
+    (pair items depth)
+    (let [(b (bytesGet bs i))
+          (more (if (and (= depth 0) (not low)) (+ items 1) items))]
+      (cond
+        ((spaceByte? b) (bareScan bs n (+ i 1) depth items low))
+        ((= b 59) (pair items depth))
+        ((= b 34) (bareScan bs n (stringEndAt bs n (+ i 1)) depth more low))
+        ((openByte? b) (bareScan bs n (+ i 1) (+ depth 1) more low))
+        ((closeByte? b) (bareScan bs n (+ i 1) (- depth 1) items (or low (< depth 1))))
+        (else (bareScan bs n (atomEndAt bs n i) depth more low)))))
+
+fn bareHead? head: String -> Bool
+  (let [(c (slice head 0 1))]
+    (not (or (stringEmpty? head)
+             (or (stringContains? "0123456789:\"" c)
+                 (or (= head "->") (and (= c "-") (> (stringLength head) 1)))))))
+
+fn bareLine l: String -> BareLine
+  (let [(bs (stringToBytes l))
+        (n (bytesLength bs))
+        (i (skipSpacesOnly bs n 0))
+        (blank (or (>= i n) (= (bytesGet bs i) 59)))
+        (first (if blank 32 (bytesGet bs i)))
+        (head (if (or blank (or (openByte? first) (closeByte? first))) "" (slice l i (atomEndAt bs n i))))
+        (scan (bareScan bs n i 0 0 false))]
+    (BareLine :indent i :blank blank :bare (bareHead? head) :head head :items (pairFirst scan) :delta (pairSecond scan)))
+
+fn specialHead? head: String -> Bool
+  (listContains? (list "let" "cond" "match" "if" "do") head)
+
+fn tailrec codeEndOf bs: Bytes i: Int64 -> Int64
+  (if (and (> i 0) (spaceByte? (bytesGet bs (- i 1)))) (codeEndOf bs (- i 1)) i)
+
+fn closeLine l: String k: Int64 -> String
+  (let [(bs (stringToBytes l))
+        (e (codeEndOf bs (bytesLength bs)))]
+    (str (slice l 0 e) (stringRepeat ")" k) (slice l e (stringLength l))))
+
+fn tailrec closeLastLoop out: (List String) k: Int64 kept: (List String) -> (List String)
+  (match (listHead out)
+    ((none) (listReverse kept))
+    ((some l)
+      (if (stringEmpty? (stringTrim l))
+        (closeLastLoop (optionOr (listTail out) (list)) k (cons l kept))
+        (listAppend (listReverse kept) (cons (closeLine l k) (optionOr (listTail out) (list)))))))
+
+fn closeLast out: (List String) k: Int64 -> (List String)
+  (if (<= k 0) out (closeLastLoop out k (list)))
+
+fn childBelow? infos: (List BareLine) i: Int64 indent: Int64 -> Bool
+  (match (listFind (fn [(b BareLine)] -> Bool (not b.blank)) (listDrop infos (+ i 1)))
+    ((some b) (> b.indent indent))
+    ((none) false))
+
+fn bareStep infos: (List BareLine) st: BareState il: (Pair Int64 String) -> BareState
+  (let [(i (pairFirst il))
+        (l (pairSecond il))
+        (info (optionOr (listGet infos i) (BareLine :indent 0 :blank true :bare false :head "" :items 0 :delta 0)))]
+    (cond
+      (info.blank (with st :out (cons l st.out)))
+      ((= info.indent 0)
+        (BareState :frames (list) :depth 0 :out (cons l (closeLast st.out (listLength st.frames))) :hits st.hits))
+      (else
+        (let [(gone (filter (fn [(f (Pair Int64 Int64))] -> Bool (>= (pairFirst f) info.indent)) st.frames))
+              (frames (filter (fn [(f (Pair Int64 Int64))] -> Bool (< (pairFirst f) info.indent)) st.frames))
+              (out (closeLast st.out (listLength gone)))
+              (ctx (match (listHead frames) ((some f) (pairSecond f)) ((none) 0)))
+              (opens (and info.bare
+                          (and (or (>= info.items 2) (childBelow? infos i info.indent))
+                               (or (= st.depth ctx) (specialHead? info.head)))))]
+          (if opens
+            (BareState :frames (cons (pair info.indent st.depth) frames) :depth (+ st.depth info.delta)
+                       :out (cons (str (slice l 0 info.indent) "(" (slice l info.indent (stringLength l))) out) :hits (+ st.hits 1))
+            (BareState :frames frames :depth (+ st.depth info.delta) :out (cons l out) :hits st.hits))))))
+
+fn tailrec fnBlockFlags lines: (List String) inFn: Bool acc: (List Bool) -> (List Bool)
+  (match (listHead lines)
+    ((none) (listReverse acc))
+    ((some l)
+      (let [(top (and (not (stringEmpty? (stringTrim l))) (= (indentOf l) 0)))
+            (now (if top (fnHeaderLine? l) inFn))]
+        (fnBlockFlags (optionOr (listTail lines) (list)) now (cons (and now (not top)) acc)))))
+
+fn bareWrap text: String -> String
+  (let [(lines (stringSplit text "\n"))
+        (flags (fnBlockFlags lines false (list)))
+        (infos (map (fn [(p (Pair String Bool))] -> BareLine
+                      (if (pairSecond p) (bareLine (pairFirst p)) (BareLine :indent 0 :blank (stringEmpty? (stringTrim (pairFirst p))) :bare false :head "" :items 0 :delta 0)))
+                    (zip lines flags)))
+        (end (fold (fn [(st BareState) (il (Pair Int64 String))] -> BareState (bareStep infos st il))
+                   (BareState :frames (list) :depth 0 :out (list) :hits 0)
+                   (zip (range 0 (listLength lines)) lines)))]
+    (if (= end.hits 0) text (stringJoin (listReverse (closeLast end.out (listLength end.frames))) "\n")))
+
+fn ruleBareForm text: String -> (List String)
+  (let [(wrapped (bareWrap text))]
+    (if (= wrapped text) (list) (list wrapped (ind/guideBroken wrapped).text)))
+
+; (:m :ref MISS-ABSORB :do "rule indentBalance: the indentation-guided closer repair of asl-forms/indent over the items whose delimiters do not balance; it covers the surplus closers at the end of several fn bodies at once, which delimiterBalance leaves when one site has more than one balanced reading, and it only speaks when delimiterBalance has no repair")
+fn ruleIndentBalance text: String -> (List String)
+  (let [(g (ind/guideBroken text))]
+    (if (or (listEmpty? g.edits) (not (listEmpty? (ruleDelimiterBalance text)))) (list) (list g.text)))
+
+; (:m :ref MISS-ABSORB :do "rule headerParens (FABLE-LANG-02): a header whose parameters are wrapped the way Python or TypeScript wrap them, fn f (a: T b: U) -> R or fn f(a: T, b: U) -> R, loses the wrapper and the commas")
+fn headerParensLine l: String -> String
+  (match (stringIndexOf l "(")
+    ((none) l)
+    ((some o)
+      (let [(before (stringTrim (slice l 0 o)))
+            (words (stringSplit before " "))
+            (bs (stringToBytes l))
+            (n (bytesLength bs))
+            (inner (pairSecond (readSeq l bs n (+ o 1) (list))))
+            (params (slice l (+ o 1) (- inner 1)))
+            (after (stringTrim (slice l inner n)))]
+        (if (and (fnHeaderLine? l)
+                 (and (<= (listLength words) 4)
+                      (and (not (stringContains? before ":"))
+                           (and (stringContains? params ": ") (stringStartsWith? after "->")))))
+          (str before " " (stringTrim (stringReplace params "," "")) " " after)
+          l))))
+
+fn ruleHeaderParens text: String -> (List String)
+  (let [(next (stringJoin (map headerParensLine (stringSplit text "\n")) "\n"))]
+    (if (= next text) (list) (list next)))
+
+; (:m :ref MISS-ABSORB :do "rule argShape: three argument shapes the checker reports at the function, not at the call, so every site is one candidate and a candidate stays only when the score drops: (listAppend xs x) with an element where a list is due wraps it as (list x); (listTail xs) or (listSlice ...) passed where a list is due, the cdr and xs[1:] prior, becomes (optionOr (listTail xs) (list)); (+ a b) over strings becomes (str a b)")
+fn diagHas? ds: (List ty/Diagnostic) a: String b: String -> Bool
+  (listAny? (fn [(d ty/Diagnostic)] -> Bool (and (stringContains? d.message a) (stringContains? d.message b))) ds)
+
+fn wrapEdits x: Sx before: String after: String -> (List Edit)
+  (list (ins (sxStart x) before) (ins (sxEnd x) after))
+
+fn appendSites x: Sx -> (List (List Edit))
+  (let [(items (listItems x))]
+    (if (and (parenList? x) (and (headIs? x "listAppend") (= (listLength items) 3)))
+      (map (fn [(arg Sx)] -> (List Edit) (wrapEdits arg "(list " ")"))
+           (filter (fn [(arg Sx)] -> Bool (not (or (headIs? arg "list") (headIs? arg "listAppend")))) (listReverse (listDrop items 1))))
+      (list)))
+
+fn optionListHead? x: Sx -> Bool
+  (and (parenList? x) (or (headIs? x "listTail") (headIs? x "listSlice")))
+
+fn tailSites x: Sx -> (List (List Edit))
+  (if (or (not (parenList? x)) (or (headIs? x "optionOr") (headIs? x "match")))
+    (list)
+    (map (fn [(arg Sx)] -> (List Edit) (wrapEdits arg "(optionOr " " (list))"))
+         (filter optionListHead? (listDrop (listItems x) 1))))
+
+fn plusSites x: Sx -> (List (List Edit))
+  (if (and (parenList? x) (headIs? x "+"))
+    (match (listHead (listItems x)) ((some h) (list (list (repl h "str")))) ((none) (list)))
+    (list))
+
+fn siteCandidates text: String sites: (fn [Sx] -> (List (List Edit))) -> (List String)
+  (map (fn [(es (List Edit))] -> String (applyEdits text es))
+       (listTake (listFlatMap sites (forestLists (readSx text))) 16))
+
+fn ruleArgShape text: String ds: (List ty/Diagnostic) -> (List String)
+  (listAppend
+    (if (diagHas? ds "argument to listAppend: expected (List " "found") (siteCandidates text appendSites) (list))
+    (listAppend
+      (if (diagHas? ds "expected (List " "found (Option (List ") (siteCandidates text tailSites) (list))
+      (if (diagHas? ds "argument to +: expected a number" "found String") (siteCandidates text plusSites) (list))))
+
 ; (:m :do "pipeline: rules in order, the first candidate that strictly lowers the score is kept, then the rules start over; a fixpoint or the round cap ends it")
 fn ruleCandidates rule: String text: String ds: (List ty/Diagnostic) vocab: (List String) ex: (Map String (List String)) -> (List String)
   (cond
     ((= rule "delimiterBalance") (ruleDelimiterBalance text))
+    ((= rule "bareForm") (ruleBareForm text))
+    ((= rule "indentBalance") (ruleIndentBalance text))
+    ((= rule "headerParens") (ruleHeaderParens text))
+    ((= rule "argShape") (ruleArgShape text ds))
     ((= rule "lineHeader") (ruleLineHeader text))
     ((= rule "freeComment") (ruleFreeComment text))
     ((= rule "fnHeaderUnwrap") (ruleFnHeaderUnwrap text))
@@ -636,7 +813,7 @@ fn parseFailed? ds: (List ty/Diagnostic) -> Bool
   (listAny? (fn [(d ty/Diagnostic)] -> Bool (= d.code "parse")) ds)
 
 fn parseRuleNames -> (List String)
-  (list "delimiterBalance" "lineHeader" "fnHeaderUnwrap" "bodyIndent")
+  (list "bareForm" "delimiterBalance" "indentBalance" "lineHeader" "fnHeaderUnwrap" "headerParens" "bodyIndent")
 
 ; (:m :do "parseOnly runs only the parse-level rules and stops as soon as the text parses: the phase heal! runs before it can read the imports it needs for the full check")
 fn healLoop text: String ds: (List ty/Diagnostic) deps: (Map String r/ModuleSummary) path: String vocab: (List String) ex: (Map String (List String)) rules: (List String) parseOnly: Bool rounds: Int64 applied: (List String) -> HealResult

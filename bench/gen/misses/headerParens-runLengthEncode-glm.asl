@@ -1,0 +1,14 @@
+fn runFrom text: String i: Int64 -> (List (Pair String Int64))
+  (match (stringSlice text i (+ i 1))
+    ((none) (list))
+    ((some c)
+      (let [(n (runLenFrom text c (+ i 1) 1))]
+        (listAppend (list (pair c n)) (runFrom text (+ i n))))))
+
+fn runLenFrom text: String c: String i: Int64 n: Int64 -> Int64
+  (match (stringSlice text i (+ i 1))
+    ((none) n)
+    ((some c2) (if (= c c2) (runLenFrom text c (+ i 1) (+ n 1)) n)))
+
+fn runLengthEncode text: String -> (List (Pair String Int64))
+  (runFrom text 0)

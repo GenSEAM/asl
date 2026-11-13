@@ -1,0 +1,16 @@
+fn dedupeKeepOrder xs: (List Int64) -> (List Int64)
+  (let [(seen (mapNew)) (out (listNew))]
+    (letrec ((go (fn [items]
+                    (match items
+                      ((nil) (ok ()))
+                      ((cons x rest)
+                        (match (mapGet seen x)
+                          ((some _) (go rest))
+                          ((none)
+                            (do
+                              (mapSet seen x true)
+                              (listPush out x)
+                              (go rest)))))))))
+      (match (go xs)
+        ((ok _) out)
+        ((err e) (err e)))))

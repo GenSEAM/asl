@@ -1,0 +1,16 @@
+fn romanNumeral n: Int64 -> String
+  (cond
+    ((>= n 1000) (stringConcat "M" (romanNumeral (- n 1000))))
+    ((>= n 900) (stringConcat "CM" (romanNumeral (- n 900))))
+    ((>= n 500) (stringConcat "D" (romanNumeral (- n 500))))
+    ((>= n 400) (stringConcat "CD" (romanNumeral (- n 400))))
+    ((>= n 100) (stringConcat "C" (romanNumeral (- n 100))))
+    ((>= n 90) (stringConcat "XC" (romanNumeral (- n 90))))
+    ((>= n 50) (stringConcat "L" (romanNumeral (- n 50))))
+    ((>= n 40) (stringConcat "XL" (romanNumeral (- n 40))))
+    ((>= n 10) (stringConcat "X" (romanNumeral (- n 10))))
+    ((>= n 9) (stringConcat "IX" (romanNumeral (- n 9))))
+    ((>= n 5) (stringConcat "V" (romanNumeral (- n 5))))
+    ((>= n 4) (stringConcat "IV" (romanNumeral (- n 4))))
+    ((>= n 1) (stringConcat "I" (romanNumeral (- n 1))))
+    (else "")))

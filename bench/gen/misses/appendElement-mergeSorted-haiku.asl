@@ -1,0 +1,21 @@
+fn tailOf l: (List Int64) -> (List Int64)
+  (match (listTail l)
+      ((some t) t)
+      ((none) (list)))
+
+fn mergeHelp a: (List Int64) b: (List Int64) acc: (List Int64) -> (List Int64)
+  (match (listHead a)
+      ((some x)
+        (match (listHead b)
+          ((some y)
+            (cond
+              ((<= x y) (mergeHelp (tailOf a) b (listAppend acc (list x))))
+              (else (mergeHelp a (tailOf b) (listAppend acc (list y))))))
+          ((none) (mergeHelp (tailOf a) b (listAppend acc (list x))))))
+      ((none)
+        (match (listHead b)
+          ((some y) (mergeHelp a (tailOf b) (listAppend acc (list y))))
+          ((none) acc))))
+
+fn mergeSorted a: (List Int64) b: (List Int64) -> (List Int64)
+  (mergeHelp a b (list))

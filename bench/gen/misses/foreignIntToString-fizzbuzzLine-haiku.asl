@@ -1,0 +1,9 @@
+fn divisibleBy n: Int64 d: Int64 -> Bool
+  (< (- n (* (/ n d) d)) 1)
+
+fn fizzbuzzLine n: Int64 -> String
+  (cond
+    ((and (divisibleBy n 3) (divisibleBy n 5)) "FizzBuzz")
+    ((divisibleBy n 3) "Fizz")
+    ((divisibleBy n 5) "Buzz")
+    (else (stringFromInt64 n)))
