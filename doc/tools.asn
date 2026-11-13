@@ -2415,3 +2415,4 @@
 (:doc :symbol "asl/tools/coord/conductor.asl#requestClose!" :text "appends a close row for each id to the store's close file; true when written")
 (:doc :symbol "asl/tools/coord/conductor.asl#closeDrain!" :text "claims the close file by rename and moves each named blocked, failed, queued or ready unit to merged with one journal row; units in a stage and unknown ids are ignored; returns how many")
 (:doc :symbol "asl/tools/coord/conductor.asl#closePath" :text "path of the close request file in the store")
+(:doc :symbol "asl/tools/coord/conductor.asl#depsMerged?" :text "u units: true when every :after unit of the task is merged in the unit rows")
