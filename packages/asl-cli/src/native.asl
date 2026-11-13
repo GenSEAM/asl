@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main pruneStaleStaged!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -391,7 +391,9 @@ fn ! stagePackageMirror! ctx: sys/Context root: String -> (Result String String)
         (files (filter indexable? (listAppend (optionOr (gitFiles! root) (fallbackFiles! root)) (resultOr dataFiles (list)))))]
     (match dataFiles
       ((err e) (err e))
-      ((ok _) (stagePackageFiles! ctx root files digest mirrorDir pkgDir))))
+      ((ok _) (match (stagePackageFiles! ctx root files digest mirrorDir pkgDir)
+                ((err e) (err e))
+                ((ok staged) (do (cg/recordOrigin! mirrorDir root) (ok staged)))))))
 
 ; (:m :ref INBOXFIX-STALESTAGE-20261028 :do "staging mirrors the source exactly: after the copies, every regular file under the package's own staging dir (mirrorDir) that no copy wrote is removed, so a module deleted or checked out away no longer resolves; hidden paths (.used, .asl caches) are never pruned, nothing outside mirrorDir is touched, and the walk compares listings only (no recopy)")
 fn ! stagedDests root: String dir: String files: (List String) -> (List String)
@@ -407,8 +409,20 @@ fn ! freshStaged? path: String -> Bool
     ((err _) false))
 
 fn ! pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64
+  (pruneStaleStagedFrom! mirrorDir expected (fn [(f String)] -> Bool true))
+
+; (:m :ref ASLCLI-PREEXISTING-REDS :do "a mirror file has a live source when it maps to an existing file: a flat copy (outside pkgDir) only to root/rel; a copy under pkgDir to root/rel, root/tail or toolRoot/tail, where tail is its path past pkgDir (the package's own files and the first-party files staged from the toolchain root)")
+fn ! liveSource? root: String toolRoot: String mirrorDir: String pkgDir: String f: String -> Bool
+  (let [(rel (dropPrefixLen f (+ (stringLength mirrorDir) 1)))]
+    (or (sys/isFile? (str root "/" rel))
+        (and (stringStartsWith? f (str pkgDir "/"))
+             (let [(tail (dropPrefixLen f (+ (stringLength pkgDir) 1)))]
+               (or (sys/isFile? (str root "/" tail)) (sys/isFile? (str toolRoot "/" tail)))))))
+
+; (:m :ref ASLCLI-PREEXISTING-REDS :do "prune a file no copy wrote when it is old, or when it is fresh but live says its source is gone: the 600 s guard protects a concurrent stager's files, never a module deleted between two runs")
+fn ! pruneStaleStagedFrom! mirrorDir: String expected: (List String) live: (fn [String] -> Bool) -> Int64
   (let [(keep (fold (fn [(m (Map String Bool)) (d String)] -> (Map String Bool) (mapSet m d true)) (mapEmpty) expected))
-        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (and (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))) (not (freshStaged? f))))) (tsa/filesUnder! mirrorDir)))]
+        (stale (filter (fn [(f String)] -> Bool (and (not (some? (mapGet keep f))) (and (not (hiddenRel? (dropPrefixLen f (+ (stringLength mirrorDir) 1)))) (or (not (freshStaged? f)) (not (live f)))))) (tsa/filesUnder! mirrorDir)))]
     (do (map (fn [(f String)] -> Bool (ok? (pathRemove f))) stale) (listLength stale)))
 
 fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) digest: String mirrorDir: String pkgDir: String -> (Result String String)
@@ -426,7 +440,7 @@ fn ! stagePackageFiles! ctx: sys/Context root: String files: (List String) diges
                   ((ok _)
                     (match (writeMirrorConfig! root pkgDir)
                       ((err e) (err (str "cannot write " pkgDir "/.asl.config.asn: " e)))
-                      ((ok _) (do (pruneStaleStaged! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn")))))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
+                      ((ok _) (do (pruneStaleStagedFrom! mirrorDir (listAppend (stagedDests root mirrorDir files) (listAppend (stagedDests root pkgDir files) (listAppend (stagedDests ctx.root pkgDir (firstPartyFiles! ctx.root files)) (list (str pkgDir "/.asl.config.asn"))))) (fn [(f String)] -> Bool (liveSource? root ctx.root mirrorDir pkgDir f))) (touchUsed! mirrorDir) (pruneStage! (outsidePkgStageDir ctx) "" digest) (ok pkgDir))))))))))))
 
 fn ! stageOutside! ctx: sys/Context absFile: String -> (Result String String)
   (match (findPackageRoot! (ckr/parentDirOf absFile) 0)
@@ -536,7 +550,7 @@ fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
     (match built.binary
       ((some binPath)
         (let [(bin (if (stringStartsWith? binPath "/") binPath (str ctx.root "/" binPath)))
-              (out (nt/runProcIn (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))))
+              (out (nt/runProcWithin (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff)))) (nt/suiteWall (resultOr (fileReadString (str ctx.root "/" rel)) ""))))
               (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
           (do (print out.stdout)
               (eprintText v.stderr)
@@ -709,8 +723,12 @@ fn ! stagedViews! ctx: sys/Context files: (List String) -> (Result (List verify/
             ((ok ss) (match (stagedView! ctx a) ((err e) (err e)) ((ok s) (ok (listAppend ss (list s))))))))
         (ok (list)) files)
 
+; (:m :ref CHECK-REFUSAL-WORDING :do "the same words as command.asl: a bare test would sweep every suite, a bare check every file")
+fn bareSweepNoun verb: String -> String
+  (if (= verb "check") "file" "suite")
+
 fn ! bareSweepRefused! verb: String -> Int64
-  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every suite\")")) 2)
+  (do (sys/say! (str "(:" verb " :status :failed :error ERR_BARE_SWEEP :message \"asl " verb " needs paths or --all; a bare asl " verb " would sweep every " (bareSweepNoun verb) "\")")) 2)
 
 fn ! allWithPaths! verb: String -> Int64
   (do (sys/say! (str "(:" verb " :status :failed :error ERR_USAGE :message \"asl " verb " --all takes no paths\")")) 2)
@@ -945,7 +963,13 @@ fn ! fileEntry! ctx: sys/Context args: (List String) -> Int64
       ((err _) (do (sys/say! "(:batch :status :failed :error ERR_MISSING_ARG :message \"usage: asl -f FILE, one readable file of forms and no other argument\")") 2))
       ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text))))))
 
+; (:m :ref REMOTE-TARGET :do "asl --on NODE:UNIT and a remote .asl/target.asn route forms, test and check to tools/remote/on.asl before any local dispatch (cmd/remote!), run natively like asl run; --local drops the profile for one call")
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
+  (match (cmd/remote! ctx args (fn [(a (List String))] -> Int64 (run! ctx a)))
+    ((some code) code)
+    ((none) (localEntry! ctx (rt/localArgs args))))
+
+fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(head (first args))]
     (cond
       ((= head "-e") (if (listEmpty? (rest args)) (inlineUsage!) (runInline! ctx "e" (first (rest args)) (rest (rest args)))))

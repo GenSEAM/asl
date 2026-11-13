@@ -61,7 +61,7 @@ fn isTokenValidAtState pda: GrammarPda st: MaskerState tokenId: Int tokenText: S
   (if (= tokenText "<eos>") st.isEosAllowed (if (= tokenText ")") (> st.stackDepth 0) (if (= tokenText "(") true (if (= tokenText "]") (> st.stackDepth 0) (if (= tokenText "[") true (if (= tokenText "}") (> st.stackDepth 0) (if (= tokenText "{") true (let [(curDepth st.stackDepth) (isAtom (isGrammarTerminalAllowed pda tokenText))] (if isAtom (if (> curDepth 0) true (not pda.rootRequiresDelimiter)) false)))))))))
 
 fn computeTokenMaskBitset pda: GrammarPda st: MaskerState vocab: (List (Pair Int Str)) -> TokenMaskBitset
-  (let [(curBuf st.buffer) (allowed (fold (fn [(acc (List Int)) (item (pair Int Str))] (let [(tId (pairFirst item)) (tText (pairSecond item)) (isValid (if (= curBuf "") (isTokenValidAtState pda st tId tText) (let [(testBuf (str curBuf tText))] (isSubwordPrefixValid pda testBuf))))] (if isValid (listAppend acc (list tId)) acc))) (list) vocab))] (TokenMaskBitset :allowedTokenIds allowed :totalVocabSize (listLength vocab)))
+  (let [(curBuf st.buffer) (allowed (fold (fn [(acc (List Int)) (item (Pair Int Str))] (let [(tId (pairFirst item)) (tText (pairSecond item)) (isValid (if (= curBuf "") (isTokenValidAtState pda st tId tText) (let [(testBuf (str curBuf tText))] (isSubwordPrefixValid pda testBuf))))] (if isValid (listAppend acc (list tId)) acc))) (list) vocab))] (TokenMaskBitset :allowedTokenIds allowed :totalVocabSize (listLength vocab)))
 
 fn isTokenAllowed mask: TokenMaskBitset tokenId: Int -> Bool
   (listContains? mask.allowedTokenIds tokenId)

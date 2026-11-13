@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv execOp! execGateOp! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -13,7 +13,9 @@
       (aslAgent/reply :a rp)
       (aslAgent/plan :a p)
       (aslAgent/claims :a cl)
-      (aslAgent/remoteOps :a rr)])
+      (aslAgent/remoteOps :a rr)
+      (asl-syntax/core/bytesText :a bt)
+      (aslAgent/grounding :a gr)])
 
 enum Val
   (vStr text: String)
@@ -322,6 +324,8 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                 (if (notNone rec "balance") (str " :balance \"" (escField rec "balance") "\"") "")
                 (if (truthyField rec "nearest") (str " :nearest \"" (escField rec "nearest") "\"") "")
                 (if (truthyField rec "terminal") (str " :terminal (" (quotedList (field "terminal")) ")") "")
+                (if (has? rec "red") (str " :rev \"" (escField rec "rev") "\" :red " (if (truthyField rec "red") "true" "false") " :restored " (if (truthyField rec "revertRestored") "true" "false")) "")
+                (if (truthyField rec "revertRuns") (str " :revertGates (" (stringJoin (map formatGateRun (gateRunsOf (field "revertRuns"))) " ") ")") "")
                 (if (truthyField rec "gateRuns") (str " :gates (" (stringJoin (map formatGateRun (gateRunsOf (field "gateRuns"))) " ") ")") "")
                 (if (and (= op "run") (has? rec "exit")) (str " :cmd \"" (escField rec "cmd") "\" :exit " (fieldStr rec "exit" "")) "")
                 (if (= op "manage")
@@ -360,7 +364,7 @@ fn opShapes -> (List (Pair String String))
     (pair "gitDiff" "(:step :op \"gitDiff\" :path p :base rev [:start n :end m])")
     (pair "gitLog" "(:step :op \"gitLog\" :path p :limit n [:start n :end m])")
     (pair "gitShow" "(:step :op \"gitShow\" :rev rev :path p [:start n :end m])")
-    (pair "gate" "(:step :op \"gate\" [:n i])")
+    (pair "gate" "(:step :op \"gate\" [:n i] [:revert f [:rev r]])")
     (pair "run" "(:step :op \"run\" :argv \"cmd\")")
     (pair "delete" "(:step :op \"delete\" :file f)")
     (pair "manage" "(:step :op \"manage\" :action spawn|poll|tail|send|kill|list :id name [:cmd c] [:text s])")
@@ -620,6 +624,133 @@ fn ! execGateOp! n: (Option c/KvVal) env: ExecEnv newId: (fn [] -> String) -> (L
             (list (vs "id" rid) (vs "op" "gate") (vs "status" (if passed "ok" "failed")) (pair "gateRuns" (vRecs recs))))))))
 
 
+; (:m :ref LEON-REVERT-NO-RESTORE :do "red on revert is one harness step: F is saved to a backup under .asl/run/revert, set to its text at :rev (default HEAD; removed when absent there), the gate runs, and F is written back and checked byte for byte before the step answers, so a run whose budget ends after this step never leaves the reverted file in the tree; the runs go under revertRuns, not gateRuns, so a pass on reverted code never backs a gate claim")
+fn revertRejected rid: String rel: String code: String message: String -> (List (Pair String Val))
+  (list (vs "id" rid) (vs "op" "gate") (vs "status" "rejected") (vs "error" code) (vs "file" rel) (vs "message" message))
+
+fn ! putFile! full: String content: (Option Bytes) -> Bool
+  (match content
+    ((some b) (and (ok? (fileWrite full b)) (ok? (fileUtime full (+ (nowNs) 2000000000)))))
+    ((none) (or (ok? (pathRemove full)) (not (ok? (fileStat full))))))
+
+fn ! sameFile! full: String want: (Option Bytes) -> Bool
+  (match want
+    ((some b) (match (fileReadBytes full) ((ok now) (= (bt/bytesToString now) (bt/bytesToString b))) ((err _) false)))
+    ((none) (not (ok? (fileStat full)))))
+
+fn ! execRevertGate! n: (Option c/KvVal) rel0: String rev: String env: ExecEnv newId: (fn [] -> String) -> (List (Pair String Val))
+  (let [rid (newId)
+        root (absRoot! env.root)
+        rel (if (stringStartsWith? rel0 (str root "/")) (c/sliceOf rel0 (+ (stringLength root) 1) (stringLength rel0)) rel0)
+        full (str root "/" rel)
+        t (stepTimeout! env)]
+    (cond
+      ((listEmpty? env.gates) (revertRejected rid rel "ERR_NO_GATES" "this run declares no :gates"))
+      ((not (r/insideRoot! rel env.root)) (rootRec rid "gate" rel))
+      ((not (c/checkOwns rel (c/effectiveOwns env.owns) root)) (ownsRec rid "gate" rel env.owns))
+      ((not (match (g/runBounded! (list "git" "rev-parse" "--verify" "--quiet" (str rev "^{commit}")) (some root) (some t) env.env (none))
+              ((ok b) (= (optionOr b.code 1) 0)) ((err _) false)))
+        (revertRejected rid rel "ERR_REVERT_REV" (str ":rev " rev " names no commit")))
+      (else
+        (let [orig (match (fileReadBytes full) ((ok b) (some b)) ((err _) (none)))
+              atRev (match (g/runBounded! (list "git" "show" (str rev ":" rel)) (some root) (some t) env.env (none))
+                      ((ok b) (if (= (optionOr b.code 1) 0) (some (stringToBytes b.out)) (none)))
+                      ((err _) (none)))
+              same (match orig
+                     ((some a) (match atRev ((some b) (= (bt/bytesToString a) (bt/bytesToString b))) ((none) false)))
+                     ((none) (none? atRev)))]
+          (if same
+            (revertRejected rid rel "ERR_REVERT_UNCHANGED" (str rel " is the same as at " rev "; there is no change to revert"))
+            (let [stem (revertStem root env.session rel)
+                  lock (match (dirCreate (revertDir root)) ((ok _) (fileLock (str stem ".lock") true)) ((err e) (err e)))
+                  saved (and (ok? lock)
+                          (and (ok? (fileWrite (str stem ".path") rel))
+                            (match orig
+                              ((some b) (ok? (fileWrite (str stem ".bak") b)))
+                              ((none) (ok? (fileWrite (str stem ".absent") ""))))))]
+              (if (not saved)
+                (do (match lock ((ok fd) (closeEntry! stem fd true)) ((err _) true))
+                  (revertRejected rid rel "ERR_REVERT_BACKUP" (str "could not save " rel " before the revert; nothing was changed")))
+                (let [reverted (putFile! full atRev)
+                      gate (if reverted (execGateOp! n env newId) (list))
+                      put (putFile! full orig)
+                      restored (and put (sameFile! full orig))
+                      closed (match lock ((ok fd) (closeEntry! stem fd restored)) ((err _) true))
+                      runs (optionOr (recGet gate "gateRuns") (vRecs (list)))
+                      gateStatus (fieldStr gate "status" "")
+                      verdict (revertVerdict runs)
+                      red (= verdict "red")]
+                  (cond
+                    ((not restored)
+                      (list (vs "id" rid) (vs "op" "gate") (vs "status" "failed") (vs "error" "ERR_REVERT_RESTORE") (vs "file" rel)
+                        (vs "message" (str rel " could not be written back after the revert run; its text is in " stem ".bak, and the next run's start restores it"))))
+                    ((not reverted)
+                      (revertRejected rid rel "ERR_REVERT_WRITE" (str rel " could not be set to its text at " rev "; it was restored and the gate did not run")))
+                    ((= gateStatus "rejected") (recSet gate "file" (vStr rel)))
+                    (else
+                      (list (vs "id" rid) (vs "op" "gate") (vs "status" "ok") (vs "file" rel) (vs "rev" rev)
+                        (pair "red" (vBool red)) (vs "verdict" verdict) (pair "revertRestored" (vBool true)) (pair "revertRuns" runs)
+                        (vs "message" (cond
+                                        (red (str "red on revert: the gate fails with " rel " as at " rev "; " rel " is restored"))
+                                        ((= verdict "unknown") (str "unknown on revert: a gate timed out with " rel " as at " rev ", which proves nothing either way; raise :gateTimeout or run the suite alone; " rel " is restored"))
+                                        (else (str "not red on revert: the gate passes with " rel " as at " rev ", so it does not prove the change; " rel " is restored")))))))))))))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M1: red needs a gate that exited nonzero without timing out; a timeout on the reverted file is unknown, as gateRevertVerdict rules for the integrity check")
+fn revertVerdict runs: Val -> String
+  (let [recs (gateRunsOf runs)
+        timedOut (fn [r] (truthyField r "timeout"))
+        failed (fn [r] (match (recGet r "exit") ((some v) (match v ((vInt e) (!= e 0)) (_ false))) ((none) false)))]
+    (cond
+      ((listAny? (fn [r] (and (failed r) (not (timedOut r)))) recs) "red")
+      ((listAny? timedOut recs) "unknown")
+      (else "pass")))
+
+fn ! revertDir root: String -> String
+  (str root "/.asl/run/revert")
+
+fn ! revertStem root: String session: String rel: String -> String
+  (str (revertDir root) "/" session "-" (stringJoin (stringSplit rel "/") "__"))
+
+fn ! dropFiles! stem: String exts: (List String) -> Bool
+  (fold (fn [acc ext] (and acc (or (ok? (pathRemove (str stem ext))) (not (ok? (fileStat (str stem ext)))))))
+    true exts)
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: an entry is dropped while its lock is still held (data files first, then the lock is released, then the lock file removed), so a sweep never sees a free lock beside a stale .path")
+fn ! closeEntry! stem: String fd: Int64 drop: Bool -> Bool
+  (let [data (if drop (dropFiles! stem (list ".path" ".bak" ".absent")) true)
+        closed (ok? (fdClose fd))
+        lockGone (if drop (dropFiles! stem (list ".lock")) true)]
+    (and data (and closed lockGone)))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade M2: a run killed mid-revert leaves F at its :rev text with a .path/.bak (or .absent) entry whose .lock no live process holds; at a run's start every such entry puts F back (the .bak bytes, or removes F that did not exist) and is dropped; an entry whose lock is held belongs to a live run and is skipped; answers the restored paths")
+fn ! sweepRevertBackups! root0: String -> (List String)
+  (let [root (absRoot! root0)
+        dir (revertDir root)
+        stems (map (fn [n] (str dir "/" (c/sliceOf n 0 (- (stringLength n) 5))))
+                (filter (fn [n] (stringEndsWith? n ".path")) (resultOr (dirList dir) (list))))]
+    (fold (fn [acc stem]
+            (match (fileLock (str stem ".lock") true)
+              ((err _) acc)
+              ((ok fd)
+                (let [rel (resultOr (fileReadString (str stem ".path")) "")
+                      full (str root "/" rel)
+                      content (match (fileReadBytes (str stem ".bak")) ((ok b) (some b)) ((err _) (none)))
+                      absent (ok? (fileStat (str stem ".absent")))
+                      put (cond
+                            ((stringEmpty? rel) false)
+                            ((some? content) (putFile! full content))
+                            (absent (putFile! full (none)))
+                            (else false))
+                      closed (closeEntry! stem fd put)]
+                  (if put (listAppend acc (list rel)) acc)))))
+      (list) stems))
+
+; (:m :ref TOOLCARD-B :do "(:step :op help :name N) for a builtin that is not an op answers the checker's signature line locally, so a model asks the harness instead of the web; an op name keeps the op help")
+fn builtinHelp name: String -> String
+  (if (or (stringEmpty? name) (listAny? (fn [p] (= (pairFirst p) name)) (opShapes)))
+    ""
+    (gr/sigLine name))
+
 fn rootRec rid: String opName: String path: String -> (List (Pair String Val))
   (list (vs "id" rid) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_ROOT") (vs "file" path)
     (vs "message" (str "'" path "' is outside :root; nothing in this step was written; the run goes on")))
@@ -723,6 +854,8 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
       ((match effect ((t/effectConfirm) true) (_ false)) (eo (needsConfirmRec (newId) opName) procs))
       ((and step (and (listContains? (rr/remoteOpNames) opName) (not (stringEmpty? (rr/remoteUnit op)))))
         (eo (remoteRec! op opName env newId) procs))
+      ((and step (and (= opName "gate") (opTruthy op "revert")))
+        (eo (execRevertGate! (opGet op "n") (opStr op "revert" "") (opStr op "rev" "HEAD") env newId) procs))
       ((and step (= opName "gate")) (eo (execGateOp! (opGet op "n") env newId) procs))
       ((some? gateIdx)
         (let [k (optionOr gateIdx 0)
@@ -758,6 +891,8 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
         (let [res (r/execManageOp! op (runCtx! env) procs (newId) onKeep)]
           (eo (mapRec res.rec fromRun) res.procs)))
       ((and step (= opName "note")) (eo (execNoteOp op (newId)) procs))
+      ((and step (and (= opName "help") (not (stringEmpty? (builtinHelp (opStr op "name" ""))))))
+        (eo (list (vs "id" (newId)) (vs "op" "help") (vs "status" "ok") (vs "name" (opStr op "name" "")) (vs "content" (builtinHelp (opStr op "name" "")))) procs))
       (else (eo (withCanonical op (execRest! op opType opName env newId snap run)) procs))))
 
 fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))

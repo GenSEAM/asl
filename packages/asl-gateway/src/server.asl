@@ -1,7 +1,7 @@
 (module aslGateway/server
-  :x [gatewayCliMode? busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [gatewayCliMode? hubStatusText! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
-  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys)
+  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/admission :a adm) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
@@ -241,7 +241,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 
 ; (:m :ref GW-MODELS-MODE :do "the gateway subcommands that run in the CLI main instead of the server: config, configCheck, convert, stats, session, models and subs (models sync and subs refresh reach cliDispatch)")
 fn gatewayCliMode? mode: String -> Bool
-  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs" "order") mode)
+  (listContains? (list "config" "configCheck" "convert" "stats" "learn" "health" "session" "models" "subs" "order" "hubStatus") mode)
 
 fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFamily) -> (Result Int64 String)
   (let [(launch (Launch :module module :families (listAppend (dp/builtinFamilies) families)))
@@ -587,7 +587,7 @@ fn failureHeaders f: u/UpstreamFailure -> (List (Pair String String))
 ; (:m :ref GW-LEDGER-ROTATION-WINDOW :do "what a failed attempt's ledger row keeps as its reason: the status line and the start of the upstream body, the curl exit and its text, or the tool or protocol detail; ul/callRowLine redacts it before writing")
 fn failureReason f: u/UpstreamFailure -> String
   (match f
-    ((u/httpFailure status reason body _) (str (stringFromInt64 status) " " reason ": " (optionOr (stringSlice body 0 400) body)))
+    ((u/httpFailure status reason body _) (str (stringFromInt64 status) " " reason ": " (ts/stringClipUtf8 body 400)))
     ((u/transportFailure code text) (str "curl exit " (stringFromInt64 code) ": " (stringTrim text)))
     ((u/toolAbsent tool detail) (str tool ": " detail))
     ((u/protocolFailure detail) detail))
@@ -716,8 +716,8 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
           ((some v) (pair srv1 (ch/outStrings (list v.outcome v.reason))))
           ((none) (limitConcurrency! srv1 text sc limits provider alias now)))))
     ; (:m :ref GW-ADAPTIVE-ADMISSION :do "the upstream said 429 for concurrency: free this call's lease and lower the lane cap; a shared-state failure is logged, the call still parks")
-    ((ch/effConcurrency429 provider alias)
-      (let [(r (adm/concurrency429! srv.home (admissionLimits! srv provider alias) provider alias (/ (nowNs) 1000000)))]
+    ((ch/effConcurrency429 provider alias retryAfterMs)
+      (let [(r (adm/concurrency429After! srv.home (admissionLimits! srv provider alias) provider alias (/ (nowNs) 1000000) retryAfterMs))]
         (do (match r ((ok _) true) ((err e) (logLine! (str "(:gateway :admission :error \"" (wire/asnEscape e) "\")"))))
           (pair srv ch/outDone))))
     ((ch/effRealpath p) (pair srv (ch/outPath (resultOr (realPath p) p))))
@@ -1164,6 +1164,7 @@ fn ! hubStatusText! srv: GatewayLoop -> String
     (str "(:hub :uptimeSec " (stringFromInt64 (/ (- now srv.startMs) 1000))
          " :streams " (stringFromInt64 (listLength flying))
          " :waiting " (stringFromInt64 (listLength (filter hubParked? flying)))
+         (if (stringEmpty? (c/profilesStale srv.profiles)) "" (str " :configStale (:error " (hubAsnStr (wire/asnEscape (c/profilesStale srv.profiles))) ")"))
          " :requests " (stringFromInt64 (listLength srv.reqs))
          " :stuck " (stringFromInt64 (listLength (filter (fn [(r rq/ReqInfo)] -> Bool (> (- now r.startMs) (* 1000 (rq/requestDeadlineFromText (optionOr srv.wiringText ""))))) srv.reqs)))
          " :buckets (" (stringJoin (map (fn [(p (Pair String u/TokenBucket))] -> String (hubBucketRow (pairFirst p) (pairSecond p) nowSec)) srv.buckets.buckets) " ") ")"

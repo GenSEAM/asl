@@ -57,9 +57,116 @@ fn ! budgets root: String -> Bool
             (langTokens (tok/countTokens! t lang))]
         (do
           (assert (> indexTokens 0) "index is non-empty")
-          (assert (<= indexTokens 2000) (str "L0 index fits 2000 o200k tokens, got " indexTokens))
+          ; (:m :ref KNOW-INDEX-SCALE :do "L0 is one line per group: 82 cards measured 1766 o200k tokens as a flat index, the group index is a quarter of that, so 2x the packages still fits the 700 cap; the cap is adopted, the figure is measured at the 2026-11-13 render")
+          (assert (<= indexTokens 700) (str "L0 group index fits 700 o200k tokens, got " indexTokens))
           (assert (<= langTokens 1500) (str "language card fits 1500 o200k tokens, got " langTokens))
           true))))
+
+; (:m :ref KNOW-INDEX-BRANDING :do "words that name the language or praise a package and say nothing about what it does; an index purpose made only of them, or led by one, spends its few bytes on nothing a model can pick the card by")
+fn brandOnly -> (List String)
+  (list "100%" "Self-Hosted" "Self-Contained" "Pure" "AgentSlang" "ASL" "Aslany" "Native" "Standalone" "Sovereign" "Standard" "Universal" "Autonomous" "Unified")
+
+fn indexPurposeOf line: String -> String
+  (let [(parts (stringSplit line "\""))]
+    (optionOr (listGet parts 3) ""))
+
+fn bareIndexLine? line: String -> Bool
+  (let [(words (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringReplace (stringReplace (indexPurposeOf line) "..." "") ":" "") " ")))]
+    (and (not (listEmpty? words)) (listAll? (fn [(w String)] -> Bool (listContains? (brandOnly) w)) words)))
+
+fn brandLed? line: String -> Bool
+  (listContains? (brandOnly) (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) ""))
+
+; (:m :ref KNOW-INDEX-FILLER :do "a fixed praise list, independent of render fillerWords, so dropping the render trim or emptying its list goes red here")
+fn fillerOnly -> (List String)
+  (list "high-performance" "high-frequency" "zero-cost")
+
+fn fillerLed? line: String -> Bool
+  (listContains? (fillerOnly) (stringLower (optionOr (listHead (stringSplit (indexPurposeOf line) " ")) "")))
+
+fn ! groupIds root: String -> (List String)
+  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))]
+    (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) ""))
+         (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:g \"")) (stringSplit index "\n"))))
+
+fn ! groupLines root: String gid: String -> (List String)
+  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:c \""))
+          (stringSplit (resultOr (fileReadString (str (kn/cardsDir root) "/index-" gid ".asn")) "") "\n"))
+
+fn ! cardLines root: String -> (List String)
+  (listFlatMap (fn [(g String)] -> (List String) (groupLines root g)) (groupIds root))
+
+; (:m :ref KNOW-INDEX-SCALE :do "every card is reachable L0 to its group file: each group named by L0 has a file, each card id appears in exactly one group file, the L0 group counts equal the file line counts, and no card fell into the other group (a package missing from groups.asn)")
+fn ! tiersReach root: String -> Bool
+  (let [(es (qy/loadEntries! (kn/cardsDir root)))
+        (ids (map (fn [(e qy/Entry)] -> String e.id) es))
+        (gids (groupIds root))
+        (lines (cardLines root))
+        (listed (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) "")) lines))
+        (index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))
+        (counts (listFlatMap (fn [(l String)] -> (List Int64) (if (stringStartsWith? l "(:g \"") (list (optionOr (stringToInt64 (stringTrim (optionOr (listGet (stringSplit l "\"") 2) ""))) -1)) (list))) (stringSplit index "\n")))
+        (fileCounts (map (fn [(g String)] -> Int64 (listLength (groupLines root g))) gids))]
+    (do
+      (assert (> (listLength gids) 1) "L0 lists several groups")
+      (assert (not (listContains? gids "other")) (str "every card has a group in groups.asn, other holds: " (stringJoin (filter (fn [(i String)] -> Bool (not (listContains? (listFlatMap (fn [(g String)] -> (List String) (if (= g "other") (list) (map (fn [(l String)] -> String (optionOr (listGet (stringSplit l "\"") 1) "")) (groupLines root g)))) gids) i))) ids) ", ")))
+      (assert (= (listLength listed) (listLength ids)) (str "group files list every card once: " (listLength listed) " lines for " (listLength ids) " cards"))
+      (assert (listAll? (fn [(i String)] -> Bool (listContains? listed i)) ids) "each card id is reachable through one group file")
+      (assert (= counts fileCounts) "L0 group counts equal the lines of each group file")
+      (assert (> (listLength gids) 0) "L0 lists groups")
+      true))
+
+fn ! indexDistinct root: String -> Bool
+  (let [(lines (cardLines root))
+        (bare (filter bareIndexLine? lines))
+        (led (filter brandLed? lines))
+        (filler (filter fillerLed? lines))
+        (empty (filter (fn [(l String)] -> Bool (stringEmpty? (stringTrim (indexPurposeOf l)))) lines))]
+    (do
+      (assert (> (listLength lines) 80) (str "index lists every card, got " (listLength lines)))
+      (assert (listEmpty? bare) (str (listLength bare) " index lines show only a branding prefix: " (stringJoin (listTake bare 6) " ")))
+      (assert (listEmpty? led) (str (listLength led) " index lines spend their purpose bytes on a branding word first: " (stringJoin (listTake led 6) " ")))
+      (assert (listEmpty? filler) (str (listLength filler) " index lines lead with a praise word: " (stringJoin (listTake filler 6) " ")))
+      (assert (= (r/indexPurpose "High-performance vector memory store") "vector memory store") "a leading praise word is dropped before the cut")
+      (assert (= (r/indexPurpose "Pure AgentSlang Zero-Cost Schema, Codec") "Schema, Codec") "brand and praise words drop together")
+      (assert (= (r/indexPurpose "Fast") "Fast") "a purpose of only a praise word is kept whole")
+      ; (:m :ref KNOW-INTEL-PURPOSE :do "an empty purpose leaves a model only the card id: a description the scan blanks (it names a retired path) shows up here, not as a missing card")
+      (assert (listEmpty? empty) (str (listLength empty) " index lines carry an empty purpose: " (stringJoin (listTake empty 6) " ")))
+      true))
+
+; (:m :ref KNOW-TIER-LOWS :do "L0 member names are unique across groups (core/parquet and asl-parquet both keep their full id), the word memory leads exactly one group purpose, and gen's dropStaleIndexes! deletes an index-GROUP.asn whose group is gone while keeping rendered index files and other card files")
+fn ! memberNames root: String -> (List String)
+  (let [(index (r/indexText (r/groupsOf! root) (r/allCards! root)))]
+    (listFlatMap (fn [(l String)] -> (List String)
+                   (if (stringStartsWith? l "(:g \"")
+                     (stringSplit (optionOr (listHead (stringSplit (optionOr (listLast (stringSplit l "(")) "") ")")) "") " ")
+                     (list)))
+                 (stringSplit index "\n")))
+
+fn ! purposeLines root: String -> (List String)
+  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:group "))
+          (stringSplit (resultOr (fileReadString (str root "/asl/packages/asl-know/groups.asn")) "") "\n"))
+
+fn purposeOf l: String -> String
+  (optionOr (listGet (stringSplit (optionOr (listHead (stringSplit l " :members ")) "") ":purpose ") 1) "")
+
+fn ! tierLows root: String -> Bool
+  (let [(names (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (memberNames root)))
+        (dup (filter (fn [(n String)] -> Bool (> (listLength (filter (fn [(m String)] -> Bool (= m n)) names)) 1)) names))
+        (memory (filter (fn [(l String)] -> Bool (stringContains? (stringLower (purposeOf l)) "memory")) (purposeLines root)))
+        (dir (str (optionOr (envGet "TMPDIR") "/tmp") "/knowTierLows-" (stringFromInt64 (procSelf))))]
+    (do (assert (> (listLength names) 60) (str "L0 lists the members of every group, got " (listLength names)))
+        (assert (listEmpty? dup) (str "L0 member names are unique across groups: " (stringJoin dup " ")))
+        (assert (stringContains? (stringJoin names " ") "core/parquet") "the colliding core card keeps its full id")
+        (assert (stringContains? (stringJoin names " ") "asl-parquet") "the colliding package card keeps its full id")
+        (assert (= (listLength memory) 1) (str "memory appears in exactly one group purpose, got " (listLength memory)))
+        (assert (ok? (dirCreate dir)) "scratch dir made")
+        (assert (and (ok? (fileWrite (str dir "/index-gone.asn") (str (r/groupMarker) "\"gone\" :cards 0 :tokensBy bytes36)\n"))) (and (ok? (fileWrite (str dir "/index-keep.asn") "x")) (and (ok? (fileWrite (str dir "/core-lang.asn") "x")) (ok? (fileWrite (str dir "/index-hand.asn") "(:hand made)\n"))))) "scratch files written")
+        (assert (= (kn/dropStaleIndexes! dir (list (pair "index-keep.asn" "x") (pair "core-lang.asn" "x"))) (ok 2)) "dropStaleIndexes! reports the rendered count")
+        (assert (not (fileExists? (str dir "/index-gone.asn"))) "the index file of a removed group is deleted")
+        (assert (and (fileExists? (str dir "/index-keep.asn")) (fileExists? (str dir "/core-lang.asn"))) "rendered index and other card files stay")
+        (assert (fileExists? (str dir "/index-hand.asn")) "a hand-made index-*.asn without the generator's head survives gen")
+        (assert (ok? (pathRemove dir)) "scratch dir removed")
+        true))
 
 fn ! queries root: String -> Bool
   (let [(es (qy/loadEntries! (kn/cardsDir root)))
@@ -76,6 +183,30 @@ fn ! queries root: String -> Bool
       (assert (<= (r/tokensOf tight) 330) (str "answer respects the budget, got " (r/tokensOf tight)))
       true))
 
+; (:m :ref KNOW-TIER-LOWS3 :do "the pure checks of the tier code with synthetic ids absent from the tree, run before every check that reads the generated cards, so a broken shortIdIn, orphan, other or receipt function fails here and not first at cardsFresh")
+fn ! tierPure -> Bool
+  (let [(card (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))]
+    (do
+        (assert (and (= (r/shortIdIn "core/zzdup" (list "core/zzdup" "asl-zzdup")) "core/zzdup") (= (r/shortIdIn "asl-zzdup" (list "core/zzdup" "asl-zzdup")) "asl-zzdup")) "a short name shared by two cards keeps both full ids")
+        (assert (and (= (r/shortIdIn "asl-zzone" (list "asl-zzone" "core/zztwo")) "zzone") (= (r/shortIdIn "core/zztwo" (list "asl-zzone" "core/zztwo")) "zztwo")) "an unshared card gets its short name")
+        (assert (= (r/orphanMembers (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "g/ghost")) "a group member naming no card is reported as an orphan")
+        (assert (= (r/otherMembers (list) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "a")) "a card no group lists is reported as falling to other")
+        (assert (= (kn/genReceipt 5 (list) (list)) "(:know :gen :files 5)") "gen receipt without orphans or other is the bare count")
+        (assert (= (kn/genReceipt 5 (list "g/ghost") (list "zz/a" "b")) "(:know :gen :files 5 :orphans (\"g/ghost\") :other (\"zz/a\" \"b\"))") "gen receipt names orphans and other")
+        (assert (= (kn/genLineOf 3 (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list card)) "(:know :gen :files 3 :orphans (\"g/ghost\"))") "genLineOf reports an orphan member and no other when every card is listed")
+        (assert (= (kn/genLineOf 3 (list) (list card)) "(:know :gen :files 3 :other (\"a\"))") "genLineOf reports a card no group lists as other")
+        true))
+
 fn ! runTests -> Bool
-  (let [(root (resultOr (realPath ".") "."))]
-    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (queries root)))
+  (let [(root (resultOr (realPath ".") "."))
+        (a0 (tierPure))
+        (a (examplesRun))
+        (b (cardsFresh root))
+        (c (ratchetShrinks root))
+        (d (examplesEmbedded root))
+        (e (budgets root))
+        (f (tiersReach root))
+        (g (tierLows root))
+        (h (indexDistinct root))
+        (i (queries root))]
+    (and a0 (and a (and b (and c (and d (and e (and f (and g (and h i))))))))))

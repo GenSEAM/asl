@@ -23,7 +23,7 @@ fn indentFields! path: String -> String
       (let [(g (ind/guideBroken text))]
         (if (listEmpty? g.edits)
           ""
-          (str " :indent " (ind/editsAsn g.edits) " :fix \"(:fix :file \\\"" (dyck/esc (dyck/esc path)) "\\\" :by :indent :apply true)\"")))))
+          (str " :indent " (ind/editsAsnIn text g.edits) " :fix \"(:fix :file \\\"" (dyck/esc (dyck/esc path)) "\\\" :by :indent :apply true)\"")))))
 
 fn balanceReceipt! path: String -> String
   (pairSecond (dyck/reportFile! path (fn [(p String)] -> String (indentFields! p))))

@@ -1,5 +1,5 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout revertTimeoutWithin gateIntegrityWithin!]
   :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
 
 enum Claim
@@ -215,17 +215,22 @@ fn unionPaths a: (List String) b: (List String) -> (List String)
   (fold (fn [acc f] (if (listContains? acc f) acc (listAppend acc (list f)))) a b)
 
 fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String -> (Pair Bool String)
-  (match (io/changedOwnedFiles! owns root env)
-    ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed)
-      (let [rev (revertRev! root base timeout env)
-            all (unionPaths (unionPaths changed (committedSince! owns root rev timeout env)) (map (fn [f] (scanPath root f)) written))]
-        (gateIntegrityWithChanged! gates root gateResults timeout env all watch rev))))
+  (gateIntegrityWithin! gates owns root gateResults timeout env written watch base (none))
+
+; (:m :ref LEON-FINISH-HANG :do "gateIntegrityWritten! bounded by the wall the run has left (seconds, none for unbounded): every revert run gets at most the wall still left when it starts, and a run that would start with less than revertMinSec is not started, so the check ends inside the run's wall and the receipt is written; STAGEPRUNE 2026-11-09 started the check with about 4 min of wall, the 900 s revert floor ran twice and the outer bound killed the run 24 min later with no receipt")
+fn ! gateIntegrityWithin! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String wall: (Option Int64) -> (Pair Bool String)
+  (let [deadline (match wall ((some w) (some (+ (monotonicNs) (* (max 0 w) 1000000000)))) ((none) (none)))]
+    (match (io/changedOwnedFiles! owns root env)
+      ((err message) (pair false (str "changedOwnedFiles failed: " message)))
+      ((ok changed)
+        (let [rev (revertRev! root base timeout env)
+              all (unionPaths (unionPaths changed (committedSince! owns root rev timeout env)) (map (fn [f] (scanPath root f)) written))]
+          (gateIntegrityWithChanged! gates root gateResults timeout env all watch rev deadline)))))
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
     ((err message) (pair false (str "changedOwnedFiles failed: " message)))
-    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none) "HEAD")))
+    ((ok changed) (gateIntegrityWithChanged! gates root gateResults timeout env changed (none) "HEAD" (none))))
 
 fn fnName line: String -> String
   (let [toks (filter (fn [t] (not (stringEmpty? t))) (stringSplit line " "))
@@ -271,7 +276,24 @@ fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String 
 fn revertTimeout timeout: Int64 -> Int64
   (if (< timeout 60) timeout (max timeout 900))
 
-fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String -> (Pair Bool String)
+; (:m :ref LEON-FINISH-HANG :do "the revert floor never outlasts the wall: a revert run gets revertTimeout, cut to the seconds left when it starts")
+fn revertTimeoutWithin timeout: Int64 left: (Option Int64) -> Int64
+  (match left ((some l) (max 1 (min (revertTimeout timeout) l))) ((none) (revertTimeout timeout)))
+
+; (:m :ref LEON-FINISH-HANG :do "the least wall a revert run is started with; under it the check ends unfinished instead of running a gate the outer bound would kill")
+fn revertMinSec -> Int64
+  10
+
+fn ! secondsLeft! deadline: (Option Int64) -> (Option Int64)
+  (match deadline ((some d) (some (/ (- d (monotonicNs)) 1000000000))) ((none) (none)))
+
+fn wallOut? left: (Option Int64) -> Bool
+  (match left ((some l) (< l (revertMinSec))) ((none) false))
+
+fn wallUnfinished left: (Option Int64) impl: (List String) -> (Pair Bool String)
+  (pair false (str "revertCheck unfinished :revertKind wall: " (stringFromInt64 (max 0 (optionOr left 0))) " s of wall left, under the " (stringFromInt64 (revertMinSec)) " s a revert run needs; the gates were not run with " (c/joinSep impl ", ") " reverted"))
+
+fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String deadline: (Option Int64) -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         vac (g/gateVacuousMessage gateResults verdicts)]
@@ -286,14 +308,18 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               newFiles (map pairFirst (filter (fn [p] (not (some? (pairSecond p)))) headText))
               wroteHead (writeTexts! root existing)
               bumped (fold (fn [ok p] (and ok (bumpMtime! (str root "/" (pairFirst p))))) wroteHead existing)
-              firstRun (if (and bumped (not (listEmpty? existing))) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))
-              firstDecision (revertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles)
-              answer (if (and bumped (pairFirst firstDecision))
+              firstLeft (secondsLeft! deadline)
+              firstOut (and (not (listEmpty? existing)) (wallOut? firstLeft))
+              firstRun (if (and bumped (and (not firstOut) (not (listEmpty? existing)))) (runIntegrityGates! gates root (revertTimeoutWithin timeout firstLeft) env watch) (list))
+              firstDecision (if firstOut (wallUnfinished firstLeft impl) (revertVerdict firstRun (g/gateVerdicts firstRun true) impl newFiles))
+              answer (if (or firstOut (and bumped (pairFirst firstDecision)))
                 firstDecision
                 (let [headRestored (and (writeTexts! root existing) (bumpTexts! root existing))
                       removedNew (removeNames! root newFiles)
-                      secondRun (if (and headRestored removedNew) (runIntegrityGates! gates root (revertTimeout timeout) env watch) (list))]
-                  (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list))))
+                      secondLeft (secondsLeft! deadline)
+                      secondOut (wallOut? secondLeft)
+                      secondRun (if (and headRestored (and removedNew (not secondOut))) (runIntegrityGates! gates root (revertTimeoutWithin timeout secondLeft) env watch) (list))]
+                  (if secondOut (wallUnfinished secondLeft impl) (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list)))))
               implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
               implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
               unwired (if (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile")) (unwiredFns implNow implHead) (list))

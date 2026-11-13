@@ -1,6 +1,6 @@
 (module asl-tools/audit/run
-  :x [Lens AuditCfg Finding RunOut segs parseConfig scanText promptOf real? flagged? rowsFor heldBy git! rangeFiles! run! main]
-  :i [(asl-tools/fleet/model :a fm) (asl-tools/fleet/run :a fr) (asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/reviewStage :a rs) (asl-parser/reader :a rd)])
+  :x [clip Lens AuditCfg Finding RunOut segs parseConfig scanText promptOf real? flagged? rowsFor heldBy git! rangeFiles! run! main]
+  :i [(asl-tools/fleet/model :a fm) (asl-tools/fleet/run :a fr) (asl-tools/coord/store :a st) (asl-tools/coord/planImport :a pi) (asl-tools/coord/reviewStage :a rs) (asl-parser/reader :a rd) (asl-text/string :a ts)])
 
 ; (:m :ref AUD-RUN :do "the release audit loop as one command: ~/.asl/audit.asn names the lenses, their models and consensus rule; the range runs from the last release tag (or :since) to HEAD; static lenses find candidates, models vote on bounded code slices, flagged findings of :queue true lenses become (:u ...) rows that are imported dry, then for real; one (:auditRun ...) row per run")
 
@@ -143,7 +143,7 @@ fn stubOf comment: Bool line: String -> (Option (Pair String String))
 (schema ScanSt (:f sym String) (:f ret String) (:f n Int64) (:f found (List Finding)))
 
 fn clip s: String -> String
-  (let [(t (stringTrim s))] (if (> (stringLength t) 170) (optionOr (stringSlice t 0 170) t) t))
+  (let [(t (stringTrim s))] (if (> (stringLength t) 170) (ts/stringClipUtf8 t 170) t))
 
 fn hit st0: ScanSt file: String lens: String on: (List String) h: (Option (Pair String String)) line: String -> ScanSt
   (match h

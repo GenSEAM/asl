@@ -44,7 +44,7 @@ fn ! alternates? events: (List String) -> Bool
                 ((none) (= e "e"))
                 ((some n) (and (!= e n) (alternates? (optionOr (listTail events) (list))))))))
 
-fn ! runTests -> Bool -> Bool
+fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (built (headDirOf root))
         (cache (str root "/.asl/cache/binEntry/" (stringFromInt64 (procSelf))))

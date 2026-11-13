@@ -107,9 +107,9 @@ fn parseMigrateArgs args: (List String) -> MigrateCliOptions
 fn ! runMigrate args: (List Str) -> (Result Str Str)
   (if (listEmpty? args) (err "Usage: asl migrate [--dry-run|--check] <file.asl>") (let [(opts (parseMigrateArgs args)) (path opts.path)] (if (stringEmpty? path) (err "Usage: asl migrate [--dry-run|--check] <file.asl>") (let [(srcRes (fileReadString path))] (match srcRes ((err _) (err (str "Failed to read target file: " path))) ((ok src) (migrateSource src path opts.dryRun opts.checkOnly)))))))
 
-(schema BatchAuditSummary (:f scannedCount Int64) (:f passedCount Int64) (:f failedCount Int64) (:f errors (List (pair Str Str))))
+(schema BatchAuditSummary (:f scannedCount Int64) (:f passedCount Int64) (:f failedCount Int64) (:f errors (List (Pair Str Str))))
 
-(schema DryRunReport (:f scannedCount Int64) (:f passedCount Int64) (:f failedCount Int64) (:f errors (List (pair Str Str))))
+(schema DryRunReport (:f scannedCount Int64) (:f passedCount Int64) (:f failedCount Int64) (:f errors (List (Pair Str Str))))
 
 fn ! validateDryRunFile path: Str -> (Result Bool Str)
   (match (fileReadString path) ((err _) (err (str "Failed to read target file: " path))) ((ok src) (if (stringContains? src "\nfn ") (match (ip/parseIndentedForms src) ((ok _) (ok true)) ((err e) (err (str "Parse error in " path ": " e)))) (match (readSexprs src) ((err e) (err (str "Parse error in " path ": " e))) ((ok origForms) (if (listEmpty? origForms) (err (str "Empty source forms in " path)) (match (tryGenerateIndented src origForms) ((err e) (err (str "Indented generation failure in " path ": " e))) ((ok indentedText) (match (ip/parseIndentedForms indentedText) ((err e) (err (str "Reparse failure in " path ": " e))) ((ok reparsedForms) (if (verifyAllSemanticEquivalence origForms reparsedForms) (ok true) (err (str "Semantic divergence detected in " path)))))))))))))

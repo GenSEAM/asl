@@ -1,6 +1,6 @@
 (module asl-tools/coord/stall
   :x [Cfg Probe Signal Act Hooks stRowOf cfgOf cfgErrors replyRows sameTrail emptyTrail servedCount opText signalFrom verdictOf stallCount actOf stallRow statMs newestWrite! signalOf! sweep! stallsPath atPath]
-  :i [])
+  :i [(asl-text/string :a ts)])
 
 ; (:m :ref COND-STALL-AUTO :do "automatic stall handling for writing units: per unit a Signal (newest journal mtime, newest file write outside .asl, trailing identical-reply streak, trailing empty-reply streak, pid alive), a verdict ok|stalled|looping|dead from the (:stall ...) row of <store>/ladder.asn, and an Act (kill the run record's tree, requeue with an ASN note, escalate to the strong lane after :escalateAfter stalls); no valid row means no sweep, today's behaviour. The conductor owns the hooks, this module owns the decision and the rows")
 
@@ -92,7 +92,7 @@ fn servedCount journal: String -> Int64
 ; (:m :ref COND-STALL-AUTO :do "the op text for the note: the reply cut to 100 bytes with quotes, backslashes and parens replaced so it stays inside one quoted ASN string")
 fn opText reply: String -> String
   (let [(clean (stringReplace (stringReplace (stringReplace (stringReplace reply "\\" "") "\"" "'") "(" "<") ")" ">"))]
-    (optionOr (stringSlice clean 0 (min 100 (stringLength clean))) ""))
+    (ts/stringClipUtf8 clean 100))
 
 fn signalFrom journal: String turnAgeMs: Int64 writeAgeMs: Int64 alive: Bool -> Signal
   (let [(rs (replyRows journal))]

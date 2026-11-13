@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
 
 (schema Job
@@ -402,8 +402,10 @@ fn ! killTree! root: Int64 -> Int64
   (killTreeWith! root (list) (list))
 
 ; (:m :ref KILLTREE-NO-PINS :do "stop a guarded run from outside its own judge (a cancel, a dropped connection): the kill carries the groups and pins the guard recorded, so a setsid escapee the guard saw in the tree goes with it, where killTree! of the bare pid spares it")
+; (:m :ref SESSIONPOOL-LOWS-20261112 :do "a polled snapshot still running when the guard is stopped is killed, reaped and its fd closed, so a caller stopping at its deadline leaves no ps child behind")
 fn ! stopGuard! g: Guarded -> Int64
-  (let [(left (killTreeWith! g.run.pid g.run.groups g.run.known))
+  (let [(_ (snapStop! g))
+        (left (killTreeWith! g.run.pid g.run.groups g.run.known))
         (_ (dropTmp g.run.tmp))]
     left)
 
@@ -659,6 +661,80 @@ fn ! reapStaleLeases! -> Int64
         (snap (procSnapshot))]
     (reapLeasesAt! (leaseDir) snap (procSelf) snapNs))
 
+; (:m :ref PROC-REAPER-ALL :do "the backstop sweep: a process of this user whose parent is init (ppid 1), older than orphanTestAgeSec (2 h, adopted) and whose executable lies under a native test cache (.asl/run/nativeTest or .asl/cache/nativeTest) is an orphaned test binary and its tree is killed; another user's process, a service or any other executable is never a candidate")
+fn orphanTestAgeSec -> Int64
+  7200
+
+fn nativeTestExe? path: String -> Bool
+  (or (stringContains? path "/.asl/run/nativeTest/") (stringContains? path "/.asl/cache/nativeTest/"))
+
+; (:m :ref REAPALL-LOWS :do "the text of a ps line after its first n columns, inner spaces kept, so an args column whose path holds a space stays whole")
+fn columnsAfter line: String n: Int64 -> String
+  (let [(t (stringTrim line))]
+    (if (<= n 0)
+      t
+      (match (stringIndexOf t " ")
+        ((none) "")
+        ((some i) (columnsAfter (optionOr (stringSlice t i (stringLength t)) "") (- n 1))))))
+
+; (:m :ref REAPALL-LOWS :do "argv0 of an args column whose executable may hold spaces: the shortest prefix, grown one space-separated word at a time, that is an absolute path under a native test cache and that isFile? accepts; empty when none, so an argument that only names a cache path never passes for the executable")
+; (:m :ref REAPALL-LOWS2 :do "the words are split on one space and a prefix is rejoined with one space, which gives back the exact column text even for a path holding two or more spaces (split keeps the empty words between them); the first prefix that passes is the shortest, so a plain file whose path is a prefix of a longer executable path with a space ('.../x/foo' beside '.../x/foo bar/t') is returned instead of the executable: both lie under a native test cache and the sweep reads only whether the result is empty, so the verdict is the same, and the value is pinned in reapAllTest as the shortest file prefix")
+fn argsExe args: String isFile?: (Fn [String] Bool) -> String
+  (let [(words (stringSplit args " "))
+        (n (listLength words))]
+    (if (not (stringStartsWith? args "/"))
+      ""
+      (optionOr (listFind (fn [(c String)] -> Bool (and (nativeTestExe? c) (isFile? c)))
+                  (map (fn [(k Int64)] -> String (stringJoin (listTake words k) " ")) (range 1 (+ n 1))))
+        "")))
+
+fn orphanTestRow uid: Int64 minAge: Int64 isFile?: (Fn [String] Bool) acc: (List Int64) line: String -> (List Int64)
+  (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
+        (num (fn [(i Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (listGet ws i) "")) -1)))
+        (age (etimeSeconds (optionOr (listGet ws 3) "")))]
+    (if (and (> (num 0) 1) (and (= (num 1) 1) (and (>= uid 0) (and (= (num 2) uid) (and (>= age minAge) (not (stringEmpty? (argsExe (columnsAfter line 4) isFile?))))))))
+      (cons (num 0) acc)
+      acc))
+
+; (:m :ref REAPALL-LOWS :do "orphanTestPids with the file check given, so a fixture ps text is judged without real binaries")
+fn orphanTestPidsWith text: String uid: Int64 minAge: Int64 isFile?: (Fn [String] Bool) -> (List Int64)
+  (listReverse (fold (fn [(acc (List Int64)) (line String)] -> (List Int64) (orphanTestRow uid minAge isFile? acc line)) (list) (stringLines text)))
+
+; (:m :ref PROC-REAPER-ALL :do "the orphaned test binaries of a ps text with the columns pid ppid uid etime args; the executable must be a file on disk")
+fn ! orphanTestPids text: String uid: Int64 minAge: Int64 -> (List Int64)
+  (orphanTestPidsWith text uid minAge (fn [(p String)] -> Bool (match (fileStat p) ((ok st) st.isFile) ((err _) false))))
+
+fn sweepEveryNs -> Int64
+  300000000000
+
+; (:m :ref PROC-REAPER-ALL :do "every tree the sweep kills is first logged as one (:sweep ...) row, so a kill outside a lease can be traced to it")
+fn ! sweepLog -> String
+  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet/sweep.log")
+
+fn ! sweepStamp -> String
+  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet/sweep.stamp")
+
+; (:m :ref PROC-REAPER-ALL :do "run the sweep at most once per sweepEveryNs across all processes of this user (a wall-clock stamp next to the leases), so a pool start pays one ps only every 5 min; a candidate that still holds a lease is left to the lease reaper; the count of trees killed, 0 when skipped or when ps or id fails")
+fn ! sweepOrphanTests! -> Int64
+  (let [(wall (nowNs))
+        (last (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (sweepStamp)) ""))) 0))]
+    (if (< (- wall last) (sweepEveryNs))
+      0
+      (let [(_ (dirCreate (leaseDir)))
+            (_ (fileWrite (sweepStamp) (stringFromInt64 wall)))
+            (uid (optionOr (stringToInt64 (stringTrim (resultOr (shellOut "id -u" 5000) ""))) -1))
+            (pids (orphanTestPids (resultOr (shellOut "ps -A -o pid= -o ppid= -o uid= -o etime= -o args=" 10000) "") uid (orphanTestAgeSec)))]
+        (fold (fn [(n Int64) (pid Int64)] -> Int64
+                (if (fileExists? (leasePath pid))
+                  n
+                  (let [(_ (fileAppend (sweepLog) (str "(:sweep :pid " pid " :wallNs " wall " :ageMinSec " (orphanTestAgeSec) ")\n")))
+                        (_ (killTreeWith! pid (list pid) (list)))]
+                    (+ n 1)))) 0 pids))))
+
+; (:m :ref PROC-REAPER-ALL :do "a pooled child's lease outlives its own limit by a minute, since the pool's judge kills it at the limit; a pool with no limit leases for 24 h, so a long unbounded job is never reaped while its owner lives")
+fn poolLeaseDeadline startNs: Int64 timeoutMs: Int64 -> Int64
+  (+ startNs (* (if (> timeoutMs 0) (+ timeoutMs 60000) 86400000) 1000000))
+
 ; (:m :ref GW-SESSION-BIND :do "a guarded run a caller steps itself: guardStart! reaps stale leases, spawns and writes the lease; each guardAdvance! pumps output once and judges the limits, returning the ProcOut when the child has ended, so a single-threaded server can park the run and look at it between other work; guardFds is what to poll. guardLoop and runGuarded are this same step in a blocking loop")
 (schema Guarded
   (:f run RunningSep)
@@ -691,7 +767,7 @@ fn ! guardOpen! argv: (List String) cwd: String env: (List String) lim: Limits -
         ((ok r0) (ok (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAtSep r0 g.startNs))))))))
 
 fn ! guardStart! argv: (List String) cwd: String env: (List String) lim: Limits -> (Result Guarded ProcOut)
-  (let [(_ (reapStaleLeases!))]
+  (let [(_ (reapStaleLeases!)) (_ (sweepOrphanTests!))]
     (match (guardOpen! argv cwd env lim)
       ((err d) (err d))
       ((ok r) (let [(_ (writeLease! r.pid (procSelf) r.startNs (leaseDeadline r.startNs lim.timeoutMs)))]
@@ -827,7 +903,9 @@ fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
           (else
            (match (spawnPooled next (optionOr (listGet jobs next) (job (list) "." (list))))
              ((err d) (let [(_ (js/releaseIdxs lim.jsDir g.idxs))] (poolLoop jobs (+ next 1) slots lim running (cons d done) lastCheck admit onDone (onDone state d))))
-             ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAt r0 g.startNs))))]
+             ((ok r0) (let [(r (if (listEmpty? g.idxs) r0 (let [(_ (js/bind lim.jsDir g.idxs r0.pid lim.class g.startNs))] (startedAt r0 g.startNs))))
+                            (wall (nowNs))
+                            (_ (writeLeaseAt! r.pid (procSelf) r.startNs (poolLeaseDeadline r.startNs lim.timeoutMs) wall (/ wall 1000000000) 0))]
                         (poolLoop jobs (+ next 1) slots lim (listAppend running (list r)) done lastCheck admit onDone state))))))))
     (poolPump jobs next slots lim running done lastCheck admit onDone state))
 
@@ -852,16 +930,21 @@ fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (still (filter (fn [(r Running)] -> Bool (not (over? r))) states))
             (finished (map finish closed))
             (_ (fold (fn [(n Int64) (r Running)] -> Int64 (+ n (js/releasePid lim.jsDir lim.class r.pid))) 0 closed))
+            (_ (map (fn [(r Running)] -> Bool (removeLease! r.pid)) closed))
             (nextState (fold onDone state finished))]
         ; (:m :ref RUNASL-POOLLOOP-FDPOLL-TYPE-20261017 :do "fix: the two if branches disagreed in type (fdPoll's own (Result (List (Pair Int64 Int64)) String) vs the else branch's bare Unit) -- a latent mismatch only a full native rebuild's whole-program check surfaces, not the normal incremental path; fdPoll's own result was always discarded here (it is called only to block until a socket is ready or the 50ms timeout passes, never consulted), so the true branch now discards it explicitly too, making both branches Unit with no change in runtime behavior")
         (do (if (and (not progress) (listEmpty? closed)) (let [(_ (fdPoll (openFds still) 50))] ()) ())
             (poolLoop jobs next slots lim still (listAppend finished done) (if checked now lastCheck) admit onDone nextState))))
 
+; (:m :ref PROC-REAPER-ALL :do "a pool run reaps expired and ownerless leases and runs the throttled orphan sweep before it starts, and leases every child it spawns (pgid = the child's pid) until the child is judged, so bounded.asl and every other pool caller leave a lease a later start can reap when the owner dies")
+fn ! poolStart! -> Int64
+  (+ (reapStaleLeases!) (sweepOrphanTests!))
+
 fn ! runPoolLimited jobs: (List Job) slots: Int64 lim: Limits -> (List Done)
-  (pairFirst (poolLoop jobs 0 (if (< slots 1) 1 slots) lim (list) (list) 0 (fn [(i Int64)] -> Bool true) (fn [(n Int64) (d Done)] -> Int64 (+ n 1)) 0))
+  (let [(_ (poolStart!))] (pairFirst (poolLoop jobs 0 (if (< slots 1) 1 slots) lim (list) (list) 0 (fn [(i Int64)] -> Bool true) (fn [(n Int64) (d Done)] -> Int64 (+ n 1)) 0)))
 
 fn ! runPoolEach jobs: (List Job) slots: Int64 lim: Limits admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
-  (poolLoop jobs 0 (if (< slots 1) 1 slots) lim (list) (list) 0 admit onDone state)
+  (let [(_ (poolStart!))] (poolLoop jobs 0 (if (< slots 1) 1 slots) lim (list) (list) 0 admit onDone state))
 
 fn ! runPool jobs: (List Job) slots: Int64 -> (List Done)
   (runPoolLimited jobs slots (defaultLimits))

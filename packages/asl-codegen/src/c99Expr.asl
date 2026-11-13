@@ -1,6 +1,6 @@
 (module asl-codegen/c99Expr :x [LowerCtx emptyLowerCtx ctxWithVar ctxVarType lowerCExpr lowerCAtom lowerCLet lowerCIf lowerCCond lowerCMatch lowerCCall lowerCFieldAccess lowerCRecordInit lowerCDo wrapBlockWithReturn isC99Keyword? mangleCIdent mangleCTypeName c99TypeStr isIntegerLiteral? isFloatLiteral? inferCType] :i [(reader :a rd)])
 
-(schema LowerCtx (:f vars (List (pair String String))) (:f substs (List (pair String String))) (:f fns (List (pair String String))) (:f retTy String))
+(schema LowerCtx (:f vars (List (Pair String String))) (:f substs (List (Pair String String))) (:f fns (List (Pair String String))) (:f retTy String))
 
 fn emptyLowerCtx -> LowerCtx
   (LowerCtx :vars (list) :substs (list) :fns (list) :retTy "")

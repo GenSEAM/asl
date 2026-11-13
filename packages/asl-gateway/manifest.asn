@@ -6,6 +6,7 @@
   :dependencies ("asl-text" "asl-json" "asl-proc" "asl-http" "asl-cli")
   :modules (
     "aslGateway/server"
+    "aslGateway/bus"
     "aslGateway/wire"
     "aslGateway/lmk"
     "aslGateway/gateway"

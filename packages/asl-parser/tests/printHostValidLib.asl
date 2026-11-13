@@ -3,7 +3,8 @@
   :i [(ast :a a)
       (astPrinter :a ap)
       (asl-parser/tests/printReparseLib :a prl)
-      (asl-parser/tests/printHostValidScope :a scope)])
+      (asl-parser/tests/printHostValidScope :a scope)
+      (asl-tools/fleet/run :a fr)])
 
 fn knownHostInvalidReason path: String -> (Option String)
   (cond
@@ -43,9 +44,6 @@ fn hostBinary! -> (Result String String)
      (match (realPath ".")
        ((err _) (err "cannot canonicalize the working directory"))
        ((ok cwd) (findHostFrom! cwd)))))
-
-fn shellQuote s: String -> String
-  (str "'" (stringReplace s "'" "'\\''") "'")
 
 ; (:m :ref STRAY-CHK-PRINT :do "the printed copy must sit beside its source (a copy checked from a temp dir resolves package-relative imports differently and fails), so a run killed between create and remove cannot clean up after itself; each copy is named by its owner pid and every shard first removes the copies whose owner is dead, so a killed run's strays live only until the next shard starts")
 fn tempPrefix -> String
@@ -91,12 +89,13 @@ fn firstHostError out: String -> String
   (:f valid Bool)
   (:f detail String))
 
+; (:m :ref D81-SPAWN-ROUTE :do "host check runs through the fleet runner (argv, no shell quoting): 300 s for one file, 900 s for a batch, 32 descendants, the whole tree killed on a verdict; stdout and stderr come back as one text, as 2>&1 gave")
 fn runCheck! host: String path: String -> HostRun
-  (let [(res (processRun (str (shellQuote host) " check " (shellQuote path) " 2>&1")))
-        (out (str res.stdout res.stderr))]
+  (let [(res (fr/runOneLimited (fr/job (list host "check" path) "." (fr/childEnv (list))) (fr/limits 300 32)))
+        (out res.out)]
     (HostRun
-      :valid (= res.exitCode 0)
-      :detail (str "exit " (stringFromInt64 res.exitCode) ": " (firstHostError out))))
+      :valid (= res.exit 0)
+      :detail (str "exit " (stringFromInt64 res.exit) ": " (firstHostError out))))
 
 (schema CheckOutcome
   (:f source HostRun)
@@ -116,8 +115,8 @@ fn verdictIn lines: (List String) path: String -> (Option HostRun)
 fn batchCheck! host: String paths: (List String) -> (Map String HostRun)
   (if (listEmpty? paths)
     (mapEmpty)
-    (let [(res (processRun (str (shellQuote host) " check " (stringJoin (map shellQuote paths) " ") " 2>&1")))
-          (lines (stringLines (str res.stdout res.stderr)))]
+    (let [(res (fr/runOneLimited (fr/job (listAppend (list host "check") paths) "." (fr/childEnv (list))) (fr/limits 900 32)))
+          (lines (stringLines res.out))]
       (fold (fn [(m (Map String HostRun)) (p String)] -> (Map String HostRun)
               (mapSet m p (match (verdictIn lines p) ((some r) r) ((none) (runCheck! host p)))))
             (mapEmpty) paths)))

@@ -1,4 +1,4 @@
-(module asl-checker/lowLevelSigs :x [lowLevelSig sizedIntNames conversionTarget loweredNames unroutedName? formNames bitOperatorNames] :i [])
+(module asl-checker/lowLevelSigs :x [lowLevelSig sizedIntNames conversionTarget loweredNames wrapOperatorNames unroutedName? formNames bitOperatorNames] :i [])
 
 ; (:m :ref LL-SIZED-CHECK :do "signatures of the low-level surface in one place, hooked once into types.asl#builtinSig: sized integer conversions, Wrap Clamp Checked arithmetic, integral bit operators and intrinsics, Buf operations and atomics; I is an integer-kind type variable, J a second one for shift amounts and indexes, so any sized integral type unifies and two different sized types do not")
 
@@ -69,8 +69,11 @@ fn lowLevelSig name: String -> (Option (Pair (List String) (Pair Bool String)))
 fn bitOperatorNames -> (List String)
   (list "&" "|" "^" "~" "<<" ">>")
 
+fn wrapOperatorNames -> (List String)
+  (list "mulWrap" "addWrap" "subWrap" "rotateLeft" "rotateRight")
+
 fn loweredNames -> (List String)
-  (bitOperatorNames)
+  (listAppend (bitOperatorNames) (wrapOperatorNames))
 
 fn unroutedName? name: String -> Bool
   (and (some? (lowLevelSig name)) (not (listContains? (loweredNames) name)))

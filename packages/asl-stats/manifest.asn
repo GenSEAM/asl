@@ -1,0 +1,6 @@
+(:package asl-stats
+ :version "0.1.0"
+ :entry "src/describe.asl"
+ :description "Descriptive statistics, effect sizes, Wilson and Clopper-Pearson and t and bootstrap intervals, Spearman, Cohen kappa, seeded xoshiro256** with gamma and beta draws, pure AgentSlang"
+ :aslFirst true
+ :dependencies ())

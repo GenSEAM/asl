@@ -3,4 +3,4 @@
  :entry "src/cli.asl"
  :description "Pure AgentSlang Native CLI Toolchain"
  :aslFirst true
- :dependencies ["asl-parser" "asl-checker" "asl-compiler" "asl-ir" "asl-hypergraph" "asl-conform" "asl-ui" "asl-intel"])
+ :dependencies ["asl-parser" "asl-checker" "asl-compiler" "asl-ir" "asl-hypergraph" "asl-conform" "asl-ui" "asl-intel" "asl-remote"])

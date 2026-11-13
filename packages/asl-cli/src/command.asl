@@ -1,6 +1,6 @@
 (module asl-cli/command
-  :x [main dispatch! route! asnEcho testFiles! readStdin!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel)])
+  :x [main dispatch! route! remote! asnEcho testFiles! readStdin!]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
   (:f closer String)
@@ -507,6 +507,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "browser") (browser! args))
     ((= cmd "cockpit") (cockpit! ctx args))
     ((= cmd "intel") (intel! ctx args))
+    ((= cmd "cache") (cg/cacheCmd! ctx args))
     ((= cmd "lens") (cliResult! "lens" args (lens/runLensCommand args)))
     ((= cmd "consilium") (cliResult! "consilium" args (consilium/runConsiliumCommand args)))
     ((= cmd "mesh") (mesh! ctx args))
@@ -552,7 +553,47 @@ fn ! readStdin! acc: (List String) -> (Result String String)
 fn batchUsage! text: String -> Int64
   (do (sys/say! (str "(:batch :status :failed :error ERR_MISSING_ARG :message \"" text "\")")) 2)
 
+fn quoteText s: String -> String
+  (str "\"" (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" "\\n") "\"")
+
+fn ! formsBody! args: (List String) -> (Result (List String) Int64)
+  (cond
+    ((= args (list "-"))
+      (match (readStdin! (list))
+        ((err e) (do (sys/sayErr! (str "asl -: stdin: " e)) (err 2)))
+        ((ok text) (ok (list (sys/stripTrailingNewlines text))))))
+    ((and (= (first args) "-f") (= (listLength args) 2))
+      (match (fileReadString (first (rest args)))
+        ((err _) (err (batchUsage! "usage: asl -f FILE, one readable file of forms and no other argument")))
+        ((ok text) (ok (list (sys/stripTrailingNewlines text))))))
+    (else (ok args)))
+
+; (:m :ref REMOTE-TARGET :do "before any local dispatch: asl --on NODE:UNIT, or a remote .asl/target.asn in the cwd workspace, sends forms, test and check to tools/remote/on.asl, which runs them in that remote worktree; with no profile file and no --on it costs a few existence checks and changes nothing")
+fn ! remote! ctx: sys/Context args: (List String) runner: (fn [(List String)] -> Int64) -> (Option Int64)
+  (let [(lead (first args))
+        (on (= lead "--on"))
+        (profile (if (or on (= lead "--local")) (ok (none)) (rt/findProfile! (resultOr (realPath ".") "."))))
+        (fail (fn [(e String)] -> Int64
+                (do (sys/say! (str "(:asl :status :failed :error ERR_TARGET :message " (quoteText (stringReplace e "ERR_TARGET " "")) ")")) 2)))]
+    (match profile
+      ((err e) (some (fail e)))
+      ((ok p)
+        (if (and (not on) (none? p))
+          (none)
+          (match (formsBody! (if on (listDrop args 2) args))
+            ((err code) (some code))
+            ((ok body)
+              (match (rt/routeOf (if on (listAppend (listTake args 2) body) body) p)
+                ((err e) (some (fail e)))
+                ((ok (none)) (if (= body args) (none) (some (fail "under a remote .asl/target.asn, asl - and asl -f take forms only, and the input is already read; run asl --local - for a local script"))))
+                ((ok (some r)) (some (runner (rt/onArgv ctx.root r)))))))))))
+
 fn ! entry! ctx: sys/Context args: (List String) -> Int64
+  (match (remote! ctx args (fn [(a (List String))] -> Int64 (runFile! ctx a)))
+    ((some code) code)
+    ((none) (localEntry! ctx (rt/localArgs args))))
+
+fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
   (let [(cmd (first args))]
     (cond
       ((= cmd "-f")

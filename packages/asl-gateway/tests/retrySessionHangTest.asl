@@ -1,6 +1,6 @@
 (module aslGateway/tests/retrySessionHangTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "GW-RETRY-OCGO-HANG: reproduces the reported hang for a provider that declares :sessionHeader (OpenCode's x-opencode-session) and a :pool batch window (mirroring the real modal provider's settings, which an opencodeGo-style scratch config can inherit by copying the same template) combined with :retry. Root cause confirmed by this test before the fix: a provider's :pool window exists to amortize a serverless cold start across concurrent arrivals, so the FIRST request into an idle lane deliberately waits up to :windowMs before dispatch. A retried attempt is not a sibling arrival -- retryOrFinish already slept once, so by the time it resubmits, the lane has gone idle again (the prior batch settled and scaled down), and the retry pays the full :windowMs a second time, parked in the pool's own queue (not connTimer/connBucketWait), with nothing logged while it waits. Across :max retries this compounds past any attempt timeout with little to no gateway output, matching the reported symptom exactly. The stub also records the session header it saw on each hit, confirming that header stays stable across the retry (it does -- the header was never the bug)")
 
@@ -167,12 +167,6 @@ fn clientOf w: World tag: String -> Client
 fn clientsDone? w: World tags: (List String) -> Bool
   (listAll? (fn [(t String)] -> Bool (clientOf w t).done) tags)
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -201,7 +195,10 @@ fn ! runTests -> Bool
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (startMs (nowMs!))
+        (started (if (> pid 0) (sk/waitReady! readyPath pid (+ startMs (sk/startDeadlineMs))) (pair 0 "spawn failed")))
+        (gatewayPort (pairFirst started))
+        (startNote (str "start " (pairSecond started) " after " (stringFromInt64 (- (nowMs!) startMs)) " ms"))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list)))
 
         (start (nowMs!))
@@ -214,9 +211,10 @@ fn ! runTests -> Bool
                   (map (fn [(c Client)] -> Bool (if c.done true (do (fdClose c.fd) true))) w1.clients)
                   (fdClose listener) true))
         (gatewayErr (resultOr (fileReadString (str temp "/gateway.err")) ""))
+        (startDiag (str startNote "; stderr: " (sk/tailOf gatewayErr 600) "; stdout: " (sk/tailOf (resultOr (fileReadString (str temp "/gateway.out")) "") 300)))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
-      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " gatewayErr))
+      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " startDiag))
       (assert (clientsDone? w1 (list "a1")) (str "a request to a :sessionHeader+:pool provider with :retry configured must finish within 10 s, not hang past it: " gatewayErr))
       (assert (stringContains? (clientOf w1 "a1").response "HTTP/1.1 200") (str "the retried call eventually succeeds: " (clientOf w1 "a1").response " " gatewayErr))
       (assert (>= (occurrencesOf w1.seen "retry-target") 2) (str "the stub must see both the original 429 and the retried call, saw " (occurrencesOf w1.seen "retry-target") " hit(s)"))

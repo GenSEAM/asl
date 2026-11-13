@@ -138,6 +138,17 @@ fn stringSource -> String
       "")
     "\n")
 
+fn searchSource -> String
+  (stringJoin
+    (list
+      "(module wasmStringSearch :x [main] :i [])"
+      ""
+      "fn ! main -> Int64"
+      "  (do (println (stringContains? \"needle in a haystack\" \"hay\") (stringContains? \"needle\" \"pin\") (stringContains? \"abc\" \"\") (stringContains? \"ab\" \"abc\"))"
+      "      4)"
+      "")
+    "\n")
+
 fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
   (match (low/lowerSource source)
     ((err ds) (err ds))
@@ -269,4 +280,5 @@ fn ! runTests -> Bool
       (assert (wasmCase "hello" (helloSource)) "hello")
       (assert (wasmCase "allocation" (allocationSource)) "allocation")
       (assert (wasmCase "string" (stringSource)) "string")
+      (assert (wasmCase "search" (searchSource)) "search: stringContains? links (memmem) and runs")
       true))

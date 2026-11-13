@@ -1,0 +1,62 @@
+(module asl-tools/fleet/tests/readyWaitTest
+  :x [runTests]
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-tools/fleet/run :a fr)])
+
+; (:m :ref GW-TEST-KILLTREE-PIDREUSE :do "the kit's wait against real children of this test, each started through fleet/run.asl and stopped and reaped here: a child that exits without a ready file is reported exited and left unreaped, so its pid stays this test's until the teardown reaps it; a live child with no ready file ends on the deadline branch at the deadline, not before it and within 5 s of it")
+
+fn ! nowMs! -> Int64
+  (/ (monotonicNs) 1000000)
+
+fn ! scratch! -> String
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/readyWaitTest-" (stringFromInt64 (procSelf)) "-absent-ready")
+
+fn ! runTests -> Bool
+  (let [(ready (scratch!))
+        (quick (fr/spawnSep (list "sh" "-c" "exit 3") "/" (fr/childEnv (list))))
+        (qpid (match quick ((ok r) r.pid) ((err _) 0)))
+        (exited (sk/waitReady! ready qpid (+ (nowMs!) 30000)))
+        (reapedHere (procWaitPid qpid false))
+        (code (match reapedHere ((ok (some c)) c) (_ -1)))
+        (_q (match quick ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
+        (slow (fr/spawnSep (list "sleep" "30") "/" (fr/childEnv (list))))
+        (spid (match slow ((ok r) r.pid) ((err _) 0)))
+        (start (nowMs!))
+        (late (sk/waitReady! ready spid (+ start 400)))
+        (took (- (nowMs!) start))
+        (aliveAtDeadline (resultOr (procAlive? spid) false))
+        (_k (if (> spid 0) (do (procKill spid "SIGKILL") (procWaitPid spid false) true) true))
+        (_s (match slow ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
+        (none0 (sk/waitReady! ready 0 (+ (nowMs!) 1000)))
+        (hubReady (str (scratch!) "-hub"))
+        (_w (fileWrite hubReady "ok\n"))
+        (holder (fr/spawnSep (list "sleep" "30") "/" (fr/childEnv (list))))
+        (hpid (match holder ((ok r) r.pid) ((err _) 0)))
+        (fileSeen (sk/waitFile! hubReady hpid "/dev/null"))
+        (_hk (if (> hpid 0) (do (procKill hpid "SIGKILL") (procWaitPid hpid false) true) true))
+        (_hc (match holder ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true)))
+        (_hr (pathRemove hubReady))
+        (quick2 (fr/spawnSep (list "sh" "-c" "exit 3") "/" (fr/childEnv (list))))
+        (q2pid (match quick2 ((ok r) r.pid) ((err _) 0)))
+        (start2 (nowMs!))
+        (fileMiss (sk/waitFile! ready q2pid "/dev/null"))
+        (portMiss (sk/waitPortErr! ready q2pid "/dev/null"))
+        (took2 (- (nowMs!) start2))
+        (_q2 (do (procWaitPid q2pid false) (match quick2 ((ok r) (do (fdClose r.outFd) (fdClose r.errFd) true)) ((err _) true))))]
+    (do
+      (assert (> qpid 1) (str "the quick child started: " (stringFromInt64 qpid)))
+      (assert (stringStartsWith? (pairSecond exited) "exited") (str "a child that ends without a ready file is reported exited: " (pairSecond exited)))
+      (assert (= (pairFirst exited) 0) "and no port")
+      (assert (= code 3) (str "the kit left the child unreaped, so its teardown reaps it with its own exit code 3, got " (stringFromInt64 code)))
+      (assert (> spid 1) (str "the slow child started: " (stringFromInt64 spid)))
+      (assert (= (pairSecond late) "deadline") (str "a live child with no ready file ends on the deadline branch: " (pairSecond late)))
+      (assert (= (pairFirst late) 0) "with no port")
+      (assert (>= took 400) (str "not before the deadline: " (stringFromInt64 took) " ms"))
+      (assert (< took 5000) (str "and within 5 s of a 400 ms deadline (one ps per 500 ms in the loop): " (stringFromInt64 took) " ms"))
+      (assert aliveAtDeadline "the slow child was still alive, so the deadline, not its exit, ended the wait")
+      (assert (= (pairSecond none0) "no child") (str "pid 0 is no child: " (pairSecond none0)))
+      (assert (and (> hpid 1) fileSeen) "waitFile! takes a ready file that holds no port (the hub writes none) once it exists")
+      (assert (> q2pid 1) (str "the second quick child started: " (stringFromInt64 q2pid)))
+      (assert (not fileMiss) "waitFile! is false when the child ends without a ready file")
+      (assert (= portMiss 0) "waitPortErr! is 0 then")
+      (assert (< took2 5000) (str "both return on the exit, not the 300 s cap: " (stringFromInt64 took2) " ms"))
+      true))

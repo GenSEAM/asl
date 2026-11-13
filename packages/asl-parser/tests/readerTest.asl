@@ -32,7 +32,7 @@ fn projHeads src: String -> String
   (match (a/parse src) ((err e) (errText e)) ((ok forms) (str (match (listHead forms) ((some t) (match t ((a/topModule mn) (projModuleHeads mn)) ((a/topSchema _) "") ((a/topEnum _) "") ((a/topDefun _) "") ((a/topExpr _) ""))) ((none) "")) (headDecls (tailForms forms)))))
 
 fn projModuleHeads mn: a/ModuleNode -> String
-  (str mn.docstring "|" (stringJoin mn.exported ",") "|" (stringJoin (map (fn [(p (pair String String))] -> String (str (pairFirst p) ":" (pairSecond p))) mn.imports) ","))
+  (str mn.docstring "|" (stringJoin mn.exported ",") "|" (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) ":" (pairSecond p))) mn.imports) ","))
 
 fn headDecls forms: (List a/TopForm) -> String
   (if (listEmpty? forms) "" (str "|" (stringJoin (map (fn [(t a/TopForm)] -> String (headDecl t)) forms) "|")))

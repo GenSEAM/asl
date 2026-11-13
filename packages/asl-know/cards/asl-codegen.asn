@@ -28,7 +28,7 @@
 (:sym "collectFormsSchemas" :mod "asl-codegen/c99Emit" :sig "collectFormsSchemas forms: (List a/TopForm) idx: Int64 len: Int64 acc: (List a/SchemaNode) -> (List a/SchemaNode)" :doc "Collects all schema declaration nodes from top-level AST forms.")
 (:sym "collectFormsEnums" :mod "asl-codegen/c99Emit" :sig "collectFormsEnums forms: (List a/TopForm) idx: Int64 len: Int64 acc: (List a/EnumNode) -> (List a/EnumNode)" :doc "Collects all enum declaration nodes from top-level AST forms.")
 (:sym "collectFormsDefuns" :mod "asl-codegen/c99Emit" :sig "collectFormsDefuns forms: (List a/TopForm) idx: Int64 len: Int64 acc: (List a/DefunNode) -> (List a/DefunNode)" :doc "Collects all function declaration nodes from top-level AST forms.")
-(:sym "LowerCtx" :mod "asl-codegen/c99Expr" :kind type :sig "(schema LowerCtx (:f vars (List (pair String String))) (:f substs (List (pair String String))) (:f fns (List (pair String String))) (:f retTy String))" :pit (record))
+(:sym "LowerCtx" :mod "asl-codegen/c99Expr" :kind type :sig "(schema LowerCtx (:f vars (List (Pair String String))) (:f substs (List (Pair String String))) (:f fns (List (Pair String String))) (:f retTy String))" :pit (record))
 (:sym "emptyLowerCtx" :mod "asl-codegen/c99Expr" :sig "emptyLowerCtx -> LowerCtx" :doc "Creates an empty C lowering context.")
 (:sym "ctxWithVar" :mod "asl-codegen/c99Expr" :sig "ctxWithVar ctx: LowerCtx name: String cType: String -> LowerCtx" :doc "Returns a lowering context augmented with a local variable binding.")
 (:sym "ctxVarType" :mod "asl-codegen/c99Expr" :sig "ctxVarType ctx: LowerCtx name: String -> (Option String)" :doc "Looks up the C type of a variable in the lowering context." :pit (option))

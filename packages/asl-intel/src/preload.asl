@@ -251,8 +251,8 @@ fn hydrateGraphInto g: g/SymbolGraph fileSyms: (List ex/FileSymbols) -> g/Symbol
 fn hydrateGraphFromFileSymbols fileSyms: (List ex/FileSymbols) -> g/SymbolGraph
   (hydrateGraphInto (g/graphCreate) fileSyms)
 
-fn hydrateGraphFromSources sources: (List (Tuple Str Str)) -> g/SymbolGraph
-  (let [(fileSyms (map (fn [(pair (Tuple Str Str))] -> ex/FileSymbols (ex/extractAslSymbols (pairFirst pair) (pairSecond pair))) sources))] (hydrateGraphInto (g/graphCreate) fileSyms))
+fn hydrateGraphFromSources sources: (List (Pair Str Str)) -> g/SymbolGraph
+  (let [(fileSyms (map (fn [(pair (Pair Str Str))] -> ex/FileSymbols (ex/extractAslSymbols (pairFirst pair) (pairSecond pair))) sources))] (hydrateGraphInto (g/graphCreate) fileSyms))
 
 fn extractFnSymbols file: Str source: Str -> (List g/GraphNode)
   (let [(parts (stringSplit source "\n")) (mLine (optionOr (listHead (filter (fn [(l Str)] -> Bool (stringStartsWith? (stringTrim l) "(module ")) parts)) "")) (modName (if (stringEmpty? mLine) "" (let [(mToks (filter (fn [(t Str)] -> Bool (not (stringEmpty? (stringTrim t)))) (stringSplit (stringTrim mLine) " ")))] (stringReplace (stringReplace (optionOr (listGet mToks 1) "") "(" "") ")" "")))) (lines (stringSplit source "\n"))] (fold (fn [(acc (List g/GraphNode)) (line Str)] -> (List g/GraphNode) (let [(trimmed (stringTrim line))] (if (stringStartsWith? trimmed "fn ") (let [(toks (filter (fn [(t Str)] -> Bool (not (stringEmpty? (stringTrim t)))) (stringSplit trimmed " "))) (name (optionOr (listGet toks 1) ""))] (if (stringEmpty? name) acc (let [(fq (if (stringEmpty? modName) name (str modName "/" name))) (node (g/GraphNode :id fq :name name :kind "fn" :file file :startLine 1 :endLine 1 :signature trimmed :exported true))] (listAppend acc (list node))))) acc))) (list) lines))

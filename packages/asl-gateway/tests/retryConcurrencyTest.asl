@@ -1,6 +1,6 @@
 (module aslGateway/tests/retryConcurrencyTest
   :x [runTests]
-  :i [(asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/readyWait :a sk) (asl-json/json :a j) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :tags (retry) :do "an end-to-end sanity companion to serverTest.asl's testEffSleepMsDoesNotBlockReactor, which is the actual red/green proof of non-blocking (a deterministic 5000 ms timing bound with no network or jitter involved). Since GW-FREE-RETRY-3, the stub's Retry-After: 2 header is honored (headers now flow through u/UpstreamResponse/u/httpFailure into retryAfterSecOf), so aDoneMs below has a real minimum-wait assertion instead of only the always-true ordering check; this is still kept as a live-process check that the whole retry-then-succeed path (429, backoff, retried call, success) works end to end alongside a second concurrent client, not as the sole concurrency proof")
 
@@ -155,12 +155,6 @@ fn clientsDone? w: World tags: (List String) -> Bool
 fn seenOnce? w: World model: String -> Bool
   (>= (occurrencesOf w.seen model) 1)
 
-fn ! waitPort! path: String attempts: Int64 -> Int64
-  (if (<= attempts 0) 0
-    (match (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
-      ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))))
-      ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
-
 fn ! hostExe! -> String
   (optionOr (envGet "ASL_HOST") (resultOr (realPath "bin/asl") "bin/asl"))
 
@@ -189,7 +183,10 @@ fn ! runTests -> Bool
         ; (:m :ref NOSELFHOST-RETRYCONC-20261017 :do "fix NOSELFHOST-RETRYCONC: a bare procSpawnv here was an un-bounded, un-tree-tracked child start (rule spawnSafety); fr/spawn is the same asl/tools/fleet/run.asl every other fleet caller starts children through, and its killTree! below (rather than a bare negative-pid procKill) takes the whole process tree this one row of /bin/sh -c ... could have grown, not just the shell's own pid")
         (running (fr/spawn 0 (fr/job (list "/bin/sh" "-c" command) (resultOr (realPath ".") ".") env)))
         (pid (match running ((ok r) r.pid) ((err _) 0)))
-        (gatewayPort (if (> pid 0) (waitPort! readyPath 500) 0))
+        (startMs (nowMs!))
+        (started (if (> pid 0) (sk/waitReady! readyPath pid (+ startMs (sk/startDeadlineMs))) (pair 0 "spawn failed")))
+        (gatewayPort (pairFirst started))
+        (startNote (str "start " (pairSecond started) " after " (stringFromInt64 (- (nowMs!) startMs)) " ms"))
         (w0 (World :listener listener :gatewayPort gatewayPort :stubs (list) :seen (list) :clients (list)))
 
         (aStart (nowMs!))
@@ -209,9 +206,10 @@ fn ! runTests -> Bool
                   (map (fn [(c Client)] -> Bool (if c.done true (do (fdClose c.fd) true))) w4.clients)
                   (fdClose listener) true))
         (gatewayErr (resultOr (fileReadString (str temp "/gateway.err")) ""))
+        (startDiag (str startNote "; stderr: " (sk/tailOf gatewayErr 600) "; stdout: " (sk/tailOf (resultOr (fileReadString (str temp "/gateway.out")) "") 300)))
         (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
     (do
-      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " gatewayErr))
+      (assert (and wrote (> gatewayPort 0)) (str "gateway started on a scratch HOME, " startDiag))
       (assert (stringStartsWith? (clientOf w3 "b1").response "HTTP/1.1 200") (str "mFast answers 200 while mRetry is still backing off: " (clientOf w3 "b1").response " " gatewayErr))
       (assert (< bDoneMs 5000) (str "mFast finishes on its own, unaffected by mRetry's still-pending backoff, after " bDoneMs " ms"))
       (assert (clientsDone? w4 (list "a1")) (str "mRetry eventually gets a response after its retry: " gatewayErr))

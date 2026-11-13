@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs]
+  :x [kwPrev? plainArg? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -16,12 +16,12 @@ fn headPath cache: String root: String -> String
 fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
-      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
+      ((or (listContains? (list "run" "test" "parse" "eval" "launch" "check" "pkg" "-e" "--on" "--local") verb) (or (stringEndsWith? verb ".asl") (stringContains? verb "/"))) "native")
       ((or (stringStartsWith? verb "(")
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
                                      "crawler" "crawl" "engine" "mesh" "train" "timeout" "version" "-v" "--version"
-                                     "build" "audit" "pack" "target" "vcs" "help" "-h" "--help"
+                                     "build" "cache" "audit" "pack" "target" "vcs" "help" "-h" "--help"
                                      "note" "doc" "heal" "lens" "consilium" "browser" "web" "search" "research"
                                      "gateway" "relay" "rla" "mem" "tool" "lint" "gate" "-" "-f") verb)))
         "forms")

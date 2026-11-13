@@ -4,4 +4,4 @@
  :description "asl launch in ASL: harness prompt render, per-client argv and exec (port of the retired Python launcher)"
  :aslFirst true
  :modules ["asl-harness/launch" "asl-harness/collect"]
- :dependencies [])
+ :dependencies ["asl-remote"])

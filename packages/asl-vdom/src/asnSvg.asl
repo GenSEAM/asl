@@ -1,14 +1,14 @@
 (module aslVdom/asnSvg :x [SvgNode SvgResult asnToSvg parseAllChildren extractFormsByTag renderCircle renderPath renderPolygon renderRect] :i [])
 
-(schema SvgNode (:f kind Str) (:f attrs (List (pair Str Str))) (:f children (List SvgNode)) (:f textContent Str))
+(schema SvgNode (:f kind Str) (:f attrs (List (Pair Str Str))) (:f children (List SvgNode)) (:f textContent Str))
 
 (schema SvgResult (:f svg Str) (:f success Bool) (:f errorMsg Str))
 
 fn extractAttr attrs: (List (Pair Str Str)) key: Str defaultVal: Str -> Str
-  (let [(matches (filter (fn [(p (pair Str Str))] (= (pairFirst p) key)) attrs))] (match (listHead matches) ((some p) (pairSecond p)) ((none) defaultVal)))
+  (let [(matches (filter (fn [(p (Pair Str Str))] (= (pairFirst p) key)) attrs))] (match (listHead matches) ((some p) (pairSecond p)) ((none) defaultVal)))
 
 fn hasAttr? attrs: (List (Pair Str Str)) key: Str -> Bool
-  (not (listEmpty? (filter (fn [(p (pair Str Str))] (= (pairFirst p) key)) attrs)))
+  (not (listEmpty? (filter (fn [(p (Pair Str Str))] (= (pairFirst p) key)) attrs)))
 
 fn renderRect node: SvgNode -> Str
   (let [(attrs node.attrs) (x (extractAttr attrs "x" "0")) (y (extractAttr attrs "y" "0")) (w (extractAttr attrs "w" "100")) (h (extractAttr attrs "h" "100")) (rx (extractAttr attrs "rx" "0")) (ry (extractAttr attrs "ry" rx)) (f (extractAttr attrs "f" (extractAttr attrs "fill" "none"))) (s (extractAttr attrs "s" (extractAttr attrs "stroke" "none"))) (sw (extractAttr attrs "sw" (extractAttr attrs "stroke-width" "1"))) (rAttrs (if (= rx "0") "" (str " rx=\"" rx "\" ry=\"" ry "\"")))] (str "<rect x=\"" x "\" y=\"" y "\" width=\"" w "\" height=\"" h "\" fill=\"" f "\" stroke=\"" s "\" stroke-width=\"" sw "\"" rAttrs " />"))
@@ -69,7 +69,7 @@ fn extractVal src: Str key: Str -> (Option Str)
             (if (stringEmpty? cleanVal) (none) (some cleanVal)))))))
 
 fn collectAttrs src: Str keys: (List Str) -> (List (Pair Str Str))
-  (fold (fn [(acc (List (pair Str Str))) (k Str)] (let [(kClean (if (stringStartsWith? k ":") (optionOr (stringSlice k 1 (stringLength k)) k) k))] (match (extractVal src k) ((some v) (listAppend acc (list (pair kClean v)))) ((none) acc)))) (list) keys)
+  (fold (fn [(acc (List (Pair Str Str))) (k Str)] (let [(kClean (if (stringStartsWith? k ":") (optionOr (stringSlice k 1 (stringLength k)) k) k))] (match (extractVal src k) ((some v) (listAppend acc (list (pair kClean v)))) ((none) acc)))) (list) keys)
 
 fn parseChildChunk chunk: Str kind: Str keys: (List Str) -> SvgNode
   (let [(attrs (collectAttrs chunk keys)) (txt (match (extractVal chunk ":text") ((some tv) tv) ((none) (match (extractVal chunk ":t") ((some t2) t2) ((none) "")))))] (SvgNode :kind kind :attrs attrs :children (list) :textContent txt))

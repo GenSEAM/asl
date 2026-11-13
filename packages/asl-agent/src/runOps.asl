@@ -253,6 +253,53 @@ fn filesHint -> String
 fn commitHint -> String
   "(:done :commit msg) for commits"
 
+fn revertHint -> String
+  "(:step :op \"gate\" :revert \"F\" [:rev main] [:n i]), which runs the gate on F as of rev and restores F in the same step,"
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "the target of an output redirect among a git command's words: the word after > >> 1> or the rest of a word that starts with >; none when the command has no stdout redirect")
+fn redirectTarget args: (List String) -> (Option String)
+  (if (listEmpty? args)
+    (none)
+    (let [a (c/firstOf args)
+          rest (c/restOf args)]
+      (cond
+        ((memberOf a (list ">" ">>" "1>" "1>>" ">|"))
+          (if (listEmpty? rest) (none) (some (c/firstOf rest))))
+        ((and (stringStartsWith? a ">") (> (stringLength a) 1))
+          (let [t (c/sliceOf a (if (stringStartsWith? a ">>") 2 1) (stringLength a))]
+            (some (if (stringStartsWith? t "|") (c/sliceOf t 1 (stringLength t)) t))))
+        (else (redirectTarget rest)))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "git show REV:F > F overwrote an owned file to prove red on revert and the budget ended before the restore; a git show whose stdout goes to a path in the tree is refused, while one into /tmp, /dev or $TMPDIR stays allowed")
+fn showIntoTree? args: (List String) -> Bool
+  (match (redirectTarget args)
+    ((none) false)
+    ((some t) (not (scratchTarget? t))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: a scratch target starts in /tmp, /dev, /var/folders or $TMPDIR and has no .. segment, so /tmp/../repo/F is a tree path again")
+fn scratchTarget? t: String -> Bool
+  (and (not (stringContains? t ".."))
+    (listAny? (fn [p] (stringStartsWith? t p)) (list "/tmp/" "/dev/" "/private/tmp/" "/var/folders/" "$TMPDIR" "${TMPDIR" "\"$TMPDIR" "\"${TMPDIR")))
+
+fn pipeTail toks: (List String) -> (List String)
+  (cond
+    ((listEmpty? toks) toks)
+    ((memberOf (c/firstOf toks) (list ";" "&&" "||" "&")) (list))
+    ((= (c/firstOf toks) "|") (c/restOf toks))
+    (else (pipeTail (c/restOf toks))))
+
+; (:m :ref LEON-REVERT-NO-RESTORE :do "grade low: git show REV:F | tee F wrote the tree through a pipe the redirect scan never saw; the stage after the pipe is tee and a file it names is outside scratch")
+fn teeIntoTree? toks: (List String) -> Bool
+  (let [stage (pipeTail toks)]
+    (and (not (listEmpty? stage))
+      (and (= (c/firstOf stage) "tee")
+        (listAny? (fn [a] (and (not (isFlag a)) (not (scratchTarget? a))))
+          (gitArgs (c/restOf stage) (list))))))
+
+fn showSub? toks: (List String) -> Bool
+  (let [plain (filter (fn [a] (not (isFlag a))) (dropGitGlobals (gitArgs toks (list))))]
+    (and (not (listEmpty? plain)) (= (c/firstOf plain) "show")))
+
 fn refuse name: String hint: String -> (Option (Pair String String))
   (some (pair name hint))
 
@@ -300,6 +347,7 @@ fn gitVerdict raw: (List String) -> (Option (Pair String String))
         (if (listAny? (fn [a] (memberOf a (list "-d" "-D" "--delete"))) args) (refuse "git branch -d/-D" (commitHint)) (none)))
       ((= sub "update-ref") (refuse "git update-ref" (commitHint)))
       ((= sub "am") (refuse "git am" (commitHint)))
+      ((and (= sub "show") (showIntoTree? rest)) (refuse "git show >" (revertHint)))
       (else (none))))
 
 fn skipShFlags toks: (List String) -> (List String)
@@ -322,8 +370,9 @@ fn scanTokens toks: (List String) -> (Option (Pair String String))
       (cond
         ((some? shHit) shHit)
         ((and (= tok "git") (not (listEmpty? rest)))
-          (let [v (gitVerdict (gitArgs rest (list)))]
-            (if (some? v) v (scanTokens rest))))
+          (let [v (gitVerdict (gitArgs rest (list)))
+                piped (if (and (none? v) (and (showSub? rest) (teeIntoTree? rest))) (refuse "git show | tee" (revertHint)) (none))]
+            (cond ((some? v) v) ((some? piped) piped) (else (scanTokens rest)))))
         (else (scanTokens rest)))))
 
 fn checkRunGitGuard cmd: String -> (Option (Pair String String))

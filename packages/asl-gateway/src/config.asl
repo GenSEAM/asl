@@ -92,6 +92,7 @@
       gatewayLoadWarningLines
       emptyProfilesCache
       gatewayProfilesLoad!
+      profilesStale
       gatewayProfileName
       gatewayProfileSelect
       gatewayProfileModels
@@ -1416,7 +1417,7 @@ fn defaultProviders! -> (Map String GatewayProvider)
         (ollamaBase (str (rstripSlash (optionOr (envGet "OLLAMA_BASE_URL") "https://ollama.com")) "/v1"))
         (ollamaTimeout (optionOr (match (envGet "OLLAMA_TIMEOUT_SEC")
                                    ((none) (none))
-                                   ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
+                                   ((some s) (if (isFloatString? s) (stringToFloat64 s) (match (stringToInt64 s) ((some n) (some (int64ToFloat64 n))) ((none) (none))))))
                                  300.0))
         (p1 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "agy" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
         (p2 (GatewayProvider :rpmShared false :dropEmptyTools false :assistantReasoning false :id "codex" :kind "cli" :base "" :keyEnv "" :secret "" :promptCacheKey false :sessionHeader "" :timeoutSec 0.0 :firstByteSec 0.0 :rpm 0.0 :pool (none) :retry (none)))
@@ -1888,13 +1889,20 @@ fn parseRouteTemperatureKey props: (Map String rd/SExpr) key: String pid: String
           ((scalarInt n) (pair (some (int64ToFloat64 n)) (list)))
           (_ (pair (none) (list (str "profile " pid " route " intent ": :" key " must be a number"))))))))
 
+; (:m :ref GW-SPREAD-EDIT-GUARD :do "the offending :spread entry as written, so a bare (4) left behind by an alias removal is named in the per-route config error instead of only its count; nested forms show as ...")
+fn spreadItemText item: rd/SExpr -> String
+  (let [(parts (match item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
+    (match item
+      ((rd/sexprAtom a) a)
+      (_ (str "(" (stringJoin (map (fn [(p rd/SExpr)] -> String (match p ((rd/sexprAtom a) a) (_ "..."))) parts) " ") ")"))))
+
 ; (:m :ref GW-SPREAD-20261017 :do "one (ALIAS WEIGHT) pair: ALIAS is a bare atom checked against :models the same way parseChainItem checks a chain entry (never a string, never the raw model name); WEIGHT must be a positive integer, so 0, negative or a non-integer each name the offending alias rather than being silently dropped")
 fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String intent: String st: (Pair (List (Pair String Int64)) (List String)) -> (Pair (List (Pair String Int64)) (List String))
   (let [(acc (pairFirst st))
         (errs (pairSecond st))
         (parts (match item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
     (if (!= (listLength parts) 2)
-      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread entry must be (ALIAS WEIGHT)")))
+      (pair acc (listAppendOne errs (str "profile " pid " route " intent ": :spread entry " (spreadItemText item) " must be (ALIAS WEIGHT)")))
       (let [(aExpr (optionOr (listGet parts 0) (rd/makeAtom "")))
             (wExpr (optionOr (listGet parts 1) (rd/makeAtom "")))]
         (match (asnName aExpr (str "profile " pid " route " intent " :spread alias"))
@@ -2595,7 +2603,8 @@ fn gatewayUndeclaredIntents table: GatewayTable -> (Map String Int64)
 
 (schema ProfilesCache
   (:f key (Option ConfigKey))
-  (:f result (Result GatewayTable String)))
+  (:f result (Result GatewayTable String))
+  (:f stale String))
 
 (schema ProfileSelection
   (:f name String)
@@ -2866,14 +2875,15 @@ fn gatewayLoadWarningLines path: String table: GatewayTable -> (List String)
   (map (fn [(w String)] -> String (str "[Gateway Config] " path ": " w)) table.warnings)
 
 fn emptyProfilesCache -> ProfilesCache
-  (ProfilesCache :key (none) :result (err "gateway profiles not loaded"))
+  (ProfilesCache :key (none) :result (err "gateway profiles not loaded") :stale "")
 
 fn cacheHit? cache: ProfilesCache key: ConfigKey -> Bool
   (match cache.key
     ((none) false)
     ((some k) (configKeyEqual? k key)))
 
-fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
+; (:m :ref GW-CONFIG-LAST-GOOD :do "a changed file that fails to parse keeps serving the table loaded earlier in this process: the error is logged once per file key and held in :stale for hub status; a process that never loaded a good table still fails typed, and the next good file clears :stale")
+fn ! gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -> (Pair ProfilesCache (Result GatewayTable String))
   (let [(path (gatewayProfilesPath home))
         (exists (fileExists? path))
         (key (if exists (gatewayConfigKey! path registryPath) (keyBuiltin)))]
@@ -2881,13 +2891,19 @@ fn gatewayProfilesLoad! cache: ProfilesCache home: String registryPath: String -
       (pair cache cache.result)
       (let [(text (if exists (fileReadString path) (err "not read")))
             (result (gatewayProfilesLoadText! path exists text registryPath))]
-        (do
-          (match result
-            ((ok tbl)
-              (let [(lines (gatewayLoadWarningLines path tbl))]
-                (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())))
-            ((err _) ()))
-          (pair (ProfilesCache :key (some key) :result result) result)))))
+        (match result
+          ((ok tbl)
+            (let [(lines (gatewayLoadWarningLines path tbl))]
+              (do (if (and exists (not (listEmpty? lines))) (eprintln (stringJoin lines "\n")) ())
+                  (pair (ProfilesCache :key (some key) :result result :stale "") result))))
+          ((err e)
+            (if (ok? cache.result)
+              (do (eprintln (str "[Gateway Config] " e " (serving the last good config)"))
+                  (pair (ProfilesCache :key (some key) :result cache.result :stale e) cache.result))
+              (pair (ProfilesCache :key (some key) :result result :stale "") result)))))))
+
+fn profilesStale cache: ProfilesCache -> String
+  cache.stale
 
 ; (:m :ref HRN-DECISION-LAYER :do "a decision point is switched per row (:gateway ... :decides ((:decide :point P :mode off|static|model|shadow :model M :threshold T))); a point with no valid row of its own runs static (no outward call); shadow and model, the modes that send error lines to a provider, come only from an explicit valid row for that point, and a malformed row of another point never changes this one; keyFiles ride along so a caller resolves the provider key through keyFileLookup! and not the environment first")
 (schema DecidePoint

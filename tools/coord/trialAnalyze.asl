@@ -317,9 +317,9 @@ fn compileCodes -> (List String)
 fn compileCode? code: String -> Bool
   (or (listContains? (compileCodes) code) (stringStartsWith? code "ERR_READ_"))
 
-; (:m :ref TRIAL-ANALYZE :do "wReadLoop's turn cap for a record with no stop signal: 16 turns with no write op, the adopted default of Leon's :agentLoop :readOnlyTurnCap (LEON-OPROWS-M3; was 20); a run that did stop carries readStreak :cause readOnly, which wReadLoop matches directly; H1 on node2 was 37 read turns")
+; (:m :ref TRIAL-ANALYZE :do "wReadLoop's turn cap for a record with no stop signal: 12 turns with no write op, the adopted default of Leon's :agentLoop :readOnlyTurnCap (LEON-READ-LOOP-CONTEXT-LOSS; was 16, before LEON-OPROWS-M3 20); a run that did stop carries readStreak :cause readOnly, which wReadLoop matches directly; H1 on node2 was 37 read turns")
 fn readLoopCap -> Int64
-  16
+  12
 
 fn pProvider f: Facts -> Bool
   (and (writeFailed f) (or (= f.stop "provider") (or (= f.errClass "transient") (= f.cond "provider"))))

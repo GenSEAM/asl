@@ -9,23 +9,21 @@ bb.base:
   ret i64 %n
 bb.recur:
   %one = bitcast i64 1 to i64
-  %n1.p.pair = call {i64, i1} @llvm.ssub.with.overflow.i64(i64 %n, i64 %one)
-  %n1 = extractvalue {i64, i1} %n1.p.pair, 0
-  %n1.p.bad = extractvalue {i64, i1} %n1.p.pair, 1
+  %n1.p.bad = icmp slt i64 %n, -9223372036854775807
   br i1 %n1.p.bad, label %n1.p.trap, label %n1.p.ok
 n1.p.trap:
   call void @llvm.trap()
   unreachable
 n1.p.ok:
+  %n1 = sub nsw i64 %n, 1
   %f1 = call tailcc i64 @fib(i64 %n1)
-  %n2.p.pair = call {i64, i1} @llvm.ssub.with.overflow.i64(i64 %n, i64 %two)
-  %n2 = extractvalue {i64, i1} %n2.p.pair, 0
-  %n2.p.bad = extractvalue {i64, i1} %n2.p.pair, 1
+  %n2.p.bad = icmp slt i64 %n, -9223372036854775806
   br i1 %n2.p.bad, label %n2.p.trap, label %n2.p.ok
 n2.p.trap:
   call void @llvm.trap()
   unreachable
 n2.p.ok:
+  %n2 = sub nsw i64 %n, 2
   %f2 = call tailcc i64 @fib(i64 %n2)
   %sum.p.pair = call {i64, i1} @llvm.sadd.with.overflow.i64(i64 %f1, i64 %f2)
   %sum = extractvalue {i64, i1} %sum.p.pair, 0
@@ -160,7 +158,6 @@ bb.entry:
 
 declare void @llvm.trap()
 declare {i64, i1} @llvm.sadd.with.overflow.i64(i64, i64)
-declare {i64, i1} @llvm.ssub.with.overflow.i64(i64, i64)
 declare i64 @strlen(ptr)
 declare i32 @snprintf(ptr, i64, ptr, ...)
 declare i64 @write(i32, ptr, i64)

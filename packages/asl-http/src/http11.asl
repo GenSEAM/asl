@@ -1,6 +1,6 @@
 (module asl-http/http11 :x [HttpHeaders HttpRequest HttpResponse makeHeaders getHeader getHeaderFromHeaders makeRequest makeResponse parseHttpRequest getQueryParam formatHttpResponse])
 
-(schema HttpHeaders (:f entries (List (pair String String))))
+(schema HttpHeaders (:f entries (List (Pair String String))))
 
 (schema HttpRequest (:f method String) (:f path String) (:f version String) (:f headers HttpHeaders) (:f body String) (:f query String))
 

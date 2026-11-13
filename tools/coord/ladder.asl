@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines reviewBrief reviewWith review]
+  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -168,7 +168,8 @@ fn eligible rows: (List rd/SExpr) wfams: (List String) tier: String lane: Lane -
             (let [(f (laneFamily rows lane))]
               (and (not (stringEmpty? f)) (not (listContains? wfams f))))))
 
-; (:m :ref COND2 :do "the lane a rung waits for: first lane of the tier that is out of allowance and would be eligible, else the tier name")
+; (:m :ref COND2 :do "the lanes a rung waits for: every lane of the tier that is out of allowance and would be eligible, space-separated in lane order, else the tier name")
+; (:m :ref REVIEW-STRONG-STARVED :do "node2 2026-11-12: the await named only the first such lane, so 20 units sat on ocDeepseekPro while ocGlm53 and synKimiK31Pro of the same tier regained allowance; wake! matches any name of a space-separated await, so naming every candidate lane wakes the unit on the first of them to rise")
 fn insertRanked l: Lane sorted: (List Lane) -> (List Lane)
   (match (listHead (filter (fn [(x Lane)] -> Bool (< x.quality l.quality)) sorted))
     ((none) (listAppend sorted (list l)))
@@ -180,12 +181,11 @@ fn rankLanes lanes: (List Lane) -> (List Lane)
   (fold (fn [(acc (List Lane)) (l Lane)] -> (List Lane) (insertRanked l acc)) (list) lanes)
 
 fn waitLane rows: (List rd/SExpr) wfams: (List String) tier: String skipFamily: String lanes: (List Lane) -> String
-  (match (listHead (filter (fn [(l Lane)] -> Bool
-                             (let [(f (laneFamily rows l))]
-                               (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
-                           lanes))
-    ((some l) l.alias)
-    ((none) tier))
+  (let [(waits (filter (fn [(l Lane)] -> Bool
+                         (let [(f (laneFamily rows l))]
+                           (and (= l.tier tier) (and (not (stringEmpty? f)) (and (not (listContains? wfams f)) (!= f skipFamily))))))
+                       lanes))]
+    (if (listEmpty? waits) tier (stringJoin (map (fn [(l Lane)] -> String l.alias) waits) " ")))
 
 fn selectOne rows: (List rd/SExpr) writerAlias: String tier: String lanes: (List Lane) -> Pick
   (let [(wfams (familiesIn rows writerAlias))
@@ -467,6 +467,12 @@ fn withEarlier r: Ruling earlier: (List String) -> Ruling
 fn awaitRow u: ReviewUnit rung: String lane: String why: String -> String
   (str "(:await :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf lane) " :why " (fm/asnQuote why) ")")
 
+; (:m :ref WAKE-LOWS :do "the R2 and R3 wake sets join as a union in first-seen order, so a lane named by both (an alias in both tiers) appears once in the await")
+fn joinAwait a: String b: String -> String
+  (stringJoin (fold (fn [(acc (List String)) (nm String)] -> (List String) (if (or (stringEmpty? nm) (listContains? acc nm)) acc (listAppend acc (list nm))))
+                    (list) (listAppend (stringSplit a " ") (stringSplit b " ")))
+              " ")
+
 ; (:m :ref REVIEW-DEFER :do "a paid rung with no lane falls through to the strong rung with the verdicts so far (node2 2026-11-04: every paid lane outside the writer family was out of allowance and the unit parked on a lane whose window resets in nine days); when the strong rung has no lane either the R2 await stands at R2 with both lanes, space-separated, as its wake set and a reason naming both rungs")
 fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: String receipt: String callModel: (fn ! [String String] -> (Result String String)) rung: String prior: (List Verdict) fixesUsed: Int64 -> (Result Ruling String)
   (let [(pick (cond ((= rung "R1") (selectFree rows u.writerAlias lanes))
@@ -480,7 +486,7 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
               ((err e) (err e))
               ((ok r3) (if (= r3.action "await")
                          (let [(both (str why "; R3: " r3.why))
-                               (lanes2 (if (= r3.awaitLane lane) lane (str lane " " r3.awaitLane)))]
+                               (lanes2 (joinAwait lane r3.awaitLane))]
                            (ok (ruling "await" rung (list) lanes2 (list (awaitRow u rung lanes2 both)) prior both)))
                          (ok r3)))))))
       ((pickOk ls)

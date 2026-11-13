@@ -180,7 +180,7 @@
 (shape "gitDiff" (want "(:step :op \"gitDiff\" :path p :base rev [:start n :end m])"))
 (shape "gitLog" (want "(:step :op \"gitLog\" :path p :limit n [:start n :end m])"))
 (shape "gitShow" (want "(:step :op \"gitShow\" :rev rev :path p [:start n :end m])"))
-(shape "gate" (want "(:step :op \"gate\" [:n i])"))
+(shape "gate" (want "(:step :op \"gate\" [:n i] [:revert f [:rev r]])"))
 (shape "run" (want "(:step :op \"run\" :argv \"cmd\")"))
 (shape "delete" (want "(:step :op \"delete\" :file f)"))
 (shape "manage" (want "(:step :op \"manage\" :action spawn|poll|tail|send|kill|list :id name [:cmd c] [:text s])"))

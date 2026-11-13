@@ -91,7 +91,11 @@ fn testUnrouted -> Bool
         (bit (diagsAll "fn f a: Int64 b: Int64 -> Int64\n  (& a b)\n"))
         (own (diagsAll "fn addWrap a: Int64 b: Int64 -> Int64\n  (+ a b)\n\nfn g -> Int64\n  (addWrap 1 2)\n"))]
     (do (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) add) (list "ERR_LOWLEVEL_UNROUTED")) (str "a call to addWrap is one unrouted diagnostic; got " (showDiags add)))
-        (assert (stringContains? (showDiags add) "addWrap has a signature but no lowering") "the diagnostic names the builtin and the missing lowering")
+        (assert (stringContains? (showDiags add) "addWrap over U8 has no sized lowering yet") "the diagnostic names the builtin and the sized operand with no lowering")
+        (assert (listEmpty? (diagsAll "fn f a: Int64 b: Int64 -> Int64\n  (addWrap a b)\n")) "addWrap over Int64 is lowered natively and not flagged")
+        (assert (listEmpty? (diagsAll "fn f a: Int64 -> Int64\n  (rotateLeft a 3)\n")) "rotateLeft over Int64 is lowered natively")
+        (assert (not (ll/unroutedName? "mulWrap")) "mulWrap is lowered")
+        (assert (ll/unroutedName? "addClamp") "the clamp family stays unrouted")
         (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) conv) (list "ERR_LOWLEVEL_UNROUTED")) (str "a conversion call is unrouted too; got " (showDiags conv)))
         (assert (listEmpty? bit) (str "the integral operators are lowered; got " (showDiags bit)))
         (assert (listEmpty? own) (str "a module function of the same name is not flagged; got " (showDiags own)))

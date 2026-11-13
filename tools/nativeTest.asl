@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-ir/types :a irTy)
@@ -67,14 +67,17 @@ fn ! fromFr p: fr/ProcOut -> ProcOut
 
 ; (:m :ref PROC-REAPER-ALL :do "a native test binary gets the same bounded fleet lease as a runGuarded suite: its own pgid is the lease key, the default suite timeout is its deadline, and the row is removed only after pumpCollect has reaped it; a later runGuarded can therefore kill the group if this runner dies first")
 fn ! runProcIn argv: (List String) cwd: (Option String) envOpt: (Option (List String)) -> ProcOut
+  (runProcWithin argv cwd envOpt (/ (fr/defaultLimits).timeoutMs 1000))
+
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "runProcIn with the lease deadline wallS seconds after the start, so a suite binary runs under its declared wall")
+fn ! runProcWithin argv: (List String) cwd: (Option String) envOpt: (Option (List String)) wallS: Int64 -> ProcOut
   (let [(startNs (monotonicNs))
         (spawnRes (procSpawnv argv cwd envOpt))]
     (match spawnRes
       ((err e) (ProcOut :exitCode 127 :stdout "" :stderr (str "spawn failed: " e)))
       ((ok sp)
-        (let [(lim (fr/defaultLimits))
-              (_ (fr/writeLease! sp.pid (procSelf) startNs
-                   (+ startNs (* (if (> lim.timeoutMs 0) lim.timeoutMs 3600000) 1000000))))
+        (let [(_ (fr/writeLease! sp.pid (procSelf) startNs
+                   (+ startNs (* (if (> wallS 0) wallS 3600) 1000000000))))
               (_ (fdClose sp.stdin))
               (outFd sp.stdout)
               (errFd sp.stderr)
@@ -1902,11 +1905,16 @@ fn stemOfName n: String -> String
   (let [(parts (stringSplit n "."))]
     (if (< (listLength parts) 2) n (stringJoin (listTake parts (- (listLength parts) 1)) ".")))
 
+; (:m :ref NATIVETEST-SWEEP-LOCK-SPLIT :do "a module's files are KEY.o, KEY.meta and, while a compile holds the claim, KEY.o.lock; they group by KEY (the name up to its first dot), so the lock lands in the object's entry, and a live lock pins it: stemOfName grouped KEY.o.lock under KEY.o and a held claim pinned nothing")
+fn moduleStem n: String -> String
+  (optionOr (listHead (stringSplit n ".")) n)
+
 fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
   (let [(groups (fold (fn [(m (Map String (List String))) (n String)] -> (Map String (List String))
-                        (mapSet m (stemOfName n) (cons (str dir "/" n) (mapGetOr m (stemOfName n) (list)))))
-                      (mapEmpty) (resultOr (dirList dir) (list))))]
-    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) false)) (mapKeys groups)))
+                        (mapSet m (moduleStem n) (cons (str dir "/" n) (mapGetOr m (moduleStem n) (list)))))
+                      (mapEmpty) (resultOr (dirList dir) (list))))
+        (held (fn [(ps (List String))] -> Bool (listAny? (fn [(p String)] -> Bool (and (stringEndsWith? p ".lock") (lockLive? p))) ps)))]
+    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) (held (mapGetOr groups k (list))))) (mapKeys groups)))
 
 fn hexKey? n: String -> Bool
   (= (stringLength n) 64)
@@ -2105,13 +2113,33 @@ fn ! emit out: ProcOut v: Verdict -> Unit
       (eprintText v.stderr)
       (if (= v.exit 0) (println v.line) (eprintln v.line)))
 
+fn defaultWallS -> Int64
+  1800
+
+fn maxWallS -> Int64
+  7200
+
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "a suite declares its wall in its own source as a top-level fn suiteWallS -> Int64 whose body is one integer line; none when absent or not an integer")
+fn declaredWallS text: String -> (Option Int64)
+  (match (stringIndexOf text "\nfn suiteWallS -> Int64\n")
+    ((none) (none))
+    ((some at) (let [(rest (optionOr (stringSlice text (+ at 24) (stringLength text)) ""))]
+                 (stringToInt64 (stringTrim (optionOr (listHead (stringLines rest)) ""))))))
+
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the wall a suite binary runs under: the 1800 s default, raised to a declared suiteWallS, never above 7200 s")
+fn suiteWall text: String -> Int64
+  (match (declaredWallS text)
+    ((some s) (min (maxWallS) (max (defaultWallS) s)))
+    ((none) (defaultWallS)))
+
 fn ! runOne path: String fp: String -> Outcome
   (let [(built (prepare path fp))]
     (match built.binary
       ((some bin)
        (let [(t0 (monotonicNs))
              (prelude (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))
-             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/defaultLimits))))
+             (wall (suiteWall (resultOr (fileReadString path) "")))
+             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
              (took (ms (- (monotonicNs) t0)))
              (v (judgeInit! bin path prelude (verdictOf path out.exitCode out.stderr)))]
          (do (emit out v)

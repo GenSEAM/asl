@@ -62,8 +62,19 @@ fn testBrokenSegmentOnly -> Bool
       (assert (= (listLength b.skipped) 2) "the balanced misnest in fn f is skipped, not applied")
       true))
 
+; (:m :ref unbalancedFormDiagnostic :do "a missing closer in the second fn names that fn as its item; a stray closer names none; a module header above is not the item")
+fn testItemNamed -> Bool
+  (let [(src "(module ub2 :x [g h] :i [])\n\nfn g -> Int64\n  1\n\nfn ! h x: Int64 -> Int64\n  (let [(y (+ x 1))]\n    (+ y 2)\n\nfn k -> Int64\n  3\n")
+        (g (ind/guide src))
+        (stray (ind/guide "fn f -> Int64\n  1)\n"))]
+    (do
+      (assert (= (ind/editsAsnIn src g.edits) "((:insert \")\" :line 8 :col 12 :opener (:line 7 :col 3 :head \"let\") :by (:line 10) :item (:line 6 :kind \"fn\" :name \"h\")))") (str "the edit names fn h as its item, got " (ind/editsAsnIn src g.edits)))
+      (assert (= (ind/editsAsnIn "fn f -> Int64\n  1)\n" stray.edits) (ind/editsAsn stray.edits)) "a stray closer gets no item")
+      true))
+
 fn runTests -> Bool
   (do
+    (assert (testItemNamed) "testItemNamed")
     (assert (testMissingCloser) "testMissingCloser")
     (assert (testStrayCloser) "testStrayCloser")
     (assert (testBalancedMisnest) "testBalancedMisnest")

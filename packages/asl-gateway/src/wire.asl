@@ -1,5 +1,5 @@
 (module aslGateway/wire
-  :x [formatWireHeaders
+  :x [formatWireHeaders fallbackErrorText
       isToolCall?
       isDeclarativeAsn?
       extractToolName
@@ -24,7 +24,7 @@
       sanitizeAsnContent
       extractOutermostSexpr
       ]
-  :i [(asl-json/json :a j)])
+  :i [(asl-json/json :a j) (asl-text/string :a ts)])
 
 fn formatWireHeaders -> (List Str)
   (list "X-ASL-Wire-Protocol: asn/1.0" "X-Tool-Call-Dialect: asn-sexpr" "Accept: application/asn+sexpr, application/json")
@@ -551,7 +551,7 @@ fn fallbackErrorText errData: String fallbackErr: String -> String
     (if (stringEmpty? trimmed)
       fallbackErr
       (if (> (stringLength trimmed) 500)
-        (optionOr (stringSlice trimmed 0 500) trimmed)
+        (ts/stringClipUtf8 trimmed 500)
         trimmed)))
 
 fn upstreamErrorReason errData: String fallbackErr: String -> String
@@ -661,7 +661,7 @@ fn sanitizeAsnContent content: String -> String
       ((none)
        (let [(escaped (stringReplace (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\n" " "))
              (raw (if (> (stringLength escaped) 200)
-                    (str (optionOr (stringSlice escaped 0 197) "") "...")
+                    (str (ts/stringClipUtf8 escaped 197) "...")
                     escaped))]
          (str "(:error :reason \"unbalanced_non_asn\" :raw \"" raw "\")")))))
 

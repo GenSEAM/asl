@@ -132,7 +132,7 @@ fn countedRoute? name: String -> Bool
 
 fn borrowBuiltin? name: String -> Bool
   (listContains? (list "+" "-" "*" "/" "mod" "<" "<=" ">" ">=" "=" "!=" "not" "str" "print" "println" "eprintln" "stringFromFloat64" "stringToFloat64" "abs" "int64ToFloat64" "float64ToInt64" "~"
-                       "min" "max" "<<" ">>" "&" "|" "^" "clamp" "assert" "refute" "trap" "keyCompare")
+                       "min" "max" "<<" ">>" "&" "|" "^" "mulWrap" "addWrap" "subWrap" "rotateLeft" "rotateRight" "clamp" "assert" "refute" "trap" "keyCompare")
                  name)
 
 fn freshEntry? name: String -> Bool

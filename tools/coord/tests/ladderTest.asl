@@ -42,7 +42,7 @@ fn models r: l/Ruling -> (List String)
 fn rungs r: l/Ruling -> (List String)
   (map (fn [(v l/Verdict)] -> String v.rung) r.verdicts)
 
-fn rows -> (List rd)
+fn rows -> (List String)
   (list)
 
 fn testFamilies -> Bool
@@ -165,10 +165,13 @@ fn testAwait -> Bool
         (c (run (unit "high" false) (goodGates) (list (lane "ocDeepseekFlash" "paid" 0)) (list)))
         (d (run (unit "low" false) (goodGates) (list (lane "orNemotronUltraFree" "free" 5) (lane "ocLongcat" "free" 5) (lane "ocDeepseekFlash" "paid" 0))
                 (list (pair "orNemotronUltraFree" (passReply)) (pair "ocLongcat" (failReply)))))]
-    (do (assert (and (= a.action "await") (= a.awaitLane "orNemotronUltraFree")) "no free allowance awaits the first out-of-allowance eligible free lane")
+    (do (assert (and (= a.action "await") (= a.awaitLane "orNemotronUltraFree ocLongcat")) (str "no free allowance awaits every out-of-allowance eligible free lane, the writer family left out: " a.awaitLane))
         (assert (and (= b.action "await") (= b.awaitLane "ocLongcat")) "one family left awaits the lane of a second family")
         (assert (and (= c.action "await") (= c.awaitLane "ocDeepseekFlash strong") (= c.rung "R2")) (str "high risk with no paid or strong allowance awaits at R2 on the paid lane and the strong tier: " c.awaitLane))
         (assert (and (= d.action "await") (= d.rung "R2") (= (listLength d.verdicts) 2)) "a split with no R2 allowance awaits R2 and keeps the R1 verdicts")
+        (let [(u3 (l/ReviewUnit :id "U1" :task "t" :risk "low" :closureChanged false :writerAlias "flashHigh" :writerChannel "agy" :startRung "R3" :fixesUsed 0 :prior (list)))
+              (s (run u3 (goodGates) (list (lane "flashLow" "strong" 5) (lane "ocDeepseekFlash" "strong" 0) (lane "ccKimi31Pro" "strong" 0) (lane "ocLongcat" "strong" 0)) (list)))]
+          (assert (and (= s.action "await") (= s.awaitLane "ocDeepseekFlash ccKimi31Pro ocLongcat")) (str "REVIEW-STRONG-STARVED: a strong await names every strong lane of another family, so any of them rising wakes it; the writer-family lane with allowance is not one: " s.awaitLane)))
         true))
 
 ; (:m :ref REVIEW-EMPTY-QUORUM-BLOCKS :do "a reviewer with no verdict is absent, not a vote: at the last rung pass 1 fail 0 and pass 0 fail 0 (the rest absent) defer to the lanes that did not answer, only a real split (a pass and a fail) blocks, and verdicts that exist and meet the quorum still pass")
@@ -404,6 +407,14 @@ fn testFallThrough -> Bool
         (assert (and (stringContains? row "no paid lane") (stringContains? row "R3: no strong lane")) (str "naming both rungs: " row))
         true))
 
+; (:m :ref WAKE-LOWS :do "an alias listed in both the paid and the strong tier appears once in the joined R2+R3 await; joinAwait is a first-seen union")
+fn testJoinDedup -> Bool
+  (let [(shut (run (unit "high" false) (goodGates) (list (lane "ocDeepseekFlash" "paid" 0) (lane "ccKimi31Pro" "paid" 0) (lane "ccKimi31Pro" "strong" 0)) (list)))]
+    (do (assert (and (= shut.action "await") (= shut.awaitLane "ocDeepseekFlash ccKimi31Pro")) (str "the shared alias is named once: " shut.awaitLane))
+        (assert (= (l/joinAwait "a b" "b c") "a b c") (str "first-seen union: " (l/joinAwait "a b" "b c")))
+        (assert (= (l/joinAwait "a" "") "a") "an empty side adds nothing")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testFamilies) "families")
       (assert (testTokens) "tokens")
@@ -422,6 +433,7 @@ fn ! runTests -> Bool
       (assert (testPermanentLane) "permanent lane errors skip the lane")
       (assert (testSoleLaneBlocks) "a sole lane that dies blocks visibly, statuses are real statuses")
       (assert (testBlocked) "blocked")
+      (assert (testJoinDedup) "R2+R3 await join names each alias once")
       (assert (testBrief) "brief")
       (assert (testBriefWholeDiff) "whole diff reaches the reviewer")
       (assert (testBriefWithheldMarker) "a withheld diff line leaves a marker")

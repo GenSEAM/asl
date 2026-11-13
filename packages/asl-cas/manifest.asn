@@ -1,0 +1,6 @@
+(:package asl-cas
+ :version "0.1.0"
+ :entry "src/cas.asl"
+ :description "Content-addressed blob store: sha256 put/get with re-hash on read, atomic writes, owner pins with reference counts, grace-period gc with a typed receipt, pure AgentSlang"
+ :aslFirst true
+ :dependencies [])

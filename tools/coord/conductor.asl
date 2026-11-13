@@ -1,8 +1,8 @@
 (module asl-tools/coord/conductor
-  :x [porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -122,8 +122,46 @@ fn receiptRowOf out: String -> String
   (optionOr (listLast (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:") (stringContains? l ":usage")))
                               (map stringTrim (stringLines out)))) "")
 
+; (:m :ref REVIEW-DEFER :do "Leon's output wraps the receipt as (:agent :receipt (:agentReceipt ... :servedAlias A ...)), so the served keys sit one form down; nestedReceipt is the balanced (:agentReceipt ...) text of a row, empty when none, string literals skipped")
+fn formEnd s: String i: Int64 depth: Int64 inStr: Bool esc: Bool -> Int64
+  (if (>= i (stringLength s))
+    (stringLength s)
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (cond
+        (esc (formEnd s (+ i 1) depth inStr false))
+        ((and inStr (= c "\\")) (formEnd s (+ i 1) depth inStr true))
+        ((= c "\"") (formEnd s (+ i 1) depth (not inStr) false))
+        (inStr (formEnd s (+ i 1) depth inStr false))
+        ((= c "(") (formEnd s (+ i 1) (+ depth 1) inStr false))
+        ((= c ")") (if (<= depth 1) (+ i 1) (formEnd s (+ i 1) (- depth 1) inStr false)))
+        (else (formEnd s (+ i 1) depth inStr false)))))
+
+fn receiptStart s: String i: Int64 inStr: Bool esc: Bool -> Int64
+  (if (>= i (stringLength s))
+    -1
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (cond
+        (esc (receiptStart s (+ i 1) inStr false))
+        ((and inStr (= c "\\")) (receiptStart s (+ i 1) inStr true))
+        ((= c "\"") (receiptStart s (+ i 1) (not inStr) false))
+        (inStr (receiptStart s (+ i 1) inStr false))
+        ((and (= c "(") (stringStartsWith? (optionOr (stringSlice s i (stringLength s)) "") "(:agentReceipt ")) i)
+        (else (receiptStart s (+ i 1) inStr false)))))
+
+fn nestedReceipt row: String -> String
+  (let [(at (receiptStart row 0 false false))]
+    (if (< at 0) "" (optionOr (stringSlice row at (formEnd row at 0 false false)) "")))
+
+; (:m :ref NODE2-REVIEW-WRITERFAMILY :do "a Leon pool receipt carries the agent receipt as the string value of :result, (:receipt :unit U :state done :result \"(:agentReceipt ... :servedAlias A ...)\"); node2 2026-11-13 journalled STD-DURATION STD-QUERYSTRING STD-TOMLLITE as model unknown from it and their reviews deferred on writerFamily, so the unescaped :result is searched last")
 fn servedField out: String key: String -> String
-  (al/rowText (receiptRowOf out) (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
+  (let [(k (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) key) key))
+        (row (receiptRowOf out))
+        (top (al/rowText row k))
+        (nested (al/rowText (nestedReceipt row) k))
+        (inner (al/rowText row "result"))]
+    (cond ((not (stringEmpty? top)) top)
+          ((not (stringEmpty? nested)) nested)
+          (else (al/rowText (nestedReceipt inner) k))))
 
 fn servedAliasOf out: String -> String
   (servedField out ":servedAlias")
@@ -214,9 +252,19 @@ fn sigKey sig: String -> String
   (let [(spaced (fold (fn [(acc String) (ch String)] -> String (str acc (if (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" ch) ch " "))) "" (stringChars sig)))]
     (stringJoin (map (fn [(w String)] -> String (if (idWord? w) "#" w)) (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit spaced " "))) " "))
 
+; (:m :ref JOURNAL-UTF8-CUT :do "stringSlice and stringLength count bytes, so a cut at a fixed byte offset can split a multibyte character and leave invalid UTF-8 in a journal row (grep then calls journal.asn binary); utf8Clip backs the cut off to the start of the character it would split")
+fn utf8Back bs: Bytes j: Int64 -> Int64
+  (if (and (> j 0) (let [(b (bytesGet bs j))] (and (>= b 128) (< b 192)))) (utf8Back bs (- j 1)) j)
+
+fn utf8Clip t: String limit: Int64 -> String
+  (let [(bs (stringToBytes t))]
+    (if (<= (bytesLength bs) limit) t (optionOr (stringSlice t 0 (utf8Back bs (max 0 limit))) "")))
+
+fn spawnFailedSig stderr: String -> String
+  (str "spawnFailed " (utf8Clip stderr 120))
+
 fn verdictSig sig: String -> String
-  (let [(one (stringTrim (stringJoin (stringSplit sig "\n") " ")))]
-    (optionOr (stringSlice one 0 (if (< (stringLength one) 400) (stringLength one) 400)) one))
+  (utf8Clip (stringTrim (stringJoin (stringSplit sig "\n") " ")) 400)
 
 ; (:m :ref WRITEESC :do "the write tiers in escalation order; a unit on free that fails the write stage maxSame times in a row moves to paid, then strong, and only a last-tier failure blocks")
 ; (:m :ref ESC-LADDER :do "the ladder: free writers retry maxSame times per signature (L0), paid is the DeepSeek Flash fixer (L1), strong our strong paid models (L2), lead parks the unit blocked with :await lead (L3); a unit on paid or strong passes up after its second failure whatever the signature")
@@ -445,7 +493,7 @@ fn ! launch! ctx: Ctx u: st/Task c: CUnit -> CUnit
         (_ (dirCreate (runsDir ctx.dir)))
         (_ (dropRun! ctx.dir c.id stage))]
     (match (fr/spawnSep argv "." (fr/childEnv (list)))
-      ((err po) (fail! ctx c stage "" (str "spawnFailed " (optionOr (stringSlice po.stderr 0 (if (< (stringLength po.stderr) 120) (stringLength po.stderr) 120)) "")) 0))
+      ((err po) (fail! ctx c stage "" (spawnFailedSig po.stderr) 0))
       ((ok r)
         (let [(_ (fdClose r.outFd))
               (_ (fdClose r.errFd))
@@ -544,7 +592,7 @@ fn ! ledgerState! dir: String path: String base: String -> String
         (else ""))))
 
 fn repoClip text: String -> String
-  (let [(t (stringTrim text))] (if (> (stringLength t) 160) (optionOr (stringSlice t 0 160) t) t))
+  (let [(t (stringTrim text))] (utf8Clip t 160))
 
 fn ! ledgerForged! dir: String path: String base: String -> Bool
   (= (ledgerState! dir path base) "forged")
@@ -876,6 +924,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
     ((err e) (err e))
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
+            (_ (closeDrain! ctx))
             (_ (reapLeases! ctx))
             (_ (retryBlocked! ctx units))
             (_ (depWake! ctx units))
@@ -922,7 +971,12 @@ fn ! stopAll! ctx: Ctx -> Int64
 
 ; (:m :ref CONDUCTOR :do "wake LANE: units parked in awaitReview for that lane (quota window reset or refreshed allowance) become ready for review; one journal row per unit")
 fn ! wake! ctx: Ctx lane: String -> Int64
-  (let [(cus (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (or (= c.lane lane) (listContains? (stringSplit c.await " ") lane))))) (readCUnits! ctx.dir)))
+  (wakeUpTo! ctx lane (- 0 1))
+
+; (:m :ref WAKE-LOWS :do "wake LANE for at most cap units in id order, a negative cap meaning all: refreshWake! passes the lane's allowance so a reset does not send the whole herd to one lane in one tick")
+fn ! wakeUpTo! ctx: Ctx lane: String cap: Int64 -> Int64
+  (let [(all (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (or (= c.lane lane) (listContains? (stringSplit c.await " ") lane))))) (readCUnits! ctx.dir)))
+        (cus (if (< cap 0) all (listTake all cap)))
         (_ (map (fn [(c CUnit)] -> CUnit (move! ctx (parkedOf c 0) "awaitReview" "wake" "" 0 0 lane 0)) cus))]
     (listLength cus))
 
@@ -950,7 +1004,7 @@ fn ! freeWake! ctx: Ctx -> Int64
             (let [(name (stringTrim (stringReplace (stringReplace (sp/tokAfter r ":await") "\"" "") ")" "")))
                   (below (optionOr (stringToInt64 (sp/tokAfter r ":readyBelow")) 0))
                   (room (- slots done))
-                  (parked (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (= c.await name)))) (readCUnits! ctx.dir)))
+                  (parked (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (listContains? (stringSplit c.await " ") name)))) (readCUnits! ctx.dir)))
                   (take (if (or (<= room 0) (>= (+ ready done) below)) (list) (listTake parked (min room (- below (+ ready done))))))
                   (_ (map (fn [(c CUnit)] -> CUnit (move! ctx (parkedOf c 0) "awaitReview" "wake" "" 0 0 (str "free:" name) 0)) take))]
               (+ done (listLength take))))
@@ -985,6 +1039,34 @@ fn ! requeueDrain! ctx: Ctx units: (List st/Task) -> Int64
     (if (not (fileExists? taken)) 0
       (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(l String)] -> String (quotedAfter l ":unit \"")) (stringLines (readOr taken)))))
             (done (filter (fn [(id String)] -> Bool (requeueOne! ctx units id)) ids))
+            (_ (pathRemove taken))]
+        (listLength done))))
+
+; (:m :ref CONDUCTOR-CLOSE-CMD :do "close: `conductor close --ids A,B --store DIR` appends (:close :unit ID) rows to <store>/close.asn; the running tick claims the file by rename, and each named unit that is blocked, failed, queued or ready (work already on main, no stage running) goes to merged with one journal row (stage close, verdict closed), so its dependents release; unknown ids and units mid-stage are ignored")
+fn closePath dir: String -> String
+  (str dir "/close.asn")
+
+fn ! requestClose! dir: String ids: (List String) -> Bool
+  (if (listEmpty? ids) true
+    (ok? (fileAppend (closePath dir) (str (stringJoin (map (fn [(id String)] -> String (str "(:close :unit " (st/q id) ")")) ids) "\n") "\n"))))
+
+fn ! closeOne! ctx: Ctx id: String -> Bool
+  (match (cuOf (readCUnits! ctx.dir) id)
+    ((none) false)
+    ((some c)
+      (if (not (listContains? (list "blocked" "failed" "queued" "ready") c.st)) false
+        (let [(_ (dropLease! ctx c))
+              (_ (pwReset! ctx.dir c.id))
+              (_ (move! ctx (cleaned c c.lane) "merged" "close" "" 0 0 "closed" 0))]
+          true))))
+
+fn ! closeDrain! ctx: Ctx -> Int64
+  (let [(p (closePath ctx.dir))
+        (taken (str p ".taken"))
+        (_ (if (and (fileExists? p) (not (fileExists? taken))) (pathRename p taken) (ok ())))]
+    (if (not (fileExists? taken)) 0
+      (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(l String)] -> String (quotedAfter l ":unit \"")) (stringLines (readOr taken)))))
+            (done (filter (fn [(id String)] -> Bool (closeOne! ctx id)) ids))
             (_ (pathRemove taken))]
         (listLength done))))
 
@@ -1363,19 +1445,19 @@ fn jobserverPace dir: String allowance: (fn [String] -> Int64) -> Pace
   (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance)
 
 ; (:m :ref SCHED :do "the light pool: without ~/.asl/conductor/sched.asn it is the jobserver token count and nothing adapts; with one the slots come from the store's slots.asn, sampled at most once a minute from the gateway ledger, free RAM and load; gates and builds keep the jobserver class writer tokens")
-; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings passed in: conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
-fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: Int64 -> Int64
+; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings and the disk passed in (CONDUCTORTEST-SCHED-RED: the real disk at 86% was level low and halved :start 7 to 3): conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
+fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: Int64 disk: sc/Disk -> Int64
   (let [(txt (readOr (str home "/.asl/conductor/sched.asn")))]
     (if (stringEmpty? txt)
       (poolSize "")
       (let [(cfg (sc/parseCfg txt))
             (now (/ (nowNs) 1000000))]
         (if (sc/slotsDue? dir now 60000)
-          (sc/schedTick! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) freeMB load cores)
+          (sc/schedTickDisk! dir cfg now (stringLines (readOr (str home "/.asl/run/usage/gatewayCalls.asn"))) freeMB load cores disk)
           (pairFirst (sc/slotsRead! dir))))))
 
 fn ! lightSlots! dir: String home: String -> Int64
-  (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1))
+  (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1) (sc/probeDisk! dir))
 
 fn schedPace dir: String home: String -> Pace
   (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited)
@@ -1424,7 +1506,7 @@ fn gateSig out: String -> String
         (quiet (filter (fn [(l String)] -> Bool (not (or (stringStartsWith? l "(:gateway :usage") (stringStartsWith? l "(:usage")))) lines))
         (marked (filter (fn [(l String)] -> Bool (let [(low (stringLower l))] (or (stringContains? low "fail") (or (stringContains? low "error") (stringContains? low "exit"))))) quiet))
         (pick (match (listHead errs) ((some e) e) ((none) (match (listHead marked) ((some m) m) ((none) (optionOr (listLast quiet) "no output"))))))]
-    (optionOr (stringSlice pick 0 (if (< (stringLength pick) 160) (stringLength pick) 160)) pick))
+    (utf8Clip pick 160))
 
 fn ! taskText dir: String u: st/Task -> String
   (match (fileReadString (str dir "/tasks/" u.id ".txt"))
@@ -2139,7 +2221,7 @@ fn stopOf out: String -> String
 fn modelEscalatedSig out: String -> String
   (let [(row (receiptRowOf out))
         (reason (quotedAfter row ":reason \""))]
-    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (optionOr (stringSlice reason 0 (min 200 (stringLength reason))) reason))))
+    (str "modelEscalated: " (if (stringEmpty? reason) (gateSig out) (utf8Clip reason 200))))
 
 fn modelEscalatedSig? sig: String -> Bool
   (stringStartsWith? sig "modelEscalated: ")
@@ -2154,7 +2236,7 @@ fn ! writeRes rc: RealCfg dir: String u: st/Task c: CUnit -> Res
   (writeResWith runWrite! rc dir u c)
 
 ; (:m :ref COND-TASK-SPEC :do "the write stage with its Leon run injected, so a gate can record the task text the writer would receive; writeRes passes runWrite!")
-fn ! writeResWith run: (fn ! [(rc RealCfg) (lane String) (id String) (prof String) (p String) (task String) (owns (List String)) (gates (List String)) (extra String)] -> fr/Done) rc: RealCfg dir: String u0: st/Task c: CUnit -> Res
+fn ! writeResWith run: (fn ! [RealCfg String String String String String (List String) (List String) String] -> fr/Done) rc: RealCfg dir: String u0: st/Task c: CUnit -> Res
   (let [(u (resolved! rc.repo u0))
         (path (w/wtPath rc.wt u.id))
         (added (settleWt! rc dir u path))]
@@ -2227,9 +2309,12 @@ fn ! mergeReceipt! store: String id: String ex: Int64 receipt: String -> Bool
 fn mergeCheckWhy receipt: String key: String -> String
   (let [(parts (stringSplit receipt (str " " key " (")))
         (rows (if (< (listLength parts) 2) "" (stringTrim (optionOr (listHead (stringSplit (optionOr (listGet parts 1) "") ") :")) ""))))]
-    (optionOr (stringSlice rows 0 300) rows))
+    (utf8Clip rows 300))
 
 ; (:m :ref CONDUCTOR-MERGE-CHECK :do "a check that blocks leaves dev untouched and the unit blocked with verdict block and the sig mergeCheck: rows; one that could not verify (exit 3, or 2 when it could not run) holds the unit with verdict hold plus one lead-stream event; neither counts as a failed merge; exit 0 returns none and the train goes on")
+fn mergeHoldWhy ex: Int64 receipt: String -> String
+  (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (utf8Clip receipt 160))
+
 fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option Res)
   (let [(ex (pairFirst r))
         (receipt (pairSecond r))
@@ -2238,7 +2323,7 @@ fn ! mergeVerdictRes! store: String u: st/Task r: (Pair Int64 String) -> (Option
       ((= ex 0) (none))
       ((= ex 1) (some (with (failRes (str "mergeCheck: " (mergeCheckWhy receipt ":structure") " " (mergeCheckWhy receipt ":regressions"))) :verdict "block")))
       (else
-        (let [(why (str "mergeCheck unverified exit " (n ex) ": " (mergeCheckWhy receipt ":unverified") (optionOr (stringSlice receipt 0 160) receipt)))
+        (let [(why (mergeHoldWhy ex receipt))
               (_ (ls/emitAt! (dirOf store) (nowMs) "conductor" "warn" "mergeCheckHold" u.id u.id why))]
           (some (with (failRes why) :verdict "hold"))))))
 
@@ -2500,8 +2585,60 @@ fn ! refreshWake! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) ref
         (_ (refresh))
         (after (snapshot))
         (rising (rs/risingLanes before after))]
-    (+ (fold (fn [(a Int64) (lane String)] -> Int64 (+ a (wake! ctx lane))) 0 rising)
-       (deadAwaitWake! ctx (map pairFirst after))))
+    (let [(spent (fold (fn [(m (Map String Int64)) (lane String)] -> (Map String Int64) (mapSet m lane (wakeUpTo! ctx lane (allowanceOf after lane)))) (mapEmpty) rising))]
+      (+ (fold (fn [(a Int64) (lane String)] -> Int64 (+ a (mapGetOr spent lane 0))) 0 rising)
+         (+ (deadAwaitWake! ctx (map pairFirst after)) (availWakeSpent! ctx after spent)))))
+
+; (:m :ref REFRESH-WAKE-MISSED-RISE :do "a rise counts only between the before and after snapshots of one refresh, so a window that resets between two refresh ticks never rose and units parked on that lane slept on: a parked unit wakes when any lane its await names has allowance now. Tier names (free paid strong) do not count, since a tier with allowance only in the writer family would wake and re-park the unit every tick, and a unit whose newest await is quorumStarved stays parked, since its lanes had allowance and did not answer, so it keeps its rise wake and its starved cap")
+fn availNames after: (List (Pair String Int64)) -> (List String)
+  (map pairFirst (filter (fn [(p (Pair String Int64))] -> Bool (and (> (pairSecond p) 0) (not (listContains? (list "free" "paid" "strong") (pairFirst p))))) after))
+
+; (:m :ref WAKE-LOWS :do "one pass over the journal keeps the newest await row per unit (:visits counts the lines visited, so a scan per parked unit shows as units times lines); starvedAwait? then looks the unit up instead of filtering every line again")
+(schema AwaitScan (:f newest (Map String String)) (:f visits Int64))
+
+fn awaitScan lines: (List String) -> AwaitScan
+  (fold (fn [(s AwaitScan) (l String)] -> AwaitScan
+          (if (stringStartsWith? l "(:await :unit ")
+            (AwaitScan :newest (mapSet s.newest (st/textField (resultOr (st/rowFields l "await") (list)) "unit") l) :visits (+ s.visits 1))
+            (AwaitScan :newest s.newest :visits (+ s.visits 1))))
+        (AwaitScan :newest (mapEmpty) :visits 0) lines)
+
+fn starvedAwait? scan: AwaitScan id: String -> Bool
+  (stringContains? (mapGetOr scan.newest id "") ":why \"quorumStarved:")
+
+; (:m :ref WAKE-LOWS :do "a herd wake is staggered: per tick at most as many units wake on a lane as that lane's allowance now, less those wake! already took on it this tick; the rest wake on later ticks")
+fn allowanceOf after: (List (Pair String Int64)) lane: String -> Int64
+  (pairSecond (optionOr (listFind (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) lane)) after) (pair lane 0)))
+
+fn staggered picks: (List (Pair CUnit String)) after: (List (Pair String Int64)) spent: (Map String Int64) -> (List (Pair CUnit String))
+  (pairFirst (fold (fn [(acc (Pair (List (Pair CUnit String)) (Map String Int64))) (p (Pair CUnit String))] -> (Pair (List (Pair CUnit String)) (Map String Int64))
+                     (let [(lane (pairSecond p))
+                           (used (mapGetOr (pairSecond acc) lane 0))]
+                       (if (>= used (allowanceOf after lane)) acc
+                         (pair (listAppend (pairFirst acc) (list p)) (mapSet (pairSecond acc) lane (+ used 1))))))
+                   (pair (list) spent) picks))
+
+; (:m :ref WAKE-LOWS :do "the wake plan of availWake!, pure: parked units whose await names a lane with allowance that is not live in laneDead, not starved by their newest await row, staggered per lane; :visits is the scan cost")
+(schema AvailPlan (:f go (List (Pair CUnit String))) (:f visits Int64))
+
+fn availPlan cus: (List CUnit) after: (List (Pair String Int64)) dead: (List String) lines: (List String) spent: (Map String Int64) -> AvailPlan
+  (let [(avail (filter (fn [(nm String)] -> Bool (not (listContains? dead nm))) (availNames after)))
+        (hit (fn [(c CUnit)] -> String (optionOr (listHead (filter (fn [(nm String)] -> Bool (listContains? avail nm)) (stringSplit c.await " "))) "")))
+        (parked (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (and (= c.parked 1) (not (stringEmpty? (hit c)))))) cus))
+        (scan (if (listEmpty? parked) (AwaitScan :newest (mapEmpty) :visits 0) (awaitScan lines)))
+        (fresh (filter (fn [(c CUnit)] -> Bool (not (starvedAwait? scan c.id))) parked))]
+    (AvailPlan :go (staggered (map (fn [(c CUnit)] -> (Pair CUnit String) (pair c (hit c))) fresh) after spent) :visits scan.visits))
+
+fn ! availWakeSpent! ctx: Ctx after: (List (Pair String Int64)) spent: (Map String Int64) -> Int64
+  (let [(cus (readCUnits! ctx.dir))
+        (dead (map (fn [(l String)] -> String (st/textField (deadFields l) "lane")) (laneDeadLive ctx.dir (nowMs))))
+        (parked (filter (fn [(c CUnit)] -> Bool (and (= c.st "awaitReview") (= c.parked 1))) cus))
+        (plan (availPlan parked after dead (if (listEmpty? parked) (list) (journalLinesOf ctx.dir)) spent))
+        (_ (map (fn [(p (Pair CUnit String))] -> CUnit (move! ctx (parkedOf (pairFirst p) 0) "awaitReview" "wake" "" 0 0 (str "available:" (pairSecond p)) 0)) plan.go))]
+    (listLength plan.go))
+
+fn ! availWake! ctx: Ctx after: (List (Pair String Int64)) -> Int64
+  (availWakeSpent! ctx after (mapEmpty))
 
 ; (:m :ref REVIEW-PARK-DEADLANE :do "node2 2026-11-12: units parked on a lane that left lanes.asn or is remembered dead (commandCode with no credits) waited for an allowance refresh that never comes, 10 slept 1.5 h; a parked unit whose every awaited name is unknown to the lane snapshot or live in laneDead wakes and goes back to review on the lanes that exist")
 fn deadAwait? await: String known: (List String) dead: (List String) -> Bool
@@ -2702,6 +2839,8 @@ fn ! main args: (List String) -> (Result Int64 String)
                                       (map (fn [(c CUnit)] -> String c.id) (filter (fn [(c CUnit)] -> Bool (= c.st "blocked")) (readCUnits! dir)))
                                       (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ",")))))]
                            (do (println (str "(:requeue :requested " (if (requestRequeue! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
+      ((= cmd "close") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))]
+                         (do (println (str "(:close :requested " (if (requestClose! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
       ((= cmd "check") (let [(ps (startupProblemsFor rc))
                              (_ (map (fn [(l String)] -> Unit (println l)) (staleOwnsFor! dir args rc)))]
                          (do (println (str "(:check :problems " (st/qList ps) ")")) (ok (if (listEmpty? ps) 0 1)))))
@@ -2721,4 +2860,4 @@ fn ! main args: (List String) -> (Result Int64 String)
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
-      (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
+      (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|close --ids A,B (merged without any check that the work is on main)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))

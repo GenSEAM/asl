@@ -5,22 +5,31 @@
 
 ; (:m :ref TRIAL-LEON-OPROWS :do "a scripted run of a read, a write outside :owns and an owned edit leaves exactly three (:op ...) journal rows in order: ok, err ERR_OWNS, ok; LEON-READLOOP: twenty successful read-only turns stop as readStreak cause readOnly at the cap, a run that alternates reads and gate runs does not")
 
+; (:m :ref LEON-RECEIPT-READS :do "recordedOut! keeps the receipt main prints: the run goes through mainWithRoots with the roots mainCli takes, and the receipt is printed as main would")
 fn ! recordedRun! tag: String replies: (List String) gates: String cfg: String -> rk/RecordedRun
+  (pairFirst (recordedOut! tag replies gates cfg))
+
+fn ! recordedOut! tag: String replies: (List String) gates: String cfg: String -> (Pair rk/RecordedRun String)
   (let [root (rk/freshRecorderRoot! tag)
         wroteS (fileWrite (str root "/subject.txt") "red\n")
         wroteCfg (fileWrite (str root "/.asl.config.asn") cfg)
+        wroteSrc (fileWrite (str root "/src.asl") "fn red -> Int64\n  1\n")
         repo (gk/initGitRepo! root "opRows" "op-rows@example.invalid")
         fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         dir (dirCreate fixtureDir)
         fixture (fileWrite (str fixtureDir "/o" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "o" tag) replies))
         form (str "(:agent :task \"fix subject\" :backend \"script/o" tag "\" :root \""
                (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\") :gates (" gates ") :budget 60 :contextTokens 8000)")
-        code (m/main (list form))
+        repoRoot (resultOr (realPath ".") ".")
+        rootDir (match (envGet "ASL_ROOT_DIR") ((some r) (if (stringEmpty? r) repoRoot r)) ((none) repoRoot))
+        res (m/mainWithRoots (list form) repoRoot rootDir)
+        printed (println res.stdout)
+        code res.exitCode
         names (resultOr (dirList (str root "/.asl/run/agentLoop")) (list))
         journalName (optionOr (listHead (filter (fn [n] (stringEndsWith? n ".journal")) names)) "")
         text (if (stringEmpty? journalName) "" (resultOr (fileReadString (str root "/.asl/run/agentLoop/" journalName)) ""))
         cleaned (pathRemove root)]
-    (rk/RecordedRun :exitCode code :journal text :sentLines (list)))
+    (pair (rk/RecordedRun :exitCode code :journal text :sentLines (list)) res.stdout))
 
 fn opRows journal: String -> (List String)
   (filter (fn [l] (stringStartsWith? l "(:op :turn ")) (stringLines journal))
@@ -41,14 +50,18 @@ fn ! pureTests -> Bool
   (do
     (assert (= (m/opRowText 3 "write" "x.txt" "rejected" "ERR_OWNS") "(:op :turn 3 :name \"write\" :file \"x.txt\" :status err :error ERR_OWNS)") "an err row carries the error code")
     (assert (= (m/opRowText 1 "read" "a" "ok" "") "(:op :turn 1 :name \"read\" :file \"a\" :status ok)") "an ok row carries no error")
-    (assert (= (m/readOnlyTurnCapIn "") 16) "readOnlyTurnCap defaults to 16")
+    (assert (= (m/readOnlyTurnCapIn "") 12) "readOnlyTurnCap defaults to 12 (LEON-READ-LOOP-CONTEXT-LOSS)")
     (assert (= (m/readOnlyTurnCapIn "(:aslConfig :agentLoop (:readOnlyTurnCap 5))") 5) "readOnlyTurnCap reads the :agentLoop row")
     true)
 
 fn ! runTests -> Bool
   (let [pure (pureTests)
         rows (recordedRun! "rows" (list (readReply 0) "(:step :op \"write\" :file \"other.txt\" :content \"x\")" "(:step :op \"edit\" :file \"subject.txt\" :old \"red\" :new \"green\")" "(:done)") "" "(:aslConfig :agentLoop (:specCheck false))")
-        loop (recordedRun! "loop" (map readReply (range 0 20)) "" "(:aslConfig :agentLoop (:specCheck false))")
+        loopOut (recordedOut! "loop" (map readReply (range 0 20)) "" "(:aslConfig :agentLoop (:specCheck false))")
+        loop (pairFirst loopOut)
+        receipt (pairSecond loopOut)
+        symOk (recordedRun! "symok" (list "(:step :op \"read\" :file \"src.asl\" :symbol \"red\")" "(:done)") "" "(:aslConfig :agentLoop (:specCheck false))")
+        sym (recordedRun! "sym" (list "(:step :op \"read\" :file \"subject.txt\" :symbol \"red\")" "(:step :op \"read\" :file \"subject.txt\" :start 1 :end 1)" "(:done)") "" "(:aslConfig :agentLoop (:specCheck false))")
         alt (recordedRun! "alt" (listAppend (map (fn [i] (if (= (- i (* 2 (/ i 2))) 0) (readReply i) (str "(:step :op \"gate\")"))) (range 0 20)) (list "(:done)")) "\"exit 1\"" "(:aslConfig :agentLoop (:specCheck false))")
         wroteMid (recordedRun! "wmid" (listAppend (map readReply (range 0 3)) (cons (editReply) (map readReply (range 0 3)))) "" (cap4))
         mixed (recordedRun! "mixed" (listAppend (map readReply (range 0 3)) (cons "(:step :op \"read\" :file \"subject.txt\")\n(:step :op \"run\" :argv \"ls\")" (list (readReply 0)))) "" (cap4))
@@ -63,7 +76,11 @@ fn ! runTests -> Bool
                 (stringContains? (optionOr (listGet (opRows rows.journal) 1) "") ":name \"write\" :file \"other.txt\" :status err :error ERR_OWNS")) "rows are ok then err ERR_OWNS")
       (assert (stringContains? (optionOr (listGet (opRows rows.journal) 2) "") ":name \"edit\" :file \"subject.txt\" :status ok") "the owned edit row is ok")
       (assert (stringContains? loop.journal ":signal :readStreak :cause :readOnly") "twenty successful reads stop as readStreak cause readOnly")
-      (assert (not (stringContains? loop.journal "(:turn 17 :reply")) "the stop lands on the sixteenth read, not later")
+      (assert (not (stringContains? loop.journal "(:turn 13 :reply")) "the stop lands on the twelfth read, not later")
+      (assert (stringContains? receipt " :streak 12 :reads (:n 12 :distinct 1 :top ((:at \"subject.txt\" :count 12 :last 12)))") (str "the live receipt of the stopped run carries :streak 12 and its twelve reads of one place (LEON-RECEIPT-READS): " receipt))
+      (assert (listAny? (fn [l] (stringContains? l ":name \"read\" :file \"subject.txt\" :at \"#red\" :status ")) (opRows sym.journal)) (str "a live symbol read leaves an op row with :at \"#red\": " (stringJoin (opRows sym.journal) " | ")))
+      (assert (listAny? (fn [l] (stringContains? l ":name \"read\" :file \"src.asl\" :at \"#red\" :status ok")) (opRows symOk.journal)) (str "a successful symbol read leaves an ok op row with :at \"#red\": " (stringJoin (opRows symOk.journal) " | ")))
+      (assert (listAny? (fn [l] (stringContains? l ":at \":1-1\" :status ")) (opRows sym.journal)) (str "a live range read leaves its :at too: " (stringJoin (opRows sym.journal) " | ")))
       (assert (stringContains? shortCap.journal ":signal :readStreak :cause :readOnly") "a configured cap of 4 stops eight reads")
       (assert (not (stringContains? wroteMid.journal ":cause :readOnly")) "a persisted edit between reads resets the read-only count")
       (assert (not (stringContains? mixed.journal ":cause :readOnly")) "a turn that mixes a read with a run step is not read-only")
