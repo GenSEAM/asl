@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/nativeOracle
   :x [ProcOut independentRun! selfTestBinary!]
-  :i [(asl-tools/nativeTest :a nt)])
+  :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref HL-E-LLVM :do "HL-E-LLVM (asl-host deleted): several asl-target-llvm suites used asl-host to run a fixture's SOURCE as a parity oracle for a hand-built native binary (the suite's own direct asl-ir/lower + asl-target-llvm emit + clang link). With asl-host gone there is no interpreter left, so independentRun! below is the replacement oracle: it builds and runs the same source through asl/tools/nativeTest's own prepareRun/runProc pipeline (full asl-parser + asl-checker + asl-ir/lower + its own build cache), a genuinely separate code path from each suite's manual backend calls and clang invocation, never the binary under test. Proven host-free even for brand-new, never-before-compiled fixtures: asl/tools/nativeTest's in-process API (this module) has no host dependency; only going through it as a *subprocess* via (asl run asl/tools/nativeTest.asl run ...) does, because that route also needs bin/asl's own nativeCli self-build cache to be warm for asl/tools/nativeTest.asl, which a cold one can still resolve by falling back to a now-absent asl-host (confirmed: 'nativeTest: asl-host not found at asl/host/out/asl-host...'). selfTestBinary! below is for suites that genuinely need asl/tools/nativeTest.asl itself as an external OS subprocess (cwd/env-var/ASL_ROOT routing tests that cannot be faked in-process): it calls nt/prepareRun on asl/tools/nativeTest.asl's OWN source in-process (zero host dependency, confirmed on a cold cache) and returns the path to the resulting native binary, which behaves identically to the old 'asl-host run asl/tools/nativeTest.asl run ...' when exec'd directly as '<binary> run <path> <args>' (confirmed: NATIVE-CACHE marker, matching stdout, exit 0, no stray fallback diagnostics)")
 
@@ -9,6 +9,7 @@
   (:f stdout String)
   (:f stderr String))
 
+; (:m :ref D81-SPAWN-ROUTE :do "the built fixture binary runs through the fleet runner: 600 s, 16 descendants, the whole tree killed on a verdict")
 fn ! independentRun! src: String args: (List String) label: String -> ProcOut
   (let [(workDir (str "asl/tmp/nativeOracle-" label "-" (stringFromInt64 (monotonicNs))))
         (made (dirCreate workDir))
@@ -20,7 +21,7 @@ fn ! independentRun! src: String args: (List String) label: String -> ProcOut
             (bin (optionOr built.binary ""))
             (out (if (stringEmpty? bin)
                    (ProcOut :exitCode 127 :stdout "" :stderr (str "independentRun!: " built.reason))
-                   (let [(r (nt/runProc (listAppend (list bin) args) (none)))]
+                   (let [(r (fr/runGuarded (listAppend (list bin) args) "." (fr/childEnv (list)) (fr/limits 600 16)))]
                      (ProcOut :exitCode r.exitCode :stdout r.stdout :stderr r.stderr))))
             (_ (pathRemove workDir))]
         out)))
