@@ -1889,12 +1889,12 @@ fn parseRouteTemperatureKey props: (Map String rd/SExpr) key: String pid: String
           ((scalarInt n) (pair (some (int64ToFloat64 n)) (list)))
           (_ (pair (none) (list (str "profile " pid " route " intent ": :" key " must be a number"))))))))
 
-; (:m :ref GW-SPREAD-EDIT-GUARD :do "the offending :spread entry as written, so a bare (4) left behind by an alias removal is named in the per-route config error instead of only its count; nested forms show as ...")
+; (:m :ref GW-SPREAD-EDIT-GUARD :do "the offending :spread entry as written, so a bare (4) left behind by an alias removal is named in the per-route config error instead of only its count; a string literal is shown as ... so a value typed into an entry never reaches the stale error, the header or the log; nested forms show as ...")
 fn spreadItemText item: rd/SExpr -> String
   (let [(parts (match item ((rd/sexprList l) l) ((rd/sexprVect v) v) (_ (list))))]
     (match item
-      ((rd/sexprAtom a) a)
-      (_ (str "(" (stringJoin (map (fn [(p rd/SExpr)] -> String (match p ((rd/sexprAtom a) a) (_ "..."))) parts) " ") ")"))))
+      ((rd/sexprAtom a) (if (stringStartsWith? a "\"") "..." a))
+      (_ (str "(" (stringJoin (map (fn [(p rd/SExpr)] -> String (match p ((rd/sexprAtom a) (if (stringStartsWith? a "\"") "..." a)) (_ "..."))) parts) " ") ")"))))
 
 ; (:m :ref GW-SPREAD-20261017 :do "one (ALIAS WEIGHT) pair: ALIAS is a bare atom checked against :models the same way parseChainItem checks a chain entry (never a string, never the raw model name); WEIGHT must be a positive integer, so 0, negative or a non-integer each name the offending alias rather than being silently dropped")
 fn parseSpreadItem item: rd/SExpr models: (Map String GatewayModel) pid: String intent: String st: (Pair (List (Pair String Int64)) (List String)) -> (Pair (List (Pair String Int64)) (List String))

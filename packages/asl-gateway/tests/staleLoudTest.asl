@@ -21,7 +21,8 @@ fn ! testMark -> Bool
         (assert (= twice marked) "LOUD: a marked reply is not marked twice")
         (assert (= (srv/staleMarked "" reply) reply) "LOUD: a clean hub leaves the reply alone")
         (assert (= (srv/staleMarked "bad" "rest of a streamed body") "rest of a streamed body") "LOUD: a continuation chunk is untouched")
-        (assert (< (stringLength long) (+ (stringLength reply) 340)) "LOUD: the value is capped at 300 characters")
+        (assert (= (stringLength (srv/staleHeaderLine (stringRepeat "x" 900))) (+ (stringLength (srv/staleHeaderName)) 2 300 2)) "LOUD: the header line holds exactly 300 value characters")
+        (assert (= (stringLength (srv/staleHeaderLine "short")) (+ (stringLength (srv/staleHeaderName)) 2 5 2)) "LOUD: a short value is kept whole")
         true))
 
 ; (:m :ref GW-CONFIG-STALE-LOUD :do "the status client warning names the loader error and is empty for a clean status; configCheck's failure line names the file")
@@ -66,9 +67,60 @@ fn ! testRequeue -> Bool
         (assert (match (listGet out.conns 0) ((some cn) (match cn.phase ((srv/connWriting d) (= d rest)) (_ false))) ((none) false)) "LOUD: the requeued rest is not marked")
         true))
 
+; (:m :ref GW-CONFIG-STALE-LOUD :do "the real partial write: the sender socket is filled until it would block, the peer reads 64 KB, stepWriting! then writes part of a 320 KB reply and requeues the rest; the rest must not carry the header. How much the kernel takes varies, so the reply is a repeating HTTP/1.1 line unit with a rotating pad and the trials run (bounded at 300, nonblocking, sockets closed) until a rest that starts with HTTP/1. is seen: the case a marking requeue rewrites. Not seeing one in 300 trials fails the test (chance (9/10)^300)")
+fn ! fillUntilBlocked! fd: Int64 left: Int64 -> Bool
+  (if (<= left 0) false
+    (match (fdWrite fd (stringRepeat "f" 4096))
+      ((err _) true)
+      ((ok n) (fillUntilBlocked! fd (- left 1)))))
+
+fn ! shortWriteRest! pad: Int64 -> String
+  (match (tcpListen 0)
+    ((err _) "!")
+    ((ok lfd)
+      (match (sockLocalPort lfd)
+        ((err _) (do (fdClose lfd) "!"))
+        ((ok port)
+          (match (tcpConnect port)
+            ((err _) (do (fdClose lfd) "!"))
+            ((ok cfd)
+              (match (sockAccept lfd)
+                ((err _) (do (fdClose cfd) (fdClose lfd) "!"))
+                ((ok pfd)
+                  (let [(nb1 (fdNonBlocking cfd true))
+                        (nb2 (fdNonBlocking pfd true))
+                        (full (fillUntilBlocked! cfd 4096))
+                        (drained (fdRead pfd 65536))
+                        (data (str (stringRepeat "x" pad) (stringRepeat "HTTP/1.1\r\n" 32768)))
+                        (stale (with (emptyLoop "/tmp") :profiles (c/ProfilesCache :key none :result (err "x") :stale "profile p1: bad")))
+                        (conn (srv/GatewayConn :fd cfd :input "" :phase (srv/connWriting data)))
+                        (out (srv/stepWriting! stale conn data (list (pair cfd 0))))
+                        (rest (match (listGet out.conns 0) ((some cn) (match cn.phase ((srv/connWriting d) d) (_ "!"))) ((none) "!")))
+                        (c1 (fdClose pfd))
+                        (c2 (fdClose cfd))
+                        (c3 (fdClose lfd))]
+                    (if (and full (< (stringLength rest) (stringLength data))) rest ""))))))))))
+
+; (:m :ref GW-CONFIG-STALE-LOUD :do "runs short writes until one rest starts with HTTP/1., checking every partial rest on the way: unmarked; returns how many partial rests it saw and whether an HTTP/1. one was among them")
+fn ! shortWriteTrials! i: Int64 seen: Int64 marked: Int64 aligned: Bool -> (Pair (Pair Int64 Int64) Bool)
+  (if (or (>= i 300) (and aligned (>= seen 3))) (pair (pair seen marked) aligned)
+    (let [(r (shortWriteRest! (mod i 10)))
+          (partial (and (!= r "") (!= r "!")))]
+      (shortWriteTrials! (+ i 1) (if partial (+ seen 1) seen) (if (and partial (stringContains? r "X-Asl-Config-Stale")) (+ marked 1) marked) (or aligned (and partial (stringStartsWith? r "HTTP/1."))))))
+
+fn ! testShortWrite -> Bool
+  (let [(res (shortWriteTrials! 0 0 0 false))
+        (seen (pairFirst (pairFirst res)))
+        (marked (pairSecond (pairFirst res)))]
+    (do (assert (>= seen 3) (str "LOUD: short writes happened: " (stringFromInt64 seen)))
+        (assert (= marked 0) "LOUD: no requeued rest of a partial write carries the header")
+        (assert (pairSecond res) "LOUD: a split landed on HTTP/1., the case a marking requeue would rewrite")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testMark) "GW-CONFIG-STALE-LOUD: header marking")
       (assert (testWarn) "GW-CONFIG-STALE-LOUD: client warning")
       (assert (testAddConn) "GW-CONFIG-STALE-LOUD: addConn path")
       (assert (testRequeue) "GW-CONFIG-STALE-LOUD: partial write rest unmarked")
+      (assert (testShortWrite) "GW-CONFIG-STALE-LOUD: stepWriting! short write rest unmarked")
       true)

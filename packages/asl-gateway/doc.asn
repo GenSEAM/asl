@@ -1484,3 +1484,4 @@
 (:doc :symbol "asl/packages/asl-gateway/src/cliDispatch.asl#configCheckFailLine" :text "the stderr line configCheck prints when the file fails: the file and that a running hub keeps its last good config")
 (:doc :symbol "asl/packages/asl-gateway/tests/staleLoudTest.asl#runTests" :text "stale marker header, addConn write path, status warning line and configCheck failure line")
 (:doc :symbol "asl/packages/asl-gateway/src/server.asl#requeueWriting" :text "puts the unwritten rest of a reply back on the socket unchanged; only a reply's first write is marked with the stale header")
+(:doc :symbol "asl/packages/asl-gateway/src/server.asl#stepWriting!" :text "writes data to a ready socket; a short write puts the unwritten rest back through requeueWriting, a full write finishes the request, wouldBlock requeues the same data")

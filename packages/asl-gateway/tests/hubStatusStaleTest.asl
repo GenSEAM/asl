@@ -101,8 +101,26 @@ fn ! testStaleNeverHoldsValue -> Bool
         (assert (not (stringContains? status "SECRETVALUE")) "SECRETVAL: the status holds no entry value")
         true))
 
+; (:m :ref GW-CONFIG-STALE-LOUD :do "a bad edit whose only error is a three-part :spread entry holding a string with a secret-like value: spreadItemText names the entry's atoms and folds anything else to ..., so the stale error names the entry shape and never the string")
+fn ! testSpreadEntryNoValue -> Bool
+  (let [(home (str "/tmp/asl-hubstatus-sp-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (made (dirCreate (str home "/.asl")))
+        (path (c/gatewayProfilesPath home))
+        (good "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (bad (stringReplace good ":chain (m1)" ":chain (m1) :spread ((m1 \"sk-SECRETVALUE-9f3a\" 3))"))
+        (w1 (fileWrite path good))
+        (first (c/gatewayProfilesLoad! (c/emptyProfilesCache) home ".asl/mem/calibration/index.asn"))
+        (w2 (fileWrite path bad))
+        (second (c/gatewayProfilesLoad! (pairFirst first) home ".asl/mem/calibration/index.asn"))
+        (stale (c/profilesStale (pairFirst second)))
+        (gone (pathRemove home))]
+    (do (assert (stringContains? stale ":spread entry (m1 ... 3) must be (ALIAS WEIGHT)") (str "SPREADVAL: the error names the entry shape: " stale))
+        (assert (not (stringContains? stale "SECRETVALUE")) (str "SPREADVAL: the error holds no string value: " stale))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testRenderAndProbe) "GW-HUB-STATUS-STRICT: render and strict probe")
       (assert (testReadErrorIsBadEdit) "GW-CONFIG-LAST-GOOD-LOWS: a read error is a bad edit")
       (assert (testStaleNeverHoldsValue) "GW-CONFIG-STALE-LOUD: no value in the stale error")
+      (assert (testSpreadEntryNoValue) "GW-CONFIG-STALE-LOUD: a spread entry error holds no string value")
       true)
