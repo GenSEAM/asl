@@ -39,6 +39,14 @@ fn ! checkPair row: String src: String docMarker: String srcMarker: String label
     (do (assert (pairOk? d s) (str label ": doc says " (stringFromInt64 d) " after '" docMarker "', source says " (stringFromInt64 s) " after '" srcMarker "'"))
         true))
 
+; (:m :ref GC-DOC-GATE-LOWS :do "every load and store of a page field, not only the first: each site marker occurs once in gcAsl.asl and its offset equals the doc's number, so a drift at any site (the sweep's allocCount store and cursor reset, the bump path, the free-slot scan) is red")
+fn ! checkSites row: String src: String docMarker: String sites: (List String) label: String -> Bool
+  (do (map (fn [(m String)] -> Bool
+             (do (assert (= (- (listLength (stringSplit src m)) 1) 1) (str label ": site '" m "' occurs once in gcAsl.asl"))
+                 (checkPair row src docMarker m (str label " at '" m "'"))))
+           sites)
+      true)
+
 fn ! runTests -> Bool
   (let [(row (docRow (docText)))
         (src (srcText))]
@@ -53,7 +61,7 @@ fn ! runTests -> Bool
         (checkPair row src "16 words each, " "fn headerUsed -> Int64\n  " "headerUsed")
         (checkPair row src ", slotSize " "(st \"wss\" \"p\" " "slotSize")
         (checkPair row src "slotCount " "(st \"wcnt\" \"p\" " "slotCount")
-        (checkPair row src "allocCount " "(ld \"ac\" \"hp\" " "allocCount")
-        (checkPair row src "the bump slot index at " "(ld \"b\" \"bp\" " "bump slot index")
-        (checkPair row src "the free-slot scan cursor at " "(st \"wc\" \"fp\" " "scan cursor")
+        (checkSites row src "allocCount " (list "(ld \"ac\" \"hp\" " "(st \"w9\" \"hp\" " "(ld \"ac\" \"p\" " "(ld \"pac\" \"p\" " "(st \"w8\" \"p\" ") "allocCount")
+        (checkSites row src "the bump slot index at " (list "(ld \"b\" \"bp\" " "(st \"w7\" \"bp\" " "(ld \"bi\" \"ap\" " "(ld \"lim\" \"fp\" " "(ld \"lim\" \"p\" ") "bump slot index")
+        (checkSites row src "the free-slot scan cursor at " (list "(st \"wc\" \"fp\" " "(ld \"cur\" \"fp\" " "(st \"w7\" \"p\" ") "scan cursor")
         true))
