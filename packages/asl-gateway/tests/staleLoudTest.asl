@@ -21,7 +21,7 @@ fn ! testMark -> Bool
         (assert (= twice marked) "LOUD: a marked reply is not marked twice")
         (assert (= (srv/staleMarked "" reply) reply) "LOUD: a clean hub leaves the reply alone")
         (assert (= (srv/staleMarked "bad" "rest of a streamed body") "rest of a streamed body") "LOUD: a continuation chunk is untouched")
-        (assert (< (stringLength long) (+ (stringLength reply) 340)) "LOUD: the value is capped at 300 bytes")
+        (assert (< (stringLength long) (+ (stringLength reply) 340)) "LOUD: the value is capped at 300 characters")
         true))
 
 ; (:m :ref GW-CONFIG-STALE-LOUD :do "the status client warning names the loader error and is empty for a clean status; configCheck's failure line names the file")
@@ -57,8 +57,18 @@ fn ! testAddConn -> Bool
         (assert (match (listGet viaSock.conns 0) ((some cn) (match cn.phase ((srv/connWriting d) (stringContains? d "X-Asl-Config-Stale: profile p1: bad")) (_ false))) ((none) false)) "LOUD: the queued socket phase holds the marked bytes")
         true))
 
+; (:m :ref GW-CONFIG-STALE-LOUD :do "a partial write requeues its rest unmarked: a rest that starts with HTTP/1. on a stale hub stays byte for byte")
+fn ! testRequeue -> Bool
+  (let [(rest "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        (stale (with (emptyLoop "/tmp") :profiles (c/ProfilesCache :key none :result (err "x") :stale "profile p1: bad")))
+        (out (srv/requeueWriting stale 7 rest))]
+    (do (assert (= (listLength out.conns) 1) "LOUD: the rest is requeued as one conn")
+        (assert (match (listGet out.conns 0) ((some cn) (match cn.phase ((srv/connWriting d) (= d rest)) (_ false))) ((none) false)) "LOUD: the requeued rest is not marked")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testMark) "GW-CONFIG-STALE-LOUD: header marking")
       (assert (testWarn) "GW-CONFIG-STALE-LOUD: client warning")
       (assert (testAddConn) "GW-CONFIG-STALE-LOUD: addConn path")
+      (assert (testRequeue) "GW-CONFIG-STALE-LOUD: partial write rest unmarked")
       true)

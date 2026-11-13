@@ -122,6 +122,13 @@ fn ! testGatewayCliAndLifecycle -> Bool
         (assert (= run.exitCode 1) "invalid UTF-8 config is rejected")
         (assert (= run.stdout expected) "invalid UTF-8 receipt matches Python capture")
         (assert (= run.stderr (str "gateway configCheck: FAILED " invalidUtf8Path ": do not reload this file, a running hub keeps its last good config and reports :configStale, a fresh start refuses it\n")) "GW-CONFIG-STALE-LOUD: the failed check adds one loud stderr line naming the file, the receipt stays on stdout"))
+      (let [(_s (fileWrite (str temp "/status-stale.asn") "(:hub :uptimeSec 1 :configStale (:error \"/h/.asl/gateway.asn: profile p1 route any: bad entry\") :requests 0)\n"))
+            (_c (fileWrite (str temp "/status-clean.asn") "(:hub :uptimeSec 1 :requests 0)\n"))
+            (stale (cliInvoke (str runner " hubStatus --file " temp "/status-stale.asn")))
+            (clean (cliInvoke (str runner " hubStatus --file " temp "/status-clean.asn")))]
+        (assert (= stale.exitCode 0) "GW-CONFIG-STALE-LOUD: hubStatus without --strict exits zero on a stale status")
+        (assert (= stale.stderr "gateway: WARNING the hub serves its last good config, the file on disk does not load: /h/.asl/gateway.asn: profile p1 route any: bad entry\n") (str "GW-CONFIG-STALE-LOUD: hubStatus prints one warning line naming the error: " stale.stderr))
+        (assert (and (= clean.exitCode 0) (= clean.stderr "")) "GW-CONFIG-STALE-LOUD: a clean status prints no warning"))
       (let [(run (cliInvoke (str runner " config check " invalidContinuationPath)))]
         (assert (= run.exitCode 1) "invalid UTF-8 continuation exits one")
         (assert (stringContains? run.stdout "invalid continuation byte") "invalid UTF-8 continuation matches Python's reason"))

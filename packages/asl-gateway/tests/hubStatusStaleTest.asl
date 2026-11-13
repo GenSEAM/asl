@@ -80,7 +80,29 @@ fn ! testReadErrorIsBadEdit -> Bool
           (do (println "hubStatusStaleTest: READERR branch SKIPPED, this user reads a mode 000 file (root); it is not counted as coverage")
               true))))
 
+; (:m :ref GW-CONFIG-STALE-LOUD :do "a bad edit whose entries hold a secret-like value: the stale error that becomes the X-Asl-Config-Stale header and the status :configStale names the file and the cause but never the value; the marked reply carries the error and not the value")
+fn ! testStaleNeverHoldsValue -> Bool
+  (let [(home (str "/tmp/asl-hubstatus-sv-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (made (dirCreate (str home "/.asl")))
+        (path (c/gatewayProfilesPath home))
+        (good "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (bad "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\" :key \"sk-SECRETVALUE-9f3a\"))\n  :models ((:model :id m1 :provider test :name \"model-a\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :spread ((m1 \"sk-SECRETVALUE-9f3a\"))))))\n  :uses ((:use :for default :profile p1)))")
+        (w1 (fileWrite path good))
+        (first (c/gatewayProfilesLoad! (c/emptyProfilesCache) home ".asl/mem/calibration/index.asn"))
+        (w2 (fileWrite path bad))
+        (second (c/gatewayProfilesLoad! (pairFirst first) home ".asl/mem/calibration/index.asn"))
+        (stale (c/profilesStale (pairFirst second)))
+        (reply (srv/staleMarked stale "HTTP/1.1 200 OK\r\n\r\n"))
+        (status (statusWith stale))
+        (gone (pathRemove home))]
+    (do (assert (not (stringEmpty? stale)) "SECRETVAL: the bad edit is held as :stale")
+        (assert (not (stringContains? stale "SECRETVALUE")) (str "SECRETVAL: the stale error holds no entry value: " stale))
+        (assert (not (stringContains? reply "SECRETVALUE")) "SECRETVAL: the marked reply holds no entry value")
+        (assert (not (stringContains? status "SECRETVALUE")) "SECRETVAL: the status holds no entry value")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testRenderAndProbe) "GW-HUB-STATUS-STRICT: render and strict probe")
       (assert (testReadErrorIsBadEdit) "GW-CONFIG-LAST-GOOD-LOWS: a read error is a bad edit")
+      (assert (testStaleNeverHoldsValue) "GW-CONFIG-STALE-LOUD: no value in the stale error")
       true)
