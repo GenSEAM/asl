@@ -1,7 +1,7 @@
 (module aslAgent/main
   :x [withRemote knownParams acceptedKeys nearestKey! liveTxnTargets tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
-      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn receiptFieldsIn receiptFieldNames
+      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn readsIn streakIn readAtOf opRowAt readsTop readsKeyChars receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
       providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
@@ -112,7 +112,9 @@
   (:f stop (Option String))
   (:f lastStep (Option String))
   (:f servedAlias (Option String))
-  (:f servedModel (Option String)))
+  (:f servedModel (Option String))
+  (:f reads String :default "")
+  (:f streak Int64 :default 0))
 
 (schema MainResult
   (:f stdout String)
@@ -914,6 +916,8 @@ fn formatReceipt r: LoopResult -> String
   (str "(:agentReceipt :status :" r.status
        (match (nonEmpty r.stop) ((some s) (str " :stop " s)) ((none) ""))
        (match (nonEmpty r.lastStep) ((some l) (str " :lastStep " l)) ((none) ""))
+       (if (> r.streak 0) (str " :streak " (stringFromInt64 r.streak)) "")
+       r.reads
        (match (nonEmpty r.servedAlias) ((some a) (str " :servedAlias \"" (c/escapeAsn a) "\"")) ((none) ""))
        (match (nonEmpty r.servedModel) ((some m) (str " :servedModel \"" (c/escapeAsn m) "\"")) ((none) ""))
        (match (nonEmpty r.modeHint) ((some m) (str " :modeHint \"" (c/escapeAsn m) "\"")) ((none) ""))
@@ -1297,6 +1301,72 @@ fn servedIn text: String -> (Pair (Option String) (Option String))
             acc))
     (pair none none) (stringLines text))
 
+; (:m :ref LEON-RECEIPT-READS :do "where in the file a read step looked: #symbol, else :start-end (or :from-to) as the step gave it, else empty; rides on the op journal row as :at so a receipt can name what a read loop kept reading")
+fn readAtOf op: (List (Pair String c/KvVal)) -> String
+  (let [txt (fn [k] (match (c/dictGet op k) ((some v) (match v ((c/kvStr t) t) ((c/kvInt t) t))) ((none) "")))
+        sym (txt "symbol")
+        a (if (stringEmpty? (txt "start")) (txt "from") (txt "start"))
+        b (if (stringEmpty? (txt "end")) (txt "to") (txt "end"))]
+    (cond
+      ((not (stringEmpty? sym)) (str "#" sym))
+      ((or (not (stringEmpty? a)) (not (stringEmpty? b))) (str ":" a "-" b))
+      (else "")))
+
+fn opRowAt turn: Int64 name: String file: String at: String status: String error: String -> String
+  (let [row (opRowText turn name file status error)]
+    (if (stringEmpty? at) row (stringReplace row " :status " (str " :at \"" (c/escapeAsn at) "\" :status "))))
+
+fn intAfter line: String key: String -> Int64
+  (match (stringIndexOf line (str key " "))
+    ((some at) (let [rest (c/sliceOf line (+ at (+ (stringLength key) 1)) (stringLength line))]
+                 (optionOr (stringToInt64 (c/sliceOf rest 0 (optionOr (stringIndexOf rest " ") (stringLength rest)))) 0)))
+    ((none) 0))
+
+; (:m :ref LEON-RECEIPT-READS :do "receipt size: at most readsTop places, each tallied by its whole name and shown in at most readsKeyChars, so :reads stays under about 4 KB however long the loop ran")
+fn readsTop -> Int64
+  20
+
+fn readsKeyChars -> Int64
+  120
+
+fn readKeyOf line: String -> String
+  (let [file (optionOr (quotedAfter line ":file") "")
+        key (if (stringEmpty? file) (optionOr (quotedAfter line ":name") "") (str file (optionOr (quotedAfter line ":at") "")))]
+    key)
+
+fn shownKey key: String -> String
+  (if (> (stringLength key) (readsKeyChars)) (c/sliceOf key 0 (readsKeyChars)) key)
+
+fn tallyRead acc: (List (Pair String (Pair Int64 Int64))) key: String turn: Int64 -> (List (Pair String (Pair Int64 Int64)))
+  (if (listAny? (fn [e] (= (pairFirst e) key)) acc)
+    (map (fn [e] (if (= (pairFirst e) key) (pair key (pair (+ (pairFirst (pairSecond e)) 1) (max turn (pairSecond (pairSecond e))))) e)) acc)
+    (listAppend acc (list (pair key (pair 1 turn)))))
+
+; (:m :ref LEON-RECEIPT-READS :do "node2: blocked runs left ~/.asl/run/agentLoop empty and the receipt named no read, so a readStreak stop could not be told apart from a useful survey; from the journal's op rows of read-only ops (readOnlyOps less note): :n reads, :distinct places, and the top readsTop by count then latest turn, each (:at path#symbol|path:range|op :count C :last T); empty when the run read nothing")
+fn readsIn text: String -> String
+  (let [rows (filter (fn [l] (and (stringStartsWith? l "(:op :turn ")
+                                  (let [n (optionOr (quotedAfter l ":name") "")] (and (!= n "note") (listContains? (readOnlyOps) n)))))
+                     (stringSplit text "\n"))
+        tally (fold (fn [acc l] (tallyRead acc (readKeyOf l) (intAfter l ":turn"))) (list) rows)
+        ranked (listSortBy (fn [e] (- 0 (+ (* (pairFirst (pairSecond e)) 1000000) (pairSecond (pairSecond e))))) tally)
+        top (listTake ranked (readsTop))]
+    (if (listEmpty? rows) ""
+      (str " :reads (:n " (stringFromInt64 (listLength rows)) " :distinct " (stringFromInt64 (listLength tally)) " :top ("
+           (stringJoin (map (fn [e] (str "(:at \"" (c/escapeAsn (shownKey (pairFirst e))) "\" :count " (stringFromInt64 (pairFirst (pairSecond e)))
+                                         " :last " (stringFromInt64 (pairSecond (pairSecond e))) ")")) top) " ")
+           "))")))
+
+; (:m :ref LEON-RECEIPT-READS :do "the streak length of the run's last readStreak stop, from its journal signal row (:reason \"K turns ...\"), 0 when the run did not stop on one")
+fn streakIn text: String -> Int64
+  (match (listLast (filter (fn [l] (stringContains? l ":signal :readStreak")) (stringSplit text "\n")))
+    ((some l) (optionOr (stringToInt64 (let [r (optionOr (quotedAfter l ":reason") "")] (c/sliceOf r 0 (optionOr (stringIndexOf r " ") (stringLength r))))) 0))
+    ((none) 0))
+
+fn ! liveReads! rootDir: String journal: (Option String) -> (Pair String Int64)
+  (match journal
+    ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (pair (readsIn text) (streakIn text))) ((err _) (pair "" 0))))
+    ((none) (pair "" 0)))
+
 fn ! liveServed! rootDir: String journal: (Option String) -> (Pair (Option String) (Option String))
   (match journal
     ((some p) (match (fileReadString (pyJoin rootDir p)) ((ok text) (servedIn text)) ((err _) (pair none none))))
@@ -1616,7 +1686,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
           out (resolvedOut out (pairSecond resolvedOp))
           receipt (if pooled (po/poolOpReceipt! ra.pool op) (ex/formatOpReceipt out.rec env.readCap))
-          _opRow (liveOpRow! journal run.state.turn opName target out (or pooled (liveTerminalOp? op)))
+          _opRow (liveOpRow! journal run.state.turn opName target (readAtOf op) out (or pooled (liveTerminalOp? op)))
           _ownsLogged (if (liveOwnsRejected? out)
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
@@ -1794,11 +1864,11 @@ fn liveTerminalOp? op: (List (Pair String c/KvVal)) -> Bool
   (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (listContains? (list "done" "escalate") t)) (_ false))) ((none) false))
 
 ; (:m :ref LEON-OPROWS-M2 :do "audit: a step whose :op is missing or not a string got a receipt and no row; every step but done, escalate and pool ops now gets one, an unnamed one as :name \"?\" with status err and the receipt's error code (ERR_NO_OP when the receipt has none)")
-fn ! liveOpRow! journal: String turn: Int64 name: String file: String out: ex/ExecOut skip: Bool -> Bool
+fn ! liveOpRow! journal: String turn: Int64 name: String file: String at: String out: ex/ExecOut skip: Bool -> Bool
   (if skip true
     (let [unnamed (stringEmpty? name)
           error (recText out "error")]
-      (ok? (fileAppend journal (str (opRowText turn (if unnamed "?" name) file (if unnamed "rejected" (recText out "status"))
+      (ok? (fileAppend journal (str (opRowAt turn (if unnamed "?" name) file at (if unnamed "rejected" (recText out "status"))
         (if (and unnamed (stringEmpty? error)) "ERR_NO_OP" error)) "\n")))))
 
 ; (:m :ref LEON-READLOOP :do "node2 UNBALANCED-DIAG ran 37 successful read-only turns and nothing stopped it, since readStreak counts only missing-file or refused turns and only against a red gate; the rule: consecutive turns whose steps are all read-only and (a read-only turn runs no gate, unchangedTurn?), counted from the last turn that wrote, ran a gate or sent any other step, stop the run at readOnlyTurnCap (adopted 12 since LEON-READ-LOOP-CONTEXT-LOSS, was 16, :agentLoop :readOnlyTurnCap) as readStreak with cause readOnly; no exemption before the first write, whatever the owned files are: a new file needs no reading, and the 37-turn run had written nothing")
@@ -2527,7 +2597,8 @@ fn ! sendBusEvent! unit: String rootDir: String ev: bus/BusEvent -> Bool
 fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
   (let [base (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))
         served (liveServed! ls.rootDir result.journal)
-        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served))
+        reads (liveReads! ls.rootDir result.journal)
+        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served) :reads (pairFirst reads) :streak (pairSecond reads))
         exit (liveExitCode receipt)
         _bus (emitBus! ls.ra ls.rootDir receipt exit)]
     (MainResult :stdout (formatReceipt receipt) :exitCode exit))

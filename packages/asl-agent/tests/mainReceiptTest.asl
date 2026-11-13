@@ -130,6 +130,7 @@ fn ! runTests -> Bool
       (assert (and (= (listLength asl) 29) (= (listLength expected) 29)) "all 29 direct receipt and journal outputs produced")
       (assert (= asl expected) "all direct receipt and journal outputs match recorded expected values")
       (assert (stringContains? (optionOr (listGet asl 1) "") ":status :partial") "full receipt preserves its recorded status")
+      (assert (stringContains? (optionOr (listGet asl 3) "") " lastStep streak ") (str "the receipt names the readStreak stop length (LEON-RECEIPT-READS): " (optionOr (listGet asl 3) "")))
       (assert (= (optionOr (listGet asl 0) "") "(:agentReceipt :status :ok :phases () :unbacked 0)") "minimal receipt holds status, phases and unbacked only")
       (assert (stringContains? (optionOr (listGet asl 1) "") " :needsConfirm ((:op \"push\" :blocked true) (:op \"deploy\" :error ERR_X))") "needsConfirm keeps blocked and failed ops")
       (assert (match synthetic ((ok fs) (= fs (list "status" "alpha" "gates" "beta"))) ((err _) false)) "receipt fields follow a changed formatReceipt source, once each, nested cmd and exit dropped")
