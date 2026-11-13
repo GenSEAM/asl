@@ -251,6 +251,11 @@ fn shortId id: String -> String
     ((stringStartsWith? id "asl-") (optionOr (stringSlice id 4 (stringLength id)) id))
     (else id))
 
+; (:m :ref KNOW-TIER-LOWS :do "a short member name shared by two cards (core/parquet and asl-parquet) would make L0 ambiguous: both keep their full id, every other card its short name")
+fn shortIdIn id: String ids: (List String) -> String
+  (let [(s (shortId id))]
+    (if (> (listLength (filter (fn [(i String)] -> Bool (= (shortId i) s)) ids)) 1) id s))
+
 fn groupFile g: Group -> String
   (str "index-" g.id ".asn")
 
@@ -259,7 +264,8 @@ fn indexLine c: Card -> String
 
 fn indexText groups: (List Group) cards: (List Card) -> String
   (let [(gs (effectiveGroups groups cards))
-        (lines (map (fn [(g Group)] -> String (str "(:g " (q g.id) " " (listLength g.members) " " (q g.purpose) " (" (stringJoin (map shortId g.members) " ") "))")) gs))]
+        (ids (map (fn [(c Card)] -> String c.id) cards))
+        (lines (map (fn [(g Group)] -> String (str "(:g " (q g.id) " " (listLength g.members) " " (q g.purpose) " (" (stringJoin (map (fn [(m String)] -> String (shortIdIn m ids)) g.members) " ") "))")) gs))]
     (str "(:know :tier L0 :cards " (listLength cards) " :groups " (listLength gs) " :tokensBy bytes36 :use \"(:know :q intent-or-name :budget N) or asl know; asl know index ROOT GROUP lists the cards of one group, a card id or exact symbol returns its card\")\n"
          (stringJoin lines "\n") "\n"))
 

@@ -73,3 +73,4 @@
 (:doc :symbol "asl/packages/asl-know/src/render.asl#groupFile" :text "File name of a group's card listing: index-GROUP.asn")
 (:doc :symbol "asl/packages/asl-know/src/render.asl#groupIndexText" :text "One group's card listing: a header and an (:c id purpose keys) line per member card")
 (:doc :symbol "asl/packages/asl-know/src/render.asl#indexFiles" :text "index.asn (L0, one line per group) and index-GROUP.asn (one line per card) with their rendered text")
+(:doc :symbol "asl/packages/asl-know/src/know.asl#dropStaleIndexes!" :text "Delete every index-*.asn in the cards dir that is not among the rendered files, so a removed group leaves no stale listing; the count of rendered files, or the first file that could not be removed")

@@ -133,6 +133,40 @@ fn ! indexDistinct root: String -> Bool
       (assert (listEmpty? empty) (str (listLength empty) " index lines carry an empty purpose: " (stringJoin (listTake empty 6) " ")))
       true))
 
+; (:m :ref KNOW-TIER-LOWS :do "L0 member names are unique across groups (core/parquet and asl-parquet both keep their full id), the word memory leads exactly one group purpose, and gen's dropStaleIndexes! deletes an index-GROUP.asn whose group is gone while keeping rendered index files and other card files")
+fn ! memberNames root: String -> (List String)
+  (let [(index (resultOr (fileReadString (str (kn/cardsDir root) "/index.asn")) ""))]
+    (listFlatMap (fn [(l String)] -> (List String)
+                   (if (stringStartsWith? l "(:g \"")
+                     (stringSplit (optionOr (listHead (stringSplit (optionOr (listLast (stringSplit l "(")) "") ")")) "") " ")
+                     (list)))
+                 (stringSplit index "\n")))
+
+fn ! purposeLines root: String -> (List String)
+  (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:group "))
+          (stringSplit (resultOr (fileReadString (str root "/asl/packages/asl-know/groups.asn")) "") "\n"))
+
+fn purposeOf l: String -> String
+  (optionOr (listGet (stringSplit (optionOr (listHead (stringSplit l " :members ")) "") ":purpose ") 1) "")
+
+fn ! tierLows root: String -> Bool
+  (let [(names (filter (fn [(n String)] -> Bool (not (stringEmpty? n))) (memberNames root)))
+        (dup (filter (fn [(n String)] -> Bool (> (listLength (filter (fn [(m String)] -> Bool (= m n)) names)) 1)) names))
+        (memory (filter (fn [(l String)] -> Bool (stringContains? (stringLower (purposeOf l)) "memory")) (purposeLines root)))
+        (dir (str (optionOr (envGet "TMPDIR") "/tmp") "/knowTierLows-" (stringFromInt64 (procSelf))))]
+    (do (assert (> (listLength names) 60) (str "L0 lists the members of every group, got " (listLength names)))
+        (assert (listEmpty? dup) (str "L0 member names are unique across groups: " (stringJoin dup " ")))
+        (assert (stringContains? (stringJoin names " ") "core/parquet") "the colliding core card keeps its full id")
+        (assert (stringContains? (stringJoin names " ") "asl-parquet") "the colliding package card keeps its full id")
+        (assert (= (listLength memory) 1) (str "memory appears in exactly one group purpose, got " (listLength memory)))
+        (assert (ok? (dirCreate dir)) "scratch dir made")
+        (assert (and (ok? (fileWrite (str dir "/index-gone.asn") "x")) (and (ok? (fileWrite (str dir "/index-keep.asn") "x")) (ok? (fileWrite (str dir "/core-lang.asn") "x")))) "scratch files written")
+        (assert (= (kn/dropStaleIndexes! dir (list (pair "index-keep.asn" "x") (pair "core-lang.asn" "x"))) (ok 2)) "dropStaleIndexes! reports the rendered count")
+        (assert (not (fileExists? (str dir "/index-gone.asn"))) "the index file of a removed group is deleted")
+        (assert (and (fileExists? (str dir "/index-keep.asn")) (fileExists? (str dir "/core-lang.asn"))) "rendered index and other card files stay")
+        (assert (ok? (pathRemove dir)) "scratch dir removed")
+        true))
+
 fn ! queries root: String -> Bool
   (let [(es (qy/loadEntries! (kn/cardsDir root)))
         (exact (qy/answer es "jsonParse" 400))
@@ -150,4 +184,4 @@ fn ! queries root: String -> Bool
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))]
-    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (tiersReach root) (indexDistinct root) (queries root)))
+    (and (examplesRun) (cardsFresh root) (ratchetShrinks root) (examplesEmbedded root) (budgets root) (tiersReach root) (tierLows root) (indexDistinct root) (queries root)))
