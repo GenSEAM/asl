@@ -841,13 +841,13 @@ fn mapValuesList m: (Map String String) -> (List String)
   (mapValues m)
 
 fn isNullaryBuiltinType? resolved: String -> Bool
-  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle" "Handle" "Any" "LinkStat" "Keyword") resolved))
+  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle" "Handle" "Any" "LinkStat" "Keyword" ":inferredUnit") resolved))
 
 fn isKnownBuiltinType? name: String -> Bool
-  (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (or (= resolved "HashMap") (or (= resolved "Pair") (= resolved "Buf")))))))
+  (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (or (= resolved "HashMap") (or (= resolved "Pair") (or (= resolved "PreludeTree") (or (= resolved "PreludeMap") (= resolved "Buf")))))))))
 
 fn builtinTypeArity name: String -> (Option Int64)
-  (let [(resolved (ty/resolveTypeAlias name))] (cond ((= resolved "List") (some 1)) ((= resolved "Option") (some 1)) ((= resolved "Result") (some 2)) ((= resolved "Map") (some 2)) ((= resolved "HashMap") (some 2)) ((= resolved "Pair") (some 2)) ((= resolved "Buf") (some 1)) ((isNullaryBuiltinType? resolved) (some 0)) (else (none))))
+  (let [(resolved (ty/resolveTypeAlias name))] (cond ((= resolved "List") (some 1)) ((= resolved "Option") (some 1)) ((= resolved "Result") (some 2)) ((= resolved "Map") (some 2)) ((= resolved "HashMap") (some 2)) ((= resolved "Pair") (some 2)) ((= resolved "PreludeTree") (some 2)) ((= resolved "PreludeMap") (some 2)) ((= resolved "Buf") (some 1)) ((isNullaryBuiltinType? resolved) (some 0)) (else (none))))
 
 fn checkTypeTrees ts: (List ty/Type) bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (checkTypeTreeIx item bound mod deps where path a)) acc ts)
