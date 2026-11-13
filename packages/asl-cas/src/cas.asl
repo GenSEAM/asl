@@ -1,5 +1,5 @@
 (module asl-cas/cas
-  :x [Cas BlobStat GcReceipt casOpen! validHash? validOwner? blobPath put! putFile! get! has? stat! pin! unpin! pinsOf! gc! gcWith!]
+  :x [Cas BlobStat GcReceipt casOpen! validHash? validOwner? blobPath put! putWith! putFile! get! has? stat! pin! unpin! pinsOf! gc! gcWith!]
   :i [])
 
 ; (:m :ref DS-BLOBSTORE :do "a store root holds blobs/<h0h1>/<sha256> (two-hex fan-out), tmp/ for writes in flight and pins/<sha256>/<owner> markers; graceMs is how long an unpinned blob or a leftover tmp file survives gc")
@@ -85,10 +85,16 @@ fn ! touchIntact! cas: Cas dest: String h: String -> (Result Bool String)
 
 ; (:m :ref DS-BLOBSTORE :do "a blob already present is kept when it still hashes to its name (dedup, its mtime refreshed so a pending gc sees it young) and replaced when it does not; a new blob is written to tmp/, fsynced, renamed into place and its directory fsynced, so a crash leaves at most a tmp file gc removes and never a partial blob")
 fn ! put! cas: Cas data: Bytes -> (Result String String)
+  (putWith! cas data (fn [] -> Unit ()))
+
+; (:m :ref DSBLOB-LOWS2 :do "put! with a hook run after the unlocked intact check and before the store lock, where a gc can remove the blob: the dedup touch rereads under the lock, so such a put rewrites the blob instead of returning ok for a missing one")
+fn ! putWith! cas: Cas data: Bytes between: (fn ! [] -> Unit) -> (Result String String)
   (let [(h (bytesSha256 data))
         (dest (blobFile cas h))
         (fan (str cas.root "/blobs/" (fanOf h)))
-        (kept (if (intact? dest h) (touchIntact! cas dest h) (ok false)))]
+        (outer (intact? dest h))
+        (_ (between))
+        (kept (if outer (touchIntact! cas dest h) (ok false)))]
     (match kept ((err e) (err e)) ((ok k) (if k (ok h)
       (let [(tmp (str cas.root "/tmp/" h "." (stringFromInt64 (procSelf)) "." (stringFromInt64 (nowNs))))]
         (match (ensureDir! fan)
@@ -99,12 +105,22 @@ fn ! put! cas: Cas data: Bytes -> (Result String String)
               ((ok _)
                 (match (fileFsync tmp)
                   ((err e) (do (pathRemove tmp) (err (str "fsync " tmp ": " e))))
-                  ((ok _)
-                    (match (pathRename tmp dest)
-                      ((err e) (do (pathRemove tmp) (err (str "rename " tmp ": " e))))
-                      ((ok _) (match (fileFsync fan)
-                                ((err e) (err (str "fsync dir of " h ": " e)))
-                                ((ok _) (ok h))))))))))))))))
+                  ((ok _) (publish! cas tmp dest fan h))))))))))))
+
+; (:m :ref DSBLOB-LOWS2 :do "a new blob is renamed into place and given a fresh mtime under the store lock, so gc, which removes under the same lock, sees it young and never removes a blob between the rename and the return of put!; a busy lock removes the tmp file and is an err")
+fn ! publish! cas: Cas tmp: String dest: String fan: String h: String -> (Result String String)
+  (match (lockStore! cas)
+    ((err e) (do (pathRemove tmp) (err e)))
+    ((ok fd) (let [(r (publishLocked! tmp dest fan h)) (_ (fdClose fd))] r)))
+
+fn ! publishLocked! tmp: String dest: String fan: String h: String -> (Result String String)
+  (match (pathRename tmp dest)
+    ((err e) (do (pathRemove tmp) (err (str "rename " tmp ": " e))))
+    ((ok _) (match (fileUtime dest (nowNs))
+              ((err e) (err (str "touch " dest ": " e)))
+              ((ok _) (match (fileFsync fan)
+                        ((err e) (err (str "fsync dir of " h ": " e)))
+                        ((ok _) (ok h)))))))
 
 fn ! putFile! cas: Cas path: String -> (Result String String)
   (match (fileReadBytes path)
@@ -226,14 +242,15 @@ fn ! gcPlanned! cas: Cas nowNs: Int64 between: (fn ! [] -> Unit) -> GcReceipt
         (pinRead (map (fn [(h String)] -> (Pair String (Result (List String) String)) (pair h (pinsOf! cas h))) (pairFirst all)))
         (free (map pairFirst (filter freeOf pinRead)))
         (due (filter (fn [(h String)] -> Bool (old? (blobFile cas h) cut)) free))
+        (tmpList (listing! (str cas.root "/tmp")))
+        (tmpDue (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) (resultOr tmpList (list))))
         (_ (between))
-        (lock (if (listEmpty? due) (ok -1) (lockStore! cas)))
+        (lock (if (and (listEmpty? due) (listEmpty? tmpDue)) (ok -1) (lockStore! cas)))
         (still (match lock ((ok _) (filter (fn [(h String)] -> Bool (and (unpinned? cas h) (old? (blobFile cas h) cut))) due)) ((err _) (list))))
         (results (map (fn [(h String)] -> (Pair String Bool) (pair h (ok? (pathRemove (blobFile cas h))))) still))
-        (_ (match lock ((ok fd) (if (>= fd 0) (ok? (fdClose fd)) true)) ((err _) true)))
-        (tmpList (listing! (str cas.root "/tmp")))
-        (tmps (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) (resultOr tmpList (list))))
-        (tmpResults (map (fn [(t String)] -> (Pair String Bool) (pair t (ok? (pathRemove (str cas.root "/tmp/" t))))) tmps))]
+        (tmps (match lock ((ok _) (filter (fn [(t String)] -> Bool (old? (str cas.root "/tmp/" t) cut)) tmpDue)) ((err _) (list))))
+        (tmpResults (map (fn [(t String)] -> (Pair String Bool) (pair t (ok? (pathRemove (str cas.root "/tmp/" t))))) tmps))
+        (_ (match lock ((ok fd) (if (>= fd 0) (ok? (fdClose fd)) true)) ((err _) true)))]
     (GcReceipt :removed (map pairFirst (filter pairSecond results))
                :pinned (listLength (filter pinnedOf pinRead))
                :young (- (listLength free) (listLength due))
