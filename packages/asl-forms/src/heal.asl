@@ -225,14 +225,6 @@ fn retiredHeadFor name: String -> (Option String)
         ((= name "%") (some "mod"))
         (else (none)))
 
-fn retiredSpellingEdit x: Sx -> (List Edit)
-  (match (listHead (listItems x))
-    ((none) (list))
-    ((some h)
-      (match (retiredHeadFor (atomText h))
-        ((none) (list))
-        ((some to) (match h ((sxAtom _ s e) (list (Edit :start s :end e :with to))) ((sxList _ _ _ _) (list)))))))
-
 fn spellNormal text: String rules: (List String) -> String
   (if (listContains? rules "retiredSpelling") (optionOr (listHead (ruleRetiredSpelling text)) text) text)
 
@@ -240,8 +232,8 @@ fn spellApplied before: String after: String -> (List String)
   (if (= before after) (list) (list "retiredSpelling"))
 
 fn ruleRetiredSpelling text: String -> (List String)
-  (let [(es (fold (fn [(acc (List Edit)) (x Sx)] -> (List Edit) (listAppend acc (retiredSpellingEdit x))) (list) (listFlatMap allLists (readSx text))))]
-    (if (listEmpty? es) (list) (list (applyEdits text es))))
+  (let [(next (a/canonicalSpelling text))]
+    (if (= next text) (list) (list next)))
 
 ; (:m :do "rule fnHeaderUnwrap: a top-level (fn name p: T -> R body) written in header style becomes the header line with its body indented below")
 fn headerStyleFn? x: Sx -> Bool

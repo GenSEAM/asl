@@ -14,6 +14,12 @@ fn parseMsg src: String -> String
 fn checkMsg src: String -> String
   (match (a/parseForTypeCheck src) ((ok _) "ok") ((err e) e.msg))
 
+fn rendered src: String -> String
+  (match (a/parse src) ((ok forms) (stringJoin (map a/renderNode forms) "\n")) ((err e) (str "ERR " e.msg)))
+
+fn checkRendered src: String -> String
+  (match (a/parseForTypeCheck src) ((ok forms) (stringJoin (map a/renderNode forms) "\n")) ((err e) (str "ERR " e.msg)))
+
 fn armCount src: String -> Int64
   (match (cv/lift (rd/parseSexpr src)) ((a/exprMatch _ arms) (listLength arms)) (_ -1))
 
@@ -55,4 +61,20 @@ fn ! runTests -> Bool
       (assert (= (parseMsg "fn f -> Bool\n  (not= 1 2)\n") "ERR_READ_SPELLING (not= a b) is retired: write (!= a b)") "not= stays retired: no model of the bench wrote it")
       (assert (= (match (a/parse "fn f x: Int64 -> Bool\n  (== 1 (mt x (_ 1)))\n") ((ok _) 0) ((err e) (+ (* e.line 100) e.col))) 210) "an accepted == keeps the columns of what follows it")
       (assert (= (parseMsg "fn f -> String\n  \"(== 1 2) (% 3 4)\"\n") "ok") "strings are not rewritten")
+      (assert (= (rendered "fn f a: Int64 b: Int64 -> Bool\n  (== a b)\n") (rendered "fn f a: Int64 b: Int64 -> Bool\n  (= a b)\n")) "meaning: (== a b) is the program (= a b), node for node")
+      (assert (= (rendered "fn f a: Int64 b: Int64 -> Int64\n  (% a b)\n") (rendered "fn f a: Int64 b: Int64 -> Int64\n  (mod a b)\n")) "meaning: (% a b) is the program (mod a b), node for node")
+      (assert (= (checkRendered "fn f a: Int64 b: Int64 -> Int64\n  (if (== a b) 0 (% a b))\n") (checkRendered "fn f a: Int64 b: Int64 -> Int64\n  (if (= a b) 0 (mod a b))\n")) "meaning: the checker parse reads the same canonical program")
+      (assert (stringContains? (rendered "fn f a: Int64 b: Int64 -> Int64\n  (mod a b)\n") "mod") (str "the rendering names the head it compares: " (rendered "fn f a: Int64 b: Int64 -> Int64\n  (mod a b)\n")))
+      (assert (= (rendered "fn f a: Int64 -> Int64\n  ( % a 2)\n") (rendered "fn f a: Int64 -> Int64\n  ( mod a 2)\n")) "a space after the paren does not hide the head")
+      (assert (listEmpty? (messages "fn % a: Int64 b: Int64 -> Int64\n  (+ a b)\n\nfn g -> Int64\n  (% 2 3)\n")) "a module that defines % owns the name: nothing is reported")
+      (assert (not (stringContains? (rendered "fn % a: Int64 b: Int64 -> Int64\n  (+ a b)\n\nfn g -> Int64\n  (% 2 3)\n") "mod")) "and its call is not read as mod: the user definition wins")
+      (assert (not (stringContains? (rendered "fn g -> Int64\n  (let [(% 5)] (+ % 1))\n") "mod")) "a let binder named % and its uses stay as written")
+      (assert (not (stringContains? (rendered "fn g f: (fn [Int64 Int64] -> Int64) -> Int64\n  (let [(% f)] (% 7 3))\n") "mod")) "a call of a bound % is the bound value, not mod")
+      (assert (= (a/canonicalSpelling "fn == a: Int64 b: Int64 -> Bool\n  (< a b)\n\nfn g -> Bool\n  (== 2 3)\n") "fn == a: Int64 b: Int64 -> Bool\n  (< a b)\n\nfn g -> Bool\n  (== 2 3)\n") "a module that defines == keeps its own ==")
+      (assert (= (a/canonicalSpelling "fn g -> Int64\n  (let [(% 5)] (+ % 1))\n") "fn g -> Int64\n  (let [(% 5)] (+ % 1))\n") "heal's spelling pass leaves a bound % alone, binder and uses")
+      (assert (= (a/canonicalSpelling "fn f a: Int64 -> Int64\n  (if (== a 1) (% a 2) (mt a (_ (if (not= a 3) 4 5))))\n") "fn f a: Int64 -> Int64\n  (if (= a 1) (mod a 2) (match a (_ (if (!= a 3) 4 5))))\n") "heal's spelling pass writes every reported head canonically")
+      (assert (= (a/canonicalSpelling "fn f -> String\n  \"(== 1 2) (% 3 4)\"\n") "fn f -> String\n  \"(== 1 2) (% 3 4)\"\n") "and leaves strings alone")
+      (assert (= (rendered "fn f a: Int64 -> Bool\n  (if (= (stringLength \"привет, мир\") 0) false (== a 1))\n") (rendered "fn f a: Int64 -> Bool\n  (if (= (stringLength \"привет, мир\") 0) false (= a 1))\n")) "Cyrillic before the head on its line: == is still swapped")
+      (assert (= (rendered "fn f a: Int64 -> Int64\n  (if (= (stringLength \"ok 🙂 🚀\") 0) 0 (% a 3))\n") (rendered "fn f a: Int64 -> Int64\n  (if (= (stringLength \"ok 🙂 🚀\") 0) 0 (mod a 3))\n")) "an emoji before the head on its line: % is still swapped")
+      (assert (= (a/canonicalSpelling "fn f a: Int64 -> Bool\n  (if (= \"жёлтый 🟡\" \"\") (== a 1) (== (% a 2) 0))\n") "fn f a: Int64 -> Bool\n  (if (= \"жёлтый 🟡\" \"\") (= a 1) (= (mod a 2) 0))\n") "several heads after multi-byte text on one line all land")
       true))
