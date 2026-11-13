@@ -1156,6 +1156,7 @@
 (:doc :symbol "asl/tools/coord/nodes.asl#probeClang!" :text "first line of clang --version")
 (:doc :symbol "asl/tools/coord/nodes.asl#probe!" :text "Node row for this machine")
 (:doc :symbol "asl/tools/coord/tests/nodesTest.asl#runTests" :text "probe cores equal the OS count, bad rows refused, scratch round trip")
+(:doc :symbol "asl/tools/coord/tests/promoteDevRowsTest.asl#runTests" :text "promoteDev! brings main into a dev clone with no merge.asnRows.driver through the injected row driver: distinct doc.asn rows on both sides land with no conflict")
 (:doc :symbol "tools/fleet/cache.asl#Toolchain" :text "what a verdict was computed with: target triple, libc, clang version, clang binary digest")
 (:doc :symbol "tools/fleet/cache.asl#Toolchain.triple" :text "clang -print-target-triple")
 (:doc :symbol "tools/fleet/cache.asl#Toolchain.libc" :text "libSystem version on macOS, ldd version line on Linux")
