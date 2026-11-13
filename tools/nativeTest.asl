@@ -2,6 +2,7 @@
   :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
+      (asl-parser/reader :a rd)
       (asl-ir/types :a irTy)
       (asl-ir/lower :a low)
       (asl-ir/link :a lk)
@@ -2119,12 +2120,25 @@ fn defaultWallS -> Int64
 fn maxWallS -> Int64
   7200
 
-; (:m :ref NATIVETEST-PER-SUITE-WALL :do "a suite declares its wall in its own source as a top-level fn suiteWallS -> Int64 whose body is one integer line; none when absent or not an integer")
+; (:m :ref SUITEWALL-DECL-PARSE :do "a suite declares its wall as a top-level fn suiteWallS -> Int64 (the parser lists a module's defuns as top-level forms) with no params whose body is one integer literal, read from the parsed source, so the same text inside a string or a nested form is no declaration; none when absent, not an integer or the source does not parse")
 fn declaredWallS text: String -> (Option Int64)
-  (match (stringIndexOf text "\nfn suiteWallS -> Int64\n")
-    ((none) (none))
-    ((some at) (let [(rest (optionOr (stringSlice text (+ at 24) (stringLength text)) ""))]
-                 (stringToInt64 (stringTrim (optionOr (listHead (stringLines rest)) ""))))))
+  (match (ast/parse text)
+    ((ok forms) (listHead (listFlatMap wallsOfTop forms)))
+    ((err _) (none)))
+
+fn wallsOfTop t: ast/TopForm -> (List Int64)
+  (match t
+    ((ast/topDefun d) (wallsOfDefun d))
+    (_ (list)))
+
+fn wallsOfDefun d: ast/DefunNode -> (List Int64)
+  (if (and (= d.name "suiteWallS") (and (= (listLength d.params) 0) (= (stringTrim d.retType) "Int64")))
+    (match (if (= (listLength d.body) 1) (listHead d.body) (none))
+      ((some b) (match b
+                  ((rd/sexprAtom v) (match (stringToInt64 v) ((some n) (list n)) ((none) (list))))
+                  (_ (list))))
+      ((none) (list)))
+    (list))
 
 ; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the wall a suite binary runs under: the 1800 s default, raised to a declared suiteWallS, never above 7200 s")
 fn suiteWall text: String -> Int64
