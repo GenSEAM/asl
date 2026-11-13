@@ -1,5 +1,5 @@
 (module asl/tools/fleet/bounded
-  :x [main parseArgs Parsed receiptLine]
+  :x [main parseArgs Parsed receiptLine minSecs]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref WATCHDOG-GROUP-KILL :do "the one-line bounded runner for briefs and reruns: bin/asl run asl/tools/fleet/bounded.asl SECS [--max-desc N] [--receipt FILE] -- CMD ARGV...; the command runs as one fleet/run.asl child, and at SECS its whole process tree and groups are killed (a timeout verdict note is printed, exit 124); otherwise its output is printed whole and its exit code is returned; a perl alarm or a bare timeout kills only the direct child and leaves bin/asl descendants running")
@@ -40,10 +40,14 @@ fn parseArgs args: (List String) -> Parsed
 fn quoted s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
 
+; (:m :ref BOUNDED-MIN-SECS-DOC :do "the smallest SECS that leaves the command time under load: since BOUNDED-WALL-INCLUDES-BUILD the launch (exec, a ps for its age, the sentinel fork with its lease reap) counts toward SECS, measured 1.1 to 2.2 s warm at load 96 and past 3 s under heavier load (BOUNDED-PIDS-FLAKE, 2026-11-13); a smaller SECS still runs, with a warning on stderr and :warn :secsUnderMin in the receipt; adopted")
+fn minSecs -> Int64
+  10
+
 ; (:m :ref LEON-TIMEOUT-NO-RECEIPT :do "the one ASN line --receipt FILE gains on every stop of the command, an exit, a timeout or a runaway kill: the verdict, exit code, SECS, run time and the command's first word, never its arguments or environment, so a run the bound killed before it wrote its own receipt still leaves one")
 fn receiptLine verdict: String exit: Int64 secs: Int64 ms: Int64 argv: (List String) -> String
   (str "(:bounded :verdict :" verdict " :exit " (stringFromInt64 exit) " :secs " (stringFromInt64 secs) " :ms " (stringFromInt64 ms)
-       " :cmd " (quoted (optionOr (listHead argv) "")) ")\n")
+       (if (< secs (minSecs)) " :warn :secsUnderMin" "") " :cmd " (quoted (optionOr (listHead argv) "")) ")\n")
 
 ; (:m :ref BOUNDED-WALL-INCLUDES-BUILD :do "ms since this process was forked, from its own ps etime (1 s steps, rounded down; 0 when unknown): bin/asl and its native CLI exec into the run binary, so the pid that sh forked for bin/asl run bounded.asl is this one and its age holds the cold build of bounded.asl and of anything it imports, measured as 3124 s wall under a 900 s bound at load 190-220, 2026-11-13")
 fn ! launchMs! -> Int64
@@ -110,6 +114,7 @@ fn ! main args: (List String) -> (Result Int64 String)
                  (fr/Done :idx 0 :exit 124 :out (str "(:bounded :verdict :timeout :phase :launch :launchMs " (stringFromInt64 launched) " :secs " (stringFromInt64 p.secs) ")\n") :ms 0 :verdict "timeout")))
             (stopped (match guard ((ok f) (do (fr/forkKill! f "done") true)) ((err _) false)))
             (wrote (or (stringEmpty? p.receipt) (ok? (fileAppend p.receipt (receiptLine d.verdict d.exit p.secs (+ launched d.ms) p.argv)))))]
-        (do (print d.out)
+        (do (if (< p.secs (minSecs)) (eprintln (str "bounded: SECS " (stringFromInt64 p.secs) " is under " (stringFromInt64 (minSecs)) "; the launch counts toward it and can use it all under load")) ())
+            (print d.out)
             (if wrote () (eprintln (str "bounded: the receipt could not be written to " p.receipt)))
             (ok d.exit)))))
