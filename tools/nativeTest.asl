@@ -1902,11 +1902,16 @@ fn stemOfName n: String -> String
   (let [(parts (stringSplit n "."))]
     (if (< (listLength parts) 2) n (stringJoin (listTake parts (- (listLength parts) 1)) ".")))
 
+; (:m :ref NATIVETEST-SWEEP-LOCK-SPLIT :do "a module's files are KEY.o, KEY.meta and, while a compile holds the claim, KEY.o.lock; they group by KEY (the name up to its first dot), so the lock lands in the object's entry, and a live lock pins it: stemOfName grouped KEY.o.lock under KEY.o and a held claim pinned nothing")
+fn moduleStem n: String -> String
+  (optionOr (listHead (stringSplit n ".")) n)
+
 fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
   (let [(groups (fold (fn [(m (Map String (List String))) (n String)] -> (Map String (List String))
-                        (mapSet m (stemOfName n) (cons (str dir "/" n) (mapGetOr m (stemOfName n) (list)))))
-                      (mapEmpty) (resultOr (dirList dir) (list))))]
-    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) false)) (mapKeys groups)))
+                        (mapSet m (moduleStem n) (cons (str dir "/" n) (mapGetOr m (moduleStem n) (list)))))
+                      (mapEmpty) (resultOr (dirList dir) (list))))
+        (held (fn [(ps (List String))] -> Bool (listAny? (fn [(p String)] -> Bool (and (stringEndsWith? p ".lock") (lockLive? p))) ps)))]
+    (map (fn [(k String)] -> ncli/StoreEntry (ncli/storeEntry! (mapGetOr groups k (list)) (held (mapGetOr groups k (list))))) (mapKeys groups)))
 
 fn hexKey? n: String -> Bool
   (= (stringLength n) 64)
