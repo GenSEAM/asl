@@ -4,4 +4,4 @@
 (:c "asl-help" "Machine-Readable ASN..." (canonicalTools catalogSize))
 (:c "asl-hypergraph" "Codebase Hypergraph..." (makeHyperNode makeHyperEdge))
 (:c "asl-intel" "Code intelligence graph,..." (runIntel! dispatchIntel!))
-(:c "asl-know" "Tiered knowledge surface..." (cardsDir ratchetDiff))
+(:c "asl-know" "Tiered knowledge surface..." (genReceipt genLineOf))

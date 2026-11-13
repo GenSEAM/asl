@@ -1,5 +1,5 @@
 (module asl-know/know
-  :x [generatedIndex? genReport! dropStaleIndexes! rendered! cardsDir staleFiles! ratchetRows! ratchetDiff writeCards! know! main]
+  :x [generatedIndex? genReceipt genLineOf genLine! dropStaleIndexes! rendered! cardsDir staleFiles! ratchetRows! ratchetDiff writeCards! know! main]
   :i [(asl-know/render :a r) (asl-know/query :a qy)])
 
 ; (:m :tags (know) :note "asl know: gen writes asl-know/cards from source, check fails on any byte drift, q answers an intent query from the written cards")
@@ -50,14 +50,19 @@ fn ! dropStaleIndexes! dir: String files: (List (Pair String String)) -> (Result
         (failed (filter (fn [(n String)] -> Bool (err? (pathRemove (str dir "/" n)))) stale))]
     (if (listEmpty? failed) (ok (listLength files)) (err (str "cannot remove " (optionOr (listHead failed) "")))))
 
-; (:m :ref KNOW-TIER-LOWS2 :do "what gen says beyond the file count: group members that name no card (dropped from the index) and the cards that fell to index-other; empty when there is nothing to report")
-fn ! genReport! root: String -> String
-  (let [(groups (r/groupsOf! root))
-        (cards (r/allCards! root))
-        (orphans (r/orphanMembers groups cards))
-        (other (r/otherMembers groups cards))]
-    (str (if (listEmpty? orphans) "" (str " :orphans (" (stringJoin (map r/q orphans) " ") ")"))
-         (if (listEmpty? other) "" (str " :other (" (stringJoin (map r/q other) " ") ")"))))
+; (:m :ref KNOW-TIER-LOWS3 :do "the gen receipt text, pure: the file count, then :orphans (GROUP/MEMBER of groups.asn members naming no card) and :other (cards that fell to index-other) only when non-empty")
+fn genReceipt n: Int64 orphans: (List String) other: (List String) -> String
+  (str "(:know :gen :files " n
+       (if (listEmpty? orphans) "" (str " :orphans (" (stringJoin (map r/q orphans) " ") ")"))
+       (if (listEmpty? other) "" (str " :other (" (stringJoin (map r/q other) " ") ")"))
+       ")")
+
+; (:m :ref KNOW-TIER-LOWS3 :do "the receipt for given groups and cards, so a test drives the orphan and other wiring with synthetic rows")
+fn genLineOf n: Int64 groups: (List r/Group) cards: (List r/Card) -> String
+  (genReceipt n (r/orphanMembers groups cards) (r/otherMembers groups cards))
+
+fn ! genLine! root: String n: Int64 -> String
+  (genLineOf n (r/groupsOf! root) (r/allCards! root))
 
 fn ! writeCards! root: String -> (Result Int64 String)
   (let [(files (rendered! root)) (dir (cardsDir root))]
@@ -92,7 +97,7 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) "help"))
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))]
     (cond
-      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :gen :files " n (genReport! root) ")")) (ok 0)))))
+      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (genLine! root n)) (ok 0)))))
       ((= cmd "ratchet") (match (writeRatchet! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :ratchet :rows " n ")")) (ok 0)))))
       ((= cmd "check")
         (let [(stale (staleFiles! root))]

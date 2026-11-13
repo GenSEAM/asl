@@ -79,4 +79,6 @@
 (:doc :symbol "asl/packages/asl-know/src/render.asl#shortIdIn" :text "The short L0 name of a card id, the full id when another card shares the short name")
 (:doc :symbol "asl/packages/asl-know/src/render.asl#groupMarker" :text "The head every generated index-GROUP.asn opens with, how gen tells its own file from a hand-made one")
 (:doc :symbol "asl/packages/asl-know/src/know.asl#generatedIndex?" :text "True when the file opens with the generator's L0g group head")
-(:doc :symbol "asl/packages/asl-know/src/know.asl#genReport!" :text "The gen receipt tail: :orphans for group members naming no card, :other for cards that fell to index-other")
+(:doc :symbol "asl/packages/asl-know/src/know.asl#genReceipt" :text "The gen receipt text: file count, then :orphans and :other only when non-empty")
+(:doc :symbol "asl/packages/asl-know/src/know.asl#genLineOf" :text "The gen receipt for given groups and cards, the orphan and other wiring a test drives with synthetic rows")
+(:doc :symbol "asl/packages/asl-know/src/know.asl#genLine!" :text "The gen receipt of a tree: reads groups.asn and the cards, then genLineOf")

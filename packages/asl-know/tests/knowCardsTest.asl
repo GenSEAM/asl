@@ -159,10 +159,6 @@ fn ! tierLows root: String -> Bool
         (assert (stringContains? (stringJoin names " ") "core/parquet") "the colliding core card keeps its full id")
         (assert (stringContains? (stringJoin names " ") "asl-parquet") "the colliding package card keeps its full id")
         (assert (= (listLength memory) 1) (str "memory appears in exactly one group purpose, got " (listLength memory)))
-        (assert (and (= (r/shortIdIn "core/parquet" (list "core/parquet" "asl-parquet")) "core/parquet") (= (r/shortIdIn "asl-parquet" (list "core/parquet" "asl-parquet")) "asl-parquet")) "a short name shared by two cards keeps both full ids")
-        (assert (and (= (r/shortIdIn "asl-json" (list "asl-json" "core/lang")) "json") (= (r/shortIdIn "core/lang" (list "asl-json" "core/lang")) "lang")) "an unshared card gets its short name")
-        (assert (= (r/orphanMembers (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "g/ghost")) "a group member naming no card is reported as an orphan")
-        (assert (= (r/otherMembers (list) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "a")) "a card no group lists is reported as falling to other")
         (assert (ok? (dirCreate dir)) "scratch dir made")
         (assert (and (ok? (fileWrite (str dir "/index-gone.asn") (str (r/groupMarker) "\"gone\" :cards 0 :tokensBy bytes36)\n"))) (and (ok? (fileWrite (str dir "/index-keep.asn") "x")) (and (ok? (fileWrite (str dir "/core-lang.asn") "x")) (ok? (fileWrite (str dir "/index-hand.asn") "(:hand made)\n"))))) "scratch files written")
         (assert (= (kn/dropStaleIndexes! dir (list (pair "index-keep.asn" "x") (pair "core-lang.asn" "x"))) (ok 2)) "dropStaleIndexes! reports the rendered count")
@@ -187,8 +183,23 @@ fn ! queries root: String -> Bool
       (assert (<= (r/tokensOf tight) 330) (str "answer respects the budget, got " (r/tokensOf tight)))
       true))
 
+; (:m :ref KNOW-TIER-LOWS3 :do "the pure checks of the tier code with synthetic ids absent from the tree, run before every check that reads the generated cards, so a broken shortIdIn, orphan, other or receipt function fails here and not first at cardsFresh")
+fn ! tierPure -> Bool
+  (let [(card (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))]
+    (do
+        (assert (and (= (r/shortIdIn "core/zzdup" (list "core/zzdup" "asl-zzdup")) "core/zzdup") (= (r/shortIdIn "asl-zzdup" (list "core/zzdup" "asl-zzdup")) "asl-zzdup")) "a short name shared by two cards keeps both full ids")
+        (assert (and (= (r/shortIdIn "asl-zzone" (list "asl-zzone" "core/zztwo")) "zzone") (= (r/shortIdIn "core/zztwo" (list "asl-zzone" "core/zztwo")) "zztwo")) "an unshared card gets its short name")
+        (assert (= (r/orphanMembers (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "g/ghost")) "a group member naming no card is reported as an orphan")
+        (assert (= (r/otherMembers (list) (list (r/Card :id "a" :purpose "" :keys (list) :line "" :rows (list) :missing (list)))) (list "a")) "a card no group lists is reported as falling to other")
+        (assert (= (kn/genReceipt 5 (list) (list)) "(:know :gen :files 5)") "gen receipt without orphans or other is the bare count")
+        (assert (= (kn/genReceipt 5 (list "g/ghost") (list "zz/a" "b")) "(:know :gen :files 5 :orphans (\"g/ghost\") :other (\"zz/a\" \"b\"))") "gen receipt names orphans and other")
+        (assert (= (kn/genLineOf 3 (list (r/Group :id "g" :purpose "p" :members (list "a" "ghost"))) (list card)) "(:know :gen :files 3 :orphans (\"g/ghost\"))") "genLineOf reports an orphan member and no other when every card is listed")
+        (assert (= (kn/genLineOf 3 (list) (list card)) "(:know :gen :files 3 :other (\"a\"))") "genLineOf reports a card no group lists as other")
+        true))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
+        (a0 (tierPure))
         (a (examplesRun))
         (b (cardsFresh root))
         (c (ratchetShrinks root))
@@ -198,4 +209,4 @@ fn ! runTests -> Bool
         (g (tierLows root))
         (h (indexDistinct root))
         (i (queries root))]
-    (and a (and b (and c (and d (and e (and f (and g (and h i)))))))))
+    (and a0 (and a (and b (and c (and d (and e (and f (and g (and h i))))))))))
