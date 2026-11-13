@@ -34,6 +34,11 @@ fn ! pidBy! path: String deadlineNs: Int64 -> Int64
   (let [(p (pidIn! path))]
     (if (or (> p 1) (> (monotonicNs) deadlineNs)) p (do (sleepMs 100) (pidBy! path deadlineNs))))
 
+; (:m :ref BOUNDED-SENTINEL-PS-LATENCY :do "the count of processes whose command line matches pattern, polled every 200 ms until it is 0 or deadlineNs passes; pgrep leaves itself out")
+fn ! quietBy! pattern: String deadlineNs: Int64 -> Int64
+  (let [(n (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit (fr/runOneLimited (fr/job (list "pgrep" "-f" pattern) "/" (fr/childEnv (list))) (fr/limits 10 8)).out "\n"))))]
+    (if (or (= n 0) (> (monotonicNs) deadlineNs)) n (do (sleepMs 200) (quietBy! pattern deadlineNs))))
+
 ; (:m :ref BOUNDED-LAUNCHER-GROUP :do "true once pid is gone (or a zombie), polled every 200 ms up to deadlineNs")
 fn ! goneBy! pid: Int64 deadlineNs: Int64 -> Bool
   (cond
@@ -59,7 +64,7 @@ fn ! killedLauncher! root: String dir: String secs: String tag: String env: (Lis
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (m (mod (procSelf) 90))
-        (sa (stringFromInt64 (+ 100 m)))
+        (sa (stringFromInt64 (+ 1000 m)))
         (sb (stringFromInt64 (+ 200 m)))
         (sc (stringFromInt64 (+ 300 m)))
         (sd (stringFromInt64 (+ 400 m)))
@@ -109,8 +114,8 @@ fn ! runTests -> Bool
         (lkWrapperGone (goneBy! (optionOr (listGet lk 0) 0) (+ (monotonicNs) 10000000000)))
         (lkSleeperGone (goneBy! (optionOr (listGet lk 1) 0) (+ (monotonicNs) 10000000000)))
         (lkLeft (+ (killOwn! (optionOr (listGet lk 1) 0) (str "sleep " sl)) (killOwn! (optionOr (listGet lk 0) 0) dir)))
-        ; (:m :ref BOUNDED-SENTINEL-PS-LATENCY :do "the same kill with every ps the launcher and its sentinel start made slow from the kill on (the samples that found the command stay fast): a PATH shim in this run's dir prints the real ps and then sleeps 3 s (mark post: ages 3 s behind a wall read after ps), or sleeps 5 s and then prints it (mark pre: ages 5 s ahead of a wall read before ps, which the one-ps-run slack covers)")
-        (shim (do (dirCreate (str dir "/shim")) (fileWrite (str dir "/shim/ps") (str "#!/bin/sh\ngrep -q pre " dir "/slow 2>/dev/null && sleep 5\n/bin/ps \"$@\"\nrc=$?\ngrep -q post " dir "/slow 2>/dev/null && sleep 3\nexit $rc\n")) (fileChmod (str dir "/shim/ps") 493) true))
+        ; (:m :ref BOUNDED-SENTINEL-PS-LATENCY :do "the same kill with every ps the launcher and its sentinel start made slow from the kill on (the samples that found the command stay fast): a PATH shim in this run's dir prints the real ps and then sleeps 5 s (mark post: ages 5 s behind a wall read after ps), or sleeps 5 s and then prints it (mark pre: ages 5 s ahead of a wall read before ps, which the one-ps-run slack covers)")
+        (shim (do (dirCreate (str dir "/shim")) (fileWrite (str dir "/shim/ps") (str "#!/bin/sh\ngrep -q pre " dir "/slow 2>/dev/null && sleep 5\n/bin/ps \"$@\"\nrc=$?\ngrep -q post " dir "/slow 2>/dev/null && sleep 5\nexit $rc\n")) (fileChmod (str dir "/shim/ps") 493) true))
         (sp (killedLauncher! root dir sk "s" (list (str "PATH=" dir "/shim:" (optionOr (envGet "PATH") "/usr/bin:/bin"))) (str dir "/slow") "post"))
         (spSleeperGone (goneBy! (optionOr (listGet sp 1) 0) (+ (monotonicNs) 40000000000)))
         (spWrapperGone (goneBy! (optionOr (listGet sp 0) 0) (+ (monotonicNs) 10000000000)))
@@ -120,6 +125,7 @@ fn ! runTests -> Bool
         (ppSleeperGone (goneBy! (optionOr (listGet pp 1) 0) (+ (monotonicNs) 40000000000)))
         (ppWrapperGone (goneBy! (optionOr (listGet pp 0) 0) (+ (monotonicNs) 10000000000)))
         (ppLeft (+ (killOwn! (optionOr (listGet pp 1) 0) (str "sleep " sq)) (killOwn! (optionOr (listGet pp 0) 0) dir)))
+        (slowLeft (quietBy! (str dir "/(lw[sp]|shim)") (+ (monotonicNs) 30000000000)))
         (_ (pathRemove (str dir "/slow")))
         (_ (pathRemove (str dir "/shim/ps")))
         (_ (pathRemove (str dir "/shim")))
@@ -154,11 +160,12 @@ fn ! runTests -> Bool
         (assert lkSleeperGone (str "a SIGKILL of the launcher alone takes its command's sleeper with it within 10 s (left for the cleanup kill: " (stringFromInt64 lkLeft) ")"))
         (assert lkWrapperGone "and the command's wrapper sh")
         (assert (and (> (optionOr (listGet sp 0) 0) 1) (> (optionOr (listGet sp 1) 0) 1)) (str "the slow-ps launcher's command recorded its pids: " (stringJoin (map stringFromInt64 sp) " ")))
-        (assert spSleeperGone (str "with ps slowed 3 s at kill time the sentinel still kills the real command within 40 s (left for the cleanup kill: " (stringFromInt64 spLeft) ")"))
+        (assert spSleeperGone (str "with ps slowed 5 s after it reads at kill time the sentinel still kills the real command within 40 s (left for the cleanup kill: " (stringFromInt64 spLeft) ")"))
         (assert spWrapperGone "and its wrapper sh")
         (assert (and (> (optionOr (listGet pp 0) 0) 1) (> (optionOr (listGet pp 1) 0) 1)) (str "the slow-before-ps launcher's command recorded its pids: " (stringJoin (map stringFromInt64 pp) " ")))
         (assert ppSleeperGone (str "with ps delayed 5 s before it reads, so its ages run 5 s behind the wall read before it, the slack of one ps run still lets the sentinel kill the command within 40 s (left: " (stringFromInt64 ppLeft) ")"))
         (assert ppWrapperGone "and its wrapper sh")
+        (assert (= slowLeft 0) (str "the slow-ps launchers, their sentinels and every shim ps are gone before the shim is removed (left: " (stringFromInt64 slowLeft) ")"))
         (assert (= (bd/parseArgs (list "5" "--max-desc" "9" "--" "a" "b")).maxDesc 9) "parseArgs reads --max-desc")
         (assert (= (bd/parseArgs (list "5" "--" "a" "b")).maxDesc 64) "parseArgs defaults maxDesc to 64")
         (assert (stringStartsWith? treeReceipt "(:bounded :verdict :timeout :exit 124 :secs 15 ") (str "a run killed at SECS leaves a timeout receipt line: " treeReceipt))
