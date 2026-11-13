@@ -94,7 +94,10 @@ fn testNonFinite! -> Bool
       (assert (= (errOf (ds/variance (list 1.0e308 -1.0e308))) "statsRange: the variance overflows Float64") "1e308 and -1e308 have a variance past Float64 max: statsRange, not ok inf")
       (assert (= (errOf (ds/popVariance (list 1.0e308 -1.0e308))) "statsRange: the variance overflows Float64") "popVariance refuses the same overflow")
       (assert (let [(xs (map (fn [(i Int64)] -> Float64 (if (= (mod i 2) 0) 2.0e153 -2.0e153)) (range 0 100)))] (near? (/ (val (ds/variance xs)) (* 4.0e306 (/ 100.0 99.0))) 1.0 1.0e-12)) "100 values of +-2e153: the squares sum past max (4e308), the variance 4.04e306 is not, and comes back from the scaled sum")
-      (assert (let [(src (resultOr (fileReadString "asl/packages/asl-stats/src/agree.asl") ""))] (and (stringContains? src "ds/finiteValue?") (not (stringContains? src "fn finite?")))) "agree.asl uses describe finiteValue? and keeps no finite check of its own")
+      (assert (= (match (ag/ranks (list 1.0 (- 0.0 inf) 3.0)) ((err e) e) ((ok _) "")) "statsRange: a value is NaN or infinite") "ranks refuses -inf: agree's finite check covers both infinities")
+      (assert (= (match (ag/ranks (list inf 1.0)) ((err e) e) ((ok _) "")) "statsRange: a value is NaN or infinite") "ranks refuses +inf")
+      (assert (= (errOf (ag/spearman (list 1.0 2.0 3.0) (list 1.0 (- 0.0 inf) 3.0))) "statsRange: a value is NaN or infinite") "spearman refuses -inf in y")
+      (assert (= (errOf (ag/pearson (list (- 0.0 inf) 2.0 3.0) (list 1.0 2.0 3.0))) "statsRange: a value is NaN or infinite") "pearson refuses -inf in x")
       true))
 
 fn testRank! -> Bool

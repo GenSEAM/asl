@@ -92,7 +92,7 @@ fn ! testClamp! -> Bool
       (assert (near? v -1381.3969051166 1.0e-9) (str "log gamma(0.5) with u = 0 is log(7/6) + log(1e-300)/0.5 = -1381.3969051166, got " (stringFromFloat64 v)))
       true))
 
-; (:m :ref STATSLOWS-LOWS :do "a tiny-shape beta stream is pinned to its seed: from seed 2026 the side (above or below 1/2) of each of the first 40 draws and the count above 1/2 among 300 are exact, so a mirrored or reordered log-gamma ratio flips them; the 0.15 mean band in testDraws! stays only as a sanity bound")
+; (:m :ref STATSLOWS-LOWS :do "a tiny-shape beta stream is pinned to its seed: from seed 2026 the side (above or below 1/2) of each of the first 40 draws and the count above 1/2 among 300 are exact, so a mirrored ratio or a reordered draw flips them; the 0.09 mean band in testDraws! stays only as a sanity bound, and a boost that draws u before g (same law, other stream) passes the band, the beta(2,3) oracle and the zero-stream clamp while the pin goes red")
 fn ! testTinySeeded! -> Bool
   (let [(tiny (betas! 0.001 0.001 300 (rg/rngSeed 2026)))
         (k (ones tiny))
