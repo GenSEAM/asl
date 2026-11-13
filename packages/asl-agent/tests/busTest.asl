@@ -1,6 +1,6 @@
 (module aslAgent/tests/busTest
   :x [runTests]
-  :i [(aslAgent/bus :a bus)
+  :i [(aslGateway/bus :a bus)
       (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref SIGNAL-LEON-DONE :do "the shared terminal-run inbox on a scratch HOME, never the real one: whole single-line rows, the lock serialises writers, waitFor returns the row, a deadline returns none, a row that lands mid-wait is found")

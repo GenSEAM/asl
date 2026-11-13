@@ -23,7 +23,7 @@
       (aslAgent/gateIntegrity :a gi)
       (aslAgent/claims :a cl)
       (aslAgent/claimBacking :a cb)
-      (aslAgent/bus :a bus)
+      (aslGateway/bus :a bus)
       (aslAgent/agentConfig :a ac)
       (aslAgent/poolOps :a po)
       (aslGateway/codeRoute :a cr)

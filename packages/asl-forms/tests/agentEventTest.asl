@@ -1,6 +1,6 @@
 (module asl-forms/tests/agentEventTest
   :x [runTests]
-  :i [(asl-forms/delegate :a d) (aslAgent/bus :a bus)])
+  :i [(asl-forms/delegate :a d) (aslGateway/bus :a bus)])
 
 ; (:m :ref ULOOP-LOWS2 :do "the (:agent) dispatcher writes BusEvent rows the waiter parses, and skips its row when Leon already signalled the unit since the run started")
 fn ! runTests -> Bool

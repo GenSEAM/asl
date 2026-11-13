@@ -7,7 +7,6 @@
    "aslAgent/agentConfig"
    "aslAgent/aslOps"
    "aslAgent/attractor"
-   "aslAgent/bus"
    "aslAgent/card"
    "aslAgent/claimBacking"
    "aslAgent/claims"

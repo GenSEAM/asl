@@ -1,4 +1,4 @@
-(module aslAgent/bus
+(module aslGateway/bus
   :x [BusEvent busPath eventLine parseEvent emitTerminal! readEvents! findEvent waitFor! pollMs]
   :i [(aslGateway/wire :a wire)
       (aslGateway/config :a c)

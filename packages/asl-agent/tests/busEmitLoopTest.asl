@@ -1,6 +1,6 @@
 (module aslAgent/tests/busEmitLoopTest
   :x [runTests]
-  :i [(aslAgent/core :a c) (aslAgent/main :a m) (aslAgent/bus :a bus)
+  :i [(aslAgent/core :a c) (aslAgent/main :a m) (aslGateway/bus :a bus)
       (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/gitInitKit :a gk)])
 
 ; (:m :ref SIGNAL-LEON-DONE :do "a finished live run with a :unit appends exactly one row for that unit to the bus inbox under the run root's :busHome (a scratch dir, never the real HOME); a run without :unit appends none")
