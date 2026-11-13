@@ -121,7 +121,7 @@ fn ! testGatewayCliAndLifecycle -> Bool
             (expected (str "(:configCheck :file \"" invalidUtf8Path "\" :v 0 :registry \"" registry "\" :status :error :errors (\"'utf-8' codec can't decode byte 0xff in position 15: invalid start byte\") :warnings ())\n"))]
         (assert (= run.exitCode 1) "invalid UTF-8 config is rejected")
         (assert (= run.stdout expected) "invalid UTF-8 receipt matches Python capture")
-        (assert (= run.stderr "") "invalid UTF-8 diagnostics stay on the receipt channel"))
+        (assert (= run.stderr (str "gateway configCheck: FAILED " invalidUtf8Path ": do not reload this file, a running hub keeps its last good config and reports :configStale, a fresh start refuses it\n")) "GW-CONFIG-STALE-LOUD: the failed check adds one loud stderr line naming the file, the receipt stays on stdout"))
       (let [(run (cliInvoke (str runner " config check " invalidContinuationPath)))]
         (assert (= run.exitCode 1) "invalid UTF-8 continuation exits one")
         (assert (stringContains? run.stdout "invalid continuation byte") "invalid UTF-8 continuation matches Python's reason"))
