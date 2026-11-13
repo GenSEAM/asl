@@ -183,11 +183,15 @@ fn ! testLadderWiring -> Bool
         (nored (rs/reviewUnit! (gatewayText) (lanesText "zzNewModel") (pacesAt "20") "." "/nonexistent" (unit) "+ a" bad call))
         (zero (stringReplace (lanesText "zzNewModel") ":allowance 5" ":allowance 0"))
         (zeroFree (stringReplace (stringReplace (stringReplace zero ":alias orNemotronUltraFree :tier free :quality 0 :allowance 3" ":alias orNemotronUltraFree :tier free :quality 0 :allowance 0") ":alias ocLongcat :tier free :quality 0 :allowance 3" ":alias ocLongcat :tier free :quality 0 :allowance 0") "x" "x"))
-        (awaiting (rs/reviewUnit! (gatewayText) zeroFree (list) "." "/nonexistent" (unit) "+ a" good call))]
+        (awaiting (rs/reviewUnit! (gatewayText) zeroFree (list) "." "/nonexistent" (unit) "+ a" good call))
+        (stealth (rs/reviewUnit! (gatewayText) (lanesText "zzNewModel") (pacesAt "20") "." "/nonexistent" (with (unit) :writerAlias "zzNewModel") "+ a" good call))
+        (unlisted (rs/reviewUnit! (gatewayText) (lanesText "") (pacesAt "20") "." "/nonexistent" (with (unit) :writerAlias "zzNewModel") "+ a" good call))]
     (do (assert (match merged ((ok r) (= r.action "merge")) ((err _) false)) (str "two free reviewers pass with a redBefore receipt: " (match merged ((ok r) r.action) ((err e) e))))
         (assert (match merged ((ok r) (and (stringContains? r.models "+") (not (listEmpty? r.rows)))) ((err _) false)) "two models reviewed and a grade row came back")
         (assert (match nored ((ok r) (!= r.action "merge")) ((err _) true)) "without a redBefore row the ladder does not merge")
         (assert (match awaiting ((ok r) (and (= r.action "await") (not (stringEmpty? r.sig)))) ((err _) false)) (str "out-of-allowance free lanes await and name the lane: " (match awaiting ((ok r) (str r.action " " r.sig)) ((err e) e))))
+        (assert (match stealth ((ok r) (= r.action "merge")) ((err _) false)) (str "a writer listed :unknown is its own family and known lanes review it: " (match stealth ((ok r) (str r.action " " r.sig)) ((err e) e))))
+        (assert (match unlisted ((ok r) (and (= r.action "await") (stringContains? r.sig "writerFamily"))) ((err _) false)) (str "an unlisted writer with no family still waits: " (match unlisted ((ok r) (str r.action " " r.sig)) ((err e) e))))
         (assert (and (= (cd/rulingVerdict "merge") "pass") (= (cd/rulingVerdict "await") "defer")) "ruling maps to review verdicts")
         true))
 
