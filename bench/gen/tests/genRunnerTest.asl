@@ -1,7 +1,8 @@
 (module aslBench/gen/tests/genRunnerTest
   :x [runTests]
   :i [(aslBench/gen/core :a gc)
-      (aslBench/gen/score :a sc)])
+      (aslBench/gen/score :a sc)
+      (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref FABLE-LANG-01 :do "dry run of the bench end to end on three tasks and two arms with a fake model: a raw pass, a pass only after heal, a pass after one repair turn and an exhausted trial each land in their row, the budget stop fires before the first call, and the scorer refuses a comparison on missing trials")
 
@@ -61,6 +62,9 @@ fn ! testPure -> Bool
     (assert (= (gc/stageOfReply "" 0 0 "extract") "extract") "a zero output cap keeps the fallback")
     (assert (= (gc/stageOfReply "" 50 0 "extract") "extract") "a zero output cap keeps the fallback even past tokOut")
     (assert (= (gc/stageOfReply "" 1300 1200 "extract") "outputCap") "an empty reply past the output cap is stage outputCap")
+    (assert (= (gc/infraOf (fr/Done :idx 0 :exit 1 :out "FAIL candHealed.asl: ERR_NATIVE_UNSUPPORTED: compile unit failed: candHealed.nonEmpty@/x/candHealed.asl:3:1: [ERR_LOWER_UNKNOWN_CONSTRUCTOR] unknown construct" :ms 0 :verdict "exit") "heal") "") "a healed copy whose own unit fails to compile is a failed heal, not infrastructure and not nativeCli; the diagnostic names candHealed")
+    (assert (= (gc/infraOf (fr/Done :idx 0 :exit 1 :out "FAIL candHealed.asl: ERR_NATIVE_UNSUPPORTED: compile unit failed: candHealed.asl: launched" :ms 0 :verdict "exit") "heal") "") "a healed unit that fails before naming a symbol is still a failed heal, not infrastructure")
+    (assert (= (gc/infraOf (fr/Done :idx 0 :exit 1 :out "FAIL: ERR_NATIVE_UNSUPPORTED: the native CLI is stale" :ms 0 :verdict "exit") "heal") "nativeCli") "a native CLI failure that names no candidate unit stays infrastructure")
     true)
 
 fn ! testDryRun root: String -> Bool
