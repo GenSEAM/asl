@@ -85,6 +85,9 @@ fn ! allowlistGates! root: String -> Bool
       (assert (and (listContains? argv "--unshare-net") (not (listContains? (jl/bwrapArgs (with linux :net true)) "--unshare-net"))) "bwrap unshares the network unless :net true")
       (assert (= (listTake argv 6) (list "/usr/bin/bwrap" "--die-with-parent" "--unshare-pid" "--ro-bind" "/" "/")) "bwrap starts from its own process namespace and a read-only file system")
       (assert (stringContains? (c/joinSep argv " ") "--tmpfs /h --ro-bind /h/repo/.git /h/repo/.git --bind /r/unit /r/unit") "bwrap hides the real HOME, then binds reads read-only and writes read-write")
+      (assert (stringContains? (c/joinSep argv " ") "--tmpfs /tmp --tmpfs /run --tmpfs /h") "JAIL-LINUX D1: bwrap masks /run, where D-Bus, the user systemd manager and agent sockets listen, with an empty tmpfs")
+      (assert (and (not (listContains? argv "--ro-bind-try")) (stringContains? (c/joinSep (jl/bwrapArgs (with linux :net true)) " ") "--tmpfs /run --ro-bind-try /run/systemd/resolve /run/systemd/resolve")) "JAIL-LINUX D1: only a :net true jail gets the resolver directory back under the masked /run")
+      (assert (stringContains? (c/joinSep argv " ") "--bind /r/unit/.asl/run/agentLoop/home /r/unit/.asl/run/agentLoop/home --remount-ro /h --unshare-net") "JAIL-LINUX D3: bwrap seals the tmpfs over the real HOME read-only after every bind, so a write there is refused (EROFS) instead of vanishing")
       (assert (jl/denialText? "sh: x: Operation not permitted") "a seatbelt refusal is recognised in the output")
       true))
 

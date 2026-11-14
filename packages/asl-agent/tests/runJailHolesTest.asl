@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(aslAgent/runOps :a r) (aslAgent/aslOps :a o) (aslAgent/jail :a jl) (aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk) (asl-tools/fleet/run :a fr)])
 
-; (:m :ref FABLE-BLIND-03 :do "gate of the holes the grade of a59ebb44f left open, each asserted end to end with symbols that exist before the fix, so the file compiles there and fails on the claims: a test op is a jailed unit child (no credential name, no write outside the root); the cache variables name private directories, never the shared cache the harness runs with; a unit child has no ps outside the sandbox (the outsider carries a fake mark in its command line and its environment; macOS 26.1 ps prints no environment even unsandboxed, so the command line is what turns the assertion red) and cannot signal it; a refused jail never runs the command; temporary files go under TMPDIR and the refusal says so. Every path is under one /private/tmp/leonjail-holes-<ns> directory removed at the end; the key is a fake set only on fixture processes and only the count of ps lines naming it is kept, never ps output; the outsider is a sleep that ends by itself after 90 s and is killed with its tree. The asl test op clones the machine's shared caches into the fixture root (copy-on-write, read only on the shared side), as a real unit does")
+; (:m :ref FABLE-BLIND-03 :do "gate of the holes the grade of a59ebb44f left open, each asserted end to end with symbols that exist before the fix, so the file compiles there and fails on the claims: a test op is a jailed unit child (no credential name, no write outside the root); the cache variables name private directories, never the shared cache the harness runs with; a unit child has no ps outside the sandbox (the outsider carries a fake mark in its command line and its environment; macOS 26.1 ps prints no environment even unsandboxed, so the command line is what turns the assertion red) and cannot signal it; a refused jail never runs the command; temporary files go under TMPDIR and the refusal says so. JAIL-LINUX: the /tmp refusal is seatbelt behaviour; under bwrap /tmp is a private tmpfs, so the write succeeds inside the jail and the assertion is that it never reaches the shared /tmp. Every path is under one <tmp>/leonjail-holes-<ns> directory removed at the end (tmp is /private/tmp where that is a directory, else /tmp); the key is a fake set only on fixture processes and only the count of ps lines naming it is kept, never ps output; the outsider is a sleep that ends by itself after 90 s and is killed with its tree. The asl test op clones the machine's shared caches into the fixture root (copy-on-write, read only on the shared side), as a real unit does")
 fn ! runWith! ctx: r/RunCtx cmd: String -> String
   (let [res (r/execRunOp! (c/parseKv (str "(:step :op \"run\" :argv \"" (c/escapeAsn cmd) "\")")) ctx (r/newProcs) "r1" (fn [rel pre mode] true))]
     (r/serRec res.rec))
@@ -24,8 +24,16 @@ fn evilTestText sibling: String -> String
     "        names (fileWrite \"testopNames.txt\" (stringJoin (map (fn [r] (optionOr (listHead (stringSplit r \"=\")) r)) (envList)) \"\\n\"))]\n"
     "    (do (assert (ok? names) \"the env names were written inside the root\") true))\n")
 
+; (:m :ref JAIL-LINUX :do "D4: macOS keeps its fixtures under /private/tmp, the real path of /tmp there; Linux has no /private")
+fn ! tmpBase! -> String
+  (match (fileStat "/private/tmp") ((ok st) (if st.isDir "/private/tmp" "/tmp")) ((err _) "/tmp"))
+
+fn ! darwin? -> Bool
+  (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false))
+
 fn ! runTests -> Bool
-  (let [base (str "/private/tmp/leonjail-holes-" (stringFromInt64 (monotonicNs)))
+  (let [base (str (tmpBase!) "/leonjail-holes-" (stringFromInt64 (monotonicNs)))
+        mac (darwin?)
         root (str base "/root")
         sibling (str base "/sibling")
         shared (str base "/sharedCheck")
@@ -87,6 +95,7 @@ fn ! runTests -> Bool
       (assert (stringContains? refusedRun.out "ERR_RUN_SANDBOX_ABSENT") (str "the refusal names its error: " refusedRun.out))
       (assert (stringStartsWith? mktempSeen (str home "/tmp/")) (str "mktemp in a unit child lands under the private TMPDIR, got " mktempSeen))
       (assert (not tmpLeft) "a unit child cannot create a file in the shared /tmp")
-      (assert (and (stringContains? tmpRec "ERR_RUN_SANDBOX") (stringContains? tmpRec "$TMPDIR")) (str "the refusal of a /tmp write names TMPDIR: " tmpRec))
+      (assert (if mac (and (stringContains? tmpRec "ERR_RUN_SANDBOX") (stringContains? tmpRec "$TMPDIR")) (and (not tmpLeft) (stringContains? tmpRec "(sandbox \"os\")")))
+        (str (if mac "the refusal of a /tmp write names TMPDIR (seatbelt denies the shared /tmp)" "a /tmp write of a unit child stays in the jail's private tmpfs and never reaches the shared /tmp (bwrap: no refusal to report, the run is under the OS sandbox)") ": " tmpRec))
       (assert (ok? cleaned) "the fixture directory was removed")
       true))
