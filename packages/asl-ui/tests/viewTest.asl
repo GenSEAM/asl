@@ -1,0 +1,50 @@
+(module asl-ui/tests/viewTest
+  :x [runTests]
+  :i [(asl-ui/view :a ui) (asl-ui/semTokens :a t)])
+
+fn form name: String sent: Bool -> ui/View
+  (ui/stack (t/md) (ui/start)
+    [(ui/field "Name" name 1)
+     (ui/when sent (ui/note (t/success) (str "Thanks, " name)))
+     (ui/button "Send" (t/strong) 2)
+     (ui/text "We keep it private")])
+
+fn ids v: ui/View -> (List String)
+  (map (fn [i] i.id) (ui/items (ui/resolve v)))
+
+fn failures v: ui/View -> (List ui/Problem)
+  (match (ui/build v) ((ok item) []) ((err found) found))
+
+fn runTests -> Bool
+  (let [(open (ui/resolve (form "Ada" false)))
+        (done (ui/resolve (form "Ada" true)))
+        (twins (ui/row (t/sm) (ui/center) [(ui/button "Delete" (t/weak) 3) (ui/button "Delete" (t/weak) 4)]))
+        (fieldItem (optionOr (listGet open.kids 0) open))]
+    (assert (= (ids (form "Ada" true)) ["group0" "group0-textbox-name" "group0-status1" "group0-button-send" "group0-text3"]) "ids come from the parent path, the role and the label or slot")
+    (assert (= (ids (form "Ada" false)) ["group0" "group0-textbox-name" "group0-button-send" "group0-text3"]) "a false when leaves the ids of its siblings unchanged")
+    (assert (= (listLength done.kids) (+ (listLength open.kids) 1)) "a true when adds exactly its own node")
+    (assert (= (failures (form "Ada" true)) []) "the form has no problems")
+    (assert (match (ui/build (form "Ada" true)) ((ok item) (= item done)) ((err found) false)) "build returns the resolved tree")
+    (assert (= (failures twins) [(ui/clash "group0-button-delete")]) "two same-label buttons in one parent are a clash error")
+    (assert (= (failures (ui/row (t/sm) (ui/center) [(ui/keyed "first" (ui/button "Delete" (t/weak) 3)) (ui/keyed "second" (ui/button "Delete" (t/weak) 4))])) []) "explicit keys resolve the clash")
+    (assert (= (ids (ui/keyed "signUp" (ui/stack (t/sm) (ui/start) [(ui/keyed "row 7" (ui/button "Delete" (t/weak) 3))]))) ["signup" "signup-row-7"]) "a key replaces the derived segment at any depth")
+    (assert (= (failures (ui/stack (t/sm) (ui/start) [(ui/keyed "a" (ui/text "x")) (ui/keyed "a" (ui/text "y"))])) [(ui/clash "group0-a")]) "equal keys are a clash error")
+    (assert (= (failures (ui/stack (t/sm) (ui/start) [(ui/text "Same") (ui/text "Same")])) []) "equal static texts do not clash")
+    (assert (= (failures (ui/stack (t/sm) (ui/start) [(ui/button "  " (t/strong) 5) (ui/text "")])) [(ui/unnamed "group0-button-" (ui/buttonRole))]) "an interactive widget without a label is an error, a static one is not")
+    (assert (= (failures (ui/stack (t/sm) (ui/start) [(ui/stack (t/sm) (ui/start) [(ui/link "Docs" "/a")]) (ui/stack (t/sm) (ui/start) [(ui/link "Docs" "/b")])])) []) "same labels under different parents do not clash")
+    (assert (= fieldItem.role (ui/textboxRole)) "a field has the textbox role")
+    (assert (= fieldItem.label "Name") "a field carries its label")
+    (assert (= fieldItem.state (ui/valued "Ada")) "a field state is its value")
+    (assert (= fieldItem.msg (some 1)) "a field carries its message")
+    (assert (= (ui/resolve (ui/toggle "Dark" true 9)).state (ui/switched true)) "a toggle state is its position")
+    (assert (= (ui/resolve (ui/toggle "Dark" true 9)).role (ui/switchRole)) "a toggle has the switch role")
+    (assert (= (ui/resolve (ui/link "Docs" "/docs")).state (ui/valued "/docs")) "a link state is its target")
+    (assert (= (ui/resolve (ui/link "Docs" "/docs")).msg (none)) "a link sends no message")
+    (assert (= (map (fn [i] i.role) (ui/items (ui/resolve (ui/row (t/sm) (ui/end) [(ui/heading (ui/top) "T") (ui/image "Logo" "/l.png") (ui/note (t/warn) "n") (ui/text "p")])))) [(ui/groupRole) (ui/headingRole) (ui/imageRole) (ui/statusRole) (ui/staticRole)]) "each widget states its role")
+    (assert (= (ui/resolve (ui/keyed "k" (ui/button "Go" (t/strong) 6))).view (ui/button "Go" (t/strong) 6)) "an item holds the widget without its key")
+    (assert (= (ui/slug " Send now! ") "send-now-") "a slug is lower case with ASCII punctuation as dashes")
+    (assert (= (ui/slug "Имя 2") "Имя-2") "a slug keeps letters outside ASCII as written")
+    (assert (= (map ui/interactive? [(ui/buttonRole) (ui/textboxRole) (ui/switchRole) (ui/linkRole) (ui/staticRole) (ui/headingRole) (ui/statusRole) (ui/imageRole) (ui/groupRole)]) [true true true true false false false false false]) "button, textbox, switch and link are the interactive roles")
+    (assert (= (ui/problemText (ui/clash "a-b")) "two nodes share the id a-b; wrap one in (keyed \"name\" ...)") "a clash names the id and the remedy")
+    (assert (= (ui/problemText (ui/unnamed "a-button-" (ui/buttonRole))) "the button at a-button- has no label") "an unnamed widget names its role and place")
+    true)

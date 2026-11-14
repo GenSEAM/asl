@@ -24,5 +24,10 @@
    "asl-ui/vacuousMockDetector"
    "asl-ui/voiceBar"
    "asl-ui/workflowDag"
+   "asl-ui/semTokens"
+   "asl-ui/view"
+   "asl-ui/lowerHtml"
+   "asl-ui/harness"
+   "asl-ui/exampleForm"
  ]
- :dependencies ["asl-conform"])
+ :dependencies ["asl-conform" "asl-html"])
