@@ -193,12 +193,15 @@ fn ! liveLoop! l: gs/GatewayLoop r: gc/Req tries: Int64 timeoutMs: Int64 backoff
         (do (sleepMs backoffMs) (liveLoop! (pairFirst out) r (- tries 1) timeoutMs backoffMs lost)))
       (else (pair (pairFirst out) (withAbandoned rep r lost)))))
 
-; (:m :ref GENRUN-CROSSWIRE :do "root cause of the cross-wired rows: gs/linkSend! gives every call the same connection id, and a call that passes its limit returns while its request stays in flight on the loop; the loop then hands the next finished answer to whichever call is waiting, so a late answer to task A is read by the call for task B, and from then on answers are read in completion order. The link carries no request id to match on, so correlation is by connection: a call starts only on a loop that holds no request, answer or pool reply of an earlier call, and a loop that holds one is dropped for a fresh one opened from the same env, home and root (its breaker and spread state start empty); the abandoned request ends on its own upstream timeout and its answer is never read")
+; (:m :ref GENRUN-CROSSWIRE :do "root cause of the cross-wired rows: gs/linkSend! gives every call the same connection id, and a call that passes its limit returns while its request stays in flight on the loop; the loop then hands the next finished answer to whichever call is waiting, so a late answer to task A is read by the call for task B, and from then on answers are read in completion order. Correlation is by request id: each link call carries its own id, so a call may start on a loop that still holds a request, answer or pool reply of an earlier call, and a loop that holds one is kept as it is, never dropped for a fresh one; the abandoned request ends on its own upstream timeout and its answer is discarded by its own id: each link call carries an id, so a late answer is matched to the call that sent it and dropped once that call is gone. The link is therefore kept after an abandoned call, so its usage row is never lost; readyLink! opens only a link that carries no wiring, never one that is merely busy")
 fn linkIdle? l: gs/GatewayLoop -> Bool
   (and (listEmpty? l.conns) (and (listEmpty? l.replies) (listEmpty? l.outbox)))
 
+; (:m :ref GENRUN-READYLINK-REMOVE :do "a busy link is reused: a call that timed out leaves its own id on the loop and its late answer is discarded by that id, so liveOnce! no longer reopens on a non-idle link; only a link with no wiring, one never opened, is opened here")
 fn ! readyLink! l: gs/GatewayLoop -> (Result gs/GatewayLoop String)
-  (if (linkIdle? l) (ok l) (gs/linkOpen! l.env l.home l.rootDir l.families))
+  (match l.wiringText
+    ((none) (gs/linkOpen! l.env l.home l.rootDir l.families))
+    ((some _) (ok l)))
 
 fn ! liveOnce! l: gs/GatewayLoop r: gc/Req timeoutMs: Int64 -> (Pair gs/GatewayLoop gc/Reply)
   (match (readyLink! l)
