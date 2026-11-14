@@ -1496,6 +1496,7 @@ fn trainSig lines: (List String) -> String
       ((stringContains? receipt " :commitError ") (str "commitError " (quotedAfter receipt " :commitError \"")))
       ((not (listEmpty? reds)) (str "train red: " (stringJoin (listTake reds 3) " ")))
       ((not (stringEmpty? lost)) (str "train assertLoss: " (stringReplace lost "\"" "")))
+      ((stringContains? receipt "(:guardRefused :branch ") (str "guardRefused " (segment receipt "(:guardRefused :branch " " (:guard ")))
       (else "")))
 
 ; (:m :do "a train's own cause first (trainSig), else the first ERR line, else the last non-empty line, cut to 160 chars: the same failure gives the same signature")

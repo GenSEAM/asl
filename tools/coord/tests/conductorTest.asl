@@ -1136,8 +1136,10 @@ fn doneTrainOut -> String
 fn testTrainSig -> Bool
   (let [(killed (cd/gateSig (killedTrainOut)))
         (red (cd/gateSig (doneTrainOut)))
-        (plain (cd/gateSig "building\nsuite x: ERR_ASSERT: boom\ndone"))]
-    (do (assert (= killed "killed: timeout after 3600 s") (str "a killed train names the kill: " killed))
+        (plain (cd/gateSig "building\nsuite x: ERR_ASSERT: boom\ndone"))
+        (refused (cd/gateSig "(:train :head \"6468ddbaf4784df65d5681d979ebdc525ef486c7\" :branches (\"sh/COVER-UTILS-parseTimeout\") :red () (:guardRefused :branch \"sh/COVER-UTILS-parseTimeout\" :why (\"check asl/a/x.asl: ERR_TYPE_MISMATCH here\") (:guard :status :wouldBlock :rows 1 :blocking 1 :exempt () :unchecked ())))\n"))]
+    (do (assert (= refused "guardRefused \"sh/COVER-UTILS-parseTimeout\" :why (\"check asl/a/x.asl: ERR_TYPE_MISMATCH here\")") (str "a guard-refused train names the branch and the blocking rule, path and why: " refused))
+        (assert (= killed "killed: timeout after 3600 s") (str "a killed train names the kill: " killed))
         (assert (= red "train red: asl/a/aTest.asl") (str "a red train names its fresh red suite: " red))
         (assert (not (or (stringContains? killed "\\") (stringContains? red "\\"))) "no backslash from nested suite output")
         (assert (= plain "ERR_ASSERT: boom") (str "a plain gate output keeps its first ERR line: " plain))
