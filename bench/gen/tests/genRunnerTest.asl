@@ -155,7 +155,57 @@ fn ! testOutputCap root: String -> Bool
           (assert cleaned "the cap test work directory is removed")
           true))))
 
+; (:m :ref CARD-SIG-PROMOTE :do "the card chain: each arm's card file equals its derivation from llms.txt and sigNames.asn, each signature in the asl card is the registry type of its builtin, each listed builtin is called in cardLab/examplesTest.asl, and the lab arms load, the pre-promotion card among them")
+fn sigEntriesOf card: String lead: String -> (List String)
+  (match (stringIndexOf card lead)
+    ((none) (list))
+    ((some a)
+      (let [(body (gc/sliceFrom card (+ a (+ (stringLength lead) 1))))]
+        (stringSplit (gc/slice body 0 (- (stringLength body) 1)) "; "))))
+
+fn called? text: String name: String -> Bool
+  (or (stringContains? text (str "(" name " ")) (stringContains? text (str "(" name ")")))
+
+fn ! testCards root: String -> Bool
+  (let [(llms (resultOr (fileReadString (str root "/asl/llms.txt")) ""))
+        (names (resultOr (fileReadString (str root "/asl/bench/gen/cards/sigNames.asn")) ""))
+        (prelude (resultOr (fileReadString (str root "/asl/prelude/prelude.asn")) ""))
+        (examples (resultOr (fileReadString (str root "/asl/bench/gen/cardLab/examplesTest.asl")) ""))
+        (sigs (resultOr (gc/signatureSentence names prelude) ""))
+        (rows (resultOr (gc/cardSignatures names) (list)))
+        (onDisk (fn [(arm String)] -> String (resultOr (fileReadString (str root "/asl/bench/gen/cards/" arm ".txt")) "")))
+        (aslCard (onDisk "asl"))
+        (entries (sigEntriesOf aslCard "Builtin signatures, arguments in this order:"))
+        (fake "(:name \"zzOne\" :sec \"X\" :type \"Int64 -> Int64\" :src \"s\"\n :doc \"d\")\n(:name \"zzTwo\" :sec \"X\" :type \"String -> Bool\" :src \"s\"\n :doc \"d\")")
+        (fakeNames "(:sigs :lead \"Sigs:\")\n(:sig :name \"zzOne\")\n(:sig :name \"zzTwo\" :note \"a note\")")
+        (lab (resultOr (gc/loadCardsFor root (gc/labArms)) (list)))]
+    (assert (> (listLength rows) 20) "sigNames.asn lists the curated builtins")
+    (assert (not (stringEmpty? sigs)) "the signature sentence derives from sigNames.asn and the registry")
+    (assert (stringStartsWith? (resultOr (gc/languageSection llms) "") "An ASL file is a module header") "the section The language is cut at its first character")
+    (assert (= (listLength entries) (listLength rows)) "the asl card holds one signature per sigNames.asn row")
+    (assert (listAll? (fn [(p (Pair String (Pair String String)))] -> Bool
+                        (let [(name (pairFirst (pairSecond p)))]
+                          (match (gc/registryType prelude name)
+                            ((none) false)
+                            ((some t) (= (pairFirst p) (gc/signatureEntry name t (pairSecond (pairSecond p))))))))
+                      (zip entries rows))
+            "each signature in the asl card is its builtin's registry type")
+    (assert (listAll? (fn [(arm String)] -> Bool (and (not (stringEmpty? (onDisk arm))) (= (gc/cardFor arm llms sigs) (ok (onDisk arm))))) (gc/allArms))
+            "each arm's card file equals its derivation from llms.txt and sigNames.asn")
+    (assert (and (not (stringContains? (onDisk "aslParen") "Builtin signatures")) (not (stringContains? (onDisk "aslWrapFn") "Builtin signatures"))) "the surface variants carry no signature sentence")
+    (assert (listAll? (fn [(r (Pair String String))] -> Bool (called? examples (pairFirst r))) rows) "each builtin of the signature sentence is called in cardLab/examplesTest.asl")
+    (assert (= (gc/signatureSentence fakeNames fake) (ok "Sigs: zzOne Int64 -> Int64; zzTwo String -> Bool, a note.")) "types come from the registry rows, notes from the names file")
+    (assert (= (gc/signatureSentence fakeNames (stringReplace fake "String -> Bool" "String -> Int64")) (ok "Sigs: zzOne Int64 -> Int64; zzTwo String -> Int64, a note.")) "a retyped builtin changes the sentence")
+    (assert (err? (gc/signatureSentence fakeNames (stringReplace fake "zzTwo" "zzRenamed"))) "a renamed builtin fails the derivation")
+    (assert (= (gc/registryType prelude "mapEmpty") (some "() -> (Map K V)")) "the checker signature replaces the prelude.asn type, as (:help :builtin) prints it")
+    (assert (= (gc/registryType prelude "listFilter") (none)) "a guessed name is not in the registry")
+    (assert (err? (gc/cardFor "asl" llms "")) "the asl card is refused without its signature sentence")
+    (assert (= (listLength lab) (+ 5 (listLength (gc/labArms)))) "every lab arm loads with its recorded digest")
+    (assert (= (gc/cardOf lab "aslCardNoSig").tokens 799) "the pre-promotion card stays as lab arm aslCardNoSig")
+    (assert (and (not (stringContains? (gc/cardOf lab "aslCardNoSig").text "Builtin signatures")) (not (= (gc/cardOf lab "aslCardNoSig").text aslCard))) "aslCardNoSig is the card without the signature sentence")
+    true)
+
 fn ! runTests -> Bool
   (let [(given (optionOr (envGet "ASL_CLI_ROOT") "."))
         (root (resultOr (realPath given) given))]
-    (and (testPure) (testOutputCap root) (testDryRun root)))
+    (and (testPure) (testCards root) (testOutputCap root) (testDryRun root)))
