@@ -7,6 +7,7 @@
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor]
   :i [(aslAgent/core :a c)
       (aslAgent/agentConfig :a ac)
+      (aslAgent/jail :a jl)
       (aslAgent/diff :a diff)
       (aslAgent/txn :a t)
       (asl-json/json :a j)
@@ -345,9 +346,34 @@ fn envOverride key: String env: (Option (List String)) -> (Option String)
     ((none) (none))
     ((some row) (stringSlice row (+ (stringLength key) 1) (stringLength row))))
 
+; (:m :ref FABLE-BLIND-03 :do "an asl form run as a subprocess executes the unit's own files (a test op runs any .asl file the unit wrote, a check expands its macros), so it is a unit child like a run op: the allowlisted env of jail#childEnvIn! (no provider key, no harness setting) with private caches seeded from the shared ones, plus ASL_ROOT and, of rows the caller passes explicitly, the non-secret ASL_ ones; the argv goes through jail#jailWrap!, loopback-only network. A missing root or a binary that is absent or not executable keeps the plain spawn, which cannot start anything")
+fn explicitRow? row: String -> Bool
+  (let [name (jl/envKey row)]
+    (and (not (jl/secretName? name)) (and (stringStartsWith? name "ASL_") (not (listContains? (jl/cacheNames) name)))))
+
+fn ! jailedAsl! aslBin: String form: String rootDir: String env: (Option (List String)) -> (Pair (List String) (List String))
+  (let [absRoot (resultOr (realPath rootDir) rootDir)
+        toolRoot (if (stringEndsWith? aslBin "/bin/asl") (c/sliceOf aslBin 0 (- (stringLength aslBin) 8)) absRoot)
+        base (match env ((some rows) rows) ((none) (envList)))
+        extra (cons (str "ASL_ROOT=" (t/normPath rootDir))
+                (match env ((some rows) (filter (fn [r] (and (explicitRow? r) (not (stringStartsWith? r "ASL_ROOT=")))) rows)) ((none) (list))))
+        extraKeys (map jl/envKey extra)
+        rows (listAppend (filter (fn [r] (not (listContains? extraKeys (jl/envKey r)))) (jl/childEnvIn! absRoot base (list) (optionOr (envGet "HOME") "") true)) extra)
+        jail (jl/jailOf! absRoot (jl/jailHome absRoot) rows (list toolRoot) (list) false)]
+    (pair (jl/jailWrap! jail (list aslBin form)) rows))
+
+fn ! isDirAt! p: String -> Bool
+  (match (fileStat p) ((ok st) st.isDir) ((err _) false))
+
+fn ! runnable! p: String -> Bool
+  (match (fileStat p) ((ok st) (and st.isFile (!= (& st.mode 73) 0))) ((err _) false))
+
 fn ! runAslOnBin aslBin: String form: String rootDir: String timeoutSec: Int64 env: (Option (List String)) -> RunAslResult
-  (let [argv (list aslBin form)
-        childEnv (some (envWithAslRoot! rootDir env))
+  (let [jailed (if (and (isDirAt! rootDir) (runnable! aslBin))
+                 (jailedAsl! aslBin form rootDir env)
+                 (pair (list aslBin form) (envWithAslRoot! rootDir env)))
+        argv (pairFirst jailed)
+        childEnv (some (pairSecond jailed))
         res (runBounded argv (some rootDir) (some timeoutSec) childEnv)]
     (match res
       ((err m) (RunAslResult :exit 1 :stdout "" :stderr m :timedOut false :seconds 0 :fellBack ""))

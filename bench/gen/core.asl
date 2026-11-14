@@ -421,7 +421,7 @@ fn allArms -> (List String)
   (list "py" "ts" "asl" "aslParen" "aslWrapFn")
 
 fn labArms -> (List String)
-  (list "aslCardAsn" "aslCardContrast" "aslCardExample" "aslCardMin")
+  (list "aslCardAsn" "aslCardContrast" "aslCardExample" "aslCardMin" "aslCardStr")
 
 fn armKnown? arm: String -> Bool
   (or (listContains? (allArms) arm) (listContains? (labArms) arm))

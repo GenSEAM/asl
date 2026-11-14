@@ -111,6 +111,10 @@ fn callOf n: p/SexpNode root: String base: String -> (Pair String t/AslRun)
     (pair (place (strOf (at xs 1)) root base)
       (t/aslRun (optionOr (stringToInt64 (atomOf (at xs 2))) 0) (place (strOf (at xs 3)) root base) (place (strOf (at xs 4)) root base))))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "a run receipt names its boundary, (sandbox \"os\") or (sandbox \"lexical\") by what the machine offers; the recorded originals predate the field and do not depend on the machine, so it is dropped before comparing; runOsJailTest gates the field itself")
+fn noSandbox text: String -> String
+  (stringReplace (stringReplace text " (sandbox \"os\")" "") " (sandbox \"lexical\")" "")
+
 fn ! replayRun calls: (List (Pair String t/AslRun)) sentLog: String counter: String -> (fn [String String] -> t/AslRun)
   (fn [form rootDir]
     (let [k (optionOr (stringToInt64 (stringTrim (readOr counter))) 0)
@@ -142,7 +146,7 @@ fn ! execCase xs: (List p/SexpNode) base: String template: String repo: String e
         ctx (r/makeRunCtx root owns "leon" 60 (r/hiddenVars (strOf (at hiddenNode 0))) repo)
         killed (r/killSpawned! ctx out.procs onKeep)
         rec out.rec
-        got (str (x/serRec rec) "\n" (x/formatOpReceipt rec 8000) "\n" (logList (readOr snaps)) "\n" (logList (readOr keeps))
+        got (str (noSandbox (x/serRec rec)) "\n" (x/formatOpReceipt rec 8000) "\n" (logList (readOr snaps)) "\n" (logList (readOr keeps))
               "\n" (stringJoin (logItems (readOr sent)) " "))
         want (str (partStr xs "want") "\n" (stringJoin (map (fn [cl] (c/serString (pairFirst cl))) calls) " "))
         same (= got (place want root base))]

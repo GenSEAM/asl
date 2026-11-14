@@ -3,7 +3,7 @@
       makeGitCtx runBounded! isPathInRepo! lineArg gitSlice gitNextForm execGitOp!
       runGates! runGatesIn! runGatesPar! runGatesWatched! scratchTree! scratchDrop! gitText! gatePreflight! formatGatePreflight changedOwnedFiles!
       serRec serRecs recGet pyStrip pySplitLines pyNormpath pyRelpath! pyRealpath! pyRepr cpLength]
-  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg) (aslAgent/gates :a gd)])
+  :i [(aslAgent/core :a c) (aslAgent/agentConfig :a ac) (asl-tools/fleet/run :a fr) (asl-tools/vcs/git :a vg) (aslAgent/gates :a gd) (aslAgent/jail :a jl)])
 
 enum RVal
   (rStr text: String)
@@ -593,9 +593,23 @@ fn ! boundedOfEnd! root: String e: GateEnd -> Bounded
         errText (if (= verdict "maxDesc") (str own (if (or (stringEmpty? own) (stringEndsWith? own "\n")) "" "\n") "(:guard :maxDesc :limit " maxDesc ")\n") own)]
     (Bounded :code (if timedOut none (some o.exitCode)) :out (universalNewlines o.stdout) :errText (universalNewlines errText) :timedOut timedOut :guard verdict))
 
+; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: a gate runs the unit's own code, so its shell starts in the same jail as a run op: the OS sandbox of jail#jailOf! around the root and the jail home, loopback-only network, under the same guard as before (sandbox-exec and bwrap exec the shell, so the guard still sees one tree)")
+fn ! gateArgv! cmd: String root: String env: (List String) -> (List String)
+  (let [abs (pyAbspath! root)]
+    (if (= (cwdErrno! (some abs)) 0)
+      (jl/jailWrap! (jl/jailOf! abs (jl/jailHome abs) env (list) (list) false) (list "sh" "-c" cmd))
+      (list "sh" "-c" cmd)))
+
+; (:m :ref LEON-RUN-HOME-JAIL :do "the env of a gate child: the allowlist and jail home of jail#childEnv! when the root is a directory; a missing root keeps the plain rows, so the spawn still fails with the missing-directory message and no jail home is created under it")
+fn ! gateEnv! root: String env: (Option (List String)) -> (List String)
+  (let [abs (pyAbspath! root)]
+    (if (= (cwdErrno! (some abs)) 0)
+      (jl/childEnv! abs (envBase! env) (list))
+      (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")))
+
 fn ! runGate! cmd: String root: String timeoutSec: Int64 env: (List String) watch: (Option Int64) -> (Result Bounded String)
   (let [maxDesc (gateMaxDesc! root)]
-    (match (fr/guardStart! (list "sh" "-c" cmd) root env (fr/limits timeoutSec maxDesc))
+    (match (fr/guardStart! (gateArgv! cmd root env) root env (fr/limits timeoutSec maxDesc))
       ((err d) (err (startFailMsg! d root)))
       ((ok g) (ok (boundedOfEnd! root (gateLoop! g watch false))))))
 
@@ -647,7 +661,7 @@ fn ! parLoop! root: String childEnv: (List String) watch: (Option Int64) limit: 
         ((some p)
           (let [spec (pairSecond p)
                 rest (listDrop pending 1)]
-            (match (fr/guardStart! (list "sh" "-c" spec.cmd) root childEnv (fr/limits spec.sec (gateMaxDesc! root)))
+            (match (fr/guardStart! (gateArgv! spec.cmd root childEnv) root childEnv (fr/limits spec.sec (gateMaxDesc! root)))
               ((err d) (parLoop! root childEnv watch limit rest running
                          (listAppend done (list (pair (pairFirst p) (recOfRun spec.rid spec.cmd spec.sec root (err (startFailMsg! d root)) spec.extra))))))
               ((ok g) (parLoop! root childEnv watch limit rest
@@ -721,7 +735,7 @@ fn runGatesPar! gates: (List (Pair String String)) root: String timeoutSec: Int6
   (runGatesCap! gates root timeoutSec env watch (gd/gateTimesPath) limit)
 
 fn runGatesCap! gates: (List (Pair String String)) root: String timeoutSec: Int64 env: (Option (List String)) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
-  (let [childEnv (envWith (envBase! env) "PYTHONDONTWRITEBYTECODE" "1")
+  (let [childEnv (gateEnv! root env)
         st (fold (fn [(st (Pair Bool (List (List (Pair String RVal))))) (chunk (List (Pair String String)))] -> (Pair Bool (List (List (Pair String RVal))))
                    (let [failed (pairFirst st)
                          recs (if failed
