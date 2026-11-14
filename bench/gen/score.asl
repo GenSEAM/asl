@@ -1,5 +1,5 @@
 (module aslBench/gen/score
-  :x [main Row Header ArmStat ScoreOut rowOf headerOf statFor scoreText scoreTextWith rejectOf report! wilson permille pctText isqrt quantile statOf]
+  :x [main Row Header ArmStat ScoreOut rowOf headerOf statFor scoreText scoreTextWith rejectOf report! wilson permille pctText isqrt quantile statOf stageNames]
   :i [(aslBench/gen/core :a gc)])
 
 ; (:m :ref FABLE-LANG-01 :do "aggregates bench/gen trial rows into one table row per model and arm with Wilson 95 percent intervals, and prints the H1 to H4 comparisons only when every arm holds every planned trial")
@@ -61,7 +61,7 @@ fn uniqueStep acc: (List Row) r: Row -> (List Row)
   (if (listAny? (fn [(o Row)] -> Bool (= o.key r.key)) acc) acc (listAppend acc (list r)))
 
 fn stageNames -> (List String)
-  (list "ok" "extract" "parse" "check" "execute" "correct" "harness")
+  (list "ok" "extract" "outputCap" "parse" "check" "execute" "correct" "harness")
 
 fn statFor h: Header rows: (List Row) model: String arm: String -> ArmStat
   (let [(mine (filter (fn [(r Row)] -> Bool (and (= r.model model) (= r.arm arm))) rows))

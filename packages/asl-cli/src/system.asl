@@ -130,7 +130,7 @@ fn childEnv! extra: (List String) -> (List String)
         (names (map envName extra))
         (kept (filter (fn [(e String)] -> Bool
                         (let [(n (envName e))]
-                          (not (or (stringStartsWith? n "ASL_CLI_") (or (and dropHost (= n "ASL_HOST")) (listContains? names n))))))
+                          (not (or (and (stringStartsWith? n "ASL_CLI_") (not (= n "ASL_CLI_USER_PRELUDE"))) (or (and dropHost (= n "ASL_HOST")) (listContains? names n))))))
                       (envList)))]
     (listAppend kept extra))
 

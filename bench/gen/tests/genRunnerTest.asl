@@ -39,6 +39,28 @@ fn ! testPure -> Bool
     (assert (= (gc/dateOf 1794528000000000000) "2026-11-13") "epoch nanoseconds map to the civil date")
     (assert (= (sc/wilson 10 10) (pair 722 1000)) "the Wilson interval of 10 out of 10")
     (assert (= (sc/pctText (sc/permille 2 3)) "66.7") "a rate prints with one decimal")
+    (assert (= (gc/stageOfReply "" 1200 1200 "extract") "outputCap") "an empty reply at the output cap is stage outputCap")
+    (assert (= (gc/stageOfReply "" 100 1200 "extract") "extract") "an empty reply below the cap keeps the fallback")
+    (assert (= (gc/stageOfReply "code" 1200 1200 "extract") "extract") "a non-empty reply at the cap keeps the fallback")
+    (assert (= (gc/stageOfReply "" 1199 1200 "extract") "extract") "an empty reply just below the output cap keeps the fallback")
+    (assert (= (listGet (sc/stageNames) 2) (some "outputCap")) "the score lists outputCap right after extract so the firstFail tally counts it")
+    (assert (= (listLength (sc/stageNames)) 8) "the score lists eight stages including outputCap")
+    (assert (and (= (listGet (sc/stageNames) 1) (some "extract")) (= (listGet (sc/stageNames) 2) (some "outputCap"))) "extract sits right before outputCap in stageNames")
+    (assert (= (gc/stageOfReply "" 0 0 "extract") "extract") "a zero output budget keeps the fallback")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "cut off at the output token limit") "the outputCap repair says the reply was cut off")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "cut off at the output token limit before any code block") "the outputCap repair names the cut before any code block in one sentence")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "before any code block") "the outputCap repair says the cut came before any code block")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "code block first") "the outputCap repair asks for the code block first")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "shorter answer") "the outputCap repair asks for a shorter answer")
+    (assert (not (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "Tool output")) "the outputCap repair is not the ordinary stage text")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "outputCap" :output "" :failing (list))) "output token limit") "the outputCap repair names the output token limit")
+    (assert (stringContains? (gc/repairPrompt (gc/Grade :stage "check" :output "o" :failing (list))) "The solution failed at stage check") "a normal stage keeps the ordinary repair text")
+    (assert (not (stringContains? (gc/repairPrompt (gc/Grade :stage "check" :output "o" :failing (list))) "cut off at the output token limit")) "a normal stage never claims the reply was cut off")
+    (assert (= (gc/stageOfReply "" 100 0 "extract") "extract") "a non-positive output cap keeps the fallback")
+    (assert (= (gc/stageOfReply "" 100 (- 0 5) "extract") "extract") "a negative output cap keeps the fallback")
+    (assert (= (gc/stageOfReply "" 0 0 "extract") "extract") "a zero output cap keeps the fallback")
+    (assert (= (gc/stageOfReply "" 50 0 "extract") "extract") "a zero output cap keeps the fallback even past tokOut")
+    (assert (= (gc/stageOfReply "" 1300 1200 "extract") "outputCap") "an empty reply past the output cap is stage outputCap")
     true)
 
 fn ! testDryRun root: String -> Bool
@@ -99,7 +121,37 @@ fn ! testDryRun root: String -> Bool
     (assert cleaned "the work directory is removed")
     true)
 
+fn ! testOutputCap root: String -> Bool
+  (let [(work (resultOr (realPath (let [(d (str (optionOr (envGet "TMPDIR") "/tmp") "/aslBenchGenCapTest-" (stringFromInt64 (nowNs))))
+                                        (made (dirCreate d))]
+                                    d))
+                        ""))
+        (cards (resultOr (gc/loadCards root) (list)))
+        (ts (filter (fn [(t gc/Task)] -> Bool (= t.id "gcd")) (resultOr (gc/loadTasks root) (list))))]
+    (match (listHead ts)
+      ((none) false)
+      ((some t)
+        (let [(tr (gc/Trial :idx 0 :arm "py" :task t :model "fake" :rep 1))
+              (cfg (gc/Config :root root :aslBin (str root "/bin/asl") :work work :out (str work "/trials.asn") :repairs 1 :maxTokens 1200
+                              :priceIn 150000 :priceOut 600000 :capPico 1000000000000 :checkFirst true))
+              (capped (fn [(n Int64) (r gc/Req)] -> (Pair Int64 gc/Reply)
+                        (pair (+ n 1) (gc/Reply :text "" :tokIn 10 :tokOut cfg.maxTokens :served "fake" :error ""))))
+              (res (gc/runTrial! cfg cards tr capped 0 0))
+              (o (pairSecond res))
+              (stages (map (fn [(x gc/Turn)] -> String x.stage) o.turns))
+              (first (match (listHead o.turns) ((some x) x.stage) ((none) "")))
+              (cleaned (gc/removeDir! work))]
+          (assert (= first "outputCap") "a trial whose reply is empty at the cap fails first at outputCap, so turnLoop! must use stageOfReply and not g0.stage")
+          (assert (not (= first "extract")) "the capped trial's first stage is not the extract fallback, so turnLoop! does not use g0.stage directly")
+          (assert (= (match (listHead o.turns) ((some x) x.tokOut) ((none) 0)) cfg.maxTokens) "the capped trial's first turn records tokOut exactly at the configured maxTokens")
+          (assert (and (not o.rawPass) (not o.solved)) "the capped trial is neither a raw nor a solved pass")
+          (assert (listContains? stages "outputCap") "the trial's stages list holds outputCap")
+          (assert (= (listLength o.turns) 2) "the capped trial takes exactly one outputCap repair turn")
+          (assert (listAll? (fn [(x gc/Turn)] -> Bool (= x.stage "outputCap")) o.turns) "both the capped turn and its repair turn record outputCap, so turnLoop! uses stageOfReply and not g0.stage")
+          (assert cleaned "the cap test work directory is removed")
+          true))))
+
 fn ! runTests -> Bool
   (let [(given (optionOr (envGet "ASL_CLI_ROOT") "."))
         (root (resultOr (realPath given) given))]
-    (and (testPure) (testDryRun root)))
+    (and (testPure) (testOutputCap root) (testDryRun root)))
