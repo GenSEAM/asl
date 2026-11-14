@@ -2,12 +2,12 @@
   :x [runHealCommand! formatHealHelp healTarget maxAttempts]
   :i [(asl-forms/heal :a heal) (asl/packages/asl-cli/src/verify :a verify)])
 
-; (:m :do "asl heal FILE: runs the one heal pipeline (asl-forms/heal) on an .asl file and writes the repaired text back unless --dry-run; a file that already checks is left byte-identical; exit 0 only when nothing is left over")
+; (:m :do "asl heal FILE: runs the one heal pipeline (asl-forms/heal) on an .asl file and writes the repaired text back unless --dry-run; a file that already checks is left byte-identical; exit 0 when nothing is left over or only the rule-13 lint, which asl check does not report")
 
 fn formatHealHelp -> String
   (str "Usage: asl heal [--dry-run] [--max-attempts=<n>] <file.asl>\n\n"
        "Repairs generated ASL with named rules (" (stringJoin (heal/healRuleNames) " ") "); an edit is kept only when it lowers the checker's diagnostics.\n"
-       "A file that already checks is never changed. Prints (:heal :file F :written B :repaired (rule ...) :left (diag ...)); exit 1 when diagnostics are left.\n"
+       "A file that already checks is never changed. Prints (:heal :file F :written B :repaired (rule ...) :left (diag ...)); exit 1 when diagnostics other than the rule-13 lint are left.\n"
        "  --dry-run            report the repairs without writing the file\n"
        "  --max-attempts=<n>   cap the rule applications (default 24)\n")
 
@@ -39,7 +39,7 @@ fn ! healFile! path: String dryRun: Bool rounds: Int64 -> (Result String String)
               ((err e) (err (str "(:heal :file " (quoted path) " :status :failed :error ERR_IO :message " (quoted e) ")")))
               ((ok w)
                 (let [(body (stringReplace res.receipt "(:repaired" (str "(:heal :file " (quoted path) " :written " (if w "true" "false") " :repaired")))]
-                  (if (listEmpty? res.left) (ok body) (err body))))))))))
+                  (if (or (listEmpty? res.left) (heal/lintOnly? res.left)) (ok body) (err body))))))))))
 
 fn ! runHealCommand! args: (List String) -> (Result String String)
   (cond

@@ -95,7 +95,33 @@ fn testSymbolRename -> Bool
        (healsTo? "symbolRename" (str (hdr) "fn ! f n: Int64 -> Int64\n  (let [(p (println! n))]\n    n)\n") (str (hdr) "fn ! f n: Int64 -> Int64\n  (let [(p (println n))]\n    n)\n") (list))
        (healsTo? "symbolRename" (str (hdr) "fn f n: Int64 -> Int64\n  (listSun [n 1])\n") (str (hdr) "fn f n: Int64 -> Int64\n  (listSum [n 1])\n") (list "listSum" "listSort"))
        (healsTo? "symbolRename" "(module m :x [f addOne])\n\nfn addOne n: Int64 -> Int64\n  (+ n 1)\n\nfn f n: Int64 -> Int64\n  (add_one n)\n" "(module m :x [f addOne])\n\nfn addOne n: Int64 -> Int64\n  (+ n 1)\n\nfn f n: Int64 -> Int64\n  (addOne n)\n" (list))
-       (untouched? "symbolRename near-miss" (str (hdr) "fn f n: Int64 -> Int64\n  (listSum [n 1])\n")))
+       (untouched? "symbolRename near-miss" (str (hdr) "fn f n: Int64 -> Int64\n  (listSum [n 1])\n"))
+       (healsTo? "symbolRename" "(module m :x [f])\n\nfn f! n: Int64 -> Int64\n  (+ n 1)\n" (str (hdr) "fn f n: Int64 -> Int64\n  (+ n 1)\n") (list)))
+
+; (:m :ref HEAL-CLEAN-ARROW :do "an undefined export is renamed onto a fn only when exactly one fn of the text is a spelling variant of it (bang suffix, snake or kebab case, isX): a merely near name (decode for encode, solve1 and solve2 for solve) is another function, and two variants are a guess; those texts come back as given with ERR_UNDEFINED_EXPORT left")
+fn staysUndefined? label: String text: String -> Bool
+  (let [(res (h/healSourceWith text "m.asl" (mapEmpty) (list)))]
+    (assert (and (= res.text text) (not res.changed)) (str label ": no fn is renamed onto the export, got " res.text " receipt " res.receipt))
+    (assert (listAny? (fn [(d ty/Diagnostic)] -> Bool (= d.code "ERR_UNDEFINED_EXPORT")) res.left) (str label ": ERR_UNDEFINED_EXPORT is left, got " res.receipt))
+    true)
+
+fn testExportRename -> Bool
+  (and (healsTo? "symbolRename" "(module m :x [solveIt])\n\nfn solve_it n: Int64 -> Int64\n  (+ n 1)\n" "(module m :x [solveIt])\n\nfn solveIt n: Int64 -> Int64\n  (+ n 1)\n" (list))
+       (staysUndefined? "near name" "(module m :x [encode])\n\nfn decode n: Int64 -> Int64\n  (+ n 1)\n")
+       (staysUndefined? "two near names" "(module m :x [solve])\n\nfn solve1 n: Int64 -> Int64\n  (+ n 1)\n\nfn solve2 n: Int64 -> Int64\n  (+ n 2)\n")
+       (staysUndefined? "two spelling variants" "(module m :x [solve])\n\nfn solve! n: Int64 -> Int64\n  (+ n 1)\n\nfn solve_ n: Int64 -> Int64\n  (+ n 2)\n"))
+
+; (:m :ref HEAL-SYMBOLRENAME-ARROW :do "-> written as a call head is unbound and its nearest name is >: the call is renamed and the -> of the header line, of a header continued on a second line and of a lambda stay; a missing closer that still balances pulls the next header into a body and makes -> unbound with no call to rename, so nothing is renamed and every signature keeps its ->")
+fn testSignatureArrow -> Bool
+  (let [(pulled (str (hdr) "fn f n: Int64 -> Int64\n  (let [(g (fn [(x Int64)] -> Int64 (+ x 1)))]\n    (g n)\n\nfn h n: Int64 -> Int64\n  (+ n 1))\n"))
+        (res (h/healSourceWith pulled "m.asl" (mapEmpty) (list ">" "listSum")))]
+    (and (healsTo? "symbolRename" (str (hdr) "fn f n: Int64 -> Bool\n  (-> n 1)\n") (str (hdr) "fn f n: Int64 -> Bool\n  (> n 1)\n") (list ">" "listSum"))
+         (healsTo? "symbolRename" (str (hdr) "fn f n: Int64\n  -> Bool\n  (-> n 1)\n") (str (hdr) "fn f n: Int64\n  -> Bool\n  (> n 1)\n") (list ">" "listSum"))
+         (healsTo? "symbolRename" (str (hdr) "fn f xs: (List Int64) -> (List Int64)\n  (filter (fn [(x Int64)] -> Bool (-> x 0)) xs)\n") (str (hdr) "fn f xs: (List Int64) -> (List Int64)\n  (filter (fn [(x Int64)] -> Bool (> x 0)) xs)\n") (list ">" "listSum"))
+         (do (assert (stringContains? res.text "fn h n: Int64 -> Int64\n") (str "a header pulled into a body by a missing closer keeps its ->, got " res.text))
+             (assert (stringContains? res.text "(fn [(x Int64)] -> Int64 (+ x 1))") (str "the lambda next to it keeps its ->, got " res.text))
+             (assert (not (listContains? res.repaired "symbolRename")) (str "no -> is renamed where every one is a signature arrow, got " res.receipt))
+             true)))
 
 ; (:m :ref EFFECT-INFER :do "InferWhatCanBeInferred (2026-10-16): ! is optional and the checker infers an unmarked effect, so the plain fixture no longer reports ERR_EFFECT_UNMARKED and effectMark has nothing to repair; m.asl has no manifest.asn on disk, so it is never a :pure package. testEffectMarkPure below proves the rule still does its job for real, against a genuine :pure package on disk (packagePure! reads the filesystem by path).")
 fn testEffectMark -> Bool
@@ -142,9 +168,21 @@ fn testEdits -> Bool
     (assert (= (h/editDistance "kitten" "sitting") 3) "edit distance kitten/sitting")
     true)
 
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "a text whose only diagnostic is the rule-13 lint passes asl check, so heal returns it byte-identical with the lint left: no clause of its cond is swapped and exportAdd does not fire")
+fn lintLeft? label: String text: String -> Bool
+  (let [(ds (h/healDiags text (mapEmpty) "m.asl"))
+        (res (h/healSourceWith text "m.asl" (mapEmpty) (list)))]
+    (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) ds) (list "rule-13")) (str label ": the fixture has the rule-13 lint and nothing else, got " (stringJoin (map h/diagText ds) " | ")))
+    (assert (and (= res.text text) (not res.changed)) (str label ": a text that passes asl check is returned byte-identical, got " res.text " receipt " res.receipt))
+    (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) res.left) (list "rule-13")) (str label ": the lint is left in the receipt, got " res.receipt))
+    true)
+
 ; (:m :do "STATICHINT gap 2: exportAdd appends a name this module declares to its :x when every diagnostic is an export one; the near-miss with an unrelated second error is left alone")
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "the exportAdd fixture is a text that does not check (a stray closer): once the closer is gone only the lint is left, and from there exportAdd is the repair, not a swapped cond clause that trades the lint for type errors")
 fn testExportAdd -> Bool
-  (and (healsTo? "exportAdd" "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n" "(module m :x [f Foo])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n" (list))
+  (and (healsTo? "exportAdd" "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  (cond ((> x.a 0) 1) (else 0)))\n" "(module m :x [f Foo])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  (cond ((> x.a 0) 1) (else 0))\n" (list))
+       (lintLeft? "cond under the lint" "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  (cond ((> x.a 0) 1) (else 0))\n")
+       (lintLeft? "lint alone" "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n")
        (untouched? "exportAdd near-miss" "(module m :x [f Foo])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n")
        (let [(res (h/healSourceWith "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  (zzqq x.a)\n" "m.asl" (mapEmpty) (list)))]
          (do (assert (not (listContains? res.repaired "exportAdd")) (str "exportAdd waits while another error remains, got " res.receipt))
@@ -181,6 +219,15 @@ fn ! testImportsUnloaded -> Bool
                   (assert (stringContains? res.receipt "nope/missingMod") (str "the left diagnostic names the module, got " res.receipt))
                   true)))
 
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "heal!, the entry asl heal runs, holds the same identity once the imports are loaded: a text with the rule-13 lint and nothing else comes back as given, the lint left")
+fn ! testHealBangLintIdentity -> Bool
+  (let [(text "(module m :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n")]
+    (match (h/heal! "m.asl" text (list ".") "asl/prelude/prelude.asl" 24)
+      ((err e) (do (assert false (str "heal! failed: " e)) false))
+      ((ok res) (do (assert (and (= res.text text) (not res.changed)) (str "heal! returns a text that passes asl check byte-identical, got " res.text " receipt " res.receipt))
+                    (assert (= (map (fn [(d ty/Diagnostic)] -> String d.code) res.left) (list "rule-13")) (str "heal! leaves the lint in the receipt, got " res.receipt))
+                    true))))
+
 fn ! runTests -> Bool
   (and (testDelimiterBalance) (testLineHeader) (testFreeComment) (testRetiredSpelling) (testFnHeaderUnwrap) (testBodyIndent) (testCondClauses)
-       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testEffectMark) (testEffectMarkPure) (testExportAdd) (testImportAdd) (testImportAddIndex) (testImportsUnloaded) (testUnrepairableIsReported) (testEdits))
+       (testLetBindingVector) (testTestPredicate) (testSymbolRename) (testExportRename) (testSignatureArrow) (testEffectMark) (testEffectMarkPure) (testExportAdd) (testImportAdd) (testImportAddIndex) (testImportsUnloaded) (testHealBangLintIdentity) (testUnrepairableIsReported) (testEdits))
