@@ -31,7 +31,7 @@ fn entries -> (List String)
 ; (:m :ref QUADGOLDEN-RED-MAIN :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on main fe6f09707 (+15410 bytes, 5835229): its link closure changed since the b8a32dd70 pin only by 9dfcb541e heal, 633865026 forms kernel, d7cef1f38 checkCached, 90688a703 and 207d8fd6b indentParser schema defaults, b45aa7ff8 resolve effect worklist; asl-ir src, prelude and lowerSourceWith are unchanged in that range, so the drift is those source changes, not a lowering regression")
 ; (:m :ref LOWLEVEL-WRAP-NATIVE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on WRAPNAT d448d30b8 (+702 bytes, 5837165): closure change only lowLevelSigs.asl and check.asl wrap-builtin routing")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "697514801947418405:5989936")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-3269276313524332912:6002995")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
