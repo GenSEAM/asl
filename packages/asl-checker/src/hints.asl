@@ -1,5 +1,5 @@
 (module asl-checker/hints
-  :x [Hint hintTable unboundName diagKind hintFor headerExports exportersOf! Prior priorTable priorFor priorNames priorFix]
+  :x [Hint hintTable unboundName diagKind hintFor headerExports exportersOf! Prior priorTable priorFor priorNames priorFix headerFixes]
   :i [(asl-checker/types :a ty) (asl-checker/resolve :a r)])
 
 ; (:m :do "STATICHINT 2026-10-28: one short ASN hint per checker diagnostic, chosen by a data table (code plus a message fragment); the two context hints, nearest known name and exporting module, are built by the caller from heal symbolCandidates and exportersOf! and passed in, so no name-matching logic is copied here")
@@ -124,3 +124,143 @@ fn ! exportersOf! root: String names: (List String) -> (Map String (List String)
                           (if (listContains? ex n) (mapSet a n (listAppend (optionOr (mapGet a n) (list)) (list m.name))) a))
                         acc names))))
             (mapEmpty) ix.mods)))
+
+; (:m :ref FABLE-LANG-02 :do "fn header repair: a column-0 line shaped as (defn n [a b]), (define (n a b)), a wrapped (fn n [a: T]) with colon params, a Python def n(a: T) -> R: or fn n(a: T) -> R:, or a canonical header whose body starts in column 0, maps to the canonical fn header of that very function; untyped params print a: T and a missing return prints R")
+(schema TokSt (:f cur String) (:f depth Int64) (:f out (List String)))
+
+fn flushTok st: TokSt -> TokSt
+  (if (stringEmpty? st.cur) st (with (with st :out (listAppend st.out (list st.cur))) :cur ""))
+
+fn tokStep seps: (List String) st: TokSt c: String -> TokSt
+  (cond
+    ((and (= st.depth 0) (listContains? seps c)) (flushTok st))
+    ((or (= c "(") (= c "[")) (with (with st :cur (str st.cur c)) :depth (+ st.depth 1)))
+    ((or (= c ")") (= c "]")) (if (= st.depth 0) (flushTok st) (with (with st :cur (str st.cur c)) :depth (- st.depth 1))))
+    (else (with st :cur (str st.cur c))))
+
+fn splitTop s: String seps: (List String) -> (List String)
+  (let [(st (flushTok (fold (fn [(acc TokSt) (c String)] -> TokSt (tokStep seps acc c)) (TokSt :cur "" :depth 0 :out (list)) (stringChars s))))]
+    st.out)
+
+fn dropColon s: String -> String
+  (if (stringEndsWith? s ":") (slice s 0 (- (stringLength s) 1)) s)
+
+fn nonEmpty xs: (List String) fallback: String -> String
+  (if (listEmpty? xs) fallback (stringJoin xs " "))
+
+fn groupParam t: String -> String
+  (let [(ws (splitTop (slice t 1 (- (stringLength t) 1)) (list " ")))]
+    (str (dropColon (optionOr (listHead ws) "x")) ": " (nonEmpty (optionOr (listTail ws) (list)) "T")))
+
+fn paramsFromTokens ts: (List String) -> (List String)
+  (match (listHead ts)
+    ((none) (list))
+    ((some t)
+      (let [(rest (optionOr (listTail ts) (list)))]
+        (cond
+          ((and (stringEndsWith? t ":") (not (listEmpty? rest)))
+            (cons (str t " " (optionOr (listHead rest) "T")) (paramsFromTokens (optionOr (listTail rest) (list)))))
+          ((stringStartsWith? t "(") (cons (groupParam t) (paramsFromTokens rest)))
+          (else (cons (str t ": T") (paramsFromTokens rest)))))))
+
+fn unwrap t: String -> String
+  (slice t 1 (- (stringLength t) 1))
+
+fn retAfter ts: (List String) -> String
+  (match (listFind (fn [(t String)] -> Bool (= t "->")) ts)
+    ((none) "R")
+    ((some _) (let [(after (optionOr (listTail (dropUntilArrow ts)) (list)))] (optionOr (listHead after) "R"))))
+
+fn dropUntilArrow ts: (List String) -> (List String)
+  (match (listHead ts)
+    ((none) (list))
+    ((some t) (if (= t "->") ts (dropUntilArrow (optionOr (listTail ts) (list))))))
+
+fn headerText name: String params: (List String) ret: String -> String
+  (str "fn " name " " (if (listEmpty? params) "" (str (stringJoin params " ") " ")) "-> " ret)
+
+fn tokAt ts: (List String) i: Int64 -> String
+  (optionOr (listGet ts i) "")
+
+fn wrappedHeader line: String -> (Option String)
+  (let [(ts (splitTop (slice line 1 (stringLength line)) (list " " "\t")))
+        (head (tokAt ts 0))
+        (second (tokAt ts 1))
+        (foreign (listContains? (list "defn" "define" "def" "defun" "function") head))
+        (fnHead (listContains? (list "fn" "df") head))]
+    (cond
+      ((not (or foreign fnHead)) (none))
+      ((stringStartsWith? second "(")
+        (let [(inner (splitTop (unwrap second) (list " ")))]
+          (if foreign
+            (some (headerText (tokAt inner 0) (paramsFromTokens (optionOr (listTail inner) (list))) (retAfter ts)))
+            (none))))
+      ((stringStartsWith? (tokAt ts 2) "[")
+        (let [(raw (splitTop (unwrap (tokAt ts 2)) (list " ")))]
+          (if (or foreign (listAny? (fn [(t String)] -> Bool (stringEndsWith? t ":")) raw))
+            (some (headerText second (paramsFromTokens raw) (retAfter ts)))
+            (none))))
+      (foreign (some (headerText second (list) (retAfter ts))))
+      (else (none))))
+
+fn matchClose cs: (List String) i: Int64 depth: Int64 -> Int64
+  (match (listHead cs)
+    ((none) -1)
+    ((some c)
+      (let [(rest (optionOr (listTail cs) (list)))]
+        (cond
+          ((or (= c "(") (= c "[")) (matchClose rest (+ i 1) (+ depth 1)))
+          ((or (= c ")") (= c "]")) (if (= depth 0) i (matchClose rest (+ i 1) (- depth 1))))
+          (else (matchClose rest (+ i 1) depth))))))
+
+fn pyParam p: String -> String
+  (let [(parts (stringSplit (stringTrim p) ":"))
+        (nm (stringTrim (optionOr (listHead parts) "")))
+        (ty (stringTrim (stringJoin (optionOr (listTail parts) (list)) ":")))
+        (ty2 (optionOr (listHead (stringSplit ty "=")) ""))]
+    (str nm ": " (if (stringEmpty? (stringTrim ty2)) "T" (stringTrim ty2))))
+
+fn pyHeader line: String start: Int64 -> (Option String)
+  (let [(rest (slice line start (stringLength line)))
+        (nm (stringTrim (optionOr (listHead (stringSplit rest "(")) "")))]
+    (if (or (not (stringContains? rest "(")) (stringEmpty? nm) (stringContains? nm " ") (stringContains? nm ":"))
+      (none)
+      (let [(after (slice rest (+ (stringLength nm) 1) (stringLength rest)))
+            (close (matchClose (stringChars after) 0 0))]
+        (if (< close 0)
+          (none)
+          (let [(params (filter (fn [(p String)] -> Bool (not (stringEmpty? (stringTrim p)))) (splitTop (slice after 0 close) (list ","))))
+                (tail (stringTrim (slice after (+ close 1) (stringLength after))))
+                (ret (if (stringStartsWith? tail "->") (stringTrim (dropColon (stringTrim (slice tail 2 (stringLength tail))))) "R"))]
+            (some (headerText nm (map pyParam params) (if (stringEmpty? ret) "R" ret))))))))
+
+fn nextContent lines: (List String) i: Int64 -> (Option String)
+  (match (listGet lines i)
+    ((none) (none))
+    ((some l) (if (stringEmpty? (stringTrim l)) (nextContent lines (+ i 1)) (some l))))
+
+fn col0BodyStarts? l: String -> Bool
+  (and (not (stringStartsWith? l " ")) (and (not (stringStartsWith? l "\t"))
+    (not (listAny? (fn [(k String)] -> Bool (stringStartsWith? l k)) (list ";" "fn " "schema " "enum " "module" "exports " "import " "doc ")))))
+
+fn headerFix line: String lines: (List String) i: Int64 -> (Option String)
+  (cond
+    ((stringStartsWith? line "(") (wrappedHeader line))
+    ((stringStartsWith? line "def ") (pyHeader line 4))
+    ((stringStartsWith? line "fn ")
+      (match (pyHeader line 3)
+        ((some h) (some h))
+        ((none) (match (nextContent lines (+ i 1))
+                  ((some n) (if (col0BodyStarts? n) (some (stringTrim line)) (none)))
+                  ((none) (none))))))
+    (else (none)))
+
+fn headerFixesFrom ls: (List String) all: (List String) i: Int64 acc: (List (Pair Int64 String)) -> (List (Pair Int64 String))
+  (match (listHead ls)
+    ((none) (listReverse acc))
+    ((some l)
+      (headerFixesFrom (optionOr (listTail ls) (list)) all (+ i 1)
+        (match (headerFix l all i) ((some h) (cons (pair (+ i 1) h) acc)) ((none) acc)))))
+
+fn headerFixes src: String -> (List (Pair Int64 String))
+  (let [(ls (stringSplit src "\n"))] (headerFixesFrom ls ls 0 (list)))
