@@ -8,6 +8,9 @@ fn ! scratchBase! -> String
 fn onlyFileSource -> String
   "(module checkNoHostFixture/onlyFile :x [runTests] :i [])\n\nfn runTests -> Bool\n  true\n"
 
+fn asnFixtureSource -> String
+  "(:fixture :name checkAsn)\n"
+
 fn envName row: String -> String
   (optionOr (listHead (stringSplit row "=")) row)
 
@@ -55,8 +58,15 @@ fn ! preludeCheck binary: String root: String host: String prelude: String -> ru
                               (isolatedEnv root (list (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_CLI_USER_PRELUDE=" prelude))))
                      (run/limits 60 16))
 
-fn ! testPreludeOverrideWithoutHost binary: String root: String base: String poison: String -> Bool
+fn ! preludeCheckAsn binary: String root: String host: String prelude: String path: String -> run/Done
+  (run/runOneLimited (run/job (list binary "check" path) root
+                              (isolatedEnv root (list (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_CLI_USER_PRELUDE=" prelude))))
+                     (run/limits 60 16))
+
+fn ! testPreludeOverrideWithoutHost binary: String root: String base: String fixtureRoot: String poison: String -> Bool
   (let [(absent (str base "/absentHost"))
+        (asn (str fixtureRoot "/asnFixture.asn"))
+        (wroteAsn (ok? (fileWrite asn (asnFixtureSource))))
         (own (str root "/asl/prelude/prelude.asl"))
         (same (str base "/samePrelude.asl"))
         (other (str base "/userPrelude.asl"))
@@ -65,10 +75,11 @@ fn ! testPreludeOverrideWithoutHost binary: String root: String base: String poi
         (dOwn (preludeCheck binary root absent own))
         (dSame (preludeCheck binary root absent same))
         (dOther (preludeCheck binary root absent other))
+        (dAsn (preludeCheckAsn binary root absent other asn))
         (dHost (preludeCheck binary root poison other))
         (okLine "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl: (:checked 1 :summarised 0)")]
     (do
-      (assert (and copied wrote) "the two prelude files are written")
+      (assert (and copied wrote wroteAsn) "the prelude and .asn fixture files are written")
       (refute (fileExists? absent) "the host path names nothing")
       (assert (and (= dOwn.exit 0) (stringContains? dOwn.out okLine)) (str "the tree's own prelude as override checks natively: " dOwn.out))
       (assert (and (= dSame.exit 0) (stringContains? dSame.out okLine)) (str "a byte-identical prelude elsewhere checks natively: " dSame.out))
@@ -77,6 +88,8 @@ fn ! testPreludeOverrideWithoutHost binary: String root: String base: String poi
       (refute (stringContains? dOther.out okLine) "and no verdict from a prelude the user did not choose")
       (refute (listAny? (fn [(d run/Done)] -> Bool (or (stringContains? d.out "cannot run") (stringContains? d.out "notFound"))) (list dOwn dSame dOther)) (str "never the bare cannot-run line: " dOwn.out dOther.out))
       (refute (stringContains? dOther.out other) "the message does not print the variable's value")
+      (assert (= dAsn.exit 0) (str "a foreign prelude with no host checks a non-ASL argument natively: " dAsn.out))
+      (refute (stringContains? dAsn.out "ERR_HOST_ABSENT") (str "no absent-host refusal for a .asn argument: " dAsn.out))
       (assert (= dHost.exit 97) (str "an executable host still gets a real override: " dHost.out))
       true))
 
@@ -97,7 +110,7 @@ fn ! runTests -> Bool
       (let [(binary (optionOr built.binary ""))
             (r1 (testBareSweepIgnoresPoisonHost binary root fixtureRoot poison))
             (r2 (testSingleFileIgnoresPoisonHost binary root poison))
-            (r3 (testPreludeOverrideWithoutHost binary root base poison))
+            (r3 (testPreludeOverrideWithoutHost binary root base fixtureRoot poison))
             (removed (pathRemove base))]
         (do
           (assert (ok? removed) "scratch fixture tree removed")
