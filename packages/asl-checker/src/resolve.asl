@@ -1146,8 +1146,40 @@ fn invalidArmHead pat: rd/SExpr mod: ModuleSummary path: String acc: (List ty/Di
     ((rd/sexprAtom v) (if (or (mapHas? mod.funs v) (or (and (some? (ty/builtinSig v)) (not (or (isPreludeTag? v) (some? (ty/preludeUnionCases v))))) (listContains? (list "do" "begin" "if" "cond" "let" "match" "when" "unless" "fn" "lambda" "assert" "refute" "and" "or" "not") v))) (cons (makeDiag "ERR_INVALID_MT_ARM" "mt arm has an invalid pattern head" path) acc) acc))
     (_ acc))
 
+; (:m :ref CHECK-LOWER-CONSTRUCTOR :do "the lowering resolves an applied pattern head only against this module's cases, the prelude cases some none ok err, an alias/case of an import, and a bare case that exactly one enum of the direct imports declares, exported or not; every other head is its ERR_LOWER_UNKNOWN_CONSTRUCTOR, so the checker reports the same heads first: a list pattern ([a b], (list a b), (cons h t)), which the checker types as a List union but the lowering has no form for, and a bare case that two imported modules declare, where the checker picked the first exporter; the pattern text after 'in a match pattern: ' is what check.asl reads back to place the diagnostic")
+fn bareCaseOwners head: String mod: ModuleSummary deps: DepIndex -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (alias String)] -> (List (Pair String String))
+          (match (resolveDepIn (optionOr (mapGet mod.imports alias) "") deps)
+            ((ok target) (if (and (mapHas? target.caseOwner head) (not (listAny? (fn [(p (Pair String String))] -> Bool (= (pairSecond p) target.name)) acc)))
+                           (listAppend acc (list (pair alias target.name)))
+                           acc))
+            ((err _) acc)))
+        (list)
+        (listSort (mapKeys mod.imports)))
+
+fn unknownCtorDiag head: String pat: rd/SExpr why: String path: String -> ty/Diagnostic
+  (makeDiag "ERR_UNKNOWN_CONSTRUCTOR" (str "unknown constructor '" head "' in a match pattern: " (rd/renderSexpr pat) " is " why) path)
+
+fn listPatternWhy -> String
+  "a list pattern, which the lowering has no form for; branch on (listEmpty? xs), (listLength xs) or (match (listHead xs) ((some h) ...) ((none) ...)) instead"
+
+fn withUnknownCtorDiag pat: rd/SExpr mod: ModuleSummary deps: DepIndex path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (match pat
+    ((rd/sexprVect _) (cons (unknownCtorDiag "list" pat (listPatternWhy) path) acc))
+    ((rd/sexprList _)
+     (let [(head (rd/sexprHead pat))]
+       (cond
+         ((or (stringEmpty? head) (or (isQualifiedName? head) (mapHas? mod.caseOwner head))) acc)
+         ((or (= head "list") (= head "cons")) (cons (unknownCtorDiag head pat (listPatternWhy) path) acc))
+         ((or (= head "some") (or (= head "none") (or (= head "ok") (= head "err")))) acc)
+         (else (let [(owners (bareCaseOwners head mod deps))]
+                 (if (> (listLength owners) 1)
+                   (cons (unknownCtorDiag head pat (str "declared by more than one import (" (stringJoin (map pairSecond owners) ", ") "), so the lowering resolves it to none of them; qualify it: " (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) "/" head)) owners) " or ")) path) acc)
+                   acc))))))
+    (_ acc))
+
 fn extractPattern pat: rd/SExpr mod: ModuleSummary deps: DepIndex path: String accDiags: (List ty/Diagnostic) -> (Pair (Pair (List String) (Option String)) (List ty/Diagnostic))
-  (match pat ((rd/sexprAtom v) (if (or (= v "_") (isLiteralAtom? v)) (pair (pair (list) (none)) accDiags) (pair (pair (list v) (none)) accDiags))) ((rd/sexprVect items) (let [(vRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) accDiags) items))] (pair (pair (pairFirst vRes) (none)) (pairSecond vRes)))) ((rd/sexprList items) (match (listHead items) ((none) (pair (pair (list) (none)) accDiags)) ((some h) (let [(headTok (rd/sexprHead h)) (subs (safeTail items)) (uInfo (unionForTag headTok mod deps))] (let [(dCheck (match uInfo ((some _) accDiags) ((none) (cons (if (mapHas? mod.funs headTok) (makeDiag "ERR_INVALID_MT_ARM" "mt arm has an invalid pattern head" path) (match (unexportedCaseModule headTok mod deps) ((some mname) (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " headTok " is not exported by " mname) path)) ((none) (makeDiag "rule-2" (str headTok " is not a case of any union") path)))) accDiags)))) (arityRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) dCheck) subs))] (pair (pair (pairFirst arityRes) (some headTok)) (pairSecond arityRes))))))))
+  (match pat ((rd/sexprAtom v) (if (or (= v "_") (isLiteralAtom? v)) (pair (pair (list) (none)) accDiags) (pair (pair (list v) (none)) accDiags))) ((rd/sexprVect items) (let [(vRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) (withUnknownCtorDiag pat mod deps path accDiags)) items))] (pair (pair (pairFirst vRes) (none)) (pairSecond vRes)))) ((rd/sexprList items) (match (listHead items) ((none) (pair (pair (list) (none)) accDiags)) ((some h) (let [(headTok (rd/sexprHead h)) (subs (safeTail items)) (uInfo (unionForTag headTok mod deps))] (let [(dCheck (match uInfo ((some _) (withUnknownCtorDiag pat mod deps path accDiags)) ((none) (cons (if (mapHas? mod.funs headTok) (makeDiag "ERR_INVALID_MT_ARM" "mt arm has an invalid pattern head" path) (match (unexportedCaseModule headTok mod deps) ((some mname) (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " headTok " is not exported by " mname) path)) ((none) (makeDiag "rule-2" (str headTok " is not a case of any union") path)))) accDiags)))) (arityRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) dCheck) subs))] (pair (pair (pairFirst arityRes) (some headTok)) (pairSecond arityRes))))))))
 
 fn closedEnumFamily? family: String -> Bool
   (not (or (= family "Option") (or (= family "Result") (= family "List"))))
