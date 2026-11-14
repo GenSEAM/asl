@@ -1161,7 +1161,7 @@ fn unknownCtorDiag head: String pat: rd/SExpr why: String path: String -> ty/Dia
   (makeDiag "ERR_UNKNOWN_CONSTRUCTOR" (str "unknown constructor '" head "' in a match pattern: " (rd/renderSexpr pat) " is " why) path)
 
 fn listPatternWhy -> String
-  "a list pattern, which the lowering has no form for; branch on (listEmpty? xs), (listLength xs) or (match (listHead xs) ((some h) ...) ((none) ...)) instead"
+  "a list pattern, which the lowering has no form for; branch on listEmpty? or listLength of the matched list, or match (listHead ...) with some and none instead"
 
 fn withUnknownCtorDiag pat: rd/SExpr mod: ModuleSummary deps: DepIndex path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (match pat

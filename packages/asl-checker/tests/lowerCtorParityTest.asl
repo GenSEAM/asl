@@ -43,6 +43,7 @@ fn testListPatterns -> Bool
   (let [(emptyList (diagsOf (overList "(match xs ((list) 0) (_ 1))")))
         (consCell (diagsOf (overList "(match xs ((cons h t) h) (_ 0))")))
         (bracket (diagsOf (overList "(match xs ([h] h) (_ 0))")))
+        (itemsNamed (diagsOf (program "" "fn f items: (List Int64) -> Int64" "(match items ((cons h t) h) (_ 0))")))
         (splitLines (diagsOf (overList "(match xs\n    (_ 0)\n    ((cons h t) h))")))
         (viaHead (diagsOf (overList "(match (listHead xs) ((some h) h) ((none) 0))")))
         (viaEmpty (diagsOf (overList "(if (listEmpty? xs) 0 (listLength xs))")))]
@@ -50,7 +51,9 @@ fn testListPatterns -> Bool
         (assert (unknownCtorAt? consCell "cons" 6 15) (str "(cons h t) as a pattern is the lowering's unknown constructor 'cons', at the constructor: " (render consCell)))
         (assert (unknownCtorAt? bracket "list" 6 14) (str "[h] as a pattern is the lowering's (list h), reported at the bracket: " (render bracket)))
         (assert (says? bracket "(list h) is a list pattern") (str "the bracket pattern is named as the lowering reads it: " (render bracket)))
-        (assert (says? consCell "listHead") (str "the diagnostic names the forms that do lower: " (render consCell)))
+        (assert (says? consCell "branch on listEmpty? or listLength of the matched list") (str "the hint names the matched list rather than a variable: " (render consCell)))
+        (assert (not (says? itemsNamed "xs")) (str "the hint names no variable when the scrutinee is named items: " (render itemsNamed)))
+        (assert (says? itemsNamed "unknown constructor 'cons' in a match pattern") (str "the code and leading words stay unchanged: " (render itemsNamed)))
         (assert (unknownCtorAt? splitLines "cons" 8 7) (str "the position is the pattern's own line, not the match's: " (render splitLines)))
         (assert (listEmpty? viaHead) (str "matching (listHead xs) on some and none checks clean: " (render viaHead)))
         (assert (listEmpty? viaEmpty) (str "listEmpty? and listLength check clean: " (render viaEmpty)))
