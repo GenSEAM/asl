@@ -3,3 +3,4 @@
 (:card :arm "aslCardContrast" :file "cards/aslCardContrast.txt" :sha256 "323bd29005ec11a23bb2f2377dc29a1fe1372f9b4525bfe8beb19d5094db5c74" :tokens 449 :bytes 1196)
 (:card :arm "aslCardExample" :file "cards/aslCardExample.txt" :sha256 "b16794e0b08fac55d7e8eff32357b93c3b17f0639346ec385469520d1ff0fca4" :tokens 446 :bytes 1514)
 (:card :arm "aslCardMin" :file "cards/aslCardMin.txt" :sha256 "da0eeba07a3dfbd6e3deb1580062478fa3df3682c5acfda3095cbfc1c9aa25e6" :tokens 150 :bytes 432)
+(:card :arm "aslCardStr" :file "cards/aslCardStr.txt" :sha256 "3417c592771309ba8f201ae410099ab69a5d81f59a45419685b58cbc19cc6e5a" :tokens 905 :bytes 3333)
