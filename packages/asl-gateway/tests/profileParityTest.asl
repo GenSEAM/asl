@@ -217,9 +217,9 @@ fn checkCache! root: String cacheList: (List rd/SExpr) -> Bool
         (key (cfg/gatewayConfigKey! path registry))
         (sentinel (cfg/gatewayProfilesLoadText! "sentinel" true (fileReadString path) registry))
         (recorded (map (fn [(e rd/SExpr)] -> String (let [(p (propsOf e))] (str (propStr p "id") "=" (sub root (propStr p "result"))))) cacheList))
-        (hit (cacheResultText (pairSecond (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some key) :result sentinel) home registry))))
-        (cachedErr (cacheResultText (pairSecond (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some key) :result (err "boom")) home registry))))
-        (staleShell (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some (cfg/keyBuiltin)) :result sentinel) home registry))
+        (hit (cacheResultText (pairSecond (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some key) :result sentinel :stale "") home registry))))
+        (cachedErr (cacheResultText (pairSecond (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some key) :result (err "boom") :stale "") home registry))))
+        (staleShell (cfg/gatewayProfilesLoad! (cfg/ProfilesCache :key (some (cfg/keyBuiltin)) :result sentinel :stale "") home registry))
         (stale (cacheResultText (pairSecond staleShell)))]
     (allRun (list
       (check (= (listLength cacheList) 3) "three cache cases recorded")
