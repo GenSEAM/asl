@@ -1,0 +1,16 @@
+(:task :id "gcd" :family "A" :difficulty "easy"
+  :entry "gcd" :entryPy "gcd"
+  :statement "Return the greatest common divisor of two non-negative integers. When one of them is 0 the result is the other one, so the result for 0 and 0 is 0."
+  :sigAsl "fn gcd a: Int64 b: Int64 -> Int64"
+  :sigPy "def gcd(a: int, b: int) -> int:"
+  :sigTs "function gcd(a: number, b: number): number"
+  :examples (
+    (:args (12 18) :want 6)
+    (:args (7 0) :want 7))
+  :cases (
+    (:args (0 0) :want 0)
+    (:args (17 5) :want 1)
+    (:args (100 75) :want 25)
+    (:args (0 9) :want 9)
+    (:args (48 180) :want 12)
+    (:args (13 13) :want 13)))

@@ -1,0 +1,27 @@
+#@ task bugCrossModule bugfixFromFailingTest
+#@ prompt
+The test suite of this statistics package fails. Find the defect in the library source and fix it. Do not change the tests.
+#@ seed src/describe.asl
+(and (not (isNan? x)) (not (= (abs x) (floatInf))))
+#@ with
+(and (not (isNan? x)) (not (= x (floatInf))))
+#@ ref src/describe.asl
+(and (not (isNan? x)) (not (= x (floatInf))))
+#@ with
+(and (not (isNan? x)) (not (= (abs x) (floatInf))))
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/describe :a ds) (asl-stats/agree :a ag)])
+
+fn errOf r: (Result Float64 String) -> String
+  (match r
+    ((ok _) "")
+    ((err e) e))
+
+fn runTests -> Bool
+  (do
+    (assert (= (errOf (ds/mean (list 1.0 (- 0.0 (floatInf))))) "statsRange: a value is NaN or infinite") "mean refuses -inf")
+    (assert (= (match (ag/ranks (list (- 0.0 (floatInf)) 1.0)) ((err e) e) ((ok _) "")) "statsRange: a value is NaN or infinite") "ranks refuses -inf")
+    (assert (= (errOf (ds/mean (list 1.0 2.0))) "") "finite values still pass")
+    true)

@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -141,10 +141,20 @@ fn ! cacheDir! -> String
 fn modulesDirIn cDir: String -> String
   (str cDir "/modules")
 
+; (:m :ref FABLE-BOOTFIX :do "a wrapper imports its suite by a root-relative path, which resolves only under a .asl.config.asn; a tree that is just asl/ (the published subtree, a git archive of asl/) has none at its root or above, so there the wrapper goes under asl/, whose own config names the workspace asl and resolves asl/...")
+fn ! configAbove? dir: String -> Bool
+  (if (fileExists? (str dir "/.asl.config.asn")) true
+    (let [(up (resultOr (realPath (str dir "/..")) dir))]
+      (if (or (= up dir) (= dir "/")) false (configAbove? up))))
+
+fn ! wrapperBase root: String -> String
+  (if (or (configAbove? root) (not (fileExists? (str root "/asl/.asl.config.asn")))) ".asl/cache/nativeTest/entries" "asl/.asl/cache/nativeTest/entries")
+
 fn ! wrapperDirIn cDir: String -> String
-  (let [(full (resultOr (realPath cDir) cDir))]
-    (if (stringStartsWith? (relativeTo (selfRoot) full) "/")
-      (toolPath (str ".asl/cache/nativeTest/entries/" (slotKey "entries" full)))
+  (let [(full (resultOr (realPath cDir) cDir))
+        (base (wrapperBase (selfRoot)))]
+    (if (or (stringStartsWith? base "asl/") (stringStartsWith? (relativeTo (selfRoot) full) "/"))
+      (toolPath (str base "/" (slotKey "entries" full)))
       (str cDir "/entries")))
 
 fn modulesDir! -> String
@@ -222,7 +232,8 @@ fn mainReturnsBareInt64 src: String -> Bool
     ((none) false)
     ((some l) (match (stringIndexOf l "->")
                 ((none) false)
-                ((some i) (= (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")) "Int64")))))
+                ((some i) (let [(t (stringTrim (optionOr (stringSlice l (+ i 2) (stringLength l)) "")))]
+                            (or (= t "Int64") (stringStartsWith? t "Int64 ")))))))
 
 fn wrapperSourceRunInt64 importPath: String takesArgs: Bool -> String
   (str "(module nativeTestEntry\n"
@@ -1264,6 +1275,12 @@ fn ! drainAllPending acc: (List ModCompileResult) inFlight: (List PendingObj) ->
     (let [(r (finishOldest acc inFlight))]
       (drainAllPending (pairFirst r) (pairSecond r))))
 
+; (:m :ref NT-CACHE-ABS-PATH-KEY :do "the entry's inits follow the closure order of their units, not the order the objects settled: cached units used to come before the ones still at llc, so the entry key and its init call order changed with the hit pattern, a worktree whose library objects were all cached never met the entry object built beside a compile (1 llc per suite), and a dependent's init could run before its import's")
+fn initsInUnitOrder paths: (List String) named: (List (Pair String String)) -> (List String)
+  (let [(byPath (fold (fn [(m (Map String String)) (n (Pair String String))] -> (Map String String) (mapSet m (pairFirst n) (pairSecond n))) (mapEmpty) named))]
+    (filter (fn [(n String)] -> Bool (not (stringEmpty? n)))
+            (map (fn [(p String)] -> String (optionOr (mapGet byPath p) "")) paths)))
+
 fn ! compileUnitsStep facts: (Option libc/TripleFacts) cDir: String fp: String units: (List lk/LinkUnit) allUnits: (List lk/LinkUnit) ifaceMap: (Map String String) prelude: lk/LinkUnit px: lk/LinkUnit ovlNames: (List String) entry: lk/LinkUnit slot: String idx: Int64 acc: (List ModCompileResult) inFlight: (List PendingObj) jobs: Int64 opt: String -> (Pair (List ModCompileResult) (List PendingObj))
   (match (listHead units)
     ((none) (pair acc inFlight))
@@ -1272,9 +1289,9 @@ fn ! compileUnitsStep facts: (Option libc/TripleFacts) cDir: String fp: String u
            (preTrim (if (>= (listLength inFlight) jobs) (finishOldest acc inFlight) (pair acc inFlight)))
            (acc0 (pairFirst preTrim))
            (inFlight0 (pairSecond preTrim))
-           (inits (filter (fn [(n String)] -> Bool (not (stringEmpty? n)))
-                          (listAppend (map (fn [(r ModCompileResult)] -> String r.initName) acc0)
-                                      (map (fn [(p PendingObj)] -> String p.initName) inFlight0))))
+           (inits (initsInUnitOrder (map (fn [(x lk/LinkUnit)] -> String x.path) allUnits)
+                                    (listAppend (map (fn [(r ModCompileResult)] -> (Pair String String) (pair r.path r.initName)) acc0)
+                                                (map (fn [(p PendingObj)] -> (Pair String String) (pair p.path p.initName)) inFlight0))))
            (prepared (compileUnitPrepare facts cDir fp u allUnits ifaceMap prelude px ovlNames entry slot idx inits opt))
            (step (match prepared.pending ((some p) (compileUnitSpawn p)) ((none) prepared)))
            (acc1 (match step.done ((some r) (listAppend acc0 (list r))) ((none) acc0)))
@@ -1298,8 +1315,25 @@ fn ! leaveIfOrphaned! -> Unit
                      (do (eprintln (str "nativeTest: the self builder " pid " is gone, so this stage stops"))
                          (match (procKill (procSelf) "SIGTERM") ((ok _) ()) ((err _) ()))))))))
 
+; (:m :ref NATIVETEST-CACHE-KEY-IMPORTS-20261022 :do "a unit's digest covers its import closure: its own interface and, by import name, the closure digest of each import, so an interface edit two or more imports away gives every dependent another object key; keyed on the direct imports alone, a unit that reaches a type through an unchanged signature kept the object lowered against the old type")
+fn ifaceRound units: (List lk/LinkUnit) base: (Map String String) prev: (Map String String) -> (Map String String)
+  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String)
+          (mapSet acc u.path
+                  (bytesSha256 (stringToBytes (str "ifaceClosure/1\n" (optionOr (mapGet base u.path) "") "\n"
+                                                   (stringJoin (listSort (map (fn [(imp (Pair String String))] -> String (str (pairFirst imp) " " (optionOr (mapGet acc (pairSecond imp)) ""))) u.imports)) "\n"))))))
+        prev units)
+
+fn ifaceLine units: (List lk/LinkUnit) m: (Map String String) -> String
+  (stringJoin (map (fn [(u lk/LinkUnit)] -> String (optionOr (mapGet m u.path) "")) units) " ")
+
+; (:m :ref NATIVETEST-CACHE-KEY-IMPORTS-20261022 :do "rounds repeat until no digest moves, so the result does not depend on the order of the units; an import cycle never settles and stops at one round per unit, still a function of the sources alone")
+fn ifaceSettle units: (List lk/LinkUnit) base: (Map String String) prev: (Map String String) left: Int64 -> (Map String String)
+  (let [(next (ifaceRound units base prev))]
+    (if (or (<= left 0) (= (ifaceLine units next) (ifaceLine units prev))) next (ifaceSettle units base next (- left 1))))
+
 fn ifaceMapOf units: (List lk/LinkUnit) -> (Map String String)
-  (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mapSet acc u.path (interfaceDigest u.forms))) (mapEmpty) units)
+  (let [(base (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mapSet acc u.path (interfaceDigest u.forms))) (mapEmpty) units))]
+    (ifaceSettle units base (mapEmpty) (listLength units)))
 
 ; (:m :ref NATIVE-WORKERS-DEFAULT :do "the count for a suite built alone: the :native :suiteWorkers config row, capped at (cpus-2)/2 so its workers leave room for the clang jobs; ASL_NATIVE_WORKERS, when set, still names the count outright, capped at the cpus")
 fn soloWorkersOf asked: (Option Int64) configured: Int64 cpus: Int64 -> Int64
@@ -2481,6 +2515,9 @@ fn testHeaderParsing -> Bool
         (mainOnly "(module a/c :x [main other] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok 0)\n")
         (bare "(module a/d :i [])\n\nfn f -> Int64\n  (:x [runTests])\n")]
     (do (assert (= (exportsOf src) (list "helper" "runTests")) "exports read across lines of the :x vector")
+        (assert (mainReturnsBareInt64 src) "a main header that ends at -> Int64 returns a bare Int64")
+        (assert (mainReturnsBareInt64 "(module a/e :x [main] :i [])\n\nfn main -> Int64   (+ 1 2)\n") "a body on the header line after -> Int64 is still a bare Int64 main")
+        (refute (mainReturnsBareInt64 mainOnly) "a Result main is not a bare Int64 main")
         (assert (= (entryOf src) (some "runTests")) "runTests is the entry when exported")
         (assert (= (entryOf mainOnly) (some "main")) "main is the entry when runTests is not exported")
         (assert (none? (entryOf bare)) "an :x after the header is not an export")
@@ -2563,6 +2600,9 @@ fn ! testManifestStamp dir: String -> Bool
         (assert (= (wrapperDirIn "rel/cache") "rel/cache/entries") "the entry wrapper lives under a cache root inside the workspace")
         (assert (stringStartsWith? (wrapperDirIn "/c") ".asl/cache/nativeTest/entries/") "a cache root outside the workspace keeps its wrappers inside it, where imports resolve")
         (refute (= (wrapperDirIn "/c") (wrapperDirIn "/d")) "one entries directory per outside cache root")
+        (assert (configAbove? (resultOr (realPath dir) dir)) "a directory inside this workspace has a .asl.config.asn above it")
+        (assert (= (wrapperBase (selfRoot)) ".asl/cache/nativeTest/entries") "a root with a config above keeps its wrappers under its own .asl")
+        (assert (= (wrapperBase (str (resultOr (realPath dir) dir) "/absent")) ".asl/cache/nativeTest/entries") "a root without asl/.asl.config.asn keeps the default")
         true))
 
 fn ! testLock dir: String -> Bool

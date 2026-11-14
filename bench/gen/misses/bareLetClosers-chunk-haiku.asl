@@ -1,0 +1,10 @@
+fn chunkFrom xs: (List Int64) size: Int64 i: Int64 acc: (List (List Int64)) -> (List (List Int64))
+  (let [(n (listLength xs))]
+    (cond
+      ((>= i n) acc)
+      (else
+        (let [(e (cond ((< (+ i size) n) (+ i size)) (else n)))]
+          (chunkFrom xs size (+ i size) (listAppend acc (list (optionOr (listSlice xs i e) (list)))))))))
+
+fn chunk xs: (List Int64) size: Int64 -> (List (List Int64))
+  (chunkFrom xs size 0 (list))

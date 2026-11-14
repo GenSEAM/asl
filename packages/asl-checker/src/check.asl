@@ -698,10 +698,38 @@ fn paramInferType p: a/Param summary: r/ModuleSummary deps: r/DepIndex vmap: (Ma
 fn defunTvars d: a/DefunNode -> (List String)
   (if (listEmpty? d.typeVars) (ty/collectTvars (map (fn [(p a/Param)] -> String p.type) d.params) d.retType) d.typeVars)
 
+; (:m :ref typeVarParamUnchecked :do "a signature type variable is rigid in its own body: callers instantiate it freshly, so a body that pins it to a concrete type (passing c: C to a function that takes a record) let asl check accept any argument and fail at run time with ERR_TYPE; the pin is a check error at the definition. Any and the unknown type stay unflagged, and so does the variable own name written in a lambda or let annotation of the body, which parses as a nominal type; prelude own kinded variables (N I J X) are exempt because checkedDiv and its helpers narrow N by a run-time preludeIsFloat test")
+fn concreteBinding? t: ty/Type own: String -> Bool
+  (match t ((ty/tyVar _ _) false) ((ty/tyCon name _ _ _) (not (or (= name "?") (or (= name "Any") (= name own))))) ((ty/tyFun _ _) true))
+
+fn preludeFile? path: String -> Bool
+  (stringEndsWith? path "prelude/prelude.asl")
+
+fn rigidTvarDiags st: InferState tvars: (List String) vmap: (Map String ty/Type) fname: String path: String modName: String -> InferState
+  (fold (fn [(s InferState) (v String)] -> InferState
+          (match (mapGet vmap v)
+            ((none) s)
+            ((some tv) (let [(bound (u/applySubst s.subst tv))]
+                         (if (and (concreteBinding? bound v) (not (and (= modName "prelude") (listContains? (list "N" "I" "J" "X") v))))
+                           (addDiag s "type" (str "type variable " v " of " fname " is used as " (ty/showType bound) " in the body, so callers are not checked against it: write " (ty/showType bound) " in the signature") path)
+                           s)))))
+        st tvars)
+
+fn mergedTvarDiags st: InferState tvars: (List String) vmap: (Map String ty/Type) fname: String path: String -> InferState
+  (pairSecond (fold (fn [(acc (Pair (List (Pair Int64 String)) InferState)) (v String)] -> (Pair (List (Pair Int64 String)) InferState)
+          (match (mapGet vmap v)
+            ((none) acc)
+            ((some tv) (match (u/applySubst (pairSecond acc).subst tv)
+                         ((ty/tyVar id _) (match (listHead (filter (fn [(e (Pair Int64 String))] -> Bool (= (pairFirst e) id)) (pairFirst acc)))
+                                            ((some e) (pair (pairFirst acc) (addDiag (pairSecond acc) "type" (str "type variables " (pairSecond e) " and " v " of " fname " are used as one type in the body, so callers are not checked against it: use one variable in the signature") path)))
+                                            ((none) (pair (cons (pair id v) (pairFirst acc)) (pairSecond acc)))))
+                         (_ acc)))))
+        (pair (list) st) tvars))
+
 fn checkDefunDiags d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (let [(st00 (makeInferState)) (tvRes (freshVarsFrom (defunTvars d) (mapEmpty) st00)) (vmap (pairFirst tvRes)) (st0 (pairSecond tvRes)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (paramInferType p summary deps vmap))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (substParsedType (ty/parseTypeStr d.retType (list)) vmap) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (paramInferType p summary deps vmap) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
     (if (listEmpty? bodyNodes) (list)
-      (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path summary.name) summary path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
+      (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (mergedTvarDiags (rigidTvarDiags (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path summary.name) summary path) (defunTvars d) vmap d.name path (if (preludeFile? path) "prelude" "")) (defunTvars d) vmap d.name path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
         (placeFresh dMap placed (bodyDiagPos d (- (listLength bodyNodes) 1) st2.diags)))))
 
 fn untypedParamDiags d: a/DefunNode path: String -> (List ty/Diagnostic)
@@ -866,6 +894,23 @@ fn mapEmptyMistake? d: ty/Diagnostic -> Bool
   (or (and (= d.code "ERR_ARITY") (and (stringStartsWith? d.message "map takes ") (stringEndsWith? d.message "given 0")))
       (and (= d.code "ERR_TYPE_MISMATCH") (and (stringContains? d.message "expected (Map ") (stringContains? d.message "found (List _)"))))
 
+; (:m :ref unknownTypeAccepted :do "ERR_UNKNOWN_TYPE names the nearest known types (builtins plus the module own schemas and enums) so a misspelt Stringing points at String; a name with nothing near gets no suggestion")
+fn knownTypeVocabulary forms: (List a/TopForm) path: String -> (List String)
+  (let [(m (r/collectSummary forms path))]
+    (listAppend (mapKeys m.schemas) (listAppend (mapKeys m.enums) (list "String" "Bool" "Unit" "Bytes" "Int64" "Int32" "Float64" "List" "Option" "Result" "Map" "HashMap" "Pair" "Any" "IoError" "Keyword" "Buf"))))
+
+fn unknownTypeHint vocab: (List String) d: ty/Diagnostic -> ty/Diagnostic
+  (if (not (and (= d.code "ERR_UNKNOWN_TYPE") (stringContains? d.message " is neither a known type")))
+    d
+    (let [(name (optionOr (listHead (stringSplit d.message " ")) ""))
+          (limit (max 2 (/ (stringLength name) 3)))
+          (scored (fold (fn [(acc (List (Pair Int64 String))) (c String)] -> (List (Pair Int64 String))
+                          (let [(dist (editDistance name c))] (if (and (<= dist limit) (!= c name)) (cons (pair dist c) acc) acc)))
+                        (list) vocab))
+          (ordered (listSortBy (fn [(p (Pair Int64 String))] -> String (str (stringFromInt64 (+ 1000 (pairFirst p))) " " (pairSecond p))) scored))
+          (names (map (fn [(p (Pair Int64 String))] -> String (pairSecond p)) (listTake ordered 3)))]
+      (if (listEmpty? names) d (let [(hint (str "; did you mean " (stringJoin names ", ")))] (with d :message (str d.message hint) :msg (str d.msg hint))))))
+
 fn messageHint d: ty/Diagnostic -> ty/Diagnostic
   (let [(hint (cond
                 ((mapEmptyMistake? d) "; hint: the empty map is (mapEmpty); map is the list function")
@@ -874,7 +919,7 @@ fn messageHint d: ty/Diagnostic -> ty/Diagnostic
     (if (stringEmpty? hint) d (with d :message (str d.message hint) :msg (str d.msg hint))))
 
 fn checkModuleSource forms: (List a/TopForm) deps: (Map String r/ModuleSummary) path: String src: String -> (List ty/Diagnostic)
-  (map messageHint (normalizeCheckDiags (armShapeHints forms src (refineUnknownSymbolPositions forms src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src)))))))))
+  (let [(vocab (knownTypeVocabulary forms path))] (map (fn [(d ty/Diagnostic)] -> ty/Diagnostic (unknownTypeHint vocab (messageHint d))) (normalizeCheckDiags (armShapeHints forms src (refineUnknownSymbolPositions forms src (refineNotExportedPositions src (listAppend (checkModule forms deps path) (listAppend (tp/notTailDiags forms src path) (listAppend (ca/constantAssertDiags forms src path) (r/letrecDiags forms path src))))))))))
 
 fn checkDefunWithUntyped d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
   (listAppend (untypedParamDiags d path) (checkDefunDiags d summary deps path))

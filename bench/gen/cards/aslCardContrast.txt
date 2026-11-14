@@ -1,0 +1,21 @@
+You know Python. ASL is typed and written in prefix forms. Write the code at once. Differences, most missed first:
+
+1. def f(n: int) -> int: return n * 2
+   -> fn f n: Int64 -> Int64
+        (* n 2)
+   A bare header line, then ONE form in parentheses; never a bare cond, match or let.
+2. a == b, a != b -> (= a b), (!= a b)
+3. f(a, g(b)) -> (f a (g b)); close each form once
+4. xs + [x], [], [1, 2] -> (listAppend xs (list x)), (list), (list 1 2)
+5. len(xs), str(n), int(s) -> (listLength xs), (stringFromInt64 n), (stringToInt64 s)
+   camelCase, type first: listReverse listSort listContains? listSum stringSplit stringJoin
+6. xs[1:] -> (listDrop xs 1)
+7. xs[0], xs[i], d.get(k) -> (listHead xs), (listGet xs i), (mapGet d k): each is (some v) or (none)
+   unwrap: (match (listHead xs) ((none) 0) ((some h) h)) or (optionOr (mapGet d k) 0)
+8. a % b, a // b -> (mod a b), (/ a b)
+9. if/elif/else -> (cond ((< n 0) "neg") (else "pos")); x if c else y -> (if c x y)
+10. "a" + s -> (str "a" s)
+11. y = e -> (let [(y e) (z (+ y 1))] body)
+    lambda x: x + 1 -> (fn [x] (+ x 1))
+    match/case -> (match s ((circle r) (* r r)) ((dot) 0))
+    None, raise -> (none), (err "message"); success is (ok v)

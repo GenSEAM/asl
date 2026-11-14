@@ -1,0 +1,45 @@
+#@ task featureRngInt featureWithRefactor
+#@ prompt
+Add an integer draw to the rng module and export it: rngInt r: Rng lo: Int64 hi: Int64 -> (Result (Pair Int64 Rng) String). It takes one rngNext draw v and returns lo + ((lsr v 1) mod (hi - lo)) with the advanced generator, so the value lies in [lo, hi); hi at or below lo is (err "statsRange: need lo < hi"). Then use it in the bootstrap resampling loop of the interval module in place of the inline index arithmetic. The seeded bootstrap results must not change.
+#@ ref src/rng.asl
+gammaDraw logGammaDraw betaDraw lsr]
+#@ with
+gammaDraw logGammaDraw betaDraw lsr rngInt]
+#@ ref src/rng.asl
+#@ with
+
+fn rngInt r: Rng lo: Int64 hi: Int64 -> (Result (Pair Int64 Rng) String)
+  (if (<= hi lo)
+    (err "statsRange: need lo < hi")
+    (let [(p (rngNext r))]
+      (ok (pair (+ lo (mod (lsr (pairFirst p) 1) (- hi lo))) (pairSecond p)))))
+#@ ref src/interval.asl
+    (let [(p (rg/rngNext r))
+          (k (mod (rg/lsr (pairFirst p) 1) n))]
+      (do (bytesSetFloat64 out i (bytesGetFloat64 src k))
+          (resampleLoop! src n out (+ i 1) (pairSecond p)))))
+#@ with
+    (match (rg/rngInt r 0 n)
+      ((err _) r)
+      ((ok p)
+        (do (bytesSetFloat64 out i (bytesGetFloat64 src (pairFirst p)))
+            (resampleLoop! src n out (+ i 1) (pairSecond p))))))
+#@ absent
+(mod (rg/lsr (pairFirst p) 1) n)
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/rng :a rg)])
+
+fn ! draws! n: Int64 r: rg/Rng -> (List Int64)
+  (if (<= n 0) (list)
+    (match (rg/rngInt r 5 15)
+      ((err _) (list))
+      ((ok p) (cons (pairFirst p) (draws! (- n 1) (pairSecond p))))))
+
+fn ! runTests -> Bool
+  (do
+    (assert (= (draws! 4 (rg/rngSeed 42)) (list 6 6 9 11)) "seed 42: the first four draws in [5, 15)")
+    (assert (= (match (rg/rngInt (rg/rngSeed 1) 3 3) ((err e) e) ((ok _) "")) "statsRange: need lo < hi") "an empty range is statsRange")
+    (assert (= (match (rg/rngInt (rg/rngSeed 1) 7 8) ((ok p) (pairFirst p)) ((err _) -1)) 7) "a range of one value returns it")
+    true)

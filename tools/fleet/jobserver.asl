@@ -2,7 +2,7 @@
   :x [Grant rootDir snapshot startOf tokenCount classRank want wantWith acquire acquireProc psCommand maxHoldNs bind releaseIdxs releasePid heldCount backoffMs]
   :i [])
 
-; (:m :ref MACHINE-JOBSERVER :do "a machine-wide CPU token pool: N token files under <dir>/tokens claimed with fileCreateExclusive, a dead owner's token reclaimed by pid liveness, and one waiting ticket per waiter under <dir>/wait ordered by class rank then arrival, so a higher class gets the next free token first; the dir is a call argument or ~/.asl/run/jobserver, N is the :tokens row of <dir>/config.asn or the core count, never env")
+; (:m :ref MACHINE-JOBSERVER :do "a machine-wide CPU token pool: N token files under <dir>/tokens claimed with fileCreateExclusive, a dead owner's token reclaimed by pid liveness, and one waiting ticket per waiter under <dir>/wait ordered by class rank then arrival, so a higher class gets the next free token first; the dir is a call argument or ~/.asl/run/jobserver, N is the :tokens row of <dir>/config.asn or half the cores (FABLE-GATE-ADMIT), never env")
 (schema Grant
   (:f state String)
   (:f idxs (List Int64))
@@ -22,7 +22,20 @@ fn ! tokenCount dir: String -> Int64
   (let [(cfg (resultOr (fileReadString (str (rootDir dir) "/config.asn")) ""))]
     (match (fieldInt cfg ":tokens ")
       ((some n) (if (> n 0) n 1))
-      ((none) (let [(c (resultOr (cpuCount) 1))] (if (> c 0) c 1)))))
+      ((none) (defaultTokens (resultOr (cpuCount) 1)))))
+
+; (:m :ref FABLE-GATE-ADMIT :do "without a :tokens row the pool is half the cores, at least 1 (adopted 2026-11-13: load 20-166 on 10 cores with a token per core); the row (:jobserver :tokens N) in <dir>/config.asn is read at every claim, so a change reaches every running session at its next claim")
+fn defaultTokens cores: Int64 -> Int64
+  (if (> cores 1) (/ cores 2) 1)
+
+; (:m :ref FABLE-GATE-ADMIT :do "the slot ledger <dir>/slots.log: one row per claim, release and reclaim of a token with the monotonic time, appended by whoever did it; a claim row is written after the exclusive create and a release or reclaim row carries the time before the token file goes, so the rows of one token never overlap while claims are exclusive and the peak of open claims over the rows sorted by :ns is the peak concurrency; past 4 MB the file moves to slots.log.1")
+fn ! slotRow root: String ev: String i: Int64 owner: Int64 ns: Int64 -> Bool
+  (let [(path (str root "/slots.log"))
+        (_ (if (> (resultOr (fileSize path) 0) 4194304) (ok? (pathRename path (str path ".1"))) false))]
+    (ok? (fileAppend path (str "(:slot :ev :" ev " :tok " i " :owner " owner " :ns " ns ")\n"))))
+
+fn idxOfName f: String -> Int64
+  (optionOr (stringToInt64 (stringReplace (optionOr (listLast (stringSplit f "/")) f) "tok" "")) -1)
 
 ; (:m :ref MACHINE-JOBSERVER :do "train outranks audit outranks writer outranks background; exclusive (bench) queues at audit rank and takes every token; \"\" opts out")
 fn classRank cls: String -> Int64
@@ -83,35 +96,37 @@ fn ! tokPath root: String i: Int64 -> String
 fn tokText owner: Int64 child: Int64 startNs: Int64 cls: String ost: String -> String
   (str "(:tok :ownerPid " owner " :ownerStart \"" ost "\" :childPid " child " :startNs " startNs " :class \"" cls "\")\n")
 
-fn ! breakToken path: String deadPid: Int64 -> Unit
-  (let [(stale (str path ".stale." (procSelf)))]
+fn ! breakToken root: String path: String deadPid: Int64 -> Unit
+  (let [(stale (str path ".stale." (procSelf)))
+        (before (monotonicNs))]
     (match (pathRename path stale)
       ((err _) ())
       ((ok _)
        (let [(moved (resultOr (fileReadString stale) ""))]
          (do (if (= (fieldInt moved ":ownerPid ") (some deadPid))
-               ()
+               (let [(_ (slotRow root "reclaim" (idxOfName path) deadPid before))] ())
                (match (fileCreateExclusive path moved) ((ok _) ()) ((err _) ())))
              (match (pathRemove stale) ((ok _) ()) ((err _) ())))))))
 
 fn ! takeToken root: String i: Int64 owner: Int64 cls: String ost: String startNs: Int64 tries: Int64 -> Bool
   (let [(path (tokPath root i))]
     (match (fileCreateExclusive path (tokText owner 0 startNs cls ost))
-      ((ok _) true)
+      ((ok _) (let [(_ (slotRow root "claim" i owner (monotonicNs)))] true))
       ((err _) (if (<= tries 0) false
                  (match (fileReadString path)
                    ((err _) false)
                    ((ok t) (match (fieldInt t ":ownerPid ")
                              ((none) false)
                              ((some p) (if (alive? p) false
-                                         (do (breakToken path p) (takeToken root i owner cls ost startNs (- tries 1))))))))))))
+                                         (do (breakToken root path p) (takeToken root i owner cls ost startNs (- tries 1))))))))))))
 
 ; (:m :ref MACHINE-JOBSERVER :do "a token is removed only while its file still names this process as owner, so a release after a reclaim and re-take by someone else cannot free the new holder's token")
 fn ! dropIdxs root: String idxs: (List Int64) -> Int64
   (fold (fn [(n Int64) (i Int64)] -> Int64
           (let [(t (resultOr (fileReadString (tokPath root i)) ""))]
             (if (= (fieldInt t ":ownerPid ") (some (procSelf)))
-              (match (pathRemove (tokPath root i)) ((ok _) (+ n 1)) ((err _) n))
+              (let [(_ (slotRow root "release" i (procSelf) (monotonicNs)))]
+                (match (pathRemove (tokPath root i)) ((ok _) (+ n 1)) ((err _) n)))
               n)))
         0 idxs)
 
@@ -139,7 +154,7 @@ fn ! reapStale root: String snap: (List Row) names: (List String) maxHold: Int64
                                 (age (- (monotonicNs) born))
                                 (old (and (> maxHold 0) (and (> born 0) (> age maxHold))))]
                             (if (or old (or (stringEmpty? now) (and (not (stringEmpty? ost)) (!= now ost))))
-                              (let [(_ (breakToken path o))
+                              (let [(_ (breakToken root path o))
                                     (_ (reclaimNote root f o (if old "age" "owner") (/ age 1000000000)))]
                                 (+ n 1))
                               n))))))
@@ -309,6 +324,7 @@ fn ! releasePid dir: String cls: String pid: Int64 -> Int64
               (let [(path (str root "/tokens/" f))
                     (t (resultOr (fileReadString path) ""))]
                 (if (and (= (fieldInt t ":childPid ") (some pid)) (= (fieldInt t ":ownerPid ") (some me)))
-                  (match (pathRemove path) ((ok _) (+ n 1)) ((err _) n))
+                  (let [(_ (slotRow root "release" (idxOfName f) me (monotonicNs)))]
+                    (match (pathRemove path) ((ok _) (+ n 1)) ((err _) n)))
                   n)))
             0 (tokenNames root))))

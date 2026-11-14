@@ -1,0 +1,4 @@
+fn inventoryTotal items: (List Item) -> Int64
+  (match (listHead items)
+    ((some it) (+ (* it.qty it.unitPrice) (inventoryTotal (listTail items))))
+    ((none) 0))

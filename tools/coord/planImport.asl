@@ -1,5 +1,5 @@
 (module asl-tools/coord/planImport
-  :x [PlanRow Report rowsOf importable? needOf resolve refreshable? ownsLive? staleOwns plan! report main]
+  :x [PlanRow Report rowsOf importable? needOf resolve refreshable? ownsLive? staleOwns plan! planIn! report main]
   :i [(asl-tools/coord/store :a st) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND4 :do "plan import: the ledger's (:u :id X ...) rows that are marked :auto true, or :queue conductor, and carry a :do become store tasks (:owns, :reads, :gate, :channel, :after) with the :do text as tasks/ID.txt; idempotent by row id (a unit already in the store is skipped, never rewritten); a row whose :owns or :gate is missing, or whose :after names something that will not be in the store, is parked in <store>/parked.asn with its :need and nothing is guessed; the ledger is only read")
@@ -18,8 +18,30 @@ fn listOf v: (Option rd/SExpr) -> (List String)
 fn textAt items: (List rd/SExpr) key: String -> String
   (match (fm/kvGet items key) ((none) "") ((some v) (fm/textOf v)))
 
+; (:m :ref NODE2-FEED-BACKLOG :do "the conductor runs a unit's gate as a shell command in the unit worktree, and backlog rows carry their gate as prose: a backlog row's command is its :gateCmd when it has one, else its :gate only when that is exactly one or more `./bin/asl test FILE.asl` joined by ` && `; anything else yields no command, so the row is parked with :need gate and no writer is spent on it")
+fn testCommand? part: String -> Bool
+  (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim part) " ")))]
+    (and (= (listLength ws) 3)
+         (and (= (optionOr (listGet ws 0) "") "./bin/asl")
+              (and (= (optionOr (listGet ws 1) "") "test") (stringEndsWith? (optionOr (listGet ws 2) "") ".asl")))))
+
+fn gateCommand gateCmd: String gate: String -> String
+  (cond
+    ((not (stringEmpty? (stringTrim gateCmd))) (stringTrim gateCmd))
+    ((and (not (stringEmpty? (stringTrim gate))) (listAll? testCommand? (stringSplit gate " && "))) (stringTrim gate))
+    (else ""))
+
+; (:m :ref NODE2-FEED-BACKLOG :do "the queue template (LEONFIX-01) marks a file the unit creates as `PATH (new)`: the store owns the path itself")
+fn ownedPath p: String -> String
+  (if (stringEndsWith? p " (new)") (optionOr (stringSlice p 0 (- (stringLength p) 6)) p) p)
+
+; (:m :ref NODE2-FEED-BACKLOG :do "the workers of the backlog schema whose rows the conductor may take: the cheap-model ones")
+fn backlogWorker? worker: String -> Bool
+  (listContains? (list "deepseek" "cheap") worker)
+
 ; (:m :ref COND4 :do "selected rows: one-line (:u :id ...) forms, :auto true or :queue conductor, a :do, and no :status other than queued; an :auto list (the older survey rows) selects nothing")
-fn rowOf line: String -> (Option PlanRow)
+; (:m :ref NODE2-FEED-BACKLOG :do "a row of the backlog schema (id status prio area do gate effort src model, optional worker owns) is selected too when its :worker is deepseek or cheap and its :status is exactly open, so running, review, done and blocked rows never enter; it has no :channel, so it takes the caller's lane, and its gate is gateCommand; a row without :owns or without a gate command is parked like any other")
+fn rowOf line: String lane: String -> (Option PlanRow)
   (match (fm/parseForms line)
     ((err _) (none))
     ((ok forms)
@@ -29,18 +51,25 @@ fn rowOf line: String -> (Option PlanRow)
           (let [(items (fm/itemsOf form))
                 (id (textAt items ":id"))
                 (status (textAt items ":status"))
-                (picked (or (= (textAt items ":auto") "true") (= (textAt items ":queue") "conductor")))]
-            (if (or (stringEmpty? id) (or (not picked) (or (stringEmpty? (textAt items ":do")) (and (!= status "") (!= status "queued"))))) (none)
-              (some (PlanRow :id id :doc (textAt items ":do") :gate (textAt items ":gate") :owns (listOf (fm/kvGet items ":owns"))
+                (marked (and (or (= (textAt items ":auto") "true") (= (textAt items ":queue") "conductor")) (or (= status "") (= status "queued"))))
+                (backlog (and (not marked) (and (backlogWorker? (textAt items ":worker")) (= status "open"))))]
+            (if (or (stringEmpty? id) (or (not (or marked backlog)) (stringEmpty? (textAt items ":do")))) (none)
+              (some (PlanRow :id id :doc (textAt items ":do")
+                             :gate (if backlog (gateCommand (textAt items ":gateCmd") (textAt items ":gate")) (textAt items ":gate"))
+                             :owns (map ownedPath (listOf (fm/kvGet items ":owns")))
                              :reads (listOf (fm/kvGet items ":reads")) :after (listOf (fm/kvGet items ":after"))
-                             :channel (let [(c (textAt items ":channel"))] (if (stringEmpty? c) "free" c))))))))))
+                             :channel (let [(c (textAt items ":channel"))] (if (stringEmpty? c) (if backlog lane "free") c))))))))))
 
-fn rowsOf text: String -> (List PlanRow)
+; (:m :ref NODE2-FEED-BACKLOG :do "rows below a line that starts (:unrewritten are the planner's text not yet safe for a cheap model: nothing below that marker is read")
+fn rowsOfIn text: String lane: String -> (List PlanRow)
   (fold (fn [(acc (List PlanRow)) (line String)] -> (List PlanRow)
           (if (stringStartsWith? line "(:u :id ")
-            (match (rowOf line) ((some r) (if (listAny? (fn [(x PlanRow)] -> Bool (= x.id r.id)) acc) acc (listAppend acc (list r)))) ((none) acc))
+            (match (rowOf line lane) ((some r) (if (listAny? (fn [(x PlanRow)] -> Bool (= x.id r.id)) acc) acc (listAppend acc (list r)))) ((none) acc))
             acc))
-        (list) (stringLines text))
+        (list) (stringLines (optionOr (listHead (stringSplit text "\n(:unrewritten")) text)))
+
+fn rowsOf text: String -> (List PlanRow)
+  (rowsOfIn text "free")
 
 fn importable? r: PlanRow -> Bool
   (and (not (listEmpty? r.owns)) (not (stringEmpty? r.gate)))
@@ -118,11 +147,15 @@ fn ! refreshOne! store: String u: st/Task r: PlanRow changed: (List String) -> B
 
 ; (:m :ref COND4 :do "plan! LEDGER-TEXT STORE BASE DRY: rows to tasks; parked.asn is rewritten from the rows still parked, so a row that gained :owns leaves it at the next import")
 fn ! plan! text: String store: String base: String dry: Bool -> (Result Report String)
+  (planIn! text store base dry "free")
+
+; (:m :ref NODE2-FEED-BACKLOG :do "planIn! is plan! with the lane a backlog row without :channel is queued on")
+fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (Result Report String)
   (match (match (st/readUnits! store) ((ok us) (ok us)) ((err _) (ok (list))))
     ((err e) (err e))
     ((ok units)
       (let [(inStore (map (fn [(u st/Task)] -> String u.id) units))
-            (rows (rowsOf text))
+            (rows (rowsOfIn text lane))
             (fresh (filter (fn [(r PlanRow)] -> Bool (not (listContains? inStore r.id))) rows))
             (keep (resolve fresh inStore))
             (parked (filter (fn [(r PlanRow)] -> Bool (not (listContains? keep r.id))) fresh))

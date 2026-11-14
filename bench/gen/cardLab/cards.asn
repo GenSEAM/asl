@@ -1,0 +1,5 @@
+(:cards :id "CARD-LAB" :method "tiktoken 0.12.0 o200k_base on the card file bytes" :date "2026-11-13" :scope "system prompt of the screening arms; the language is the asl arm unchanged (bracket surface, bare fn header), only the instruction card differs; every example in the cards is executed by asl/bench/gen/cardLab/examplesTest.asl" :budget "at most 450 tokens, aslCardMin at most 150" :src "miss frequencies of asl/bench/gen/cardLab/misses.asn")
+(:card :arm "aslCardAsn" :file "cards/aslCardAsn.txt" :sha256 "31d01d5815ed4e0a582f550fb13daea03266f61218a2c1aac2fe9635f0a8b104" :tokens 448 :bytes 1302)
+(:card :arm "aslCardContrast" :file "cards/aslCardContrast.txt" :sha256 "323bd29005ec11a23bb2f2377dc29a1fe1372f9b4525bfe8beb19d5094db5c74" :tokens 449 :bytes 1196)
+(:card :arm "aslCardExample" :file "cards/aslCardExample.txt" :sha256 "b16794e0b08fac55d7e8eff32357b93c3b17f0639346ec385469520d1ff0fca4" :tokens 446 :bytes 1514)
+(:card :arm "aslCardMin" :file "cards/aslCardMin.txt" :sha256 "da0eeba07a3dfbd6e3deb1580062478fa3df3682c5acfda3095cbfc1c9aa25e6" :tokens 150 :bytes 432)

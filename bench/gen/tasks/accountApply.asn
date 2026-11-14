@@ -1,0 +1,16 @@
+(:task :id "accountApply" :family "C" :difficulty "medium"
+  :entry "accountApply" :entryPy "account_apply"
+  :statement "Apply one operation to a bank account and return the new account; the given account is not modified. A deposit adds its amount to the balance. A withdrawal subtracts its amount and fails when the amount exceeds the balance. Deposits and withdrawals fail on a frozen account. Freezing marks the account as frozen and unfreezing marks it as not frozen; both always succeed. Amounts are non-negative."
+  :sigAsl "schema Account { balance: Int64 frozen: Bool }\n\nenum Op (deposit amount: Int64) (withdraw amount: Int64) (freeze) (unfreeze)\n\nfn accountApply acct: Account op: Op -> (Result Account String)"
+  :sigPy "from dataclasses import dataclass, replace\n\n@dataclass(frozen=True)\nclass Account:\n    balance: int\n    frozen: bool\n\n@dataclass(frozen=True)\nclass Deposit:\n    amount: int\n\n@dataclass(frozen=True)\nclass Withdraw:\n    amount: int\n\n@dataclass(frozen=True)\nclass Freeze:\n    pass\n\n@dataclass(frozen=True)\nclass Unfreeze:\n    pass\n\nOp = Deposit | Withdraw | Freeze | Unfreeze\n\ndef account_apply(acct: Account, op: Op) -> Account:"
+  :sigTs "type Account = { balance: number; frozen: boolean };\n\ntype Op =\n  | { kind: \"deposit\"; amount: number }\n  | { kind: \"withdraw\"; amount: number }\n  | { kind: \"freeze\" }\n  | { kind: \"unfreeze\" };\n\nfunction accountApply(acct: Account, op: Op): Account"
+  :examples (
+    (:args ((record Account (balance 100) (frozen false)) (variant deposit (amount 50))) :want (ok (record Account (balance 150) (frozen false))))
+    (:args ((record Account (balance 100) (frozen false)) (variant withdraw (amount 200))) :want (fails)))
+  :cases (
+    (:args ((record Account (balance 100) (frozen false)) (variant withdraw (amount 100))) :want (ok (record Account (balance 0) (frozen false))))
+    (:args ((record Account (balance 100) (frozen false)) (variant freeze)) :want (ok (record Account (balance 100) (frozen true))))
+    (:args ((record Account (balance 100) (frozen true)) (variant deposit (amount 10))) :want (fails))
+    (:args ((record Account (balance 40) (frozen true)) (variant unfreeze)) :want (ok (record Account (balance 40) (frozen false))))
+    (:args ((record Account (balance 7) (frozen false)) (variant deposit (amount 0))) :want (ok (record Account (balance 7) (frozen false))))
+    (:args ((record Account (balance 100) (frozen true)) (variant withdraw (amount 1))) :want (fails))))

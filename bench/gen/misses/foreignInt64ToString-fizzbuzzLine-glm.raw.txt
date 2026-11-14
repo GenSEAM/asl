@@ -1,0 +1,6 @@
+fn fizzbuzzLine n: Int64 -> String
+  (cond
+      ((= (int64Mod n 15) 0) "FizzBuzz")
+      ((= (int64Mod n 3) 0) "Fizz")
+      ((= (int64Mod n 5) 0) "Buzz")
+      (else (int64ToString n)))

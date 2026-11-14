@@ -1,0 +1,16 @@
+(:task :id "shapeArea" :family "C" :difficulty "easy"
+  :entry "shapeArea" :entryPy "shape_area"
+  :statement "Return the area of a shape, in whole numbers. A circle of radius r has area 3 times r times r (pi is taken as 3). A rectangle has area width times height. A square has area side times side. A triangle with base b and height h has area b times h divided by 2, rounded down. All measures are non-negative."
+  :sigAsl "enum Shape (circle r: Int64) (rect w: Int64 h: Int64) (square side: Int64) (triangle b: Int64 h: Int64)\n\nfn shapeArea s: Shape -> Int64"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Circle:\n    r: int\n\n@dataclass(frozen=True)\nclass Rect:\n    w: int\n    h: int\n\n@dataclass(frozen=True)\nclass Square:\n    side: int\n\n@dataclass(frozen=True)\nclass Triangle:\n    b: int\n    h: int\n\nShape = Circle | Rect | Square | Triangle\n\ndef shape_area(s: Shape) -> int:"
+  :sigTs "type Shape =\n  | { kind: \"circle\"; r: number }\n  | { kind: \"rect\"; w: number; h: number }\n  | { kind: \"square\"; side: number }\n  | { kind: \"triangle\"; b: number; h: number };\n\nfunction shapeArea(s: Shape): number"
+  :examples (
+    (:args ((variant circle (r 2))) :want 12)
+    (:args ((variant rect (w 3) (h 4))) :want 12))
+  :cases (
+    (:args ((variant square (side 5))) :want 25)
+    (:args ((variant triangle (b 3) (h 5))) :want 7)
+    (:args ((variant circle (r 0))) :want 0)
+    (:args ((variant rect (w 0) (h 9))) :want 0)
+    (:args ((variant triangle (b 4) (h 6))) :want 12)
+    (:args ((variant circle (r 10))) :want 300)))

@@ -1,0 +1,9 @@
+fn lookupChain table: (Map String String) start: String -> (Option String)
+  (match (mapGet table start)
+    ((some next) (followChain table next))
+    ((none) (none)))
+
+fn followChain table: (Map String String) current: String -> (Option String)
+  (match (mapGet table current)
+    ((some next) (followChain table next))
+    ((none) (some current)))

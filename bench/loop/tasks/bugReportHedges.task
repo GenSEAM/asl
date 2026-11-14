@@ -1,0 +1,33 @@
+#@ task bugReportHedges bugfixFromReport
+#@ prompt
+A user reports: hedgesG for a = (1 2 3 4 5) and b = (3 4 5 6 7) returns about -1.1676. Hedges' g must be Cohen's d times the small-sample correction J = 1 - 3/(4n - 9), where n is the total number of values in both groups, which gives -1.1425 here. The suite is green, so no test covers this. Fix the library and add a regression assertion to the existing test file for the describe module.
+#@ seed src/describe.asl
+(- (* 4.0 n) 9.0)
+#@ with
+(- (* 4.0 n) 1.0)
+#@ seed tests/describeTest.asl
+      (assert (near? (val (ds/cohenD a b)) -1.2649110640673518 1.0e-12) "Cohen d of two shifted vectors is -2/sqrt(2.5)")
+      (assert (near? (val (ds/hedgesG a b)) -1.1425003159318015 1.0e-12) "Hedges g applies 1 - 3/(4n-9)")
+#@ with
+      (assert (near? (val (ds/cohenD a b)) -1.2649110640673518 1.0e-12) "Cohen d of two shifted vectors is -2/sqrt(2.5)")
+#@ ref src/describe.asl
+(- (* 4.0 n) 1.0)
+#@ with
+(- (* 4.0 n) 9.0)
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/describe :a ds)])
+
+fn near? a: Float64 b: Float64 eps: Float64 -> Bool
+  (< (abs (- a b)) eps)
+
+fn val r: (Result Float64 String) -> Float64
+  (match r
+    ((ok v) v)
+    ((err e) (do (assert false e) -999.0)))
+
+fn runTests -> Bool
+  (do
+    (assert (near? (val (ds/hedgesG (list 2.0 4.0 6.0 8.0) (list 1.0 3.0 5.0 7.0))) 0.33678116053977536 1.0e-12) "Hedges g of two groups of four")
+    true)

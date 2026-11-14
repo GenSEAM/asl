@@ -7,7 +7,7 @@
       (usageLedger :a ul)
       (usage :a g)
       (asl-json/json :a j)
-      (asl-cli/system :a sys)])
+      (asl-text/say :a sys)])
 
 ; (:m :ref SUBPACE :do "asl gateway subs refresh | status: refresh writes the windows of ~/.asl/subscriptions.asn from every source that exists (opencodeGo usage endpoint, codex rate_limits events, the call ledger as an estimate), each window with :src and :at; status prints one row per subscription from the same pacing core the router uses")
 

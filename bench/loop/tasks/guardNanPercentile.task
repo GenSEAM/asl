@@ -1,0 +1,31 @@
+#@ task guardNanPercentile behaviourChangeUnderInvariant
+#@ prompt
+percentile, and so median and mad, silently accepts NaN or infinite values in xs: a NaN sorts last and the answer is wrong without any error. Change percentile so that such input returns (err "statsRange: a value is NaN or infinite"), the way mean does. Keep these invariants: empty input is still the statsEmpty error; an out-of-range p on finite data is still statsRange; percentileSorted itself must keep its behaviour and cost, because the bootstrap calls it on data that is already validated and its seeded results must not change.
+#@ ref src/describe.asl
+fn percentile xs: (List Float64) p: Float64 -> (Result Float64 String)
+  (percentileSorted (listSort xs) p)
+#@ with
+fn percentile xs: (List Float64) p: Float64 -> (Result Float64 String)
+  (if (and (not (listEmpty? xs)) (not (listAll? finiteValue? xs)))
+    (err "statsRange: a value is NaN or infinite")
+    (percentileSorted (listSort xs) p))
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/describe :a ds)])
+
+fn errOf r: (Result Float64 String) -> String
+  (match r
+    ((ok _) "")
+    ((err e) e))
+
+fn runTests -> Bool
+  (do
+    (assert (= (errOf (ds/median (list 1.0 (floatNan) 3.0))) "statsRange: a value is NaN or infinite") "median refuses NaN")
+    (assert (= (errOf (ds/percentile (list 1.0 (floatInf)) 50.0)) "statsRange: a value is NaN or infinite") "percentile refuses an infinity")
+    (assert (= (errOf (ds/mad (list 1.0 2.0 (floatNan)))) "statsRange: a value is NaN or infinite") "mad inherits the guard")
+    (assert (stringStartsWith? (errOf (ds/median (list))) "statsEmpty") "empty input is still statsEmpty")
+    (assert (stringStartsWith? (errOf (ds/percentile (list 1.0 2.0) 101.0)) "statsRange: percentile") "an out-of-range p is still its own statsRange")
+    (assert (= (ds/percentileSorted (list 1.0 2.0 (floatInf)) 0.0) (ok 1.0)) "percentileSorted does not validate its input")
+    (assert (= (ds/median (list 3.0 1.0 2.0)) (ok 2.0)) "finite data is unchanged")
+    true)

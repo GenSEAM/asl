@@ -1,0 +1,16 @@
+(:task :id "secondLargest" :family "B" :difficulty "medium"
+  :entry "secondLargest" :entryPy "second_largest"
+  :statement "Return the second largest distinct value of a list of integers, that is the largest value that is smaller than the maximum. Return nothing when the list has fewer than two distinct values."
+  :sigAsl "fn secondLargest xs: (List Int64) -> (Option Int64)"
+  :sigPy "def second_largest(xs: list[int]) -> int | None:"
+  :sigTs "function secondLargest(xs: number[]): number | undefined"
+  :examples (
+    (:args ((list 1 3 2)) :want (some 2))
+    (:args ((list 5)) :want (none)))
+  :cases (
+    (:args ((list 4 4 4)) :want (none))
+    (:args ((list 2 2 1)) :want (some 1))
+    (:args ((list)) :want (none))
+    (:args ((list -1 -2 -3)) :want (some -2))
+    (:args ((list 10 9 10 8)) :want (some 9))
+    (:args ((list 1 2)) :want (some 1))))

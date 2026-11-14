@@ -1,0 +1,39 @@
+#@ task featureTrimmedMean featureWithTest
+#@ prompt
+Add a trimmed mean to the describe module and export it: trimmedMean xs: (List Float64) frac: Float64 -> (Result Float64 String). It sorts the values, drops k = floor(n * frac) values from each end and returns the mean of the rest. Empty input is the package's statsEmpty error; a frac that is NaN, negative or at least 0.5 is (err "statsRange: trim fraction must be in [0, 0.5)"); NaN or infinite values are refused the way mean refuses them. Add at least one assertion for it to the describe test file.
+#@ ref src/describe.asl
+cohenD hedgesG statsEmpty statsTooFew]
+#@ with
+cohenD hedgesG statsEmpty statsTooFew trimmedMean]
+#@ ref src/describe.asl
+#@ with
+
+fn trimmedMean xs: (List Float64) frac: Float64 -> (Result Float64 String)
+  (cond
+    ((listEmpty? xs) (err (statsEmpty)))
+    ((or (isNan? frac) (or (< frac 0.0) (>= frac 0.5))) (err "statsRange: trim fraction must be in [0, 0.5)"))
+    (else
+      (let [(n (listLength xs))
+            (k (optionOr (float64ToInt64 (floor (* (int64ToFloat64 n) frac))) 0))]
+        (mean (listTake (listDrop (listSort xs) k) (- n (* 2 k)))))))
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/describe :a ds)])
+
+fn errOf r: (Result Float64 String) -> String
+  (match r
+    ((ok _) "")
+    ((err e) e))
+
+fn runTests -> Bool
+  (do
+    (assert (= (ds/trimmedMean (list 100.0 1.0 3.0 2.0 4.0) 0.2) (ok 3.0)) "20 percent trim of five values drops one from each end")
+    (assert (= (ds/trimmedMean (list 2.0 4.0 4.0 4.0 5.0 5.0 7.0 9.0) 0.25) (ok 4.5)) "25 percent trim of eight values keeps the middle four")
+    (assert (= (ds/trimmedMean (list 1.0 2.0 6.0) 0.0) (ok 3.0)) "no trim is the mean")
+    (assert (= (ds/trimmedMean (list 1.0 2.0 6.0) 0.3) (ok 3.0)) "floor(3 * 0.3) is 0")
+    (assert (= (errOf (ds/trimmedMean (list 1.0 2.0) 0.5)) "statsRange: trim fraction must be in [0, 0.5)") "frac 0.5 is statsRange")
+    (assert (= (errOf (ds/trimmedMean (list 1.0 2.0) -0.1)) "statsRange: trim fraction must be in [0, 0.5)") "a negative frac is statsRange")
+    (assert (stringStartsWith? (errOf (ds/trimmedMean (list) 0.1)) "statsEmpty") "empty input is statsEmpty")
+    (assert (stringStartsWith? (errOf (ds/trimmedMean (list 1.0 (floatNan) 3.0) 0.0)) "statsRange") "a NaN value is statsRange")
+    true)

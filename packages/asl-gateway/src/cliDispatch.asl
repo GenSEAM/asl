@@ -58,7 +58,7 @@
       (usageLedger :a ul)
       (sessions :a ses)
       (secrets :a sc)
-      (asl-cli/system :a sys)
+      (asl-text/say :a sys)
       (modelSync :a msync)
       (capOrderStats :a cos)
       (subPacing :a space)

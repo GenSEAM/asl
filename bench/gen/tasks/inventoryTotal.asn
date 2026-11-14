@@ -1,0 +1,16 @@
+(:task :id "inventoryTotal" :family "C" :difficulty "easy"
+  :entry "inventoryTotal" :entryPy "inventory_total"
+  :statement "Each inventory item has a name, a quantity and a price per unit. Return the total value of the inventory: the sum over all items of quantity times unit price. An empty inventory has value 0."
+  :sigAsl "schema Item { name: String qty: Int64 unitPrice: Int64 }\n\nfn inventoryTotal items: (List Item) -> Int64"
+  :sigPy "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Item:\n    name: str\n    qty: int\n    unit_price: int\n\ndef inventory_total(items: list[Item]) -> int:"
+  :sigTs "type Item = { name: string; qty: number; unitPrice: number };\n\nfunction inventoryTotal(items: Item[]): number"
+  :examples (
+    (:args ((list (record Item (name "pen") (qty 2) (unitPrice 150)))) :want 300)
+    (:args ((list)) :want 0))
+  :cases (
+    (:args ((list (record Item (name "pen") (qty 2) (unitPrice 150)) (record Item (name "book") (qty 1) (unitPrice 1200)))) :want 1500)
+    (:args ((list (record Item (name "ghost") (qty 0) (unitPrice 999)))) :want 0)
+    (:args ((list (record Item (name "a") (qty 1) (unitPrice 1)) (record Item (name "b") (qty 2) (unitPrice 2)) (record Item (name "c") (qty 3) (unitPrice 3)))) :want 14)
+    (:args ((list (record Item (name "bulk") (qty 1000) (unitPrice 999999)))) :want 999999000)
+    (:args ((list (record Item (name "free") (qty 5) (unitPrice 0)) (record Item (name "paid") (qty 5) (unitPrice 1)))) :want 5)
+    (:args ((list (record Item (name "one") (qty 1) (unitPrice 1)))) :want 1)))

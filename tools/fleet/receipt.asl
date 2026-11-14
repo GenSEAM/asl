@@ -1,5 +1,5 @@
 (module asl-tools/fleet/receipt
-  :x [gateRunner! gateReport! auditedHead? receiptRows gateAudit! gateRowComplete claimedOf main Track gateCounts redBeforeCoverage ownsPresent ownsDisjoint overlaps? validateForm checkText]
+  :x [gateDoneRun gateRunner! gateReport! auditedHead? receiptRows gateAudit! gateRowComplete claimedOf main Track gateCounts redBeforeCoverage ownsPresent ownsDisjoint overlaps? validateForm checkText]
   :i [(asl-tools/fleet/model :a fm) (asl-parser/reader :a rd) (asl-tools/fleet/run :a fr)])
 
 (schema Track
@@ -158,6 +158,7 @@ fn ! gateAudit! items: (List rd/SExpr) declared: String run: (fn [(String)] -> (
                     ((not (gateRowComplete items declared)) (list (str "gateMissing: no gate row with command, exit and executed for " declared)))
                     (else (listAppend
                               (cond ((= ex -1) (list "gateTimeout: the rerun did not finish within its limit"))
+                                    ((= ex -2) (list "gateUnverified: wallOverBound, the declared gate's recorded wall is above its bound and it was not run; neither green nor red"))
                                     ((or (!= ex 0) (<= ks 0)) (list (str "gateRed: rerun exit " (stringFromInt64 ex) " executed " (stringFromInt64 ks) ", a done receipt needs exit 0 and executed above 0")))
                                     (else (list)))
                               (if (or (!= (pairFirst claimed) ex) (!= (pairSecond claimed) ks))
@@ -189,11 +190,13 @@ fn ! readTracks paths: (List String) -> (Result (List Track) String)
                                     ((ok forms) (ok (listAppend ts (tracksOf forms))))))))))
         (ok (list)) paths)
 
-; (:m :ref RECEIPT-GATE-ROW :do "the production rerun: runShell! (declared form only, host verdict lines) under a wall limit of sec seconds, a run killed by its limit answers exit -1 executed -1, which gateAudit! names gateTimeout")
+; (:m :ref RECEIPT-GATE-ROW :do "the production rerun: runShell! (declared form only, host verdict lines) under a wall limit of sec seconds, a run killed by its limit answers exit -1 executed -1, which gateAudit! names gateTimeout; a run refused for wallOverBound answers -2 -2, named gateUnverified (never gateRed)")
+fn gateDoneRun d: fr/Done -> (Pair Int64 Int64)
+  (if (or (= d.verdict "timeout") (= d.verdict "runaway")) (pair -1 -1) (if (= d.verdict "wallOverBound") (pair -2 -2) (pair d.exit (optionOr (fr/executedOf d.out) 0))))
+
 fn ! gateRunner! cwd: String sec: Int64 -> (fn [(String)] -> (Pair Int64 Int64))
   (fn [(c String)] -> (Pair Int64 Int64)
-    (let [(d (fr/runShell! c cwd (fr/childEnv (list)) (fr/limits sec 200)))]
-      (if (or (= d.verdict "timeout") (= d.verdict "runaway")) (pair -1 -1) (pair d.exit (optionOr (fr/executedOf d.out) 0)))))
+    (gateDoneRun (fr/runShell! c cwd (fr/childEnv (list)) (fr/limits sec 200))))
 
 fn ! gateReport! text: String gate: String cwd: String sec: Int64 -> Int64
   (if (stringEmpty? gate) 0

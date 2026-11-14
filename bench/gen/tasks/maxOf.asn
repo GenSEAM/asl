@@ -1,0 +1,16 @@
+(:task :id "maxOf" :family "B" :difficulty "easy"
+  :entry "maxOf" :entryPy "max_of"
+  :statement "Return the largest number of a list of integers, or nothing when the list is empty."
+  :sigAsl "fn maxOf xs: (List Int64) -> (Option Int64)"
+  :sigPy "def max_of(xs: list[int]) -> int | None:"
+  :sigTs "function maxOf(xs: number[]): number | undefined"
+  :examples (
+    (:args ((list 3 1 2)) :want (some 3))
+    (:args ((list)) :want (none)))
+  :cases (
+    (:args ((list -5 -2 -9)) :want (some -2))
+    (:args ((list 7)) :want (some 7))
+    (:args ((list 1 1 1)) :want (some 1))
+    (:args ((list 0 -1)) :want (some 0))
+    (:args ((list 2 9 9 3)) :want (some 9))
+    (:args ((list -7)) :want (some -7))))

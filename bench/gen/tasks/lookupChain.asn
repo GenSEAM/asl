@@ -1,0 +1,16 @@
+(:task :id "lookupChain" :family "B" :difficulty "medium"
+  :entry "lookupChain" :entryPy "lookup_chain"
+  :statement "A table maps names to names. Starting from the name start, look it up in the table; if it has an entry, continue from the value of that entry, and so on, until reaching a name that has no entry, and return that final name. When start itself has no entry, return nothing. The table contains no cycles."
+  :sigAsl "fn lookupChain table: (Map String String) start: String -> (Option String)"
+  :sigPy "def lookup_chain(table: dict[str, str], start: str) -> str | None:"
+  :sigTs "function lookupChain(table: Map<string, string>, start: string): string | undefined"
+  :examples (
+    (:args ((dict ("a" "b") ("b" "c")) "a") :want (some "c"))
+    (:args ((dict ("a" "b")) "z") :want (none)))
+  :cases (
+    (:args ((dict) "a") :want (none))
+    (:args ((dict ("a" "b")) "a") :want (some "b"))
+    (:args ((dict ("a" "b") ("b" "c") ("c" "d") ("d" "e")) "a") :want (some "e"))
+    (:args ((dict ("x" "y") ("p" "q")) "p") :want (some "q"))
+    (:args ((dict ("a" "b") ("b" "c") ("c" "d") ("d" "e")) "c") :want (some "e"))
+    (:args ((dict ("a" "b") ("b" "c")) "c") :want (none))))

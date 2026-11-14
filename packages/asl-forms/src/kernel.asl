@@ -1,4 +1,4 @@
-(module asl-forms/kernel :x [toolEnv! aslHome! aslPath! binFor! charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds] :i [])
+(module asl-forms/kernel :x [toolEnv! aslHome! aslPath! binFor! charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds checkoutTop! envWorkspaceRoot!] :i [])
 
 
 (schema ParsedStep (:f op String) (:f kwargs (Map String String)) (:f args (List String)))
@@ -357,6 +357,53 @@ fn existingProbe! p: String -> String
 
 fn joinPath a: String b: String -> String
   (if (stringEndsWith? a "/") (str a b) (str a "/" b))
+
+; (:m :ref ASL-EDIT-SCOPE-ESCAPES :do "the top of the checkout holding a path: the nearest directory with a .git entry, empty when there is none")
+fn ! checkoutTop! probe: String -> String
+  (cond
+    ((fileExists? (joinPath probe ".git")) probe)
+    ((= (dirName probe) probe) "")
+    (else (checkoutTop! (dirName probe))))
+
+fn gitDirOf! top: String -> String
+  (let [(text (stringTrim (resultOr (fileReadString (joinPath top ".git")) "")))
+        (named (if (stringStartsWith? text "gitdir:") (stringTrim (optionOr (stringSlice text 7 (stringLength text)) "")) ""))]
+    (cond
+      ((stringEmpty? named) "")
+      ((stringStartsWith? named "/") named)
+      (else (normalizePath (joinPath top named)))))
+
+; (:m :ref ASL-EDIT-SCOPE-ESCAPES :do "a linked worktree is a checkout whose .git is a file naming an admin directory that holds a commondir entry; a submodule has the file but no commondir, the main checkout has a .git directory")
+fn linkedWorktree! top: String -> Bool
+  (let [(dot (joinPath top ".git"))
+        (gitDir (if (isFile! dot) (gitDirOf! top) ""))]
+    (and (not (stringEmpty? gitDir)) (isFile! (joinPath gitDir "commondir"))))
+
+; (:m :ref ASL-EDIT-SCOPE-ESCAPES :do "the repository a checkout belongs to, as the real path of its shared git directory, read from the files git keeps (no git process); empty when the path is not a checkout top")
+fn gitCommonDir! top: String -> String
+  (let [(dot (joinPath top ".git"))]
+    (cond
+      ((isDir! dot) (resultOr (realPath dot) dot))
+      ((not (isFile! dot)) "")
+      (else
+        (let [(gitDir (gitDirOf! top))
+              (named (if (stringEmpty? gitDir) "" (stringTrim (resultOr (fileReadString (joinPath gitDir "commondir")) ""))))
+              (common (cond
+                        ((stringEmpty? gitDir) "")
+                        ((stringEmpty? named) gitDir)
+                        ((stringStartsWith? named "/") named)
+                        (else (normalizePath (joinPath gitDir named)))))]
+          (if (stringEmpty? common) "" (resultOr (realPath common) common))))))
+
+; (:m :ref ASL-EDIT-SCOPE-ESCAPES :do "the inherited ASL_ROOT as the workspace choice, empty when unset or when it must yield: a cwd inside a linked worktree binds that worktree when ASL_ROOT names another checkout of the same repository, so a session that inherited the main checkout's ASL_ROOT and moved into a worktree never writes the main checkout; from any other cwd ASL_ROOT stands")
+fn ! envWorkspaceRoot! cwd: String -> String
+  (let [(given (envText! "ASL_ROOT"))]
+    (if (stringEmpty? given)
+      ""
+      (let [(top (checkoutTop! cwd))
+            (envTop (checkoutTop! (resultOr (realPath given) (normalizePath given))))
+            (common (if (or (stringEmpty? top) (stringEmpty? envTop) (= top envTop) (not (linkedWorktree! top))) "" (gitCommonDir! top)))]
+        (if (and (not (stringEmpty? common)) (= common (gitCommonDir! envTop))) "" given))))
 
 fn aslHome! root: String -> String
   (if (isDir! (joinPath root "asl")) (joinPath root "asl") root)

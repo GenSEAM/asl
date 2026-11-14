@@ -2,7 +2,7 @@
   :x [utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -1511,7 +1511,7 @@ fn gateSig out: String -> String
 fn ! taskText dir: String u: st/Task -> String
   (match (fileReadString (str dir "/tasks/" u.id ".txt"))
     ((ok t) t)
-    ((err _) (str "Implement plan unit " u.id " exactly as its row in .asl/mem/work/SH/plan.asn says; the gate is: " u.gate)))
+    ((err _) (str "Implement plan unit " u.id " exactly as its row in " (stringJoin (intakeFiles! dir) " or ") " says; the gate is: " u.gate)))
 
 ; (:m :ref CONDHARDEN :do "line count of the owned file at the unit's base and now; -1 when it did not exist there or is gone now")
 fn ! baseLinesOf wt: String base: String path: String -> Int64
@@ -1586,6 +1586,12 @@ fn ! checkSig! wt: String owned: (List String) sec: Int64 -> String
 
 ; (:m :ref CONDUCTOR :do "the conductor's own gate stage reruns the declared gate in the unit's worktree and never reads the writer's report")
 ; (:m :ref CONDHARDEN :do "before the declared gate: owned files may not lose more than half their base lines without the word rewrite in the task text, and every owned .asl file and each importer of an owned module must pass asl check; either failure is exit 3 with a :sig naming the file")
+; (:m :ref GATEADMIT-FIX :do "the Res of one finished gate run: a run refused for wallOverBound (exit 126, never started) is unverified, not red: its sig starts gateTimeout so the unit is requeued without a fail count, and its exit stays 126 with 0 asserts so it is never green")
+fn gateDoneRes d: fr/Done -> Res
+  (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+       :sig (if (= d.verdict "wallOverBound") (str "gateTimeout: wallOverBound unverified, the gate was not run: " (gateSig d.out)) (gateSig d.out))
+       :ms d.ms :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict "")
+
 fn ! gatesRes gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit -> Res
   (let [(refused (if (stringEmpty? u.gate) "" (shrinkRefusal! c.wt u task)))
         (broken (if (or (stringEmpty? u.gate) (not (stringEmpty? refused))) "" (checkSig! c.wt u.owns checkSec)))]
@@ -1595,7 +1601,7 @@ fn ! gatesRes gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit ->
       ((not (stringEmpty? broken)) (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig broken :ms 0 :exit 3 :asserts 0 :verdict ""))
       (else
         (let [(d (fr/runShell! u.gate c.wt (fr/childEnv (list)) (fr/heavy (fr/limits gateSec 200) "writer" "")))]
-          (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig (gateSig d.out) :ms d.ms :exit d.exit :asserts (optionOr (fr/executedOf d.out) 0) :verdict "")))))
+          (gateDoneRes d)))))
 
 ; (:m :ref COND3 :do "a retried write finds its branch sh/UNIT left by an earlier attempt without a worktree and checks it out again instead of failing on the existing branch")
 ; (:m :ref COND3 :do "a leftover sh/UNIT re-attached for a re-run unit keeps its old base; when the unit's base is not an ancestor of it the branch is rebased onto the base, and when the rebase conflicts it is renamed sh/UNIT-stale-<s> (nothing is lost) and recreated from the base")
@@ -2759,17 +2765,54 @@ fn ! needRows! dir: String -> Int64
                 todo))]
     (listLength todo))
 
+; (:m :ref NODE2-FEED-BACKLOG :do "queue files next to the plan ledger: each (:queue :path P [:base REF] [:channel LANE]) row of the store's ladder.asn names a file in the backlog schema that every service cycle imports after the ledger of ledger.path; a relative P is read under the store's repo.path, :base defaults to main and :channel (the lane of rows without their own) to free; a row with an unknown key, no :path or an empty value is not used, and without any row intake is the ledger alone, as before")
+fn queueErrors row: String -> (List String)
+  (match (st/rowFields row "queue")
+    ((err e) (list e))
+    ((ok fs)
+      (listAppend
+        (if (stringEmpty? (st/textField fs "path")) (list "no :path") (list))
+        (map (fn [(k String)] -> String (str "unknown key " k))
+             (filter (fn [(k String)] -> Bool (not (listContains? (list ":path" ":base" ":channel") k)))
+                     (map (fn [(f asn/AsnField)] -> String f.key) fs))))))
+
+fn ! queueRows! dir: String -> (List (List String))
+  (let [(repo (stringTrim (readOr (repoPath dir))))]
+    (listFlatMap (fn [(l String)] -> (List (List String))
+                   (if (or (not (stringStartsWith? l "(:queue ")) (not (listEmpty? (queueErrors l)))) (list)
+                     (match (st/rowFields l "queue")
+                       ((err _) (list))
+                       ((ok fs)
+                         (let [(given (st/textField fs "path"))
+                               (base (st/textField fs "base"))
+                               (lane (st/textField fs "channel"))]
+                           (list (list (if (or (stringStartsWith? given "/") (stringEmpty? repo)) given (str repo "/" given))
+                                       (if (stringEmpty? base) "main" base)
+                                       (if (stringEmpty? lane) "free" lane))))))))
+                 (map stringTrim (stringLines (readOr (ladderPath dir))))))
+
+; (:m :ref NODE2-FEED-BACKLOG :do "the files a unit's row can come from, for the task text of a unit without tasks/ID.txt: the queue files, then the ledger of ledger.path; none configured names the plan journal as before")
+fn ! intakeFiles! dir: String -> (List String)
+  (let [(ledger (stringTrim (optionOr (listHead (stringLines (readOr (ledgerPath dir)))) "")))
+        (files (listAppend (map (fn [(q (List String))] -> String (optionOr (listGet q 0) "")) (queueRows! dir)) (if (stringEmpty? ledger) (list) (list ledger))))]
+    (if (listEmpty? files) (list ".asl/mem/work/SH/plan.asn") files))
+
+fn ! importFrom! ctx: Ctx path: String base: String lane: String -> Int64
+  (match (fileReadString path)
+    ((err _) 0)
+    ((ok text)
+      (match (pi/planIn! text ctx.dir base false lane)
+        ((err _) 0)
+        ((ok r) (let [(_ (needRows! ctx.dir))] (listLength r.put))))))
+
 fn ! importCycle! ctx: Ctx -> Int64
   (let [(cfg (stringLines (readOr (ledgerPath ctx.dir))))
         (ledger (stringTrim (optionOr (listGet cfg 0) "")))
-        (base (let [(b (stringTrim (optionOr (listGet cfg 1) "")))] (if (stringEmpty? b) "HEAD" b)))]
-    (if (stringEmpty? ledger) 0
-      (match (fileReadString ledger)
-        ((err _) 0)
-        ((ok text)
-          (match (pi/plan! text ctx.dir base false)
-            ((err _) 0)
-            ((ok r) (let [(_ (needRows! ctx.dir))] (listLength r.put))))))))
+        (base (let [(b (stringTrim (optionOr (listGet cfg 1) "")))] (if (stringEmpty? b) "HEAD" b)))
+        (fromLedger (if (stringEmpty? ledger) 0 (importFrom! ctx ledger base "free")))]
+    (fold (fn [(acc Int64) (q (List String))] -> Int64
+            (+ acc (importFrom! ctx (optionOr (listGet q 0) "") (optionOr (listGet q 1) "main") (optionOr (listGet q 2) "free"))))
+          fromLedger (queueRows! ctx.dir)))
 
 ; (:m :ref COND3 :do "no signal handler exists in ASL, so the loop's stop is cooperative: a stop file in the store (written by `conductor stop`, which the service runs as ExecStop) ends the loop after stopAll!; a raw SIGTERM or SIGKILL leaves stage children running and the next start resumes them from the rows")
 fn ! loopOnce! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refresh: (fn ! [] -> Unit) refreshDue: Bool -> Bool

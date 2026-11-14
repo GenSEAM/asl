@@ -1,0 +1,16 @@
+(:task :id "trafficLightNext" :family "C" :difficulty "easy"
+  :entry "trafficLightNext" :entryPy "traffic_light_next"
+  :statement "A traffic light changes from red to green, from green to yellow and from yellow to red. Return the light shown after the given number of changes, starting from the given light. The number of changes is 0 or more."
+  :sigAsl "enum Light (red) (green) (yellow)\n\nfn trafficLightNext light: Light steps: Int64 -> Light"
+  :sigPy "from enum import Enum\n\n\nclass Light(Enum):\n    RED = \"red\"\n    GREEN = \"green\"\n    YELLOW = \"yellow\"\n\n\ndef traffic_light_next(light: Light, steps: int) -> Light:"
+  :sigTs "type Light = \"red\" | \"green\" | \"yellow\";\n\nfunction trafficLightNext(light: Light, steps: number): Light"
+  :examples (
+    (:args ((tag Light red) 1) :want (tag Light green))
+    (:args ((tag Light yellow) 1) :want (tag Light red)))
+  :cases (
+    (:args ((tag Light green) 1) :want (tag Light yellow))
+    (:args ((tag Light red) 0) :want (tag Light red))
+    (:args ((tag Light red) 3) :want (tag Light red))
+    (:args ((tag Light green) 5) :want (tag Light red))
+    (:args ((tag Light yellow) 7) :want (tag Light red))
+    (:args ((tag Light red) 2) :want (tag Light yellow))))

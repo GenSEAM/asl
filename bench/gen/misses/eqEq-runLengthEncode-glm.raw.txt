@@ -1,0 +1,17 @@
+fn runLengthEncode text: String -> (List (Pair String Int64))
+  (let [(n (stringLength text))]
+    (cond
+      ((== n 0) (list))
+      (else (rleGo text n 0 "" 0 (list)))))
+
+fn rleGo text: String n: Int64 i: Int64 cur: String cnt: Int64 acc: (List (Pair String Int64)) -> (List (Pair String Int64))
+  (cond
+    ((>= i n) (listReverse (cons (pair cur cnt) acc)))
+    (else
+      (match (stringSlice text i (+ i 1))
+        ((some c)
+          (cond
+            ((== c cur) (rleGo text n (+ i 1) cur (+ cnt 1) acc))
+            ((== cnt 0) (rleGo text n (+ i 1) c 1 acc))
+            (else (rleGo text n (+ i 1) c 1 (cons (pair cur cnt) acc)))))
+        ((none) (list)))))

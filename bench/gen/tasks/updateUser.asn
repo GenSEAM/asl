@@ -1,0 +1,16 @@
+(:task :id "updateUser" :family "C" :difficulty "medium"
+  :entry "updateUser" :entryPy "update_user"
+  :statement "Apply one change to a user record and return the changed copy; the given record is not modified. rename sets the name. birthday adds 1 to the age. setEmail sets the email address. clearEmail removes the email address, so that the user has none."
+  :sigAsl "schema User { name: String age: Int64 email: (Option String) }\n\nenum Change (rename newName: String) (birthday) (setEmail email: String) (clearEmail)\n\nfn updateUser user: User change: Change -> User"
+  :sigPy "from dataclasses import dataclass, replace\n\n@dataclass(frozen=True)\nclass User:\n    name: str\n    age: int\n    email: str | None\n\n@dataclass(frozen=True)\nclass Rename:\n    new_name: str\n\n@dataclass(frozen=True)\nclass Birthday:\n    pass\n\n@dataclass(frozen=True)\nclass SetEmail:\n    email: str\n\n@dataclass(frozen=True)\nclass ClearEmail:\n    pass\n\nChange = Rename | Birthday | SetEmail | ClearEmail\n\ndef update_user(user: User, change: Change) -> User:"
+  :sigTs "type User = { name: string; age: number; email: string | undefined };\n\ntype Change =\n  | { kind: \"rename\"; newName: string }\n  | { kind: \"birthday\" }\n  | { kind: \"setEmail\"; email: string }\n  | { kind: \"clearEmail\" };\n\nfunction updateUser(user: User, change: Change): User"
+  :examples (
+    (:args ((record User (name "ann") (age 30) (email (none))) (variant birthday)) :want (record User (name "ann") (age 31) (email (none))))
+    (:args ((record User (name "ann") (age 30) (email (none))) (variant setEmail (email "ann@example.org"))) :want (record User (name "ann") (age 30) (email (some "ann@example.org")))))
+  :cases (
+    (:args ((record User (name "rob") (age 41) (email (none))) (variant rename (newName "bob"))) :want (record User (name "bob") (age 41) (email (none))))
+    (:args ((record User (name "cy") (age 20) (email (some "cy@example.org"))) (variant clearEmail)) :want (record User (name "cy") (age 20) (email (none))))
+    (:args ((record User (name "di") (age 55) (email (none))) (variant clearEmail)) :want (record User (name "di") (age 55) (email (none))))
+    (:args ((record User (name "eve") (age 0) (email (some "eve@example.org"))) (variant birthday)) :want (record User (name "eve") (age 1) (email (some "eve@example.org"))))
+    (:args ((record User (name "flo") (age 33) (email (some "old@example.org"))) (variant setEmail (email "new@example.org"))) :want (record User (name "flo") (age 33) (email (some "new@example.org"))))
+    (:args ((record User (name "gil") (age 9) (email (some "g@example.org"))) (variant rename (newName "gus"))) :want (record User (name "gus") (age 9) (email (some "g@example.org"))))))

@@ -1,0 +1,16 @@
+(:task :id "dedupeKeepOrder" :family "B" :difficulty "easy"
+  :entry "dedupeKeepOrder" :entryPy "dedupe_keep_order"
+  :statement "Remove repeated values from a list of integers, keeping the first occurrence of each value and the original order."
+  :sigAsl "fn dedupeKeepOrder xs: (List Int64) -> (List Int64)"
+  :sigPy "def dedupe_keep_order(xs: list[int]) -> list[int]:"
+  :sigTs "function dedupeKeepOrder(xs: number[]): number[]"
+  :examples (
+    (:args ((list 1 2 1 3)) :want (list 1 2 3))
+    (:args ((list)) :want (list)))
+  :cases (
+    (:args ((list 5 5 5)) :want (list 5))
+    (:args ((list 3 1 3 1 2)) :want (list 3 1 2))
+    (:args ((list 1 2 3)) :want (list 1 2 3))
+    (:args ((list 0 -1 0 -1)) :want (list 0 -1))
+    (:args ((list 7)) :want (list 7))
+    (:args ((list 2 1 2 1 2 3 3)) :want (list 2 1 3))))

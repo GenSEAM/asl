@@ -1,7 +1,7 @@
 (module aslGateway/server
   :x [gatewayCliMode? hubStatusText! staleHeaderName staleHeaderLine staleMarked addConn requeueWriting stepWriting! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
-  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-cli/system :a sys) (asl-text/string :a ts)
+  :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-text/say :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/admission :a adm) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
       (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
@@ -1515,15 +1515,19 @@ fn ! linkOpenWith! env: (Map String String) home: String rootDir: String familie
 fn outboxFor srv: GatewayLoop fd: Int64 -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(x (Pair Int64 String))] -> Bool (= (pairFirst x) fd)) srv.outbox)))
 
-fn withoutOutbox srv: GatewayLoop fd: Int64 -> GatewayLoop
-  (with srv :outbox (filter (fn [(x (Pair Int64 String))] -> Bool (!= (pairFirst x) fd)) srv.outbox))
+; (:m :ref GW-LINK-CORRELATION :do "a link call reads only the answer rendered for its own connection id. A call that passed its limit leaves its request in flight, so the provider's answer still settles and writes its usage row under that call's tag, and the next call takes the id below every one still in the loop: the late answer lands in the outbox under the old id, where no call reads it. One call waits at a time, so whatever the outbox holds when a call starts or ends belongs to no reader and is dropped")
+fn linkCallFd srv: GatewayLoop -> Int64
+  (- (fold (fn [(low Int64) (cn GatewayConn)] -> Int64 (min low cn.fd)) (+ (linkFd) 1) srv.conns) 1)
+
+fn withoutLinkAnswers srv: GatewayLoop -> GatewayLoop
+  (with srv :outbox (list))
 
 fn pending? srv: GatewayLoop fd: Int64 -> Bool
   (or (listAny? (fn [(cn GatewayConn)] -> Bool (= cn.fd fd)) srv.conns) (not (listEmpty? srv.replies)))
 
 fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop (Result String String))
   (match (outboxFor srv fd)
-    ((some data) (pair (withoutOutbox srv fd) (ok data)))
+    ((some data) (pair (withoutLinkAnswers srv) (ok data)))
     ((none)
       (cond
         ((not (or (pending? srv fd) (pd/poolActive? srv.pools))) (pair srv (err "in-process gateway request ended without a response")))
@@ -1540,5 +1544,6 @@ fn ! linkPump! srv: GatewayLoop fd: Int64 deadlineMs: Int64 -> (Pair GatewayLoop
 
 fn ! linkSend! srv: GatewayLoop method: String path: String headers: (List (Pair String String)) body: String timeoutMs: Int64 -> (Pair GatewayLoop (Result String String))
   (let [(request (HttpRequest :method method :path path :headers headers :body body))
-        (started (dispatchAuthed! (withoutOutbox srv (linkFd)) (linkFd) "" request))]
-    (linkPump! started (linkFd) (+ (nowMs!) timeoutMs)))
+        (fd (linkCallFd srv))
+        (started (dispatchAuthed! (withoutLinkAnswers srv) fd "" request))]
+    (linkPump! started fd (+ (nowMs!) timeoutMs)))

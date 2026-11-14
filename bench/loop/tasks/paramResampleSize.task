@@ -1,0 +1,81 @@
+#@ task paramResampleSize parameterThroughLayers
+#@ prompt
+Add a resample-size parameter to the bootstrap. bootstrapPercentile gets a new parameter size: Int64 directly after resamples. Each resample then draws size values, with replacement and from all the input values, instead of as many values as the input has; the value has to reach the innermost sampling loop through the helper functions between. A size below 1 is (err "statsRange: resample size must be at least 1"). Update the existing callers so the suite passes: existing calls pass the input length as size.
+#@ ref src/interval.asl
+fn ! resampleLoop! src: Bytes n: Int64 out: Bytes i: Int64 r: rg/Rng -> rg/Rng
+  (if (>= i n) r
+#@ with
+fn ! resampleLoop! src: Bytes n: Int64 m: Int64 out: Bytes i: Int64 r: rg/Rng -> rg/Rng
+  (if (>= i m) r
+#@ ref src/interval.asl
+(resampleLoop! src n out (+ i 1) (pairSecond p))
+#@ with
+(resampleLoop! src n m out (+ i 1) (pairSecond p))
+#@ ref src/interval.asl
+fn ! statLoop! src: Bytes n: Int64 out: Bytes
+#@ with
+fn ! statLoop! src: Bytes n: Int64 m: Int64 out: Bytes
+#@ ref src/interval.asl
+(resampleLoop! src n scratch 0 r)
+#@ with
+(resampleLoop! src n m scratch 0 r)
+#@ ref src/interval.asl
+(stat (floatsOf scratch 0 n))
+#@ with
+(stat (floatsOf scratch 0 m))
+#@ ref src/interval.asl
+(statLoop! src n out stat scratch (+ k 1) total r2)
+#@ with
+(statLoop! src n m out stat scratch (+ k 1) total r2)
+#@ ref src/interval.asl
+resamples: Int64 conf: Float64 r: rg/Rng -> (Result BootResult String)
+#@ with
+resamples: Int64 size: Int64 conf: Float64 r: rg/Rng -> (Result BootResult String)
+#@ ref src/interval.asl
+    ((> resamples 1000000) (err "statsRange: at most 1000000 resamples"))
+#@ with
+    ((> resamples 1000000) (err "statsRange: at most 1000000 resamples"))
+    ((< size 1) (err "statsRange: resample size must be at least 1"))
+#@ ref src/interval.asl
+(scratch (bytesAlloc (* n 8)))
+#@ with
+(scratch (bytesAlloc (* size 8)))
+#@ ref src/interval.asl
+(r2 (statLoop! src n out stat scratch 0 resamples r))
+#@ with
+(r2 (statLoop! src n size out stat scratch 0 resamples r))
+#@ gradeEditAll tests/intervalTest.asl
+meanOf 1000 0.95
+#@ with
+meanOf 1000 8 0.95
+#@ gradeEditAll tests/intervalTest.asl
+meanOf 100 0.95
+#@ with
+meanOf 100 8 0.95
+#@ gradeEdit tests/intervalTest.asl
+meanOf 5 0.95
+#@ with
+meanOf 5 8 0.95
+#@ gradeEdit tests/intervalTest.asl
+meanOf 100 2.0
+#@ with
+meanOf 100 8 2.0
+#@ accept tests/acceptTest.asl
+(module asl-stats/tests/acceptTest
+  :x [runTests]
+  :i [(asl-stats/interval :a iv) (asl-stats/rng :a rg)])
+
+fn countOf xs: (List Float64) -> Float64
+  (int64ToFloat64 (listLength xs))
+
+fn ! runTests -> Bool
+  (let [(xs (list 2.0 4.0 4.0 4.0 5.0 5.0 7.0 9.0))]
+    (do
+      (match (iv/bootstrapPercentile xs countOf 50 3 0.95 (rg/rngSeed 7))
+        ((ok b) (assert (and (= b.lo 3.0) (= b.hi 3.0)) "every resample holds exactly size values"))
+        ((err e) (assert false e)))
+      (match (iv/bootstrapPercentile xs countOf 50 20 0.95 (rg/rngSeed 7))
+        ((ok b) (assert (and (= b.lo 20.0) (= b.estimate 8.0)) "a size above the input length is allowed and the estimate uses the input"))
+        ((err e) (assert false e)))
+      (assert (= (match (iv/bootstrapPercentile xs countOf 50 0 0.95 (rg/rngSeed 7)) ((err e) e) ((ok _) "")) "statsRange: resample size must be at least 1") "size 0 is statsRange")
+      true))

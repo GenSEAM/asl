@@ -41,6 +41,10 @@ fn testUnterminatedStringIndentCall -> Bool
 fn testMismatchedBracketBracketParen -> Bool
   (let [(got (showTop (a/parse "(module m :x [] :i [])\n[ )")))] (do (assert (= got "err 2:3 mismatched closing delimiter ')'") (str "bracket-paren mismatch in paren dialect, got " got)) true))
 
+; (:m :ref unbalancedFormDiagnostic :do "the opener named in a mismatch inside the second item is a file line, not a line counted from the start of that item")
+fn testMismatchOpenerIsFileLine -> Bool
+  (let [(got (showTop (a/parse "fn g -> Int64\n  1\n\nfn f a: Int64 -> Int64\n  (let [(b (+ a 1)]\n    (* b 2))\n")))] (do (assert (= got "err 5:19 ']' closes '(' opened at 5:9") (str "mismatch in a later item names the opener by file line, got " got)) true))
+
 fn testMismatchedBracketParenBracketIndent -> Bool
   (let [(got (showTop (a/parse "fn f [] -> Int64\n  ( ]")))] (do (assert (= got "err 2:5 ']' closes '(' opened at 2:3") (str "paren-bracket mismatch in indented dialect, got " got)) true))
 
@@ -69,6 +73,7 @@ fn runTests -> Bool
       (assert (testUnterminatedStringIndentCall) "unterminated string in indented call")
       (assert (testMismatchedBracketBracketParen) "bracket-paren mismatch in paren dialect")
       (assert (testMismatchedBracketParenBracketIndent) "paren-bracket mismatch in indented dialect")
+      (assert (testMismatchOpenerIsFileLine) "mismatch opener is a file line")
       (assert (testStrayCloseBraceIndent) "stray close brace in indented dialect")
       (assert (testBareTopLevelString) "bare top-level string is a diagnostic")
       (assert (testBareTopLevelNumber) "bare top-level number is a diagnostic")

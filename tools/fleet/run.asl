@@ -1,6 +1,6 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv]
-  :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp)])
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
+  :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp) (asl-gates/suiteTimes :a st)])
 
 (schema Job
   (:f argv (List String))
@@ -956,9 +956,102 @@ fn ! runOne j: Job -> Done
   (runOneLimited j (defaultLimits))
 
 ; (:m :ref TRAIN18-NOFOREIGN-20261018 :do "the one place a (list \"sh\" \"-c\" cmd) argv literal is built for a caller that only has a command string, not an argv list already; freePool.asl's runGate! used to build this literal itself (a second textual sh -c site outside this file), this gives it (and any future command-string caller) the same single site runOneLimited's callers with an argv already in hand use")
+; (:m :ref PERF-GATE-TIMEOUT-FIT :do "a gate in the declared form whose suites' recorded wall (the gateTimes medians, summed: one asl test runs its files in turn) is above the timeout is not launched: it cannot finish, and 40 of 488 gate runs ended that way with no verdict (perfAudit 2026-11-08). The Done has exit 126 and verdict wallOverBound, and its receipt names the recorded wall, the bound and the fitted timeout (1.5 times the recorded wall, the factor asl-agent gateRaisedSec uses). The ledger is the child's: the ASL_GATE_TIMES row of its env, else this process's; an unreadable ledger or an unrecorded suite refuses nothing")
 fn ! runShell! cmd: String cwd: String env: (List String) lim: Limits -> Done
-  (let [(d (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim))]
-    (with d :out (gateOutHost (stubHostFor! cmd) cmd d.out)))
+  (let [(host (stubHostFor! cmd))]
+    (match (wallRefusal! cmd host env lim)
+      ((some d) d)
+      ((none) (let [(d (runOneLimited (job (list "sh" "-c" cmd) cwd env) lim))]
+                (with d :out (gateOutHost host cmd d.out))))))
+
+fn fitTimeoutS recordedMs: Int64 -> Int64
+  (/ (+ (* recordedMs 3) 1999) 2000)
+
+fn suiteKey f: String -> String
+  (if (stringStartsWith? f "./") (optionOr (stringSlice f 2 (stringLength f)) f) f)
+
+; (:m :ref PERF-GATE-TIMEOUT-FIT :do "the recorded wall of the files in ms when it is above timeoutMs, none when it fits, nothing is recorded or the run has no timeout")
+fn wallOver times: (Map String Int64) files: (List String) timeoutMs: Int64 -> (Option Int64)
+  (let [(total (fold (fn [(n Int64) (f String)] -> Int64 (+ n (max 0 (optionOr (mapGet times (suiteKey f)) 0)))) 0 files))]
+    (if (and (> timeoutMs 0) (> total timeoutMs)) (some total) (none)))
+
+fn asnText s: String -> String
+  (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
+
+fn ! wallRefusal! cmd: String host: String env: (List String) lim: Limits -> (Option Done)
+  (let [(files (gateFiles cmd host))
+        (given (optionOr (listHead (filter (fn [(r String)] -> Bool (stringStartsWith? r "ASL_GATE_TIMES=")) env)) ""))
+        (path (if (stringEmpty? given) (resultOr (st/timesPath!) "") (stringReplace given "ASL_GATE_TIMES=" "")))
+        (times (if (or (listEmpty? files) (stringEmpty? path)) (mapEmpty) (resultOr (st/readTimes! path) (mapEmpty))))]
+    (match (wallOver times files lim.timeoutMs)
+      ((none) (none))
+      ((some ms)
+        (some (Done :idx 0 :exit 126 :ms 0 :verdict "wallOverBound"
+                    :out (str "(:fleetRun :verdict :wallOverBound :gate " (asnText cmd) " :recordedMs " ms " :timeoutMs " lim.timeoutMs
+                              " :fitTimeoutS " (fitTimeoutS ms) " :suites (" (stringJoin (map asnText (map suiteKey files)) " ") ") :ledger " (asnText path) ")\n"))))))
+
+; (:m :ref GATEINTEGRITY-TIMEOUT-PASSES :do "the verdict of a finished gate run, for whoever reads it as evidence: pass and red only for a run that ended by itself, exit 0 or not; a run the runner ended or never started keeps the runner's verdict (timeout, runaway, tokenWait, wallOverBound, spawnFailed), and so does a failed run that reports a timeout of its own (exit 124, or a :fleetRun :verdict :timeout note from a runner below it). Only red is evidence that a gate fails: a revert or mutant run that timed out saw no assert fail (SPECDIRTY run 2 passed integrity on two 300 s revert timeouts)")
+fn gateVerdict d: Done -> String
+  (cond
+    ((and (!= d.verdict "exit") (not (stringEmpty? d.verdict))) d.verdict)
+    ((= d.exit 0) "pass")
+    ((or (= d.exit 124) (stringContains? d.out "(:fleetRun :verdict :timeout ")) "timeout")
+    (else "red"))
+
+fn redEvidence? d: Done -> Bool
+  (= (gateVerdict d) "red")
+
+; (:m :ref FABLE-GATE-ADMIT :do "the load gate of a mutant batch: no batch starts while the 1-minute load is above :maxLoadPerCore times the cores (default 2, 0 turns the gate off); the caller waits, polling every 2 s, up to :loadWaitS (default 900, under the 1800 s default suite wall) and then gets state expired, which it reports instead of running. Both rows and :loadSource (a file in /proc/loadavg form read instead of the system's) live in the admission config <jobserver dir>/config.asn, never env. States: ready, expired, off, and open when the load cannot be read, which says so and proceeds")
+(schema LoadAdmit
+  (:f state String)
+  (:f load Int64)
+  (:f cap Int64)
+  (:f waitedMs Int64))
+
+; (:m :ref FABLE-GATE-ADMIT :do "the first number of a load text (/proc/loadavg '5.70 8.39 ...' or sysctl vm.loadavg '{ 5.70 8.39 12.87 }') in hundredths, -1 when there is none")
+fn loadCenti text: String -> Int64
+  (let [(word (optionOr (listHead (filter (fn [(w String)] -> Bool (and (not (stringEmpty? w)) (and (!= w "{") (!= w "}")))) (stringSplit (stringReplace (stringTrim text) "," ".") " "))) ""))
+        (parts (stringSplit word "."))
+        (whole (stringToInt64 (optionOr (listGet parts 0) "")))
+        (fracText (optionOr (stringSlice (str (optionOr (listGet parts 1) "") "00") 0 2) "00"))
+        (frac (stringToInt64 fracText))]
+    (match whole
+      ((none) -1)
+      ((some w) (match frac
+                  ((none) -1)
+                  ((some f) (if (or (< w 0) (or (< f 0) (> (listLength parts) 2))) -1 (+ (* w 100) f)))))))
+
+fn quotedField text: String key: String -> String
+  (match (stringIndexOf text key)
+    ((none) "")
+    ((some i) (optionOr (listHead (stringSplit (optionOr (stringSlice text (+ i (stringLength key)) (stringLength text)) "") "\"")) "")))
+
+fn ! loadNow! source: String -> Int64
+  (cond
+    ((not (stringEmpty? source)) (loadCenti (resultOr (fileReadString source) "")))
+    ((fileExists? "/proc/loadavg") (loadCenti (resultOr (fileReadString "/proc/loadavg") "")))
+    (else (loadCenti (resultOr (shellOut "sysctl -n vm.loadavg" 5000) ""))))
+
+fn ! loadWait! source: String cap: Int64 startNs: Int64 waitMs: Int64 -> LoadAdmit
+  (let [(load (loadNow! source))
+        (waited (/ (- (monotonicNs) startNs) 1000000))]
+    (cond
+      ((< load 0) (let [(_ (eprintln "(:fleetRun :note loadUnreadable :proceeding true)"))] (LoadAdmit :state "open" :load load :cap cap :waitedMs waited)))
+      ((<= load cap) (LoadAdmit :state "ready" :load load :cap cap :waitedMs waited))
+      ((>= waited waitMs) (LoadAdmit :state "expired" :load load :cap cap :waitedMs waited))
+      (else (do (sleepMs (max 1 (min 2000 (- waitMs waited)))) (loadWait! source cap startNs waitMs)))))
+
+fn ! admitLoad! dir: String -> LoadAdmit
+  (let [(cfg (resultOr (fileReadString (str (js/rootDir dir) "/config.asn")) ""))
+        (perCore (optionOr (fieldInt cfg ":maxLoadPerCore ") 2))
+        (waitS (optionOr (fieldInt cfg ":loadWaitS ") 900))
+        (cores (max 1 (resultOr (cpuCount) 1)))]
+    (if (<= perCore 0)
+      (LoadAdmit :state "off" :load -1 :cap 0 :waitedMs 0)
+      (loadWait! (quotedField cfg ":loadSource \"") (* (* perCore cores) 100) (monotonicNs) (* (max 0 waitS) 1000))))
+
+fn loadNote a: LoadAdmit -> String
+  (str "(:fleetRun :verdict :loadWait :load1x100 " a.load " :capx100 " a.cap " :waitedMs " a.waitedMs ")")
 
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the executed-assert count of a gate was read from any line of the gate's own stdout, so a command that echoed '5 assertion(s) executed' passed the conductor's asserts>0 check without running a suite. Now a gate counts only in the declared form ./bin/asl test FILE... (or asl test): the host prints one verdict line per FILE after the suite's own output, the lines must be exactly the declared files' verdicts and the last lines of the output; any other count or FAIL line is rewritten to 'claimed' or '(unrecorded) FAIL' and a marker row says why. A gate whose own files are modified by the unit under test (bin/asl itself) is not covered.")
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "test stand-in for the host's test command in hermetic fixtures: greenN.asl prints N passed, redN.asl fails after N asserts, any other file is run as sh and its 'assert ' lines are the count; stubHost! writes it once to a fixed path and returns the path, a gate is then (str (stubHost!) \" test greenN.asl\"), which has the declared form")

@@ -1,0 +1,10 @@
+schema User { name: String age: Int64 email: (Option String) }
+
+enum Change (rename newName: String) (birthday) (setEmail email: String) (clearEmail)
+
+fn updateUser user: User change: Change -> User
+  match change
+    ((rename newName) (with user :name newName))
+    ((birthday) (with user :age (+ user.age 1)))
+    ((setEmail email) (with user :email (some email)))
+    ((clearEmail) (with user :email (none)))

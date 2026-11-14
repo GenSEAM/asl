@@ -1,0 +1,16 @@
+(:task :id "powMod" :family "A" :difficulty "medium"
+  :entry "powMod" :entryPy "pow_mod"
+  :statement "Return base raised to the power exponent, modulo modulus. base and exponent are non-negative, modulus is between 1 and 1000000, and exponent can be as large as 10 to the power 15, so the power itself must never be computed in full and every intermediate value must stay exact. An exponent of 0 gives 1 modulo modulus."
+  :sigAsl "fn powMod base: Int64 exponent: Int64 modulus: Int64 -> Int64"
+  :sigPy "def pow_mod(base: int, exponent: int, modulus: int) -> int:"
+  :sigTs "function powMod(base: number, exponent: number, modulus: number): number"
+  :examples (
+    (:args (2 10 1000) :want 24)
+    (:args (3 0 7) :want 1))
+  :cases (
+    (:args (7 1 1) :want 0)
+    (:args (0 0 5) :want 1)
+    (:args (5 3 13) :want 8)
+    (:args (2 62 1000000) :want 387904)
+    (:args (10 1000000000000000 999983) :want 379730)
+    (:args (123456 789 1000000) :want 528896)))

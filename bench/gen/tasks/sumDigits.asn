@@ -1,0 +1,16 @@
+(:task :id "sumDigits" :family "A" :difficulty "easy"
+  :entry "sumDigits" :entryPy "sum_digits"
+  :statement "Return the sum of the decimal digits of a non-negative integer."
+  :sigAsl "fn sumDigits n: Int64 -> Int64"
+  :sigPy "def sum_digits(n: int) -> int:"
+  :sigTs "function sumDigits(n: number): number"
+  :examples (
+    (:args (123) :want 6)
+    (:args (0) :want 0))
+  :cases (
+    (:args (9) :want 9)
+    (:args (1005) :want 6)
+    (:args (99999) :want 45)
+    (:args (10) :want 1)
+    (:args (123456789) :want 45)
+    (:args (4000000000) :want 4)))

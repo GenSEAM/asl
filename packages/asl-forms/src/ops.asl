@@ -415,7 +415,7 @@ fn binDirectory! root: String -> String
     (if (stringEmpty? given) (k/binFor! toolRoot) given))
 
 fn knowContext! root: String -> s/KnowCtx
-  (let [(ws (if (stringEmpty? (envOr! "ASL_ROOT")) root (envOr! "ASL_ROOT")))
+  (let [(ws (let [(given (k/envWorkspaceRoot! (resultOr (realPath ".") root)))] (if (stringEmpty? given) root given)))
         (toolRoot (toolchainRoot! root))
         (bin (binDirectory! root))
         (vfs (envOr! "ASL_VFS_DIR"))

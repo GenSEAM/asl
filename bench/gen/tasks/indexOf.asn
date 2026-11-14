@@ -1,0 +1,16 @@
+(:task :id "indexOf" :family "B" :difficulty "easy"
+  :entry "indexOf" :entryPy "index_of"
+  :statement "Return the zero-based position of the first occurrence of target in a list of integers, or nothing when it does not occur."
+  :sigAsl "fn indexOf xs: (List Int64) target: Int64 -> (Option Int64)"
+  :sigPy "def index_of(xs: list[int], target: int) -> int | None:"
+  :sigTs "function indexOf(xs: number[], target: number): number | undefined"
+  :examples (
+    (:args ((list 5 6 7) 6) :want (some 1))
+    (:args ((list 5 6) 9) :want (none)))
+  :cases (
+    (:args ((list) 1) :want (none))
+    (:args ((list 4 4 4) 4) :want (some 0))
+    (:args ((list 1 2 3 2) 2) :want (some 1))
+    (:args ((list 9) 9) :want (some 0))
+    (:args ((list 1 2 3) 3) :want (some 2))
+    (:args ((list -1 0 1) 0) :want (some 1))))

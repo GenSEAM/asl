@@ -1,0 +1,10 @@
+fn dedupeKeepOrder xs: (List Int64) -> (List Int64)
+  (dedupeGo (list) xs)
+
+fn dedupeGo seen: (List Int64) rest: (List Int64) -> (List Int64)
+  (match (listHead rest)
+    ((some x)
+      (if (listContains? seen x)
+        (dedupeGo seen (optionOr (listTail rest) (list)))
+        (dedupeGo (listAppend seen (list x)) (optionOr (listTail rest) (list)))))
+    ((none) seen))

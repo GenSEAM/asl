@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
+  :x [gateWord cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg) (asl-text/string :a ts)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -123,7 +123,7 @@ fn judgeSuite h: SuiteRun baseExit: Int64 baseAsserts: Int64 baseWhy: String -> 
         (baseRealRed (and (> baseExit 0) (and (< baseExit 124) (> baseAsserts 0))))
         (noRun (or (= h.asserts 0) (or (= h.exit 126) (= h.exit 127))))]
     (cond
-      ((or (= h.verdict "timeout") (= h.verdict "runaway")) "unverified")
+      ((or (= h.verdict "timeout") (or (= h.verdict "runaway") (= h.verdict "wallOverBound"))) "unverified")
       ((!= h.exit 0)
         (cond
           (noRun (if (or baseGreen (or (= baseExit -2) baseRealRed)) "regression" "unverified"))
@@ -437,11 +437,15 @@ fn ! gateOutcome! o: Opts env: (List String) hd: String deadlineNs: Int64 -> Str
   (if (stringEmpty? o.gate) ""
     (let [(s (leftS deadlineNs o.stepS))]
       (if (<= s 0) "deadline"
-        (let [(d (fr/runShell! o.gate hd env (fr/limits s 64)))]
-          (cond
-            ((or (= d.verdict "timeout") (= d.verdict "runaway")) "timeout")
-            ((= d.exit 0) "pass")
-            (else (str "fail " (n d.exit))))))))
+        (gateWord (fr/runShell! o.gate hd env (fr/limits s 64))))))
+
+; (:m :ref GATEADMIT-FIX :do "the word for one finished --gate run: timeout and runaway and wallOverBound (refused unlaunched, exit 126) are unverified words, never fail")
+fn gateWord d: fr/Done -> String
+  (cond
+    ((or (= d.verdict "timeout") (= d.verdict "runaway")) "timeout")
+    ((= d.verdict "wallOverBound") "wallOverBound")
+    ((= d.exit 0) "pass")
+    (else (str "fail " (n d.exit))))
 
 ; (:m :do "cheap mode: structure, audit consistency and gates at head against base (base audits cached by sha), and the caller's --gate; full mode adds the touched suites; the caller passes --base as the merge-base of the unit and its target, so a unit behind main does not block on baseNotAncestorOfHead")
 fn ! run! o: Opts -> (Pair Int64 String)
@@ -491,7 +495,7 @@ fn ! run! o: Opts -> (Pair Int64 String)
                 (c2 (cmp hg bg "gates"))
                 (gate (gateOutcome! o env hd deadlineNs))
                 (gateRegs (if (stringStartsWith? gate "fail") (list (pair "gate" (str o.gate " " gate))) (list)))
-                (gateUnv (if (or (= gate "timeout") (= gate "deadline")) (list (str "gate:" gate)) (list)))
+                (gateUnv (if (or (= gate "timeout") (or (= gate "deadline") (= gate "wallOverBound"))) (list (str "gate:" gate)) (list)))
                 (regs (listAppend gateRegs (listAppend (pairFirst (pairFirst c1)) (pairFirst (pairFirst c2)))))
                 (pre (listAppend (pairSecond (pairFirst c1)) (pairSecond (pairFirst c2))))
                 (unv0 (listAppend dirtyRows (listAppend gateUnv (listAppend (pairSecond c1) (pairSecond c2)))))
