@@ -49,6 +49,37 @@ fn ! testSingleFileIgnoresPoisonHost binary: String root: String poison: String 
       (refute (stringContains? d.out "97") (str "the poisoned stand-in host binary was never invoked for a single-file check: " d.out))
       true))
 
+; (:m :ref CLI-HOST-FALLBACK :do "ASL_CLI_USER_PRELUDE non-empty with no host on disk (node2, 2026-11-14: asl: cannot run asl/host/out/asl-host: notFound refused every merge): the tree's own prelude by path, and a copy with the same bytes, are no override and check natively; a different prelude fails ERR_HOST_ABSENT without spawning, without the bare cannot-run line and without printing the variable's value; with an executable host the override still reaches it")
+fn ! preludeCheck binary: String root: String host: String prelude: String -> run/Done
+  (run/runOneLimited (run/job (list binary "check" "asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl") root
+                              (isolatedEnv root (list (str "ASL_CLI_HOST_BIN=" host) (str "ASL_HOST=" host) (str "ASL_CLI_USER_PRELUDE=" prelude))))
+                     (run/limits 60 16))
+
+fn ! testPreludeOverrideWithoutHost binary: String root: String base: String poison: String -> Bool
+  (let [(absent (str base "/absentHost"))
+        (own (str root "/asl/prelude/prelude.asl"))
+        (same (str base "/samePrelude.asl"))
+        (other (str base "/userPrelude.asl"))
+        (copied (match (fileReadString own) ((ok text) (ok? (fileWrite same text))) ((err _) false)))
+        (wrote (ok? (fileWrite other "(module userPrelude\n  :x []\n  :i [])\n")))
+        (dOwn (preludeCheck binary root absent own))
+        (dSame (preludeCheck binary root absent same))
+        (dOther (preludeCheck binary root absent other))
+        (dHost (preludeCheck binary root poison other))
+        (okLine "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl: (:checked 1 :summarised 0)")]
+    (do
+      (assert (and copied wrote) "the two prelude files are written")
+      (refute (fileExists? absent) "the host path names nothing")
+      (assert (and (= dOwn.exit 0) (stringContains? dOwn.out okLine)) (str "the tree's own prelude as override checks natively: " dOwn.out))
+      (assert (and (= dSame.exit 0) (stringContains? dSame.out okLine)) (str "a byte-identical prelude elsewhere checks natively: " dSame.out))
+      (assert (= dOther.exit 2) (str "a different prelude with no host exits 2: " dOther.out))
+      (assert (stringContains? dOther.out "(:check :status :failed :error ERR_HOST_ABSENT") (str "with the structured error: " dOther.out))
+      (refute (stringContains? dOther.out okLine) "and no verdict from a prelude the user did not choose")
+      (refute (listAny? (fn [(d run/Done)] -> Bool (or (stringContains? d.out "cannot run") (stringContains? d.out "notFound"))) (list dOwn dSame dOther)) (str "never the bare cannot-run line: " dOwn.out dOther.out))
+      (refute (stringContains? dOther.out other) "the message does not print the variable's value")
+      (assert (= dHost.exit 97) (str "an executable host still gets a real override: " dHost.out))
+      true))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (base (scratchBase!))
@@ -66,7 +97,8 @@ fn ! runTests -> Bool
       (let [(binary (optionOr built.binary ""))
             (r1 (testBareSweepIgnoresPoisonHost binary root fixtureRoot poison))
             (r2 (testSingleFileIgnoresPoisonHost binary root poison))
+            (r3 (testPreludeOverrideWithoutHost binary root base poison))
             (removed (pathRemove base))]
         (do
           (assert (ok? removed) "scratch fixture tree removed")
-          (and r1 r2)))))
+          (and r1 (and r2 r3))))))

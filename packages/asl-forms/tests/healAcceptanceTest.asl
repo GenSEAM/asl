@@ -73,6 +73,21 @@ fn ! testDryRunAndCeiling! -> Bool
     (refute (fileExists? path) "the dry-run probe file is removed")
     true)
 
+; (:m :ref HEAL-CLEAN-ARROW :do "a file asl check passes, with only the rule-13 lint left, is a success for asl heal: the receipt comes back ok (exit 0) with the lint in :left and the file is not written")
+fn ! testLintOnlyExit! -> Bool
+  (let [(path (str "/tmp/aslTask54003-lint-" (stringFromInt64 (procSelf)) ".asl"))
+        (text "(module healLint :x [f])\n\n(schema Foo (:f a Int64))\n\nfn f x: Foo -> Int64\n  x.a\n")
+        (_ (fileWrite path text))
+        (run (healCli/runHealCommand! (list path)))
+        (after (resultOr (fileReadString path) ""))
+        (_ (pathRemove path))]
+    (match run
+      ((err e) (assert false (str "a lint-only file is exit 0, got the failure " e)))
+      ((ok receipt) (assert (and (stringContains? receipt ":written false") (stringContains? receipt "rule-13")) (str "the receipt keeps the lint in :left and writes nothing, got " receipt))))
+    (assert (= after text) "the lint-only file is left byte-identical")
+    (refute (fileExists? path) "the lint probe file is removed")
+    true)
+
 fn testPipelineInvariants -> Bool
   (let [(clean (healed))
         (res (heal/healSource clean "healProbe.asl"))
@@ -86,4 +101,4 @@ fn testPipelineInvariants -> Bool
     true)
 
 fn ! runTests -> Bool
-  (and (testHelpAndUsage!) (testHealsFileOnDisk!) (testDryRunAndCeiling!) (testPipelineInvariants))
+  (and (testHelpAndUsage!) (testHealsFileOnDisk!) (testDryRunAndCeiling!) (testLintOnlyExit!) (testPipelineInvariants))

@@ -1571,7 +1571,7 @@ fn ! gateTimeoutRequeue! ctx: Ctx u: st/Task c: CUnit res: Res -> Unit
 
 ; (:m :ref CONDHARDEN :do "asl check on every owned .asl file and on every importer of an owned module; the first failure is the signature, empty when all check")
 fn ! checkOne! wt: String p: String sec: Int64 -> String
-  (let [(d (fr/runOneLimited (fr/job (list (str wt "/bin/asl") "check" p) wt (fr/childEnv (list (str "ASL_ROOT=" wt)))) (fr/limits sec 200)))]
+  (let [(d (fr/runOneLimited (fr/job (list (str wt "/bin/asl") "check" p) wt (fr/childEnv (list (str "ASL_ROOT=" wt) "ASL_PRELUDE=" "ASL_CLI_USER_PRELUDE="))) (fr/limits sec 200)))]
     (cond
       ((= d.exit 0) "")
       ((= d.verdict "timeout") (gateTimeoutSig p sec))

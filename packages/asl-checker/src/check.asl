@@ -755,6 +755,34 @@ fn extractNotExportedName msg: String -> (Option String)
             ((none) (none))
             ((some j) (some (optionOr (stringSlice rest 0 j) ""))))))))
 
+; (:m :ref CHECK-LOWER-CONSTRUCTOR :do "resolve.asl reports ERR_UNKNOWN_CONSTRUCTOR at the statement, like ERR_NOT_EXPORTED; its message carries the pattern as written between 'in a match pattern: ' and ' is ', and the pattern without its opening paren is the needle, so the position found is the constructor itself; the reader hands a [a b] pattern over as (list a b), so a list pattern not found as written is looked for in its bracket spelling")
+fn unknownCtorNeedle msg: String -> (Option String)
+  (let [(prefix "in a match pattern: ")]
+    (match (stringIndexOf msg prefix)
+      ((none) (none))
+      ((some i0)
+        (let [(rest (optionOr (stringSlice msg (+ i0 (stringLength prefix)) (stringLength msg)) ""))]
+          (match (stringIndexOf rest " is ")
+            ((none) (none))
+            ((some j) (let [(pat (optionOr (stringSlice rest 0 j) ""))]
+                        (some (if (stringStartsWith? pat "(") (optionOr (stringSlice pat 1 (stringLength pat)) pat) pat)))))))))
+
+fn positionNeedle d: ty/Diagnostic -> (Option String)
+  (cond ((= d.code "rule-9") (extractNotExportedName d.message))
+        ((= d.code "ERR_UNKNOWN_CONSTRUCTOR") (unknownCtorNeedle d.message))
+        (else (none)))
+
+fn bracketNeedle needle: String -> String
+  (if (and (stringStartsWith? needle "list") (stringEndsWith? needle ")"))
+    (str "[" (stringTrim (optionOr (stringSlice needle 4 (- (stringLength needle) 1)) "")) "]")
+    needle)
+
+fn refineUnknownCtorDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) -> ty/Diagnostic
+  (let [(needle (optionOr (unknownCtorNeedle d.message) ""))
+        (asWritten (a/findTokenPos src (pairFirst floor) (pairSecond floor) needle))
+        (pos (if (= asWritten floor) (a/findTokenPos src (pairFirst floor) (pairSecond floor) (bracketNeedle needle)) asWritten))]
+    (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))
+
 fn refineNotExportedDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) -> ty/Diagnostic
   (let [(pos (a/findQualifiedTokenPos src (pairFirst floor) (pairSecond floor) (optionOr (extractNotExportedName d.message) "")))]
     (ty/Diagnostic :code d.code :message d.message :msg d.msg :line (pairFirst pos) :col (pairSecond pos) :path d.path))
@@ -763,12 +791,12 @@ fn refineNotExportedDiag src: String d: ty/Diagnostic floor: (Pair Int64 Int64) 
 fn refineNotExportedPositions src: String ds: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (listReverse (pairSecond (fold (fn [(acc (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))) (d ty/Diagnostic)] -> (Pair (Map String (Pair Int64 Int64)) (List ty/Diagnostic))
                                     (let [(seen (pairFirst acc)) (outAcc (pairSecond acc))]
-                                      (if (= d.code "rule-9")
-                                        (match (extractNotExportedName d.message)
+                                      (if (some? (positionNeedle d))
+                                        (match (positionNeedle d)
                                           ((none) (pair seen (cons d outAcc)))
                                           ((some name)
                                            (let [(floor (optionOr (mapGet seen name) (pair d.line d.col)))
-                                                 (nd (refineNotExportedDiag src d floor))]
+                                                 (nd (if (= d.code "rule-9") (refineNotExportedDiag src d floor) (refineUnknownCtorDiag src d floor)))]
                                              (pair (mapSet seen name (pair nd.line (+ nd.col 1))) (cons nd outAcc)))))
                                         (pair seen (cons d outAcc)))))
                                   (pair (mapEmpty) (list)) ds)))

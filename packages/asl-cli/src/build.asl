@@ -57,7 +57,9 @@ fn rcArgs mode: String -> (List String)
   (if (= mode "0") (list) (list "--rc" mode))
 
 fn ! interpretAsl1! ctx: sys/Context target: String ll: String mode: String -> Int64
-  (sys/run! (listAppend (list "nice" "-n" "15" ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode)))
+  (if (not (sys/executable? ctx.hostBin))
+    (do (sys/say! (sys/hostAbsent "build")) 2)
+    (sys/run! (listAppend (list "nice" "-n" "15" ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode))))
 
 fn ! compileLl! ctx: sys/Context clang: String lib: String target: String ll: String mode: String -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl")))

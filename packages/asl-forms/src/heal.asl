@@ -1,6 +1,6 @@
 (module asl-forms/heal
   :x [HealResult Sx Edit healRuleNames healSource healSourceWith healSourceRules heal! healDiags healScore lowerDiags readSx applyEdits
-      preludeVocab! vocabFromSource formatHealReceipt diagText symbolCandidates editDistance retiredHeadFor healSourceEnv ruleRetiredSpelling ruleImportAdd]
+      preludeVocab! vocabFromSource formatHealReceipt diagText symbolCandidates editDistance retiredHeadFor healSourceEnv ruleRetiredSpelling ruleImportAdd lintOnly?]
   :i [(asl-parser/ast :a a) (asl-checker/types :a ty) (asl-checker/check :a chk) (asl-checker/resolve :a r) (asl-forms/repair :a rep) (asl-checker/hints :a hn) (asl-forms/indent :a ind)])
 
 ; (:m :do "the one heal pipeline for generated ASL (HEAL 2026-10-15): a text that already checks and lowers is returned unchanged; otherwise named rules run in order and an edit is kept only when it strictly lowers the diagnostic score, until no rule improves; the receipt is (:repaired (rule ...) :left (diag ...))")
@@ -168,8 +168,14 @@ fn delimiterMessage? m: String -> Bool
   (or (stringContains? m "unmatched") (or (stringContains? m "unclosed") (stringContains? m "unbalanced")))
 
 ; (:m :do "a delimiter failure outweighs any other parse failure, which outweighs any number of resolution errors, which outweigh type errors: fixing an unbound name may surface type errors the checker hid behind it")
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "the rule-13 lint is read only once nothing else is wrong (healDiags), so a text whose diagnostics are all that lint is nearer to clean than any text with an error: it scores 1, below one type error at 2; scored as an ordinary 100 it lost to any candidate that broke the type phase and hid the lint, which is how condClauses swapped clauses of sources that check")
+fn lintOnly? ds: (List ty/Diagnostic) -> Bool
+  (and (not (listEmpty? ds)) (listAll? (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-13")) ds))
+
 fn healScore ds: (List ty/Diagnostic) -> Int64
-  (fold (fn [(acc Int64) (d ty/Diagnostic)] -> Int64 (+ acc (cond ((and (= d.code "parse") (delimiterMessage? d.message)) 20000) ((= d.code "parse") 10000) ((typePhase? d.code) 1) (else 100)))) 0 ds)
+  (if (lintOnly? ds)
+    1
+    (fold (fn [(acc Int64) (d ty/Diagnostic)] -> Int64 (+ acc (cond ((and (= d.code "parse") (delimiterMessage? d.message)) 40000) ((= d.code "parse") 20000) ((typePhase? d.code) 2) (else 200)))) 0 ds))
 
 fn diagText d: ty/Diagnostic -> String
   (str d.code " " (stringFromInt64 d.line) ":" (stringFromInt64 d.col) " " d.message)
@@ -467,13 +473,47 @@ fn symbolCandidates name: String hint: (Option String) vocab: (List String) -> (
         (all (listAppend hinted (listAppend bangless (listAppend isForm (listAppend camel (nearestInVocab name vocab))))))]
     (filter (fn [(c String)] -> Bool (and (!= c name) (not (stringEmpty? c)))) all))
 
+; (:m :ref HEAL-SYMBOLRENAME-ARROW :do "the -> of a signature is syntax, not a symbol: when -> is the unbound name (written as a call head, or a missing closer that still balances moved a header into a body) the rename leaves every -> that stands on a fn header line, at the top level of the text, or after the head of a (fn ...) lambda or function type, and still renames the others")
+fn tailrec lineStartAt bs: Bytes i: Int64 -> Int64
+  (cond ((<= i 0) 0) ((= (bytesGet bs (- i 1)) 10) i) (else (lineStartAt bs (- i 1))))
+
+fn headerLineAt? bs: Bytes at: Int64 -> Bool
+  (let [(s (lineStartAt bs at))]
+    (and (<= (+ s 3) (bytesLength bs)) (and (= (bytesGet bs s) 102) (and (= (bytesGet bs (+ s 1)) 110) (= (bytesGet bs (+ s 2)) 32)))))
+
+fn arrowAtom? x: Sx -> Bool
+  (match x ((sxAtom t _ _) (= t "->")) ((sxList _ _ _ _) false))
+
+fn signatureArrowStarts text: String forest: (List Sx) -> (List Int64)
+  (let [(bs (stringToBytes text))
+        (top (filter arrowAtom? forest))
+        (inFn (fold (fn [(acc (List Sx)) (x Sx)] -> (List Sx)
+                      (if (and (parenList? x) (headIs? x "fn")) (listAppend acc (filter arrowAtom? (optionOr (listTail (listItems x)) (list)))) acc))
+                    (list) (forestLists forest)))
+        (onHeader (filter (fn [(x Sx)] -> Bool (and (arrowAtom? x) (headerLineAt? bs (sxStart x)))) (forestAtoms forest)))]
+    (map sxStart (listAppend top (listAppend inFn onHeader))))
+
 fn renameAtoms text: String from: String to: String -> String
-  (applyEdits text (map (fn [(x Sx)] -> Edit (repl x to)) (filter (fn [(x Sx)] -> Bool (= (atomText x) from)) (forestAtoms (readSx text)))))
+  (let [(forest (readSx text))
+        (kept (if (= from "->") (signatureArrowStarts text forest) (list)))]
+    (applyEdits text (map (fn [(x Sx)] -> Edit (repl x to)) (filter (fn [(x Sx)] -> Bool (and (= (atomText x) from) (not (listContains? kept (sxStart x))))) (forestAtoms forest)))))
+
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "an export without a definition (ERR_UNDEFINED_EXPORT; its message stopped ending in 'is not defined', so unboundName no longer reads it and the corpus fell to 129 healed under the floor of 130) takes the definition whose current spelling it is: the one fn of this text that is a spelling variant of the exported name (solve! -> solve, snake or kebab to camel, isX -> x?; symbolCandidates over an empty vocabulary, so never a merely near name) is renamed to it, the export being what the caller asked for; two variants are a guess and none is renamed")
+fn undefinedExport d: ty/Diagnostic -> (Option String)
+  (if (and (= d.code "ERR_UNDEFINED_EXPORT") (stringEndsWith? d.message " is exported but not defined in this module"))
+    (listHead (stringSplit d.message " "))
+    none)
+
+fn exportRenames text: String d: ty/Diagnostic -> (List String)
+  (match (undefinedExport d)
+    ((none) (list))
+    ((some x) (let [(variants (filter (fn [(n String)] -> Bool (listContains? (symbolCandidates n none (list)) x)) (vocabFromSource text (list))))]
+                (if (= (listLength variants) 1) (map (fn [(n String)] -> String (renameAtoms text n x)) variants) (list)))))
 
 fn ruleSymbolRename text: String ds: (List ty/Diagnostic) vocab: (List String) -> (List String)
   (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String)
           (match (unboundName d)
-            ((none) acc)
+            ((none) (listAppend acc (exportRenames text d)))
             ((some name) (listAppend acc (map (fn [(c String)] -> String (renameAtoms text name c)) (listAppend (hn/priorNames name) (symbolCandidates name (renamedHintOf d) vocab)))))))
         (list) ds)
 
@@ -832,10 +872,14 @@ fn vocabFromSource text: String base: (List String) -> (List String)
 fn healSourceRules text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) rules: (List String) -> HealResult
   (healSourceEnv text path deps vocab (mapEmpty) rules)
 
+; (:m :ref HEAL-CONDCLAUSES-CLEAN :do "a text that passes asl check is the identity for every scored rule: when the only diagnostics of the text as given are the rule-13 lint, which asl check does not report, it comes back as it is with the lint left; exportAdd repairs that lint only in a text that needed another repair first (heal! applies the same gate once the imports are loaded)")
 ; (:m :do "healSourceEnv adds ex, the name -> exporting modules map importAdd reads (heal! builds it from the package index; fixtures pass it directly)")
 fn healSourceEnv text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) ex: (Map String (List String)) rules: (List String) -> HealResult
-  (let [(t0 (spellNormal text rules))]
-    (healLoop t0 (healDiags t0 deps path) deps path (vocabFromSource t0 vocab) ex rules false 24 (spellApplied text t0)))
+  (let [(t0 (spellNormal text rules))
+        (ds0 (healDiags t0 deps path))]
+    (if (lintOnly? ds0)
+      (finish t0 ds0 (spellApplied text t0))
+      (healLoop t0 ds0 deps path (vocabFromSource t0 vocab) ex rules false 24 (spellApplied text t0))))
 
 fn healSourceWith text: String path: String deps: (Map String r/ModuleSummary) vocab: (List String) -> HealResult
   (healSourceRules text path deps vocab (healRuleNames))
@@ -863,6 +907,9 @@ fn ! heal! path: String text: String roots: (List String) preludePath: String ma
               (owners (fold (fn [(acc (List String)) (os (List String))] -> (List String) (if (= (listLength os) 1) (listAppend acc (filter (fn [(o String)] -> Bool (not (listContains? acc o))) os)) acc)) (list) (mapValues ex)))
               (cl (r/loadModuleDepsFrom! (cons (r/parentDirOf path) roots) (listAppend (r/mapValuesList summary.imports) owners) (mapEmpty) (r/emptyModIndex)))]
           (if (and (listEmpty? cl.unresolved) (listEmpty? cl.errors))
-            (let [(second (healLoop first.text (healDiags first.text cl.deps path) cl.deps path vocab ex (healRuleNames) false (- maxRounds (listLength first.repaired)) (list)))]
+            (let [(ds1 (healDiags first.text cl.deps path))
+                  (second (if (and (not (parseFailed? ds0)) (lintOnly? ds1))
+                            (finish first.text ds1 (list))
+                            (healLoop first.text ds1 cl.deps path vocab ex (healRuleNames) false (- maxRounds (listLength first.repaired)) (list))))]
               (ok (finish second.text second.left (listReverse (listAppend first.repaired second.repaired)))))
             (ok (finish first.text (list (diagOf "importsUnloaded" (str "cannot load the imports of " path ": " (stringJoin (listAppend cl.unresolved cl.errors) "; ")) 1 1 path)) (listReverse first.repaired))))))))
