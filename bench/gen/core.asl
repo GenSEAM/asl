@@ -7,7 +7,7 @@
       languageSection cardFor parenSubs wrapFnSubs loadCards cardOf sha256Of labArms loadCardsFor
       infraOf settle! promptShaOf reqPromptSha expectedPromptSha hasWord? definesEntry? rowVerdict
       gradeCode! gradeReply! healedPass! healedStage! runTrial! runAll! trialKey trialRow planTrials planSig callCost reqChars
-      fakeReply! fakeCaller usdToMicro dateOf toolVersion! removeDir! failingOf headerRow usdText priorSpend headOf]
+      fakeReply! fakeCaller usdToMicro dateOf toolVersion! removeDir! failingOf headerRow usdText priorSpend headOf stageOfReply]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref FABLE-LANG-01 :do "generation-baseline bench core for asl/EXPERIMENT.md protocol v2: task rows, value rendering per language, graded children under fleet limits, trial loop over a caller, one ASN row per trial")
@@ -557,6 +557,13 @@ fn extractCode reply: String -> (Option String)
                 ((none) (none))
                 ((some b) (some (slice body 0 b))))))))))
 
+; (:m :ref GEN-OUTPUT-CAP :do "a reply that came back empty because the output cap was reached is its own stage outputCap: a truncated reply carries no code, so it must not be recorded as an extraction failure")
+fn stageOfReply text: String tokOut: Int64 maxTokens: Int64 fallback: String -> String
+  (if (and (> maxTokens 0) (and (stringEmpty? text) (>= tokOut maxTokens))) "outputCap" fallback)
+
+fn withStage g: Grade s: String -> Grade
+  (with g :stage s)
+
 fn tailrec formEndLoop text: String i: Int64 depth: Int64 -> (Option Int64)
   (let [(c (charAt text i))]
     (cond
@@ -740,10 +747,13 @@ fn userPrompt arm: String t: Task -> String
        (formatFor (armLang arm)) "\n")
 
 fn repairPrompt g: Grade -> String
-  (str "The solution failed at stage " g.stage ".\n"
-       "Tool output (first 2000 characters):\n" (clip g.output 2000) "\n"
-       (if (listEmpty? g.failing) "" (str "Failing cases: " (stringJoin g.failing ", ") "\n"))
-       "Reply with exactly one fenced code block holding the corrected complete solution.\n")
+  (if (= g.stage "outputCap")
+    (str "The reply was cut off at the output token limit before any code block.\n"
+         "Reply with a shorter answer, and put the fenced code block first.\n")
+    (str "The solution failed at stage " g.stage ".\n"
+         "Tool output (first 2000 characters):\n" (clip g.output 2000) "\n"
+         (if (listEmpty? g.failing) "" (str "Failing cases: " (stringJoin g.failing ", ") "\n"))
+         "Reply with exactly one fenced code block holding the corrected complete solution.\n"))
 
 fn languageSection llms: String -> (Result String String)
   (match (stringIndexOf llms "## The language\n\n")
@@ -1016,11 +1026,13 @@ fn ! turnLoop! cfg: Config tr: Trial dir: String system: String messages: (List 
         (if (not (stringEmpty? rep.error))
           (pair state2 (with pa :error (str "call: " rep.error) :spent spent2))
           (let [(gr (gradeReply! cfg dir tr.arm tr.task rep.text))
-                (g (pairFirst gr))
+                (g0 (pairFirst gr))
+                (stage (stageOfReply rep.text rep.tokOut cfg.maxTokens g0.stage))
+                (g (withStage g0 stage))
                 (healStage (cond
                              ((!= turn 1) "kept")
-                             ((= g.stage "ok") "ok")
-                             ((and (= (armLang tr.arm) "asl") (and (!= g.stage "extract") (!= g.stage "infra"))) (healedStage! cfg dir tr.arm tr.task rep.text))
+                             ((= stage "ok") "ok")
+                             ((and (= (armLang tr.arm) "asl") (not (listContains? (list "extract" "infra" "outputCap") stage))) (healedStage! cfg dir tr.arm tr.task rep.text))
                              (else "none")))
                 (healed (if (= turn 1) (= healStage "ok") pr.healedPass))
                 (pr2 (with pa :turns (listAppend pr.turns (list (Turn :stage g.stage :tokIn rep.tokIn :tokOut rep.tokOut :reply rep.text)))
