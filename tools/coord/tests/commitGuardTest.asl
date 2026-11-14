@@ -211,6 +211,32 @@ fn ! delayGates root: String base: String -> Bool
       (assert (and (= r2.code 0) (!= (head c2) h2)) (str "the same 2 s check under the 5 s deadline commits: " r2.text))
       true))
 
+; (:m :ref CLI-HOST-FALLBACK :do "a stand-in bin/asl that applies the launcher's own rule (ASL_CLI_USER_PRELUDE when set, else ASL_PRELUDE): a non-empty result is the user-prelude branch that ended on the retired host, so it fails the way node2 did on 2026-11-14 without printing a value; otherwise it checks")
+fn leakStub -> String
+  "#!/bin/sh\nu=\"${ASL_CLI_USER_PRELUDE-${ASL_PRELUDE:-}}\"\nif [ -n \"$u\" ]; then echo 'asl: cannot run asl-host: notFound' >&2; exit 127; fi\nshift\nfor f in \"$@\"; do echo \"ok $f: (:checked 1)\"; done\nexit 0\n"
+
+; (:m :ref CLI-HOST-FALLBACK :do "the guard runs as its own bounded process (the native CLI, never this executable) whose environment carries a non-empty ASL_CLI_USER_PRELUDE, the state a leaked launcher variable left the node2 conductor in; its check child is the stand-in above. The stand-in called directly with the same variable fails, so the green commit is the guard clearing it, not a stub that never looks")
+fn ! preludeLeakGates base: String -> Bool
+  (let [(stub (stubRoot! base "leakRoot" (leakStub)))
+        (_k (put (str stub "/.asl.config.asn") (roomyCfg)))
+        (leak (str "ASL_CLI_USER_PRELUDE=" base "/userPrelude.asl"))
+        (c1 (fixture base "pLeak" (list)))
+        (_a (put (str c1 "/good.asl") (goodAsl)))
+        (h1 (head c1))
+        (direct (fr/runOneLimited (fr/job (list (str stub "/bin/asl") "check" (str c1 "/good.asl")) c1 (fr/childEnv (list leak))) (fr/limits 30 16)))
+        (clear (fr/runOneLimited (fr/job (list (str stub "/bin/asl") "check" (str c1 "/good.asl")) c1 (fr/childEnv (list "ASL_PRELUDE=" "ASL_CLI_USER_PRELUDE="))) (fr/limits 30 16)))
+        (d (fr/runOneLimited (fr/job (list (fr/nativeCli!) "run" "asl/tools/coord/commitGuard.asl" "commit" "--msg" (goodMsg) "--repo" c1 "--asl-root" stub "--" "good.asl") "." (fr/childEnv (list leak))) (fr/limits 600 200)))]
+    (do
+      (assert (= direct.exit 127) (str "the stand-in fails when the override reaches it: " (stringFromInt64 direct.exit)))
+      (assert (= clear.exit 0) (str "and checks when both variables are empty: " clear.out))
+      (assert (= d.verdict "exit") (str "the guard process ended on its own: " d.verdict))
+      (assert (= d.exit 0) (str "a valid staged .asl file commits from an environment with a prelude override: " d.out))
+      (refute (stringContains? d.out ":unchecked (\"good.asl\")") (str "no unchecked check row: " d.out))
+      (refute (stringContains? d.out ":commit :refused") (str "no refusal: " d.out))
+      (refute (stringContains? d.out "cannot run") (str "the check child never took the host branch: " d.out))
+      (assert (!= (head c1) h1) "HEAD moved")
+      true))
+
 ; (:m :ref COMMITGUARD-RED-LEAKS-TMP :do "a run that dies on a failed assert cannot remove its pid-named base, so the next run sweeps TMPDIR/commitGuardTest-<pid> whose pid is numeric and dead; a live pid, a non-numeric suffix and any other name stay; a procAlive? error counts as alive")
 fn ! pidOfBase name: String -> Int64
   (let [(tail (optionOr (stringSlice name 16 (stringLength name)) ""))
@@ -280,6 +306,7 @@ fn ! runTests -> Bool
         (assert (commitGates root base) "commit entry")
         (assert (partialGates root base) "partial check blocks the commit")
         (assert (delayGates root base) "an injected 2 s check delay: 1 s deadline red, 5 s green")
+        (assert (preludeLeakGates base) "a prelude override in the guard's own environment never reaches its check child")
         (assert (fixPure) "fix-round pure gates")
         (assert (fixFixtures root base) "fix-round fixtures")
         (assert (fix2 root base) "fix2")

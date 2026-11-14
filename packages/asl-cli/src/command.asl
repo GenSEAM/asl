@@ -1,5 +1,5 @@
 (module asl-cli/command
-  :x [main dispatch! route! remote! asnEcho testFiles! readStdin!]
+  :x [main dispatch! route! remote! asnEcho testFiles! readStdin! ownPrelude? preludeHostAbsent]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
@@ -42,6 +42,19 @@ fn helpText -> String
 fn ! preludeEnv -> (List String)
   (let [(prelude (optionOr (envGet "ASL_CLI_USER_PRELUDE") ""))]
     (if (stringEmpty? prelude) (list) (list (str "ASL_PRELUDE=" prelude))))
+
+; (:m :ref CLI-HOST-FALLBACK :do "a prelude override that names this tree's own prelude (asl/prelude/prelude.asl or its build copy asl/host/out/prelude.asl, by real path) or holds the same bytes changes nothing the native checker would see, so it is no override: a launcher variable that leaked into a nested call (node2, 2026-11-14: every merge refused) is then served natively instead of being sent to the retired host")
+fn ! ownPrelude? ctx: sys/Context path: String -> Bool
+  (let [(real (resultOr (realPath path) path))
+        (own (str ctx.root "/asl/prelude/prelude.asl"))]
+    (or (listAny? (fn [(p String)] -> Bool (= (resultOr (realPath p) p) real)) (list own (str ctx.root "/asl/host/out/prelude.asl")))
+      (match (fileReadString path)
+        ((err _) false)
+        ((ok text) (match (fileReadString own) ((err _) false) ((ok mine) (= text mine)))))))
+
+; (:m :ref CLI-HOST-FALLBACK :do "a real user prelude ran only on the stage-0 host; with the host retired the override cannot be honoured, and checking with the workspace prelude instead would answer a question the user did not ask, so the verb fails with the structured error and names the two variables without printing their values")
+fn preludeHostAbsent cmd: String -> String
+  (str "(:" cmd " :status :failed :error ERR_HOST_ABSENT :message \"asl " cmd " cannot honour the prelude override: a prelude other than the workspace's own ran only on the stage-0 host, which was permanently retired by HL-DELETE; unset ASL_PRELUDE and ASL_CLI_USER_PRELUDE to use the workspace prelude\")")
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -390,7 +403,9 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
       (do (sys/say! "(:changed :status :failed :error ERR_USAGE :message \"asl test --changed [BASE] [--dry-run]\")") 2)
       (let [(base (optionOr (listHead restArgs) "main"))
             (argv (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "changed" ctx.hostBin base) (if dryRun (list "--dry-run") (list))))]
-        (sys/run! argv))))
+        (if (not (sys/executable? ctx.hostBin))
+          (do (sys/say! (sys/hostAbsent "test")) 2)
+          (sys/run! argv)))))
 
 fn ! test! ctx: sys/Context args: (List String) -> Int64
   (if (listContains? args "--changed")
@@ -399,10 +414,12 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
     (let [(suites (optionOr (listTail args) (list)))
           (cwdReal (resultOr (realPath ".") "."))
           (rootReal (resultOr (realPath ctx.root) ctx.root))]
-      (if (or (listEmpty? suites) (!= cwdReal rootReal))
-        (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test --native SUITE... runs from the workspace root " ctx.root "\")")) 2)
-        (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/asl/tools/nativeTest.asl") suites)))
-                    (list))))
+      (cond
+        ((or (listEmpty? suites) (!= cwdReal rootReal))
+          (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test --native SUITE... runs from the workspace root " ctx.root "\")")) 2))
+        ((not (sys/executable? ctx.hostBin)) (do (sys/say! (sys/hostAbsent "test")) 2))
+        (else (sys/execv! (cons ctx.hostBin (cons "run" (cons (str ctx.root "/asl/tools/nativeTest.asl") suites)))
+                          (list)))))
     (let [(files (filter (fn [(a String)] -> Bool (and (!= a "--trace") (!= a "--all"))) args))
           (all (listContains? args "--all"))
           (tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
@@ -482,17 +499,20 @@ fn ! checkOrSweep! ctx: sys/Context args: (List String) -> Int64
     (if (not (sys/executable? ctx.hostBin))
       (do (sys/say! (sys/hostAbsent "check")) 2)
       (sys/execv! (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/sweep.asl") "check" ctx.hostBin) (list)))
-    (let [(preludeEnv (preludeEnv))]
-      (if (listEmpty? preludeEnv)
-        (verify/checkFiles! ctx args)
-        (let [(aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
-              (otherArgs (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) args))
-              (otherRc (verify/checkFiles! ctx otherArgs))]
-          (if (!= otherRc 0)
-            otherRc
-            (if (listEmpty? aslArgs)
-              0
-              (sys/runWith! (cons ctx.hostBin (cons "check" aslArgs)) preludeEnv)))))))
+    (let [(preludeEnv (preludeEnv))
+          (override (optionOr (envGet "ASL_CLI_USER_PRELUDE") ""))]
+      (cond
+        ((or (listEmpty? preludeEnv) (ownPrelude? ctx override)) (verify/checkFiles! ctx args))
+        ((not (sys/executable? ctx.hostBin)) (do (sys/say! (preludeHostAbsent "check")) 2))
+        (else
+          (let [(aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
+                (otherArgs (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) args))
+                (otherRc (verify/checkFiles! ctx otherArgs))]
+            (if (!= otherRc 0)
+              otherRc
+              (if (listEmpty? aslArgs)
+                0
+                (sys/runWith! (cons ctx.hostBin (cons "check" aslArgs)) preludeEnv))))))))
 
 fn ! parse! ctx: sys/Context args: (List String) -> Int64
   (if (not (sys/executable? ctx.hostBin))
@@ -525,6 +545,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "stubs") (intel! ctx (cons "stubs" args)))
     ((= cmd "trace") (intel! ctx (cons "trace" args)))
     ((or (= cmd "target") (= cmd "codegen")) (target/targetCommand! ctx args))
+    ((and (= cmd "launch") (not (sys/executable? ctx.hostBin))) (do (sys/say! (sys/hostAbsent "launch")) 2))
     ((= cmd "launch") (sys/execv! (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-harness/src/launch.asl")) args) (list (str "ASL_ROOT=" ctx.root))))
     ((= cmd "audit") (audit! ctx args))
     ((= cmd "pack") (pack/packCommand! ctx args))
