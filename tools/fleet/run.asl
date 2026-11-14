@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp) (asl-gates/suiteTimes :a st)])
 
 (schema Job
@@ -1058,9 +1058,13 @@ fn loadNote a: LoadAdmit -> String
 fn stubHostText -> String
   "#!/bin/sh\n[ \"$1\" = test ] || exit 2\nshift\nrc=0\nfor f in \"$@\"; do\n  b=${f##*/}\n  case \"$b\" in\n    green*.asl) n=${b#green}; n=${n%.asl}; echo \"$f: $n assertion(s) executed ($n passed)\" ;;\n    red*.asl) n=${b#red}; n=${n%.asl}; echo \"suite: ERR_TYPE boom in $b\"; echo \"FAIL $f: ERR_ASSERT: assertion failed: red (after $n asserts)\"; rc=1 ;;\n    *) out=$(sh \"$f\" 2>&1); r=$?; [ -z \"$out\" ] || printf '%s\\n' \"$out\"; n=$(printf '%s\\n' \"$out\" | /usr/bin/grep -c '^assert '); e=$(printf '%s\\n' \"$out\" | /usr/bin/grep -o 'ERR_[A-Z_]*' | head -1); if [ $r -eq 0 ]; then echo \"$f: $n assertion(s) executed ($n passed)\"; else echo \"FAIL $f: ${e:-exit $r} (after $n asserts)\"; rc=1; fi ;;\n  esac\ndone\nexit $rc\n"
 
-; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "a stand-in install belongs to the process that made it: /tmp/aslStubHost-PID-TOKEN, TOKEN from the pid and the clock. Production trusts a stub head only from such a dir whose PID is alive and is the running process or one of its ancestors, so a dir left behind or planted by a unit (dead pid, unrelated pid, the old fixed name) is refused")
+; (:m :ref N2-COORD-REDS :do "where stand-in installs live: /var/tmp, not /tmp. A gate also runs as a jailed unit child (Leon's gate integrity check), and the Linux jail (aslAgent/jail#bwrapArgs) gives that child an empty /tmp and /run of its own and hides the real HOME, so a stand-in under /tmp did not exist there and every such gate ended 127 (not found) on Linux while the macOS jail, which only denies writes to /tmp, ran it. /var/tmp is a sticky world-writable directory on Linux and macOS that neither jail hides")
+fn stubBase -> String
+  "/var/tmp"
+
+; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "a stand-in install belongs to the process that made it: <stubBase>/aslStubHost-PID-TOKEN, TOKEN from the pid and the clock. Production trusts a stub head only from such a dir whose PID is alive and is the running process or one of its ancestors, so a dir left behind or planted by a unit (dead pid, unrelated pid, the old fixed name) is refused")
 fn stubPrefix -> String
-  "/tmp/aslStubHost-"
+  (str (stubBase) "/aslStubHost-")
 
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "the stand-in host is trusted only from a private install: dir is a real directory (lstat, no symlink), mode 700, owned by the caller, and bin/asl holds exactly the stand-in text; stubHostIn! never reuses what it finds, it rewrites bin/asl through a temp name and verifies again, and any failed check returns the empty string so the caller fails closed; is the same check without writing, and is what lets runShell! accept the stand-in head: where no test installed it, the head is undeclared")
 fn ! privateDir? dir: String -> Bool
@@ -1104,9 +1108,9 @@ fn ! stubHostFor! cmd: String -> String
       ""))
 
 fn ! stubDirsOwnedBy pid: Int64 -> (List String)
-  (match (dirList "/tmp")
+  (match (dirList (stubBase))
     ((err _) (list))
-    ((ok names) (map (fn [(n String)] -> String (str "/tmp/" n)) (filter (fn [(n String)] -> Bool (stringStartsWith? (str "/tmp/" n "-") (str (stubPrefix) (stringFromInt64 pid) "-"))) names))))
+    ((ok names) (map (fn [(n String)] -> String (str (stubBase) "/" n)) (filter (fn [(n String)] -> Bool (stringStartsWith? (str (stubBase) "/" n "-") (str (stubPrefix) (stringFromInt64 pid) "-"))) names))))
 
 fn ! stubHostPath -> String
   (match (listHead (filter stubVerifiedIn! (stubDirsOwnedBy (procSelf))))
@@ -1125,10 +1129,10 @@ fn ! stubHostIn! dir: String -> String
       ""))
 
 fn ! stubSweepDead! -> Bool
-  (match (dirList "/tmp")
+  (match (dirList (stubBase))
     ((err _) false)
     ((ok names)
-      (let [(dead (filter (fn [(d String)] -> Bool (and (stringStartsWith? d (stubPrefix)) (and (privateDir? d) (or (<= (ownerPidOf d) 1) (not (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 (ownerPidOf d))) "." (childEnv (list))) (limits 5 4)).exit 0)))))) (map (fn [(n String)] -> String (str "/tmp/" n)) names)))]
+      (let [(dead (filter (fn [(d String)] -> Bool (and (stringStartsWith? d (stubPrefix)) (and (privateDir? d) (or (<= (ownerPidOf d) 1) (not (= (runOneLimited (job (list "kill" "-0" (stringFromInt64 (ownerPidOf d))) "." (childEnv (list))) (limits 5 4)).exit 0)))))) (map (fn [(n String)] -> String (str (stubBase) "/" n)) names)))]
         (listAll? (fn [(d String)] -> Bool (= (runOne (job (list "rm" "-rf" d) "." (childEnv (list)))).exit 0)) dead))))
 
 ; (:m :ref GATE-ASSERTS-FROM-LEDGER :do "stubHost! installs this process's stand-in (one dir per process, a token from pid and clock) after sweeping dirs whose owner is gone, stubRemove! deletes it, tests call it on their way out")
