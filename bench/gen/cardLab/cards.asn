@@ -6,3 +6,4 @@
 (:card :arm "aslCardStr" :file "cards/aslCardStr.txt" :sha256 "3417c592771309ba8f201ae410099ab69a5d81f59a45419685b58cbc19cc6e5a" :tokens 905 :bytes 3333)
 (:card :arm "aslCardSig" :file "cards/aslCardSig.txt" :sha256 "c79c8335454cceb4d22d5c5a1ec9c5f7bc9f56bdeccd42cc58575bc9cf132387" :tokens 1213 :bytes 4264)
 (:card :arm "aslCardTextEx" :file "cards/aslCardTextEx.txt" :sha256 "335296094ac7070aa012276b06508259a06fd136b93bc3fb5cc1fc91bbbb6a5a" :tokens 985 :bytes 3577)
+(:card :arm "aslCardNoSig" :file "cards/aslCardNoSig.txt" :sha256 "f2ee36723d1d6cd639f4b1441548d634583311e7e4b48d4c5ea09c2bd8c2de60" :tokens 799 :bytes 2975)

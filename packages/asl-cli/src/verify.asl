@@ -37,7 +37,19 @@ fn ! indentLine! path: String -> String
   (let [(fields (indentFields! path))]
     (if (stringEmpty? fields) "" (str "(:indentFix :file \"" (dyck/esc path) "\"" fields ")")))
 
+; (:m :ref FABLE-LANG-02 :do "one (:headerFix) line per fn header of a failing file whose shape is not the canonical column-0 fn line, carrying that function's canonical header")
+fn ! headerFixLines! path: String -> (List String)
+  (match (fileReadString path)
+    ((err _) (list))
+    ((ok text) (map (fn [(f (Pair Int64 String))] -> String (str "(:headerFix :file \"" (dyck/esc path) "\" :line " (stringFromInt64 (pairFirst f)) " :header \"" (pairSecond f) "\" :note \"the body is indented two spaces below it\")")) (hn/headerFixes text))))
+
+fn ! diagPaths diags: (List ty/Diagnostic) -> (List String)
+  (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (if (listContains? acc d.path) acc (listAppend acc (list d.path)))) (list) diags)
+
 fn ! diagHints! diags: (List ty/Diagnostic) -> (List String)
+  (listAppend (diagIndentHints! diags) (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (headerFixLines! p))) (list) (diagPaths diags)))
+
+fn ! diagIndentHints! diags: (List ty/Diagnostic) -> (List String)
   (let [(paths (fold (fn [(acc (List String)) (d ty/Diagnostic)] -> (List String) (if (and (unbalancedRead? d) (not (listContains? acc d.path))) (listAppend acc (list d.path)) acc))
                      (list) diags))]
     (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map (fn [(p String)] -> String (indentLine! p)) paths)))

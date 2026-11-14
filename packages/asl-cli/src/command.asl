@@ -503,7 +503,7 @@ fn ! checkOrSweep! ctx: sys/Context args: (List String) -> Int64
           (override (optionOr (envGet "ASL_CLI_USER_PRELUDE") ""))]
       (cond
         ((or (listEmpty? preludeEnv) (ownPrelude? ctx override)) (verify/checkFiles! ctx args))
-        ((not (sys/executable? ctx.hostBin)) (do (sys/say! (preludeHostAbsent "check")) 2))
+        ((and (not (sys/executable? ctx.hostBin)) (listAny? (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args)) (do (sys/say! (preludeHostAbsent "check")) 2))
         (else
           (let [(aslArgs (filter (fn [(a String)] -> Bool (stringEndsWith? a ".asl")) args))
                 (otherArgs (filter (fn [(a String)] -> Bool (not (stringEndsWith? a ".asl"))) args))

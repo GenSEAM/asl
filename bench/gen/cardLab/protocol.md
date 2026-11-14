@@ -28,7 +28,7 @@ pass). Only the system prompt differs.
 
 | Arm | Style | o200k tokens |
 |---|---|---|
-| `asl` (existing) | prose, the section "The language" of `llms.txt` | 799 |
+| `asl` (existing; since 2026-11-14 the lab arm `aslCardNoSig`, the `asl` arm now appends the builtin signature sentence derived from `cards/sigNames.asn` and the builtin registry, 1221 tokens) | prose, the section "The language" of `llms.txt` | 799 |
 | `aslCardAsn` | ASN rows `(:rule :id .. :do .. :ex ..)`, examples as forms | 448 |
 | `aslCardContrast` | "you know Python", 11 contrast pairs `py -> asl` | 449 |
 | `aslCardExample` | two complete programs and 6 one-line pitfalls | 446 |

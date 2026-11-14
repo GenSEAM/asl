@@ -5,10 +5,11 @@
       aslHarness pyHarness tsHarness extractCode stripModuleHeader parenToBracket bracketToParen toWrapFn fromWrapFn
       normaliseAsl toArm sigFor userPrompt repairPrompt exampleLine conventionFor formatFor
       languageSection cardFor parenSubs wrapFnSubs loadCards cardOf sha256Of labArms loadCardsFor
+      registryType signatureEntry signatureSentence signatureLine! cardSignatures
       infraOf settle! promptShaOf reqPromptSha expectedPromptSha hasWord? definesEntry? rowVerdict
       gradeCode! gradeReply! healedPass! healedStage! runTrial! runAll! trialKey trialRow planTrials planSig callCost reqChars
       fakeReply! fakeCaller usdToMicro dateOf toolVersion! removeDir! failingOf headerRow usdText priorSpend headOf stageOfReply]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr) (asl-checker/types :a ty)])
 
 ; (:m :ref FABLE-LANG-01 :do "generation-baseline bench core for asl/EXPERIMENT.md protocol v2: task rows, value rendering per language, graded children under fleet limits, trial loop over a caller, one ASN row per trial")
 
@@ -421,7 +422,7 @@ fn allArms -> (List String)
   (list "py" "ts" "asl" "aslParen" "aslWrapFn")
 
 fn labArms -> (List String)
-  (list "aslCardAsn" "aslCardContrast" "aslCardExample" "aslCardMin" "aslCardStr" "aslCardSig" "aslCardTextEx")
+  (list "aslCardAsn" "aslCardContrast" "aslCardExample" "aslCardMin" "aslCardStr" "aslCardSig" "aslCardTextEx" "aslCardNoSig")
 
 fn armKnown? arm: String -> Bool
   (or (listContains? (allArms) arm) (listContains? (labArms) arm))
@@ -759,7 +760,7 @@ fn languageSection llms: String -> (Result String String)
   (match (stringIndexOf llms "## The language\n\n")
     ((none) (err "llms.txt has no section: The language"))
     ((some a)
-      (let [(body (sliceFrom llms (+ a 18)))]
+      (let [(body (sliceFrom llms (+ a 17)))]
         (match (stringIndexOf body "\n\n## ")
           ((none) (err "llms.txt: section The language has no end"))
           ((some b) (ok (slice body 0 b)))))))
@@ -789,7 +790,80 @@ fn wrapFnSubs -> (List (Pair String String))
         (pair "and fn main with no -> binds args" "and (fn main [] body) with no -> binds args")
         (pair "with fn runTests -> Bool ending true" "with (fn runTests [] -> Bool body) ending true"))
 
-fn cardFor arm: String llms: String -> (Result String String)
+fn checkerType sig: (Pair (List String) (Pair Bool String)) -> String
+  (let [(params (pairFirst sig))
+        (variadic (pairFirst (pairSecond sig)))
+        (shown (if (and variadic (not (listEmpty? params)))
+                 (listAppend (listTake params (- (listLength params) 1)) (list (str (optionOr (listLast params) "") "...")))
+                 params))]
+    (str (if (listEmpty? shown) "()" (stringJoin shown " ")) " -> " (pairSecond (pairSecond sig))))
+
+fn preludeType prelude: String name: String -> (Option String)
+  (match (stringIndexOf prelude (str "(:name " (asnQuote name) " :sec "))
+    ((none) (none))
+    ((some a)
+      (let [(rest (sliceFrom prelude (+ a 7)))
+            (row (match (stringIndexOf rest "(:name ") ((none) rest) ((some z) (slice rest 0 z))))]
+        (match (stringIndexOf row " :type \"")
+          ((none) (none))
+          ((some t)
+            (let [(body (sliceFrom row (+ t 8)))]
+              (match (stringIndexOf body "\"")
+                ((none) (none))
+                ((some e) (some (slice body 0 e))))))))))
+
+; (:m :ref CARD-SIG-PROMOTE :do "the type of a builtin as asl '(:help :builtin NAME)' prints it: the prelude.asn row must exist, and the checker signature, when the checker has one, replaces the row's :type")
+fn registryType prelude: String name: String -> (Option String)
+  (match (preludeType prelude name)
+    ((none) (none))
+    ((some t)
+      (match (ty/builtinSig name)
+        ((some sig) (some (checkerType sig)))
+        ((none) (some t)))))
+
+fn signatureEntry name: String type: String note: String -> String
+  (str name " " type (if (stringEmpty? note) "" (str ", " note)))
+
+fn cardSignatures names: String -> (Result (List (Pair String String)) String)
+  (match (readForms names)
+    ((err e) (err (str "sigNames.asn: " e)))
+    ((ok forms)
+      (ok (map (fn [(f Sx)] -> (Pair String String) (pair (kwText (sxItems f) ":name") (kwText (sxItems f) ":note")))
+               (filter (fn [(f Sx)] -> Bool (= (headOf f) ":sig")) forms)))))
+
+fn signatureSentence names: String prelude: String -> (Result String String)
+  (match (readForms names)
+    ((err e) (err (str "sigNames.asn: " e)))
+    ((ok forms)
+      (let [(lead (optionOr (listHead (map (fn [(f Sx)] -> String (kwText (sxItems f) ":lead")) (filter (fn [(f Sx)] -> Bool (= (headOf f) ":sigs")) forms))) ""))
+            (rows (resultOr (cardSignatures names) (list)))
+            (entries (fold (fn [(acc (Result (List String) String)) (r (Pair String String))] -> (Result (List String) String)
+                             (match acc
+                               ((err e) (err e))
+                               ((ok done)
+                                 (match (registryType prelude (pairFirst r))
+                                   ((none) (err (str "sigNames.asn names " (pairFirst r) ", which the builtin registry asl/prelude/prelude.asn does not hold")))
+                                   ((some t) (ok (listAppend done (list (signatureEntry (pairFirst r) t (pairSecond r))))))))))
+                           (ok (list))
+                           rows))]
+        (cond
+          ((stringEmpty? lead) (err "sigNames.asn has no (:sigs :lead ...) row"))
+          ((listEmpty? rows) (err "sigNames.asn has no (:sig ...) row"))
+          (else
+            (match entries
+              ((err e) (err e))
+              ((ok es) (ok (str lead " " (stringJoin es "; ") ".")))))))))
+
+fn ! signatureLine! root: String -> (Result String String)
+  (match (fileReadString (str root "/asl/bench/gen/cards/sigNames.asn"))
+    ((err e) (err (str "asl/bench/gen/cards/sigNames.asn: " e)))
+    ((ok names)
+      (match (fileReadString (str root "/asl/prelude/prelude.asn"))
+        ((err e) (err (str "asl/prelude/prelude.asn: " e)))
+        ((ok prelude) (signatureSentence names prelude)))))
+
+; (:m :ref CARD-SIG-PROMOTE :do "the asl card is the section The language of llms.txt followed by the builtin signature sentence; the surface variants aslParen and aslWrapFn keep the section alone, their bracket rewrites do not cover type notation")
+fn cardFor arm: String llms: String sigs: String -> (Result String String)
   (cond
     ((= arm "py") (ok "You write Python 3.13 with type hints, using only the standard library."))
     ((= arm "ts") (ok "You write TypeScript that compiles under tsc --strict with target es2022, using only the standard library."))
@@ -798,7 +872,7 @@ fn cardFor arm: String llms: String -> (Result String String)
         ((err e) (err e))
         ((ok section)
           (cond
-            ((= arm "asl") (ok section))
+            ((= arm "asl") (if (stringEmpty? sigs) (err "the asl card needs the signature sentence") (ok (str section " " sigs))))
             ((= arm "aslParen") (substituteAll section (parenSubs)))
             ((= arm "aslWrapFn") (substituteAll section (wrapFnSubs)))
             (else (err (str "unknown arm " arm))))))))
