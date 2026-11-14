@@ -455,12 +455,14 @@ fn ! readTracked! root: String -> (Result (List (Pair String String)) String)
 fn allowRel -> String
   ".asl/mem/vcsDirectAllow.asn"
 
-; (:m :do "the base commit: --base REF resolved, by default the merge base of HEAD with main; a base that does not resolve is an error")
+; (:m :do "the base commit: --base REF resolved, by default the merge base of HEAD with main, else with srcMain, the mirror of main the conductor keeps in a dev repo that has no main branch; a base that does not resolve is an error")
 fn ! baseCommit! root: String base: String -> (Result String String)
   (if (stringEmpty? base)
     (match (sr/gitOut! root (list "merge-base" "HEAD" "main"))
       ((ok sha) (ok (stringTrim sha)))
-      ((err e) (err (str "ERR_VCS_NO_MAIN: no main branch to compare with, or not a git work tree (" e ")"))))
+      ((err e) (match (sr/gitOut! root (list "merge-base" "HEAD" "srcMain"))
+                 ((ok sha) (ok (stringTrim sha)))
+                 ((err _) (err (str "ERR_VCS_NO_MAIN: no main branch to compare with, or not a git work tree (" e ")"))))))
     (resultMap (sr/gitOut! root (list "rev-parse" "--verify" (str base "^{commit}"))) stringTrim))
 
 ; (:m :do "the allowlist keys at the base commit; none when the allowlist did not exist there yet, an error when git fails")
