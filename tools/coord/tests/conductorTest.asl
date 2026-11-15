@@ -1016,13 +1016,13 @@ fn ! testKilledChild bin: String -> Bool
         (pid (pidOf dir "K" "write"))
         (aliveBefore (up? pid))
         (_ (fr/killTree! pid))
-        (failed (tickUntil! ctx dir "K" "ready" 1 200))
+        (failed (tickUntil! ctx dir "K" "ready" 0 200))
         (k (cuOf dir "K"))
         (_ (cd/stopAll! ctx))
         (_ (cleanup dir))]
     (do (assert put "unit put")
         (assert aliveBefore "the write child was alive before the kill")
-        (assert failed (str "K failed once and is back in ready: " k.st " " (stringFromInt64 k.fails)))
+        (assert failed (str "a stage killed from outside returns the unit to ready without counting: " k.st " " (stringFromInt64 k.fails)))
         (assert (stringContains? k.sig "stage died") (str "the signature says the stage died: " k.sig))
         true))
 
