@@ -23,6 +23,9 @@ fn ! closedRun! tag: String task: String gate: (fn [String] -> String) replies: 
   (closedRunIn! tag task gate replies "false")
 
 fn ! closedRunIn! tag: String task: String gate: (fn [String] -> String) replies: (List String) baseline: String -> Closed
+  (closedRunWith! tag task gate replies baseline "" "\"subject.txt\"" true)
+
+fn ! closedRunWith! tag: String task: String gate: (fn [String] -> String) replies: (List String) baseline: String tail: String owns: String gated: Bool -> Closed
   (let [root (rk/freshRecorderRoot! tag)
         wroteS (fileWrite (str root "/subject.txt") "base\n")
         wroteCfg (fileWrite (str root "/.asl.config.asn") (str "(:aslConfig :agentLoop (:specCheck false :baseline " baseline "))"))
@@ -32,7 +35,7 @@ fn ! closedRunIn! tag: String task: String gate: (fn [String] -> String) replies
         dir (dirCreate fixtureDir)
         fixture (fileWrite (str fixtureDir "/green" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "green" tag) replies))
         form (str "(:agent :task \"" (c/escapeAsn task) "\" :backend \"script/green" tag "\" :root \"" (c/escapeAsn root)
-               "\" :mode \"scout\" :owns (\"subject.txt\") :gates (\"sh " (c/escapeAsn root) ".gate.sh\") :budget 8 :contextTokens 8000 :commit true)")
+               "\" :mode \"scout\" :owns (" owns ") :gates (" (if gated (str "\"sh " (c/escapeAsn root) ".gate.sh\"") "") ") :budget 8 :contextTokens 8000 :commit true" tail ")")
         repoRoot (resultOr (realPath ".") ".")
         rootDir (match (envGet "ASL_ROOT_DIR") ((some r) (if (stringEmpty? r) repoRoot r)) ((none) repoRoot))
         res (m/mainWithRoots (list form) repoRoot rootDir)
@@ -42,7 +45,7 @@ fn ! closedRunIn! tag: String task: String gate: (fn [String] -> String) replies
         logged (fr/runOneLimited (fr/job (list "git" "log" "-1" "--format=%s" (str "--output=" root ".subject")) root (fr/childEnv (list))) (fr/limits 10 8))
         message (resultOr (fileReadString (str root ".subject")) "")
         subject (resultOr (fileReadString (str root "/subject.txt")) "")
-        cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root ".gate.sh"))) (ok? (pathRemove (str root ".subject")))))]
+        cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root ".gate.sh"))) (and (ok? (pathRemove (str root ".subject"))) (or (ok? (pathRemove (str root ".seen"))) true))))]
     (Closed :journal journal :message message :subject subject :receipt res.stdout))
 
 fn clip s: String n: Int64 -> String
@@ -65,6 +68,18 @@ fn statusOf out: String -> String
       ((some k) (let [rest (c/sliceOf line (+ k 24) (stringLength line))]
         (c/sliceOf rest 0 (optionOr (stringIndexOf rest " ") (stringLength rest)))))))
 
+fn heldCount journal: String -> Int64
+  (listLength (filter (fn [l] (stringContains? l ":signal :greenDoneHeld")) (stringSplit journal "\n")))
+
+fn sentCarries journal: String turn: Int64 -> Bool
+  (listAny? (fn [l] (and (stringStartsWith? l (str "(:turn " (stringFromInt64 turn) " :sent")) (stringContains? l "(:gateVacuous "))) (stringSplit journal "\n"))
+
+fn slowFirstGate root: String -> String
+  (str "if [ ! -f " root "/.seen ]; then touch " root "/.seen; sleep 20; fi\n" (doneGate root))
+
+fn testPairGate root: String -> String
+  (str "if [ -f " root "/checkTest.txt ] && ! grep -q done " root "/subject.txt; then echo '1 assertion(s) executed (0 passed, 1 failed)'; exit 1; fi; echo '1 assertion(s) executed (1 passed)'\n")
+
 fn ! runTests -> Bool
   (let [reads (list (readReply 1) (readReply 2) (readReply 3))
         quoted (closedRun! "Quoted" "make subject say done. Finish with (:done :commit \"(:c :a subject :do \\\"subject says done\\\" :g \\\"gate\\\" :ev (GREEN-QUOTED))\")."
@@ -77,6 +92,11 @@ fn ! runTests -> Bool
         noWrite (closedRun! "NoWrite" "make the gate pass" toggleGate (cons "(:step :op \"run\" :argv \"ls\")" (cons "(:step :op \"run\" :argv \"ls\")" reads)))
         baseRed (closedRunIn! "BaseRed" "make subject say done" doneGate (cons (writeReply "done") reads) "true")
         modelDone (closedRun! "ModelDone" "make subject say done" doneGate (list (writeReply "draft") (str (writeReply "done") "\n(:done)") (readReply 1)))
+        heldMany (closedRun! "HeldMany" "keep subject free of the word" noBadGate (list (writeReply "bad") (writeReply "good") (writeReply "good2") (writeReply "good3") (writeReply "good4") (writeReply "good5") (readReply 1) (readReply 2)))
+        baseLost (closedRunWith! "BaseLost" "make subject say done" slowFirstGate (cons (writeReply "done") reads) "true" " :gateTimeout 1" "\"subject.txt\"" true)
+        pairDone (closedRunWith! "PairDone" "add the check and make subject say done" testPairGate (list (str (writeReply "done") "\n(:step :op \"write\" :file \"checkTest.txt\" :content \"check\\n\")") "(:done)" (readReply 1)) "true" "" "\"subject.txt\" \"checkTest.txt\"" true)
+        noGates (closedRunWith! "NoGates" "make subject say done" doneGate (list (writeReply "done") "(:done)" (readReply 1)) "false" "" "\"subject.txt\"" false)
+        testOnly (closedRunWith! "TestOnly" "add the check" noBadGate (list (str "(:step :op \"write\" :file \"checkTest.txt\" :content \"check\\n\")") "(:done)" (readReply 1)) "true" "" "\"subject.txt\" \"checkTest.txt\"" true)
         escalated (closedRun! "Escalated" "make subject say done" doneGate (list (writeReply "draft") (str (writeReply "done") "\n(:escalate :reason \"need a second look\" :seen \"gate\" :tried \"write\")") (readReply 1)))]
     (do
       (assert (stringContains? quoted.journal "(:turn 2 :signal :greenDone :reason") "a gate that failed earlier in the session and is green after the owned write closes the run on that turn")
@@ -119,4 +139,35 @@ fn ! runTests -> Bool
       (assert (m/redBefore? (list "g1" "g2") true (list "g1") (list)) "a baseline that ran and did not list a gate green proves it red before")
       (assert (not (m/redBefore? (list "g1" "g2") true (list "g1" "g2") (list))) "every gate green on the base and no failed run in the session: not red before")
       (assert (not (m/redBefore? (list "g1") false (list) (list))) "a baseline that did not run and no failed run in the session prove nothing")
+      (assert (stringContains? heldMany.journal "(:turn 2 :signal :greenDoneHeld") "the first green candidate is held")
+      (assert (stringContains? heldMany.journal "(:turn 3 :signal :greenDoneHeld") "the second green candidate is held")
+      (assert (not (stringContains? heldMany.journal "(:turn 4 :signal :greenDoneHeld")) "the third candidate runs no integrity check once gateVacuousRounds (2) are spent")
+      (assert (not (stringContains? heldMany.journal "(:turn 6 :signal :greenDoneHeld")) "no later write turn is held again")
+      (assert (= (heldCount heldMany.journal) 2) (str "at most gateVacuousRounds integrity checks run for green candidates, got " (stringFromInt64 (heldCount heldMany.journal))))
+      (assert (not (stringContains? heldMany.journal ":signal :greenDone :reason")) "a held run never closes greenDone")
+      (assert (not (stringContains? heldMany.receipt ":stop gateIntegrity")) "the capped run is not a gateIntegrity failure")
+      (assert (not (or (= (statusOf heldMany.receipt) "ok") (= (statusOf heldMany.receipt) "failed"))) (str "the capped run goes on to its budget, got " (statusOf heldMany.receipt)))
+      (assert (sentCarries heldMany.journal 3) (str "the model's next turn carries the held (:gateVacuous ...) form: " (clip heldMany.journal 6000)))
+      (assert (stringContains? heldMany.journal ":passesOnRevert true") "the held form tells the model the gates pass on revert")
+      (assert (not (m/baselineVerdicts? "" (list "g1"))) "no baseline row: no verdict")
+      (assert (m/baselineVerdicts? "(:baseline :green (\"g1\") :red (\"g2\"))\n" (list "g1" "g2")) "a row naming every gate is a verdict")
+      (assert (not (m/baselineVerdicts? "(:baseline :green (\"g1\") :red ())\n" (list "g1" "g2"))) "a gate missing from the row has no verdict")
+      (assert (not (m/baselineVerdicts? "(:baseline :green () :red (\"g1\") :lost (\"g1\"))\n" (list "g1"))) "a timed-out baseline gate has no verdict")
+      (assert (not (m/baselineRanWith? false "" "" (list "g1"))) "baseline on by config but no verdicts: not ran")
+      (assert (m/baselineRanWith? false "" "(:baseline :green () :red (\"g1\"))\n" (list "g1")) "baseline with verdicts ran")
+      (assert (not (m/baselineRanWith? false "(:aslConfig :agentLoop (:baseline false))" "(:baseline :green () :red (\"g1\"))\n" (list "g1"))) "config off stays off")
+      (assert (not (m/redBefore? (list "g1") (m/baselineRanWith? false "" "" (list "g1")) (list) (list))) "without verdicts and without a failed session run a never-red gate is not red before")
+      (assert (not (stringContains? baseLost.journal ":signal :greenDone")) "a gate whose baseline timed out is not red before, so it neither closes nor is held")
+      (assert (not (stringContains? baseLost.journal "(:commit \"")) "no commit rests on a baseline that gave no verdict")
+      (assert (stringContains? baseLost.journal "(:op :turn 1 :name \"write\" :file \"subject.txt\" :status ok)") "the scripted write was applied, so the green gate after it was judged")
+      (assert (stringContains? baseLost.journal ":lost (") (str "the timed-out baseline gate is named in the baseline row: " (clip baseLost.journal 1500)))
+      (assert (stringContains? pairDone.journal "(:commit \"") (str "a run that ends ok on a new test plus its source change commits: " (clip pairDone.journal 3000)))
+      (assert (not (stringContains? pairDone.journal "(:commitMissing")) "no commitMissing row on that run")
+      (assert (stringStartsWith? pairDone.message "(:c :a leon :do") (str "the harness commit line stands in for the missing one, got " pairDone.message))
+      (assert (not (stringContains? pairDone.journal ":vacuousGates")) "a gate the run's own new test changed is not reported vacuous")
+      (assert (stringContains? pairDone.journal ":failsOnRevert") "the integrity check reverted the source only and the gate went red")
+      (assert (not (stringContains? noGates.journal "(:commit \"")) (str "a bare (:done) with no declared gate commits nothing: " (clip noGates.journal 2500)))
+      (assert (stringContains? noGates.journal "(:commitMissing true)") "the no-gate run keeps its :commitMissing result")
+      (assert (stringContains? testOnly.journal "revertCheck skipped") (str "a test-only run skips the revert check: " (clip testOnly.journal 2500)))
+      (assert (stringContains? testOnly.journal ":vacuousGates") "a test-only run whose revert check was skipped still lists the vacuous gate")
       true))

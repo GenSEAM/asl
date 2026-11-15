@@ -2,7 +2,7 @@
   :x [ownedDigest! finishLeftFor finishShortFor wallBounded? commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
-      (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
+      (aslAgent/gateIntegrity :a gi) (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
       (aslAgent/core :a c) (aslAgent/gates :a g) (asl-json/json :a j)
       (aslAgent/providers :a pv) (aslAgent/agentConfig :a ac) (aslAgent/aslOps :a ao)
       (asl-tools/vcs/vcs :a vcs) (aslAgent/exec :a ex)])
@@ -427,10 +427,15 @@ fn noOutline f: String -> (Pair Int64 String)
   (pair 1 "")
 
 ; (:m :ref LEON-CAPS :do "the task's gates run once before the first turn, in the run root, with the run's gate timeout; a gate that exits 0 here is green before any edit, so a later green of it proves nothing about the change and the end status lists it as vacuous; a resumed run skips this because its root may already carry edits")
-fn ! baselineGreen! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (List String)
+fn ! baselineGreen! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (Pair (List String) (List String))
   (let [rows (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent)]
-    (map (fn [row] (rowText row "cmd"))
-      (filter (fn [row] (= (rowExit row) 0)) rows)))
+    (pair (map (fn [row] (rowText row "cmd")) (filter (fn [row] (= (rowExit row) 0)) rows))
+      (map (fn [row] (rowText row "cmd")) (filter baselineLost? rows))))
+
+; (:m :ref LDR-BASELINE-RAN :do "a baseline row with no verdict: the gate timed out, or never ran (a spawn failure row has no stdout key); such a gate is neither green nor red on the base")
+fn baselineLost? row: (List (Pair String go/RVal)) -> Bool
+  (or (listAny? (fn [p] (and (= (pairFirst p) "timeout") (match (pairSecond p) ((go/rBool v) v) (_ false)))) row)
+    (not (listAny? (fn [p] (= (pairFirst p) "stdout")) row)))
 
 fn rowText row: (List (Pair String go/RVal)) key: String -> String
   (match (listHead (filter (fn [p] (= (pairFirst p) key)) row))
@@ -539,10 +544,12 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
           (let [swept (ex/sweepRevertBackups! rootDir)
                 _swept (if (listEmpty? swept) true
                          (ok? (jr/journalWrite env.journalPath (str "(:revertSwept :files (" (stringJoin (map (fn [f] (str "\"" (c/escapeAsn f) "\"")) swept) " ") "))\n"))))
-                green (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
+                baseVerdicts (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
                         (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
-                        (list))
-                _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) "))\n"))) true)
+                        (pair (list) (list)))
+                green (pairFirst baseVerdicts)
+                lost (pairSecond baseVerdicts)
+                _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) ")" (if (listEmpty? lost) "" (str " :lost (" (quoted lost) ")")) ")\n"))) true)
                 _inherited (if (and (none? env.resume) (not (stringEmpty? env.inheritedBase))) (ok? (jr/journalWrite env.journalPath (str "(:inheritedBase :sha \"" (c/escapeAsn env.inheritedBase) "\")\n"))) true)
                 _skipped (if (and (not baselineOn) (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath "(:baseline :skipped :why \"config :agentLoop :baseline false\")\n")) true)]
           (ready (LoopRun
@@ -787,7 +794,11 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
               ((= (modelFamily grader) (modelFamily writer)) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
               (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
 
-fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) -> String
+; (:m :ref LEON-OK-UNCOMMITTED :do "gates green before any edit are listed as vacuous; a run that ends ok, wrote a test file of its own and whose integrity check ran a revert and saw failsOnRevert changed the gate; the check reverted the sources and saw the gate go red, so they are not listed")
+fn vacuousShown status: String written: (List String) reverted: Bool state: s/LoopState -> (List String)
+  (if (and (= status "ok") (and reverted (listAny? gi/testFile? written))) (list) state.baselineGreen)
+
+fn resultText state: s/LoopState session: String status: String unbacked: Int64 commit: (Pair (Option String) (Option String)) commitMissing: Bool preserve: Bool patch: (Option String) restored: (List String) spec: (Option s/SpecVerdict) written: (List String) reverted: Bool -> String
   (let [claims (map ctx/pyStr state.runUnbackedClaims)
         findings (map ctx/pyStr state.findingsList)
         usage state.usageTotals
@@ -803,7 +814,7 @@ fn resultText state: s/LoopState session: String status: String unbacked: Int64 
       (match state.deliver ((some d) (if (stringEmpty? d) "" (str " :deliver :" d))) ((none) ""))
       " :phases (" (phasesText state.phases) ")"
       (if preserve " :gatesGreen true" "")
-      (if (listEmpty? state.baselineGreen) "" (str " :vacuousGates (" (quoted state.baselineGreen) ")"))
+      (if (listEmpty? (vacuousShown status written reverted state)) "" (str " :vacuousGates (" (quoted (vacuousShown status written reverted state)) ")"))
       (specText spec)
       (if (listEmpty? findings) "" (str " :findings (" (c/joinSep findings " ") ")"))
       (if state.hasTiming (str " :queueWaitSec " (ctx/floatRepr state.totalQueueWaitSec) " :execSec " (ctx/floatRepr state.totalExecSec)) "")
@@ -833,7 +844,7 @@ fn ! finalResult env: s/LoopEnv run: LoopRun status: String unbacked: Int64 comm
       :ownsRejected state.ownsRejections
       :planSummary (match (j/jsonGet state.plan "steps") ((some _) (some state.plan)) ((none) none))
       :coreHost (coreHostZero) :openPossible (list)
-      :gatePreflight none :message none :vacuousGates state.baselineGreen :specCheck spec))
+      :gatePreflight none :message none :vacuousGates (vacuousShown status (distinct (listAppend state.writtenFiles (writtenPaths run.written))) (stringContains? (resultOr (fileReadString env.journalPath) "") ":failsOnRevert") state) :specCheck spec))
 
 fn ! failedAfterKill! env: s/LoopEnv run: LoopRun rootDir: String e: String -> s/RunResult
   (match (jr/handBack run.written rootDir env.journalPath run.session true run.written.startHead)
@@ -967,7 +978,7 @@ fn ! finish! env: s/LoopEnv run: LoopRun -> s/RunResult
                     (let [commitMissing (and (= endStatus "ok") (and state.commitRequested (and (none? run.commitMessage) state.writesPersisted)))]
                       (match (journaled! env (str (if commitMissing "(:commitMissing true)\n" "")
                             (ctx/coreStatsLine (coreHostZero))
-                            (resultText run2.state run.session endStatus finalUnbacked commit commitMissing preserve patch restored spec)) true)
+                            (resultText run2.state run.session endStatus finalUnbacked commit commitMissing preserve patch restored spec written (stringContains? (resultOr (fileReadString env.journalPath) "") ":failsOnRevert"))) true)
                         ((err e) (failed e patch restored))
                         ((ok _) (finalResult env run2 endStatus finalUnbacked commit commitMissing preserve patch restored spec)))))))))))))
 
