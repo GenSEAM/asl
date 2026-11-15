@@ -17,7 +17,8 @@ fn countLines text: String -> Int64
 
 fn ! runTests -> Bool
   (let [(root (rk/freshRecorderRoot! "readOnlyGate"))
-        (counter (str root ".gatecount"))
+        (_ (dirCreate (str root "/.asl")))
+        (counter (str root "/.asl/gatecount"))
         (seeded (and (ok? (fileWrite (str root "/subject.txt") "before\n")) (gk/initGitRepo! root "readOnlyGateTest" "read-only-gate@example.invalid")))
         (fixtureDir (str root "/tests/fixtures/agentLoop/mvp"))
         (_ (dirCreate fixtureDir))
@@ -40,6 +41,7 @@ fn ! runTests -> Bool
       (assert (= written "green\n") (str "the write turn landed: " written))
       (assert (stringContains? journal "(:result :status :ok") "the run still finishes ok after the write turn's green gate")
       (assert (= gateRows 1) (str "only the write turn journals a gate run, read-only turns reuse the last verdict: " (stringFromInt64 gateRows) " gate rows"))
+      (assert (>= runs 1) (str "the gate command ran at least once, got " (stringFromInt64 runs)))
       (assert (<= runs 3) (str "the gate command ran at most baseline + write turn + integrity check, got " (stringFromInt64 runs)))
       (assert (= exitCode 0) (str "exit 0, got " (stringFromInt64 exitCode)))
       true))

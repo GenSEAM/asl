@@ -148,6 +148,12 @@ fn ! repoint! src: String tmp: String dst: String head: String dir: String -> Bo
     ((err _) false)
     ((ok st) (and (ok? (fileWrite (str tmp "/" head) (str dst "/" (lastSeg dir) "\n"))) (ok? (fileUtime (str tmp "/" head) st.mtimeNs)))))
 
+; (:m :ref JAIL-LINUX :do "a private cache is seeded when it is missing or empty: a gate or run env created it empty before the first asl op")
+fn ! seedable? dst: String -> Bool
+  (match (fileStat dst)
+    ((err _) true)
+    ((ok _) (listEmpty? (resultOr (dirList dst) (list "x")))))
+
 ; (:m :ref JAIL-LINUX :do "D2: the active entry of the shared native CLI cache, plain cp -Rp (about 56M): every head pointer file, and the cli directory of each pointer in heads, which is then repointed at the copy; the other pointers keep naming the shared cache, which the jail reads. Built under a private name and renamed into place; returns the reason it failed, empty on success, and a failed seed leaves nothing behind")
 fn ! seedCliEntry! src: String dst: String heads: (List String) -> String
   (let [tmp (str dst ".seed-" (stringFromInt64 (monotonicNs)))
@@ -170,11 +176,11 @@ fn ! seedCachesWith! kind: String home: String sources: (List (Pair String Strin
           (let [name (pairFirst r)
                 dst (str home (pairSecond r))
                 src (optionOr (listHead (map pairSecond (filter (fn [s] (= (pairFirst s) name)) sources))) "")]
-            (if (or (stringEmpty? src) (or (not (listContains? (seededNames) name)) (ok? (fileStat dst))))
+            (if (or (stringEmpty? src) (or (not (listContains? (seededNames) name)) (not (seedable? dst))))
               acc
               (let [tmp (str dst ".seed-" (stringFromInt64 (monotonicNs)))
                     parent (dirCreate (parentOf dst))
-                    cloned (and (!= kind "none") (and (runBounded! (cloneArgv kind src tmp)) (ok? (pathRename tmp dst))))
+                    cloned (and (!= kind "none") (and (!= name "ASL_NATIVE_CLI_CACHE") (and (runBounded! (cloneArgv kind src tmp)) (ok? (pathRename tmp dst)))))
                     swept (if (or cloned (not (ok? (fileStat tmp)))) true (ok? (pathRemove tmp)))
                     how (seedHow kind cloned name)
                     why (if (= how "cliEntry") (seedCliEntry! src dst heads) "")]
@@ -201,7 +207,7 @@ fn ! seedReport! home: String rows: (List (Pair String String)) -> Bool
 
 ; (:m :ref JAIL-LINUX :do "the clone probe runs only when some cache is still to be seeded; jailCacheEnv! creates every private directory right after, so a jail home is seeded once")
 fn ! seedCaches! home: String sources: (List (Pair String String)) heads: (List String) -> (List (Pair String String))
-  (if (listAny? (fn [r] (and (listContains? (seededNames) (pairFirst r)) (and (listAny? (fn [s] (= (pairFirst s) (pairFirst r))) sources) (not (ok? (fileStat (str home (pairSecond r)))))))) (jailCacheRows))
+  (if (listAny? (fn [r] (and (listContains? (seededNames) (pairFirst r)) (and (listAny? (fn [s] (= (pairFirst s) (pairFirst r))) sources) (seedable? (str home (pairSecond r)))))) (jailCacheRows))
     (seedCachesWith! (cloneKind! home) home sources heads)
     (list))
 
