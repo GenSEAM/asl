@@ -69,13 +69,13 @@ fn testExhaustiveOverDeclaredEnums -> Bool
       (assert (listContains? (codesOf "(enum Maybe (:c none []) (:c some [(v Int64)])) (fn f [(x Maybe)] -> Int64 (match x ((some v) v)))") "rule-4") "a local enum reusing some and none is its own declared enum, so a match missing none is rule-4")
       true)
 
-fn testImportedCasesBeatPreludeNameCollisions -> Bool
+fn testPreludeCasesBeatImportedNameCollisions -> Bool
   (let [(proc (summaryOf "(module process :x [ProcessError] :i []) (enum ProcessError (:c notFound []) (:c timeout []))" "/w/process.asl"))
         (deps (mapSet (mapEmpty) "/w/process.asl" proc))
         (messages (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((notFound) 0) ((timeout) 1)))" deps))
         (qualified (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((p/notFound) 0) ((p/timeout) 1)))" deps))
         (qualifiedMissing (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (match e ((p/notFound) 0)))" deps))]
-    (do (assert (listEmpty? messages) (str "imported ProcessError constructor names win over prelude IoError names: " (stringJoin messages "; ")))
+    (do (assert (listAny? (fn [(m String)] -> Bool (stringContains? m "arms mix unions: process/ProcessError, IoError")) messages) (str "a bare notFound is the prelude IoError case, as in type inference and the lowering, so bare arms over an imported ProcessError mix unions and the imported case is written p/notFound (MATCH-PARITY): " (stringJoin messages "; ")))
         (assert (listEmpty? qualified) (str "all qualified imported cases are exhaustive: " (stringJoin qualified "; ")))
         (assert (listAny? (fn [(m String)] -> Bool (stringStartsWith? m "rule-4")) qualifiedMissing) (str "qualified imported patterns still detect a missing case: " (stringJoin qualifiedMissing "; ")))
         true))
@@ -137,7 +137,7 @@ fn ! runTests -> Bool
       (assert (testChainedQualifiedType) "a/b/T resolves through the import chain")
       (assert (testExactImportKeyWins) "an exact deps key wins over suffix matches")
       (assert (testExhaustiveOverDeclaredEnums) "exhaustiveness follows the host: declared enums only")
-      (assert (testImportedCasesBeatPreludeNameCollisions) "match family follows the imported enum, not a same-named prelude tag")
+      (assert (testPreludeCasesBeatImportedNameCollisions) "match family follows the imported enum, not a same-named prelude tag")
       (assert (testCaseExportedWithoutTypeNameStillQualifies) "a case exported by name alone still qualifies in a pattern")
       (assert (testCycleThroughRootOnly) "rule-11 reports cycles through the checked module only")
       (assert (testOperatorArity) "operator arity follows the host")
