@@ -1,5 +1,5 @@
 (module aslAgent/tests/leonPoolTest
-  :x [runTests]
+  :x [runTests Out prepBase! blocked! pooled! diffMsg]
   :i [(aslAgent/main :a m) (aslAgent/leonPool :a lp) (aslAgent/sessionPool :a sp)
       (aslAgent/providers :a pv) (asl-tools/fleet/run :a fr) (aslHarness/tests/agentLoopRecorderKit :a rk)])
 
