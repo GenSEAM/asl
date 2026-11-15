@@ -90,8 +90,9 @@ fn budgetOpen left: (Option Int64) -> Bool
 ; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "after the quick retries an all-down reply holds the ask for its Retry-After, else allDownPauseSec, while the waits of this turn stay inside allDownWaitSec and the pause fits the wall left, then asks again in the same session")
 ; (:m :ref HUB-RETRY-POOL :do "a hub 429 or 503 carrying Retry-After N holds the run at least N seconds (capped by the wall left) as the same Turn.holdMs the backoff uses, so the pool thread never sleeps for it")
 ; (:m :ref SE3F-POOL-PARITY :do "provider retry as retryTurn! decides it, from the same functions: a transient error is retried up to 3 times under the wall budget with the pause list 1 2 4; the retried call is issued at once and a hub request carries the pause as its hold, so the pool waits without blocking; a provider that answers in the call (script, replay, CLI) pauses after the retried call instead of before it, which changes timing only. The retry rows go to the journal before the apply, as liveTurn! writes them")
-fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk t: pv/Turn pause: Int64 -> (Pair (List (Pair String Live)) sp/Turn)
-  (let [(sess live.sess)
+fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk raw: pv/Turn pause: Int64 -> (Pair (List (Pair String Live)) sp/Turn)
+  (let [(t (match raw.reply ((ok (some text)) (if (rt/junkReply? text) (rt/junkTurn raw) raw)) (_ raw)))
+        (sess live.sess)
         (slept (if (> pause 0) (sess.env.sleep pause) true))]
     (match t.reply
       ((ok _) (settled! book id live ask t))

@@ -2,12 +2,29 @@
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
       makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
-      providerRetryPause hintedPause chargeSeconds errorTransient errorClass httpStatusIn retryTurn! retryTurnWaiting! allDown? GateRec ReceiptRec AdviceRec SpecVerdict]
+      providerRetryPause hintedPause chargeSeconds junkReply? junkTurn errorTransient errorClass httpStatusIn retryTurn! retryTurnWaiting! allDown? GateRec ReceiptRec AdviceRec SpecVerdict]
   :i [(aslAgent/context :a ctx) (aslAgent/providers :a pv)])
 
 ; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")
 fn transientCodes -> (List String)
-  (list "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE" "ERR_NO_REPLY" "ERR_TIMEOUT")
+  (list "ERR_QUEUE_TIMEOUT" "ERR_GATEWAY_OFFLINE" "ERR_NO_REPLY" "ERR_TIMEOUT" "ERR_PROVIDER_JUNK")
+
+fn junkMarkers -> (List String)
+  (list "<ifm|" "</ifm|" "<ds_safety")
+
+fn hasWhitespace? s: String -> Bool
+  (or (stringContains? s " ") (or (stringContains? s "\n") (or (stringContains? s "\t") (stringContains? s "\r"))))
+
+; (:m :ref PROVIDER-JUNK-RETRY :do "a reply is provider junk when its text contains <ifm| , </ifm| or <ds_safety, or has the control-token opener <| at its start or right after its first word (no whitespace before it); nothing else matches, so quoted code or markup with < is never junk and the empty string is not junk")
+fn junkReply? text: String -> Bool
+  (let [t (stringTrim text)]
+    (or (listAny? (fn [marker] (stringContains? t marker)) (junkMarkers))
+        (match (stringIndexOf t "<|")
+          ((none) false)
+          ((some k) (not (hasWhitespace? (slice t 0 k)))))))
+
+fn junkTurn turn: pv/Turn -> pv/Turn
+  (pv/Turn :provider turn.provider :reply (err (pv/providerError "ERR_PROVIDER_JUNK" "provider returned template junk instead of an answer")) :meta turn.meta)
 
 fn transientMarkers -> (List String)
   (list "timed out" "timeout" "connection reset" "reset by peer" "empty body" "empty content" "empty reply" "rate limit" "overloaded")
@@ -80,7 +97,10 @@ fn ! retryTurn! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) 
 
 fn ! retryTurnLoop! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) maxRetries: Int64 configured: (List Int64) budgetLeft: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) retries: Int64 -> (Pair pv/Turn Int64)
   (let [started (now)
-        turn (call provider retries)
+        raw (call provider retries)
+        turn (match raw.reply
+               ((ok (some text)) (if (junkReply? text) (junkTurn raw) raw))
+               (_ raw))
         spent (chargeSeconds (- (now) started))
         afterCall (match budgetLeft ((some n) (some (max 0 (- n spent)))) ((none) none))]
     (match turn.reply
