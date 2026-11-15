@@ -30,8 +30,9 @@ fn entries -> (List String)
 ; (:m :ref ASLIR-STALE-GOLDENS :do "checkSemanticTest linked IR re-recorded on 766de3ec0 (+21506 bytes, 5803018): the only source change in its link closure since the 4d09b2c23 pin (which reproduced the old digest) is e84bdce13 sized ints in asl-checker (new module lowLevelSigs, 13 new fns in check and lowLevelSigs, edits in types and resolve); all other linked lines differ only by renumbered string and id indexes; measured by this file own goldenDigests printer")
 ; (:m :ref QUADGOLDEN-RED-MAIN :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on main fe6f09707 (+15410 bytes, 5835229): its link closure changed since the b8a32dd70 pin only by 9dfcb541e heal, 633865026 forms kernel, d7cef1f38 checkCached, 90688a703 and 207d8fd6b indentParser schema defaults, b45aa7ff8 resolve effect worklist; asl-ir src, prelude and lowerSourceWith are unchanged in that range, so the drift is those source changes, not a lowering regression")
 ; (:m :ref LOWLEVEL-WRAP-NATIVE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on WRAPNAT d448d30b8 (+702 bytes, 5837165): closure change only lowLevelSigs.asl and check.asl wrap-builtin routing")
+; (:m :ref MATCH-BY-SCRUTINEE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on 62db78e74 over main 668522103 (+59227 bytes, 6104690): closure change only check.asl and resolve.asl (match patterns resolved by the inferred enum, ERR_NESTED_CASE_ATOM, unreachable-arm covering arm) and link.asl elaborateUnits")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-5877999418986838404:6045463")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-8883695896353586377:6104690")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String

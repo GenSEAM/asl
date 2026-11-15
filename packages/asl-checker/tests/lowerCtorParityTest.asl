@@ -20,7 +20,8 @@ fn atomDeps -> (List (Pair String String))
   (list (pair "depE" "(module depE :x [Sig spot dash] :i []) (enum Sig (:c spot [] \"s\") (:c dash [] \"d\"))")
         (pair "depF" "(module depF :x [Mark spot blot] :i []) (enum Mark (:c spot [] \"s\") (:c blot [] \"b\"))")
         (pair "depH" "(module depH :x [height] :i []) (enum Veiled (:c spot [] \"s\") (:c void [] \"v\")) (fn height [] -> Int64 3)")
-        (pair "depG" "(module depG :x [Wrap ok take] :i []) (enum Wrap (:c ok [(n Int64)] \"o\") (:c take [(n Int64)] \"t\"))"))
+        (pair "depG" "(module depG :x [Wrap ok take] :i []) (enum Wrap (:c ok [(n Int64)] \"o\") (:c take [(n Int64)] \"t\"))")
+        (pair "depK" "(module depK :x [ProcessError notFound timeout] :i []) (enum ProcessError (:c notFound [] \"n\") (:c timeout [] \"t\"))"))
 
 fn diagsOf src: String -> (List ty/Diagnostic)
   (match (a/parseForTypeCheck src)
@@ -35,6 +36,9 @@ fn overList body: String -> String
 
 fn overShape imports: String body: String -> String
   (program imports "fn f s: da/Shape -> Int64" body)
+
+fn overUnknown imports: String body: String -> String
+  (program imports "fn f s: Int64 -> Int64" body)
 
 fn render ds: (List ty/Diagnostic) -> String
   (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.line ":" d.col " " d.code " " d.message)) ds) " | ")
@@ -88,8 +92,10 @@ fn testOwnCasesNamedLikeLists -> Bool
 
 fn testAmbiguousImportedCase -> Bool
   (let [(both "(depA :a da) (depB :a db)")
-        (bare (diagsOf (overShape both "(match s ((da/circle r) r) ((square q) q))")))
-        (hiddenTwin (diagsOf (overShape "(depA :a da) (depC :a dc)" "(match s ((da/circle r) r) ((square q) q))")))
+        (bare (diagsOf (overUnknown both "(match s ((da/circle r) r) ((square q) q))")))
+        (hiddenTwin (diagsOf (overUnknown "(depA :a da) (depC :a dc)" "(match s ((da/circle r) r) ((square q) q))")))
+        (typed (diagsOf (overShape both "(match s ((da/circle r) r) ((square q) q))")))
+        (typedHiddenTwin (diagsOf (overShape "(depA :a da) (depC :a dc)" "(match s ((da/circle r) r) ((square q) q))")))
         (qualified (diagsOf (overShape both "(match s ((da/circle r) r) ((da/square q) q))")))
         (single (diagsOf (overShape "(depA :a da)" "(match s ((circle r) r) ((square q) q))")))
         (unrelated (diagsOf (overShape both "(match s ((circle r) r) ((da/square q) q))")))]
@@ -100,6 +106,8 @@ fn testAmbiguousImportedCase -> Bool
         (assert (listEmpty? qualified) (str "the qualified case checks clean with both imports: " (render qualified)))
         (assert (listEmpty? single) (str "a bare case only one import declares checks clean: " (render single)))
         (assert (listEmpty? unrelated) (str "a bare case of one import is not ambiguous because another case is: " (render unrelated)))
+        (assert (listEmpty? typed) (str "over a scrutinee of da/Shape the bare case two imports declare is the case of da/Shape (MATCH-BY-SCRUTINEE): " (render typed)))
+        (assert (listEmpty? typedHiddenTwin) (str "over a scrutinee of da/Shape a hidden twin in another import does not matter: " (render typedHiddenTwin)))
         true))
 
 fn codeSays? ds: (List ty/Diagnostic) code: String text: String -> Bool
@@ -109,8 +117,11 @@ fn codeSays? ds: (List ty/Diagnostic) code: String text: String -> Bool
 fn testAmbiguousAtomPattern -> Bool
   (let [(both "(depE :a de) (depF :a df)")
         (over (fn [(imports String) (body String)] -> (List ty/Diagnostic) (diagsOf (program imports "fn f s: de/Sig -> Int64" body))))
-        (bare (over both "(match s (spot 1) (dash 2))"))
-        (hiddenTwin (over "(depE :a de) (depH :a dh)" "(match s (spot 1) (dash 2))"))
+        (unknown (fn [(imports String) (body String)] -> (List ty/Diagnostic) (diagsOf (program imports "fn f s: Int64 -> Int64" body))))
+        (bare (unknown both "(match s (spot 1) (dash 2))"))
+        (hiddenTwin (unknown "(depE :a de) (depH :a dh)" "(match s (spot 1) (dash 2))"))
+        (typed (over both "(match s (spot 1) (dash 2))"))
+        (typedHiddenTwin (over "(depE :a de) (depH :a dh)" "(match s (spot 1) (dash 2))"))
         (qualified (over both "(match s (de/spot 1) (de/dash 2))"))
         (single (over "(depE :a de)" "(match s (spot 1) (dash 2))"))
         (binding (over both "(match s (dash 2) (anything 1))"))
@@ -121,7 +132,9 @@ fn testAmbiguousAtomPattern -> Bool
         (assert (says? bare "de/spot or df/spot") (str "the diagnostic offers both qualified spellings: " (render bare)))
         (assert (says? bare "depE, depF") (str "the diagnostic names the declaring modules: " (render bare)))
         (assert (says? hiddenTwin "depE, depH") (str "an unexported enum of another import declaring the case counts, as in the lowering: " (render hiddenTwin)))
-        (assert (says? otherEnum "de/spot or df/spot") (str "the atom is reported too where the first exporter is not the matched enum and the checker itself bound it as a name: " (render otherEnum)))
+        (assert (listEmpty? otherEnum) (str "over df/Mark the bare atom spot is the case of df/Mark though de declares it first (MATCH-BY-SCRUTINEE): " (render otherEnum)))
+        (assert (listEmpty? typed) (str "over de/Sig the bare atoms two imports declare are the cases of de/Sig: " (render typed)))
+        (assert (listEmpty? typedHiddenTwin) (str "over de/Sig a hidden twin in another import does not matter: " (render typedHiddenTwin)))
         (assert (listEmpty? qualified) (str "the qualified atoms check clean with both imports: " (render qualified)))
         (assert (listEmpty? single) (str "a bare atom case only one import declares checks clean: " (render single)))
         (assert (listEmpty? binding) (str "a lower-case atom that names no case stays a binding: " (render binding)))
@@ -142,12 +155,36 @@ fn testPreludeBeforeImport -> Bool
   (let [(imp "(depG :a dg)")
         (resultMatch (diagsOf (program imp "fn f w: (Result Int64 String) -> Int64" "(match w ((ok n) n) ((err _) 0))")))
         (listTake (diagsOf (program imp "fn f xs: (List Int64) -> (List Int64)" "(take xs 1)")))
-        (barePattern (diagsOf (program imp "fn f w: dg/Wrap -> Int64" "(match w ((take n) n) (_ 0))")))
+        (barePattern (diagsOf (program imp "fn f w: Int64 -> Int64" "(match w ((take n) n) (_ 0))")))
+        (typedPattern (diagsOf (program imp "fn f w: dg/Wrap -> Int64" "(match w ((take n) n) ((ok n) n))")))
         (qualified (diagsOf (program imp "fn f w: dg/Wrap -> Int64" "(match w ((dg/take n) n) ((dg/ok n) n))")))]
     (do (assert (listEmpty? resultMatch) (str "ok and err over a Result check clean though an import declares a case ok: " (render resultMatch)))
         (assert (listEmpty? listTake) (str "take over a list keeps the builtin arity though an import declares a case take: " (render listTake)))
         (assert (says? barePattern "qualify it: dg/take") (str "a bare pattern headed by a builtin name an import declares is reported with the qualified spelling: " (render barePattern)))
         (assert (listEmpty? qualified) (str "the qualified cases check clean: " (render qualified)))
+        (assert (listEmpty? typedPattern) (str "over dg/Wrap the bare take and ok are its cases, before the builtin and the prelude case (MATCH-BY-SCRUTINEE): " (render typedPattern)))
+        true))
+
+; (:m :ref MATCH-BY-SCRUTINEE :do "a bare case name in a pattern is first a case of the enum inferred for its position: nested (case) forms are cases of the field's enum and a nested bare atom naming a zero-field one is refused, exhaustiveness and repeats are judged on the resolved cases, a local named like a case does not make the pattern a binding, and where no enum is known the mixed-unions report names the spelling of the import case")
+fn testMatchedEnumFirst -> Bool
+  (let [(both "(depE :a de) (depF :a df)")
+        (col "(enum Col (:c red [] \"r\") (:c blue [] \"b\"))\n\n")
+        (nested (diagsOf (program both "fn f o: (Option de/Sig) -> Int64" "(match o ((some (spot)) 1) ((some (dash)) 2) ((none) 0))")))
+        (nestedOwn (diagsOf (program "" (str col "fn f o: (Option Col) -> Int64") "(match o ((some (red)) 1) ((some (blue)) 2) ((none) 0))")))
+        (nestedAtom (diagsOf (program both "fn f o: (Option de/Sig) -> Int64" "(match o ((some spot) 1) ((none) 0))")))
+        (repeated (diagsOf (program both "fn f o: (Option de/Sig) -> Int64" "(match o ((some (spot)) 1) ((some (spot)) 2) ((none) 0))")))
+        (missing (diagsOf (program both "fn f s: de/Sig -> Int64" "(match s (spot 1))")))
+        (local (diagsOf (program both "fn f s: de/Sig spot: Int64 -> Int64" "(match s (spot spot) (dash 2))")))
+        (process (diagsOf (program "(depK :a dk)" "fn f e: dk/ProcessError -> Int64" "(match e ((notFound) 0) ((timeout) 1))")))
+        (hint (diagsOf (program "(depK :a dk)" "fn f e: Int64 -> Int64" "(match e ((notFound) 0) ((timeout) 1))")))]
+    (do (assert (listEmpty? nested) (str "nested (case) forms naming cases of the field's enum de/Sig are its cases though two imports declare spot: " (render nested)))
+        (assert (listEmpty? nestedOwn) (str "nested (case) forms naming this module's cases are its cases: " (render nestedOwn)))
+        (assert (codeSays? nestedAtom "ERR_NESTED_CASE_ATOM" "write (de/spot) to test for the case, or rename the binder, e.g. spotValue") (str "a nested bare atom naming a zero-field case of the field's enum is refused with both spellings: " (render nestedAtom)))
+        (assert (codeSays? repeated "ERR_UNREACHABLE_ARM" "(some (de/spot)) is unreachable") (str "a nested case repeated is reported by the checker: " (render repeated)))
+        (assert (codeSays? missing "ERR_MATCH_NONEXHAUSTIVE" "misses variant(s): dash") (str "exhaustiveness is judged on the cases of de/Sig: " (render missing)))
+        (assert (listEmpty? local) (str "a parameter named like a case of the matched enum leaves the atom a constructor test: " (render local)))
+        (assert (listEmpty? process) (str "bare notFound and timeout over dk/ProcessError are its cases: " (render process)))
+        (assert (codeSays? hint "ERR_MATCH_NONEXHAUSTIVE" "qualify it: dk/notFound") (str "with no known enum, mixed unions name the spelling of the import case: " (render hint)))
         true))
 
 ; (:m :ref CHECK-LOWER-CONSTRUCTOR :do "runs the list-pattern, nested, own-case and ambiguous-import groups")
@@ -159,4 +196,5 @@ fn runTests -> Bool
       (assert (testAmbiguousAtomPattern) "ambiguous bare atom pattern")
       (assert (testCaseInTwoEnums) "one case name in two enums")
       (assert (testPreludeBeforeImport) "the prelude before a bare imported case")
+      (assert (testMatchedEnumFirst) "a bare case name is a case of the matched enum")
       true)

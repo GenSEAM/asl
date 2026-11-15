@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [ensureIndex! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [ensureIndex! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags bareCaseOwners preludeShadows? preludeUnionForTag modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (Pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -1146,15 +1146,50 @@ fn elseKeywordPatternAtom? pat: rd/SExpr -> Bool
     (_ false))
 
 fn unreachableArmDiagsIx arms: (List rd/SExpr) family: String mod: ModuleSummary deps: DepIndex path: String seenCatchall: Bool -> (List ty/Diagnostic)
+  (unreachableArmsAfter arms family mod deps path seenCatchall (list))
+
+; (:m :ref MATCH-BY-SCRUTINEE :do "an arm is unreachable when an earlier arm matches every value it matches: the same constructor with, field by field, a name or _ or the same literal or a pattern that covers it, or the same constructor as an atom or as its zero-field list (red and (red)), and the message names that earlier arm; the lowering rejects such a repeat (ERR_LOWER_DUPLICATE_ARM) or never takes it, so the checker reports it first, nested fields included")
+fn fieldCovers? q: rd/SExpr p: rd/SExpr -> Bool
+  (match q
+    ((rd/sexprAtom v) (if (or (= v "_") (not (or (isLiteralAtom? v) (stringStartsWith? v ":")))) true (match p ((rd/sexprAtom w) (= v w)) (_ false))))
+    ((rd/sexprList _) (listCovers? q p))
+    (_ false))
+
+fn listCovers? q: rd/SExpr p: rd/SExpr -> Bool
+  (match q
+    ((rd/sexprList qs)
+     (match p
+       ((rd/sexprList ps) (and (= (listLength qs) (listLength ps))
+                               (and (not (stringEmpty? (rd/sexprHead q))) (and (= (rd/sexprHead q) (rd/sexprHead p))
+                                    (listAll? (fn [(f (Pair rd/SExpr rd/SExpr))] -> Bool (fieldCovers? (pairFirst f) (pairSecond f))) (zip (safeTail qs) (safeTail ps)))))))
+       (_ false)))
+    (_ false))
+
+fn armCovers? q: rd/SExpr p: rd/SExpr family: String mod: ModuleSummary deps: DepIndex -> Bool
+  (match q
+    ((rd/sexprAtom v) (match p
+                        ((rd/sexprAtom w) (and (= v w) (ctorPatternAtomIx? q family mod deps)))
+                        ((rd/sexprList ps) (and (= (listLength ps) 1) (and (= (rd/sexprHead p) v) (ctorPatternAtomIx? q family mod deps))))
+                        (_ false)))
+    ((rd/sexprList qs) (match p
+                         ((rd/sexprAtom w) (and (= (listLength qs) 1) (and (= (rd/sexprHead q) w) (ctorPatternAtomIx? p family mod deps))))
+                         (_ (listCovers? q p))))
+    (_ false))
+
+fn unreachableArmsAfter arms: (List rd/SExpr) family: String mod: ModuleSummary deps: DepIndex path: String seenCatchall: Bool earlier: (List rd/SExpr) -> (List ty/Diagnostic)
   (match (listHead arms)
     ((none) (list))
     ((some arm)
      (let [(rest (safeTail arms))
            (pat (armPatternOf arm))
            (isCatchall (catchallPatternAtom? pat family mod deps))
-           (dUnreach (if seenCatchall (list (makeDiag "unreachable-arm" "mt arm is unreachable: an earlier arm already binds everything" path)) (list)))
+           (covered (listFind (fn [(q rd/SExpr)] -> Bool (armCovers? q pat family mod deps)) earlier))
+           (dUnreach (cond
+                       (seenCatchall (list (makeDiag "unreachable-arm" "mt arm is unreachable: an earlier arm already binds everything" path)))
+                       ((some? covered) (list (makeDiag "unreachable-arm" (str "mt arm " (rd/renderSexpr pat) " is unreachable: the earlier arm " (rd/renderSexpr (optionOr covered pat)) " already matches every value it matches") path)))
+                       (else (list))))
            (d (if (elseKeywordPatternAtom? pat) (cons (makeDiag "else-keyword" "mt pattern :else is a keyword literal, not the catch-all; use else or _" path) dUnreach) dUnreach))]
-       (listAppend d (unreachableArmDiagsIx rest family mod deps path (or seenCatchall isCatchall))))))
+       (listAppend d (unreachableArmsAfter rest family mod deps path (or seenCatchall isCatchall) (listAppend earlier (list pat)))))))
 
 fn invalidArmHead pat: rd/SExpr mod: ModuleSummary path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (match pat
@@ -1225,11 +1260,21 @@ fn withAmbiguousAtomDiag pat: rd/SExpr family: String mod: ModuleSummary deps: D
 fn extractPattern pat: rd/SExpr mod: ModuleSummary deps: DepIndex path: String accDiags: (List ty/Diagnostic) -> (Pair (Pair (List String) (Option String)) (List ty/Diagnostic))
   (match pat ((rd/sexprAtom v) (if (or (= v "_") (isLiteralAtom? v)) (pair (pair (list) (none)) accDiags) (pair (pair (list v) (none)) accDiags))) ((rd/sexprVect items) (let [(vRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) (withUnknownCtorDiag pat mod deps path accDiags)) items))] (pair (pair (pairFirst vRes) (none)) (pairSecond vRes)))) ((rd/sexprList items) (match (listHead items) ((none) (pair (pair (list) (none)) accDiags)) ((some h) (let [(headTok (rd/sexprHead h)) (subs (safeTail items)) (uInfo (unionForTag headTok mod deps))] (let [(dCheck (match uInfo ((some _) (withUnknownCtorDiag pat mod deps path accDiags)) ((none) (cons (if (mapHas? mod.funs headTok) (makeDiag "ERR_INVALID_MT_ARM" "mt arm has an invalid pattern head" path) (match (unexportedCaseModule headTok mod deps) ((some mname) (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " headTok " is not exported by " mname) path)) ((none) (makeDiag "rule-2" (str headTok " is not a case of any union") path)))) accDiags)))) (arityRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) dCheck) subs))] (pair (pair (pairFirst arityRes) (some headTok)) (pairSecond arityRes))))))))
 
+; (:m :ref MATCH-BY-SCRUTINEE :do "arms still mix unions only where no enum is known for the scrutinee; a bare head that is a prelude case and also a case of an import enum then says which spelling selects the import case")
+fn preludeArmHint heads: (List String) mod: ModuleSummary deps: DepIndex -> String
+  (let [(named (filter (fn [(h String)] -> Bool (and (not (isQualifiedName? h)) (and (not (mapHas? mod.caseOwner h)) (some? (preludeUnionForTag h))))) (listSort (mapKeys (listToSet heads)))))]
+    (stringJoin (listFlatMap (fn [(h String)] -> (List String)
+                               (let [(owners (bareCaseOwners h mod deps))]
+                                 (if (listEmpty? owners) (list)
+                                   (list (str "; a bare " h " is the prelude " (pairFirst (optionOr (preludeUnionForTag h) (pair "" (list)))) " case, so for the case of the import qualify it: " (qualifiedSpellings h owners))))))
+                             named)
+                ""))
+
 fn closedEnumFamily? family: String -> Bool
   (not (or (= family "Option") (or (= family "Result") (= family "List"))))
 
 fn checkMatchExhaustiveness heads: (List String) mod: ModuleSummary deps: DepIndex path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (if (listEmpty? heads) acc (let [(firstHead (match (listHead heads) ((some h) h) ((none) ""))) (uFirst (unionForTag firstHead mod deps))] (match uFirst ((none) acc) ((some u1) (let [(u1Name (pairFirst u1)) (u1Cases (pairSecond u1)) (mixDiags (fold (fn [(a (List ty/Diagnostic)) (h String)] -> (List ty/Diagnostic) (match (unionForTag h mod deps) ((none) a) ((some uh) (if (not (= (pairFirst uh) u1Name)) (cons (makeDiag "rule-4" (str "arms mix unions: " u1Name ", " (pairFirst uh)) path) a) a)))) (list) heads))] (if (not (listEmpty? mixDiags)) (listAppend mixDiags acc) (let [(bareHeads (map (fn [(h String)] -> String (if (stringContains? h "/") (let [(p (stringSplit h "/"))] (match (listGet p 1) ((some m) m) ((none) h))) h)) heads)) (missing (filter (fn [(c String)] -> Bool (not (listContains? bareHeads c))) u1Cases))] (if (and (not (listEmpty? missing)) (closedEnumFamily? u1Name)) (cons (makeDiag "rule-4" (str "match over enum " u1Name " misses variant(s): " (stringJoin missing " ")) path) acc) acc))))))))
+  (if (listEmpty? heads) acc (let [(firstHead (match (listHead heads) ((some h) h) ((none) ""))) (uFirst (unionForTag firstHead mod deps))] (match uFirst ((none) acc) ((some u1) (let [(u1Name (pairFirst u1)) (u1Cases (pairSecond u1)) (mixDiags (fold (fn [(a (List ty/Diagnostic)) (h String)] -> (List ty/Diagnostic) (match (unionForTag h mod deps) ((none) a) ((some uh) (if (not (= (pairFirst uh) u1Name)) (cons (makeDiag "rule-4" (str "arms mix unions: " u1Name ", " (pairFirst uh) (preludeArmHint heads mod deps)) path) a) a)))) (list) heads))] (if (not (listEmpty? mixDiags)) (listAppend mixDiags acc) (let [(bareHeads (map (fn [(h String)] -> String (if (stringContains? h "/") (let [(p (stringSplit h "/"))] (match (listGet p 1) ((some m) m) ((none) h))) h)) heads)) (missing (filter (fn [(c String)] -> Bool (not (listContains? bareHeads c))) u1Cases))] (if (and (not (listEmpty? missing)) (closedEnumFamily? u1Name)) (cons (makeDiag "rule-4" (str "match over enum " u1Name " misses variant(s): " (stringJoin missing " ")) path) acc) acc))))))))
 
 ; (:m :ref LL-SIZED-CHECK-2 :do "clamp has two shapes: the three-argument builtin and the two-argument integer conversion (clamp T x), which check.asl#convForm types")
 fn hostOperatorArity? head: String given: Int64 -> Bool
