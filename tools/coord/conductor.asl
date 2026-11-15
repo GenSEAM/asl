@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig baseRedSig? baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -366,7 +366,7 @@ fn ! priorNote! dir: String id: String -> String
 ; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
 fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit
   (let [(climb (listContains? (list "write" "gates" "review") stage))
-        (fails (if (or (= (sigKey sig) (sigKey c.sig)) (and climb (or (= c.lane "paid") (= c.lane "strong")))) (+ c.fails 1) 1))
+        (fails (cond ((poolLostSig? sig) c.fails) ((or (= (sigKey sig) (sigKey c.sig)) (and climb (or (= c.lane "paid") (= c.lane "strong")))) (+ c.fails 1)) (else 1)))
         (_ (if (= stage "write") (wipSave! ctx c.id (str "writeFailed " (verdictSig sig))) ()))
         (_ (dropLease! ctx c))
         (c1 (with c :fails fails :sig sig :epoch 0))
@@ -1185,6 +1185,10 @@ fn ! retryBackoffS dir: String -> Int64
 fn conductorLeaseSig? sig: String -> Bool
   (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p)) (list "leaseLost" "stage run row lost" "lease ended before"))
 
+; (:m :ref DEPLOY-POOL-LOST :do "a pooled write that ended because the pool went away: the pool unreachable (connect failed while it restarted) or its restart lost the task (the new pool answers unknown); not a writer failure, so fail! leaves the count, the rung is kept and a blocked unit with it is retried")
+fn poolLostSig? sig: String -> Bool
+  (or (stringStartsWith? sig "pool unreachable") (stringStartsWith? sig "pool restarted, task lost"))
+
 fn conductorStallSig? sig: String -> Bool
   (or (= sig "stalled") (stringStartsWith? sig "stalled: "))
 
@@ -1197,6 +1201,7 @@ fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int
       ((stringEmpty? c.sig) "")
       ((providerFailSig? c.sig (pfPatterns (pfRowOf ctx.dir))) "provider")
       ((conductorLeaseSig? c.sig) "lease")
+      ((poolLostSig? c.sig) "pool")
       ((conductorStallSig? c.sig) "stall")
       ((vacuousSig? c.sig)
         (let [(repo (stringTrim (readOr (repoPath ctx.dir))))
@@ -1212,7 +1217,7 @@ fn blockedStageIn lines: (List String) id: String -> String
 fn ladderHopSig? sig: String -> Bool
   (not (or (stringEmpty? sig)
         (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p))
-                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train"))))
+                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train" "pool unreachable" "pool restarted"))))
 
 fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 jr: (List String) -> Bool
   (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (and (ladderHopSig? c.sig) (= (blockedStageIn jr c.id) "write")))))
