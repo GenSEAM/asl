@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! remote! asnEcho testFiles! readStdin! ownPrelude? preludeHostAbsent]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/repairCmd :a repairC) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
   (:f closer String)
@@ -17,6 +17,7 @@ fn helpText -> String
        "  check <file|--all>  Balance, then asl-host check for .asl (names, arity, enums); --all: every tracked file, bare is refused\n"
        "  heal <file>         Repair generated ASL with the named heal rules; a file that already checks is unchanged\n"
        "  test <file|dir|--all> Run suites, --all runs every suite and bare is refused; --changed [BASE] selects impacts (default main), --dry-run lists without execution\n"
+       "  repair <file...>    Repair unbalanced delimiters in place; --check reports without writing; does not re-indent\n"
        "  parse <file>        Count top-level forms on asl-host\n"
        "  eval [--native] <expr> Host evaluates expressions and echoes (:keyword ...) as ASN data; --native evaluates a single Int64 expression only\n"
        "  build <file>        Not implemented until R1 (ERR_UNIMPLEMENTED)\n"
@@ -557,6 +558,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "run") (runFile! ctx args))
     ((= cmd "check") (check! ctx args))
     ((= cmd "heal") (cliResult! "heal" args (healCli/runHealCommand! args)))
+    ((= cmd "repair") (repairC/runRepairCommand! args))
     ((= cmd "build") (build/buildCommand! ctx args))
     ((= cmd "parse") (parse! ctx args))
     ((= cmd "lint") (retired! "lint" "asl check FILE runs balance and asl-host check"))
