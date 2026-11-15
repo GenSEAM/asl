@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -544,8 +544,12 @@ fn ! launchNow! ctx: Ctx u: st/Task c: CUnit -> CUnit
           c1)))))
 
 ; (:m :ref COND3 :do "a merge failure retries the merge itself, keeping the lease, the branch and the reviewed work; the same signature maxSame times escalates; the journal row carries the reason because the scratch store is cleaned after a run")
+; (:m :ref TRAIN-NEVER-LANDS :do "merge failures compare without the :running tail of a killed train, which names whatever suites the limit caught and differs per attempt: a train killed by its limit three times in a row escalates like any other repeated merge failure instead of retrying into the same timeout")
+fn mergeSigKey sig: String -> String
+  (sigKey (optionOr (listHead (stringSplit sig " :running ")) sig))
+
 fn ! mergeFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
-  (let [(fails (if (= (sigKey sig) (sigKey c.sig)) (+ c.fails 1) 1))
+  (let [(fails (if (= (mergeSigKey sig) (mergeSigKey c.sig)) (+ c.fails 1) 1))
         (c1 (with c :fails fails :sig sig))]
     (if (>= fails ctx.maxSame)
       (let [(_ (dropLease! ctx c1))
@@ -1540,6 +1544,17 @@ fn wordAfter line: String marker: String -> String
 fn killSig line: String -> String
   (str "killed: " (wordAfter line "(:fleetRun :verdict :") " after " (n (/ (optionOr (stringToInt64 (wordAfter line " :timeoutMs ")) 0) 1000)) " s")
 
+; (:m :ref TRAIN-NEVER-LANDS :do "the items a killed train had not finished: those its last (:trainRunning :items (...)) row named less every (:itemDone PATH EXIT) row after it (tools/fleet/train.asl runningRow, itemDoneRow); empty when the train streamed no such row")
+fn stillRunning lines: (List String) -> (List String)
+  (let [(start (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trainRunning :items (")) lines)) ""))
+        (parts (stringSplit (segment start "(:trainRunning :items (" ")") "\""))
+        (items (map (fn [(i Int64)] -> String (optionOr (listGet parts i) "")) (filter (fn [(i Int64)] -> Bool (= (mod i 2) 1)) (range 0 (listLength parts)))))
+        (done (map (fn [(l String)] -> String (quotedAfter l "(:itemDone \"")) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:itemDone ")) lines)))]
+    (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (not (listContains? done p)))) items))
+
+fn runningText rs: (List String) -> String
+  (if (listEmpty? rs) "" (str " :running " (n (listLength rs)) " " (stringJoin (listTake rs 3) " ")))
+
 fn trainSig lines: (List String) -> String
   (let [(kill (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:fleetRun :verdict :")) lines))
         (failed (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:train :status :failed")) lines))
@@ -1552,7 +1567,7 @@ fn trainSig lines: (List String) -> String
         (reds (filter (fn [(p String)] -> Bool (and (not (stringEmpty? p)) (or (stringEmpty? receipt) (stringContains? fresh (str "(\"" p "\" ")))))
                       (map (fn [(l String)] -> String (quotedAfter l "(:redLive \"")) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:redLive ")) lines))))]
     (cond
-      ((some? kill) (killSig (optionOr kill "")))
+      ((some? kill) (str (killSig (optionOr kill "")) (runningText (stillRunning lines))))
       ((some? failed) (optionOr failed ""))
       ((stringContains? receipt " :commitError ") (str "commitError " (quotedAfter receipt " :commitError \"")))
       ((not (listEmpty? reds)) (str "train red: " (stringJoin (listTake reds 3) " ")))
