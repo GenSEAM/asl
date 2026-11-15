@@ -278,8 +278,12 @@ fn signalled f: Facts name: String -> Bool
 fn stopSignals -> (List String)
   (list "readStreak" "malformedReply" "parseDefect" "repeatFailure" "doneNoWrite" "modelEscalated" "wallBudget" "gateIntegrity" "stalled" "needsReview" "noWrite" "turnBudget")
 
+fn infoSignals -> (List String)
+  (list "reread" "greenDoneHeld")
+
 fn noStopSignal f: Facts -> Bool
-  (and (listEmpty? f.signals) (not (listContains? (stopSignals) f.stop)))
+  (and (listAll? (fn [(s String)] -> Bool (listContains? (infoSignals) s)) f.signals)
+       (not (listContains? (stopSignals) f.stop)))
 
 fn writeOps f: Facts -> Int64
   (+ (+ (countFor f.ops "write") (countFor f.ops "edit")) (+ (countFor f.ops "txn") (countFor f.ops "patch")))
