@@ -1552,8 +1552,9 @@ fn kindReturned name: String recv: String -> String
         ((or (= name "append") (= name "reverse")) recv)
         (else ""))
 
+; (:m :ref MATCH-PARITY :do "a name the module binds is not a generic alias: its own function, and also a constructor or record it sees, so (take 3) of an enum case take stays a construction instead of becoming listTake with one operand (ERR_LOWER_ARITY at build after a green check)")
 fn shadowed? ctx: LowerCtx kinds: (Map String String) name: String -> Bool
-  (or (mapHas? kinds name) (mapHas? ctx.info.arities name))
+  (or (mapHas? kinds name) (moduleBoundName? ctx name))
 
 fn kindOf ctx: LowerCtx kinds: (Map String String) e: rd/SExpr -> String
   (match e
@@ -2077,8 +2078,12 @@ fn importedCtors scope: LinkScope -> (Map String Ctor)
             (if (= (optionOr (mapGet counts c.variant) 0) 1) (mapSet acc c.variant c) acc))
           (mapEmpty) all))
 
-fn withBareCtors v: Vis bare: (Map String Ctor) -> Vis
-  (with v :ctors (fold (fn [(acc (Map String Ctor)) (k String)] -> (Map String Ctor) (if (mapHas? acc k) acc (mapSet acc k (optionOr (mapGet bare k) (Ctor :typeName "" :variant "" :arity 0)))))
+; (:m :ref MATCH-PARITY :do "the checker's precedence for a bare name: the prelude (its cases, its functions, the builtins and generic names of asl-checker/types) before a case of an import, which is then written alias/case; without the test a bare imported case named like a builtin was a constructor here and the builtin in type inference")
+fn preludeBound? late: (Map String Int64) name: String -> Bool
+  (or (mapHas? late name) (or (cty/genericMulti? name) (some? (cty/builtinSig (cty/genericSigName name)))))
+
+fn withBareCtors v: Vis bare: (Map String Ctor) late: (Map String Int64) -> Vis
+  (with v :ctors (fold (fn [(acc (Map String Ctor)) (k String)] -> (Map String Ctor) (if (or (mapHas? acc k) (preludeBound? late k)) acc (mapSet acc k (optionOr (mapGet bare k) (Ctor :typeName "" :variant "" :arity 0)))))
                     v.ctors (mapKeys bare)))
 
 fn preludeVisOf prelude: (List ast/TopForm) -> Vis
@@ -2091,7 +2096,7 @@ fn linkedInfoAs forms: (List ast/TopForm) scope: LinkScope prefix: String -> Mod
   (let [(preludeVis (preludeVisOf scope.prelude))
         (withPrelude (belowModule preludeVis))
         (aliasNames (mapKeys scope.imports))
-        (withImports (withBareCtors (fold (fn [(v Vis) (a String)] -> Vis (importVis v a (optionOr (mapGet scope.imports a) (list)))) withPrelude aliasNames) (importedCtors scope)))
+        (withImports (withBareCtors (fold (fn [(v Vis) (a String)] -> Vis (importVis v a (optionOr (mapGet scope.imports a) (list)))) withPrelude aliasNames) (importedCtors scope) preludeVis.arities))
         (aliases (fold (fn [(m (Map String String)) (a String)] -> (Map String String) (mapSet m a (moduleName (optionOr (mapGet scope.imports a) (list))))) (sysAliases forms) aliasNames))]
     (infoOf forms withImports preludeVis.arities prefix aliases true))
 

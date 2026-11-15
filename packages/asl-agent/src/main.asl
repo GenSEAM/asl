@@ -3,12 +3,12 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn readsIn streakIn readAtOf opRowAt readsTop readsKeyChars receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail redBefore? baselineRan? rereadEntry? opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
       (aslAgent/attractor :a at) (aslAgent/nativeTools :a nt)
-      (aslAgent/context :a ctx)
+      (aslAgent/context :a ctx) (aslAgent/reply :a rp)
       (aslAgent/journal :a jr)
       (aslAgent/gitOps :a go)
       (aslAgent/runLoop :a rl) (aslAgent/pathResolve :a pres)
@@ -1902,11 +1902,65 @@ fn refusedWriteEntry? entry: j/Json -> Bool
       (and (listAny? (fn [n] (listContains? (list "write" "edit" "delete" "txn") n)) names)
         (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "delete" "txn") n))) names))))
 
+; (:m :ref LEONFIX-READSTREAK :do "a turn whose every step was a read the session's kept turns already show (history ops reread); grade H1/M3: it saves the tokens of the content but not a turn, so it counts toward the read-only cap like any read-only turn and toward the readStreak, which only an accepted write resets")
+fn rereadEntry? entry: j/Json -> Bool
+  (let [names (entryOps entry)]
+    (and (not (listEmpty? names))
+      (and (!= (historyText entry "wrote") "1") (listAll? (fn [n] (= n "reread")) names))))
+
+; (:m :ref LEONFIX-READSTREAK :do "repeated read receipts since the last turn that wrote, newest turn first")
+fn rereadSeen entries: (List j/Json) -> Int64
+  (cond
+    ((listEmpty? entries) 0)
+    ((= (historyText (c/firstOf entries) "wrote") "1") 0)
+    (else (+ (ctx/rereadCount (historyText (c/firstOf entries) "got")) (rereadSeen (c/restOf entries)))))
+
+; (:m :ref LEON-GREEN-NO-DONE :do "2 of 5 runs on 2026-11-14 ended escalated (wallBudget, readStreak) with the diff complete inside :owns and every gate green: with :commit true only (:done) ended a run and the model kept reading. A gate run that ends all green closes such a run when the session wrote inside :owns, the turn refused no step, and a declared gate was red before: on the base when the baseline pass ran (it did not list the gate green), else in an earlier gate run of the session (a failed run, not a timeout). A gate green before any edit never closes a run this way; grade M1: a gate the baseline saw green passes on revert, so a session red alone never closes a run whose baseline ran")
+fn sessionRedGate? gates: (List String) results: (List g/GateResult) -> Bool
+  (listAny? (fn [r] (and (!= (g/gateExit r) 0) (and (not (g/gateTimeout r)) (listContains? gates (g/gateCmd r))))) results)
+
+; (:m :ref LEON-GREEN-NO-DONE :do "the baseline pass ran for this run: not a resumed run, and :agentLoop :baseline is not false")
+fn baselineRan? resumed: Bool cfgText: String -> Bool
+  (and (not resumed) (!= (optionOr (ac/agentLoopValue cfgText ":baseline") "true") "false"))
+
+fn redBefore? gates: (List String) baselineRan: Bool baselineGreen: (List String) results: (List g/GateResult) -> Bool
+  (if baselineRan
+    (listAny? (fn [cmd] (not (listContains? baselineGreen cmd))) gates)
+    (sessionRedGate? gates results))
+
+fn commitQuoted parts: (List String) acc: (List String) -> String
+  (match (listHead parts)
+    ((none) (stringJoin (listReverse acc) "\""))
+    ((some part)
+      (if (stringEndsWith? part "\\")
+        (commitQuoted (c/restOf parts) (cons part acc))
+        (stringJoin (listReverse (cons part acc)) "\""))))
+
+; (:m :ref LEON-GREEN-NO-DONE :do "the commit line the task itself quotes after :commit, when it is a valid (:c ...) line")
+fn taskCommitLine task: String -> (Option String)
+  (match (stringIndexOf task ":commit \"(:c ")
+    ((none) none)
+    ((some k)
+      (let [line (ctx/asnUnescape (commitQuoted (stringSplit (c/sliceOf task (+ k 9) (stringLength task)) "\"") (list)))]
+        (if (none? (rp/commitMessageError line)) (some line) none))))
+
+fn commitWord text: String cap: Int64 -> String
+  (let [flat (fold (fn [acc ch] (stringReplace acc ch " ")) text (list "\"" "\\" "\n" "\r" "\t" "(" ")"))
+        clean (stringTrim flat)]
+    (if (> (stringLength clean) cap) (stringTrim (c/sliceOf clean 0 cap)) clean))
+
+; (:m :ref LEON-GREEN-NO-DONE :do "the commit line of a run the harness closed on green gates: the task's own line, else one built from the task head, the gates and the session id")
+fn greenCommitLine task: String gates: (List String) session: String -> String
+  (match (taskCommitLine task)
+    ((some line) line)
+    ((none) (str "(:c :a leon :do \"" (commitWord task 72) "\" :g \"" (commitWord (c/joinSep gates "; ") 160) "\" :ev (\"" (commitWord session 40) "\"))")))
+
 fn readOnlyCount entries: (List j/Json) -> Int64
   (cond
     ((listEmpty? entries) 0)
     ((readOnlyEntry? (c/firstOf entries)) (+ 1 (readOnlyCount (c/restOf entries))))
     ((refusedWriteEntry? (c/firstOf entries)) (readOnlyCount (c/restOf entries)))
+    ((rereadEntry? (c/firstOf entries)) (+ 1 (readOnlyCount (c/restOf entries))))
     (else 0))
 
 fn readOnlyTail history: (List j/Json) -> Int64
@@ -2271,7 +2325,20 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   repeatKey (stringTrim normalized)
                   repeats (if (and (not parseDefect) (and (not wrote) (countedFailures? opReceipts)))
                     (+ 1 (optionOr (mapGet state.failureCounts repeatKey) 0)) 0)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" opReceipts)) (if (> (+ droppedOps facts.repeated) 0) (str "\n" (duplicateOpsNote (+ droppedOps facts.repeated))) "") (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
+                  historyKeep (ctx/contextKeepTurnsFor! rootDir)
+                  historyToolCap (ctx/contextToolCapBytesFor! rootDir)
+                  historyTokens (optionOr servedCtx 24000)
+                  ; (:m :ref LEONFIX-READSTREAK :do "the kept turns as the next prompt will render them, so a notice never points at a turn the coming compaction drops")
+                  keptNow (if (stringContains? opReceipts " :op \"read\" :status :ok")
+                    (ctx/keptBefore (ctx/freezeTranscriptHistory (listAppend wrapped.history (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "got" (j/jstr ""))))))
+                      historyKeep historyToolCap (ctx/contextKeptCapBytes historyTokens historyKeep historyToolCap) (ctx/contextWindowLatestCapBytes historyTokens)))
+                    (list))
+                  reread (ctx/rereadMarked opReceipts keptNow)
+                  rereadN (pairSecond reread)
+                  rereadOnly (and (> rereadN 0) (and (not wrote) (and (= rereadN (listLength operations)) (listAll? (fn [o] (= (liveOpName o) "read")) operations))))
+                  rereadSeenN (if (> rereadN 0) (+ rereadN (rereadSeen (listReverse wrapped.history))) 0)
+                  _rereadRow (if (> rereadN 0) (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :reread :n " (stringFromInt64 rereadN) " :seen " (stringFromInt64 rereadSeenN) ")\n"))) true)
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" (pairFirst reread))) (if (ctx/rereadAskDue rereadSeenN rereadN) (str "\n" (ctx/rereadAsk rereadSeenN ra.owns)) "") (if (> (+ droppedOps facts.repeated) 0) (str "\n" (duplicateOpsNote (+ droppedOps facts.repeated))) "") (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
@@ -2301,7 +2368,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   _digestSaved (if (and (not (stringEmpty? digestNow)) (not (listEmpty? newGates))) (ok? (fileWrite digestPath digestNow)) true)
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
-                  turnOpNames (c/joinSep (map liveOpName operations) " ")
+                  turnOpNames (c/joinSep (map (fn [o] (if rereadOnly "reread" (liveOpName o))) operations) " ")
                   turnOpFiles (c/joinSep (filter (fn [p] (not (stringEmpty? p))) (map liveOpPath operations)) " ")
                   deferredNow (deferredGates ra.gates newGates)
                   _deferredRow (if (listEmpty? deferredNow) true
@@ -2338,7 +2405,19 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     (or (!= (optionOr deliver "") "patch") writesPersisted)
                     (or writesPersisted ownedDone))
                   gatesTerminal (and (not (listEmpty? ra.gates)) (not state.commitRequested))
-                  terminal (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
+                  ; (:m :ref LEON-GREEN-NO-DONE :do "grade M1/L5: a green close ends exactly as a model (:done) on the same tree: the gate integrity check runs for the candidate first and a check that fails leaves the run going (a greenDoneHeld row), never failed; a turn that sends (:escalate) is the model's own stop")
+                  greenCandidate (and state.commitRequested (and (not done) (and (none? (modelEscalationReceipt operations)) (and gatesGreen (and (not (listEmpty? ra.gates)) (and writesPersisted
+                    (and (not (failedReceipts? opReceipts))
+                      (and (listAny? (fn [p] (c/checkOwns p (c/effectiveOwns ra.owns) rootDir)) (listAppend executed.state.writtenFiles (rl/writtenPaths executed.written)))
+                        (redBefore? ra.gates (baselineRan? (some? env.resume) (ac/configText! rootDir)) state.baselineGreen state.allGateResults)))))))))
+                  terminalModel (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
+                  integrityCheck (if (and (or terminalModel greenCandidate) (not (listEmpty? ra.gates)))
+                    (gi/gateIntegrityWithin! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)))
+                    (pair true "not required"))
+                  greenClose (and greenCandidate (and patchReady (pairFirst integrityCheck)))
+                  _heldRow (if (and greenCandidate (not greenClose)) (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :greenDoneHeld :reason \"every gate is green after a write inside :owns but the gate integrity check fails: " (c/escapeAsn (pairSecond integrityCheck)) "; the run goes on\")\n"))) true)
+                  _greenRow (if greenClose (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :greenDone :reason \"every gate is green after a write inside :owns and a gate was red before; the run closes without (:done)\")\n"))) true)
+                  terminal (or terminalModel greenClose)
                   historyEntry (fn [text] (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr text))
                       (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0"))))))
                   escalateForm (optionOr (modelEscalationReceipt operations) "")
@@ -2355,9 +2434,6 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   nudged (= readOnlyNow (readOnlyNudgeAt readOnlyCap))
                   _nudgeNote (if nudged (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :readNudge :readOnly " (stringFromInt64 readOnlyNow) " :cap " (stringFromInt64 readOnlyCap) ")\n"))) true)
                   historyRaw (listAppend wrapped.history (list (historyEntry (if nudged (str gotTurn "\n" (readOnlyNudge ra.owns readOnlyNow readOnlyCap) "\n" (ctx/mustEditForm (listAppend wrapped.history (list (historyEntry gotTurn))) ra.owns readOnlyNow)) gotTurn))))
-                  historyKeep (ctx/contextKeepTurnsFor! rootDir)
-                  historyToolCap (ctx/contextToolCapBytesFor! rootDir)
-                  historyTokens (optionOr servedCtx 24000)
                   history (ctx/freezeTranscriptHistory historyRaw historyKeep historyToolCap
                     (ctx/contextKeptCapBytes historyTokens historyKeep historyToolCap) (ctx/contextWindowLatestCapBytes historyTokens))
                   reviewInvoked (and terminal (and (= (optionOr (modeOf ra.modeHint) "") "review")
@@ -2367,9 +2443,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                       (str "Task: " ra.task "\n\nLive response:\n" normalized))
                     (ok none))
                   reviewLogged (if reviewInvoked (appendLiveHook! path turn "reviewer" reviewResult) true)
-                  integrity (if (and terminal (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrityWithin! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)))
-                    (pair true "not required"))
+                  integrity (if terminal integrityCheck (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
                     (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
                       " :message \"" (c/escapeAsn (pairSecond integrity)) "\")\n"))) true)
@@ -2384,14 +2458,16 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   nextStateBase (rl/withTurnContext executed.state servedCtx (ctx/readPayloadChars (optionOr servedCtx 24000)) wroteSinceGate)
                   nextState0 (rl/withHeadState nextStateBase turn nextReadStreak writesPersisted
                     deliver allGates lastGates
-                    status none none state.runStarted)
+                    status (if greenClose (some "greenDone") none) none state.runStarted)
                   nextState1 (rl/withFindings nextState0 (map (fn [form] (j/jstr form)) mergedFindingForms)
                     executed.state.needsConfirmList)
                   unbackedNow (if terminal (cb/unbackedGateClaims reply ra.gates allGates) (list))
                   nextState (if terminal (rl/withUnbacked nextState1 (map (fn [t] (j/jstr t)) unbackedNow)) nextState1)
                   withCommit (match (liveCommitMessage operations)
                     ((some message) (rl/withCommitMessage executed (some message)))
-                    ((none) executed))
+                    ((none) (if (and greenClose (none? executed.commitMessage))
+                      (rl/withCommitMessage executed (some (greenCommitLine ra.task ra.gates run.session)))
+                      executed)))
                   notedRun (rl/noteParseTurn (rl/withState withCommit nextState) turn parseDefect)
                   nextRun0 (if (and terminal (not (pairFirst integrity)))
                     (rl/withState notedRun (rl/withHeadState nextState turn nextState.readStreak writesPersisted deliver allGates lastGates

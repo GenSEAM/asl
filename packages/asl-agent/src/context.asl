@@ -4,7 +4,7 @@
       vendorBounds fitVendorCall contextTokensFor contextTokensForIn contextTokensAt! contextTokensFor! gatewayConfigPathFrom aliasRowText modelBase calibrationIndexPath calibrationIndexPath! servedContextTokens servedContextTokens!
       readPayloadChars renderTranscript renderTurnContext renderWindow stableSectionAt stableWindowTurn gateOutcome gateTail gateNow
       noWriteNudge noWriteNudgeTurns readStreakEscalate readStreakNudgeIn readStreakEscalateIn readStreakNudgeFor! readStreakEscalateFor! doneNoWriteTurns doneNoWriteTurnsIn doneNoWriteTurnsFor! readStreakNudgeLine allDownWaitSecIn allDownPauseSecIn allDownWaitSecFor! allDownPauseSecFor! noWriteTurns parseDefectEscalate parseDefectEscalateIn parseDefectEscalateFor! batchingRates costForm reinforceWhyFor escalationNear nowForm stepState! spanHolder seenReceipt failureSignatures
-      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory readRangesOf sameMarkedGot mustEditForm contextKeptCapBytes contextLatestCapBytes contextWindowLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
+      renderTranscriptBounded renderTranscriptKept freezeTranscriptHistory readRangesOf sameMarkedGot mustEditForm rereadAskDue rereadStaleGot asnUnescape ReadSpan readSpanOf spanCovers keptBefore rereadMarked rereadCount rereadAsk contextKeptCapBytes contextLatestCapBytes contextWindowLatestCapBytes contextCompactStep compactionCut turnReceiptLine contextKeepTurns contextKeepTurnsIn contextKeepTurnsFor! contextToolCapBytes contextToolCapBytesIn contextToolCapBytesFor!
       contextMaxOlderLines contextMaxOlderLinesIn contextMaxOlderLinesFor!
       coreDelta coreStatsLine formEnd sitePath possibleSitesOf readCovers siteNamed openPossible findingsRun possibleSiteList possibleNotice
       hiddenVars hiddenEnv! prefetchPaths! prefetchBlock! receiptPhase taskHintLines unmetForm specUnescape specCheckDiff! parseSpecVerdict
@@ -935,6 +935,149 @@ fn sameMarkLine line: String earlier: (List j/Json) -> String
 fn sameMarkedGot got: String earlier: (List j/Json) -> String
   (joinSep (map (fn [l] (sameMarkLine l earlier)) (stringSplit got "\n")) "\n")
 
+; (:m :ref LEONFIX-READSTREAK :do "node2 65 readStreak stops and the 180-run audit: the model re-reads slices it already holds, mostly overlapping ranges (:1-45, :1-70, :28-68 of one file), which the exact-match (:same :turn N) marker never catches; the session's read cache is the kept turns themselves: a read whose lines an earlier kept turn still shows whole, byte for byte at the same line numbers, with no write to that file in between, is answered by a short notice instead of the content")
+fn asnUnescapePart acc: (Pair (List String) Bool) part: String -> (Pair (List String) Bool)
+  (cond
+    ((pairSecond acc) (pair (cons part (pairFirst acc)) false))
+    ((stringEmpty? part) (pair (cons "\\" (pairFirst acc)) true))
+    (else (let [code (sub part 0 1)
+                rest (sub part 1 (stringLength part))
+                ch (cond ((= code "n") "\n") ((= code "t") "\t") ((= code "r") "\r") (else code))]
+            (pair (cons (str ch rest) (pairFirst acc)) false))))
+
+; (:m :do "inverse of c/escapeAsn: the text split at each backslash, where the piece after one starts with the escape code and an empty piece is an escaped backslash whose next piece is plain text")
+fn asnUnescape s: String -> String
+  (let [parts (stringSplit s "\\")]
+    (match (listHead parts)
+      ((none) "")
+      ((some first) (stringJoin (listReverse (pairFirst (fold asnUnescapePart (pair (list first) false) (listDrop parts 1)))) ""))))
+
+(schema ReadSpan (:f file String) (:f first Int64) (:f last Int64) (:f lines (List String)))
+
+; (:m :do "file, line range and lines of a successful read receipt that carries its content; none when the receipt has no range or its content is not exactly the lines it names (clipped, a note in place of content)")
+fn readSpanOf line: String -> (Option ReadSpan)
+  (if (not (and (readReceiptOk? line) (stringEndsWith? line "\")")))
+    none
+    (match (stringIndexOf line " :content \"")
+      ((none) none)
+      ((some k)
+        (let [range (stringSplit (linesAfter line) "-")
+              first (optionOr (stringToInt64 (optionOr (listGet range 0) "")) 0)
+              last (optionOr (stringToInt64 (optionOr (listGet range 1) "")) 0)
+              raw (stringSplit (asnUnescape (sub line (+ k 11) (- (stringLength line) 2))) "\n")
+              n (listLength raw)
+              lines (if (and (> n 1) (stringEmpty? (optionOr (listGet raw (- n 1)) "x"))) (optionOr (listSlice raw 0 (- n 1)) raw) raw)]
+          (match (quotedAfter line " :file \"")
+            ((none) none)
+            ((some file)
+              (if (and (> first 0) (and (>= last first) (= (listLength lines) (+ (- last first) 1))))
+                (some (ReadSpan :file file :first first :last last :lines lines))
+                none)))))))
+
+fn spanCovers big: ReadSpan small: ReadSpan -> Bool
+  (and (= big.file small.file)
+    (and (<= big.first small.first)
+      (and (>= big.last small.last)
+        (match (listSlice big.lines (- small.first big.first) (+ (- small.last big.first) 1))
+          ((some part) (= (joinSep part "\n") (joinSep small.lines "\n")))
+          ((none) false)))))
+
+; (:m :do "a turn changed the file: an ok write, edit or delete receipt names it, or an ok txn receipt lists it")
+fn wroteFileIn got: String file: String -> Bool
+  (let [name (str "\"" (c/escapeAsn file) "\"")]
+    (listAny? (fn [l] (and (stringStartsWith? l "(:receipt ")
+        (and (stringContains? l " :status :ok")
+          (and (stringContains? l name)
+            (listAny? (fn [op] (stringContains? l (str " :op \"" op "\""))) (list "write" "edit" "delete" "txn"))))))
+      (stringSplit got "\n")))
+
+; (:m :do "the turns still rendered whole in the next prompt, oldest first, without the newest one")
+fn keptBefore history: (List j/Json) -> (List j/Json)
+  (filter (fn [h] (not (stringEmpty? (jgetStr h "rendered")))) (optionOr (listSlice history 0 (max 0 (- (listLength history) 1))) (list)))
+
+fn spanShownIn span: ReadSpan h: j/Json -> Bool
+  (listAny? (fn [l] (match (readSpanOf l)
+      ((none) false)
+      ((some big) (and (spanCovers big span)
+        (match (sameFragment l) ((some f) (stringContains? (jgetStr h "rendered") (c/escapeAsn f))) ((none) false))))))
+    (stringSplit (shownGot h) "\n"))
+
+; (:m :do "the newest kept turn that shows the span whole, looking back only as far as the last turn that wrote the file: an edit invalidates every earlier read of it")
+fn rereadTurnIn span: ReadSpan newestFirst: (List j/Json) -> (Option String)
+  (match (listHead newestFirst)
+    ((none) none)
+    ((some h)
+      (cond
+        ((spanShownIn span h) (some (jgetStr h "turn")))
+        ((wroteFileIn (jgetStr h "got") span.file) none)
+        (else (rereadTurnIn span (listDrop newestFirst 1))))))
+
+fn rereadMark -> String
+  " :content (:same :turn "
+
+fn rereadLine line: String newestFirst: (List j/Json) -> String
+  (match (readSpanOf line)
+    ((none) line)
+    ((some span) (match (rereadTurnIn span newestFirst)
+      ((none) line)
+      ((some n) (match (stringIndexOf line " :content \"")
+        ((some k) (str (sub line 0 k) (rereadMark) n ") :note \"unchanged, already in context at turn " n "\")"))
+        ((none) line))))))
+
+fn rereadCount got: String -> Int64
+  (listLength (filter (fn [l] (and (readReceiptOk? l) (and (stringContains? l (rereadMark)) (stringContains? l ") :note \"unchanged, already in context at turn ")))) (stringSplit got "\n")))
+
+; (:m :do "a turn's receipts with every repeated read answered from the kept turns, and how many were")
+fn rereadMarked receipts: String kept: (List j/Json) -> (Pair String Int64)
+  (if (listEmpty? kept)
+    (pair receipts 0)
+    (let [newestFirst (listReverse kept)
+          marked (joinSep (map (fn [l] (rereadLine l newestFirst)) (stringSplit receipts "\n")) "\n")]
+      (pair marked (rereadCount marked))))
+
+; (:m :do "the reply names the owned files and asks for the edit when the repeated reads since the last write reach 2, and again at every 4 more (6, 10, ...): once per kept window, not once per turn, so a read loop does not grow the prompt")
+fn rereadAskDue seen: Int64 now: Int64 -> Bool
+  (and (> now 0) (> (/ (+ seen 2) 4) (/ (+ (- seen now) 2) 4)))
+
+fn rereadAsk n: Int64 owns: (List String) -> String
+  (str "(:reread :n " (stringFromInt64 n) " :owns (" (joinSep (map (fn [o] (str "\"" (c/escapeAsn o) "\"")) owns) " ")
+    (if (listEmpty? owns)
+      ") :do \"these reads repeat lines already above and nothing changed; the next reply sends (:findings ...) or (:done) from them\")"
+      ") :do \"these reads repeat lines already above and nothing changed; the next reply edits one of the owned files with (:edit), it does not read again\")"))
+
+; (:m :ref LEONFIX-READSTREAK :do "grade L1: a notice never outlives the turn it names; once that turn leaves the kept window the notice says the lines are gone and a re-read shows them, and the next read of them is content again since no kept turn shows them")
+fn rereadNoticeTurn line: String -> (Option String)
+  (if (not (and (readReceiptOk? line) (stringContains? line ") :note \"unchanged, already in context at turn ")))
+    none
+    (match (stringIndexOf line (rereadMark))
+      ((none) none)
+      ((some k) (let [rest (sub line (+ k (stringLength (rereadMark))) (stringLength line))]
+        (match (stringIndexOf rest ")") ((some e) (some (sub rest 0 e))) ((none) none))))))
+
+fn rereadStaleLine line: String keptTurns: (List String) -> String
+  (match (rereadNoticeTurn line)
+    ((none) line)
+    ((some n) (if (listContains? keptTurns n) line
+      (match (stringIndexOf line (rereadMark))
+        ((some k) (str (sub line 0 k) " :content (:gone :turn " n ") :note \"no longer in context, re-read to see\")"))
+        ((none) line)))))
+
+fn rereadStaleGot got: String earlier: (List j/Json) -> String
+  (let [keptTurns (map (fn [e] (jgetStr e "turn")) earlier)]
+    (joinSep (map (fn [l] (rereadStaleLine l keptTurns)) (stringSplit got "\n")) "\n"))
+
+fn withGot h: j/Json got: String -> j/Json
+  (j/jobj (list (pair "turn" (j/jstr (jgetStr h "turn"))) (pair "sent" (j/jstr (jgetStr h "sent")))
+    (pair "got" (j/jstr got)) (pair "ops" (j/jstr (jgetStr h "ops")))
+    (pair "files" (j/jstr (jgetStr h "files"))) (pair "gates" (j/jstr (jgetStr h "gates")))
+    (pair "wrote" (j/jstr (jgetStr h "wrote")))))
+
+; (:m :do "the turn with every notice whose named turn is not among the kept turns before it rewritten; such a turn drops its rendering and renders again, which happens only when the cut moves")
+fn rereadUnstale h: j/Json earlier: (List j/Json) -> j/Json
+  (let [got (jgetStr h "got")
+        fixed (if (stringContains? got (rereadMark)) (rereadStaleGot got earlier) got)]
+    (if (= fixed got) h (withGot h fixed)))
+
 ; (:m :do "everything older than the last keepTurns turns collapses to one deterministic receipt line each (ops/files/gates, never model text); only the most recent maxOlderLines of those survive at all, the rest are dropped with nothing rendered in their place, giving a true fixed ceiling for a run of any length. Below that cap the older section is pure append-only as turns age out of the kept window one at a time, so the rendered prefix stays byte-stable call over call; the kept tail is re-rendered whole (clipped per-turn) every call")
 ; (:m :ref LEON-PREFIX-CACHE-20261026 :do "the cut between summarised and whole turns only moves at fixed compaction points (every contextCompactStep turns) so the rendered bytes between two points are an append-only extension of the previous call's bytes, which is what provider prefix caches match on; the kept window is therefore keepTurns to keepTurns+step-1 whole turns")
 fn contextCompactStep -> Int64
@@ -1002,7 +1145,7 @@ fn windowTurnStep acc: (Pair (List j/Json) Int64) h: j/Json isLatest: Bool moved
   (let [earlier (listReverse (pairFirst acc))
         room (pairSecond acc)
         cap (if isLatest latestCap keptCap)
-        cleared (if (and moved (not isLatest)) (transcriptTurnCopy h (list)) h)
+        cleared (rereadUnstale (if (and moved (not isLatest)) (transcriptTurnCopy h (list)) h) earlier)
         once (renderTurnOnce cleared cap earlier)
         fresh (if (staleSame? once earlier) (renderTurnIn once cap earlier) once)
         large (and (not isLatest) (> (stringLength (jgetStr fresh "rendered")) (stringLength (turnWholeGot fresh (shownGot fresh) keptCap))))
