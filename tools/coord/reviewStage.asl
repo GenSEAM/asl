@@ -52,6 +52,7 @@ fn modelNames text: String -> (List (Pair String String))
                    (pair (fm/textOf (optionOr (fm/kvGet items ":id") (fm/makeEmpty))) (fm/textOf (optionOr (fm/kvGet items ":name") (fm/makeEmpty))))))
                (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":models") (fm/makeEmpty))))))))
 
+; (:m :ref REVIEW-WRITER-FAMILY :do "the grade intent routes are left out: they name the reviewers a profile may call, not the models that write, and the leon grade chain (glm, kimi) made the writer union moonshot+deepseek+zhipu so no lane could review its units")
 ; (:m :ref NODE2-WRITER-LITERAL-UNKNOWN :do "every alias on any route chain of the gateway profile with this id, in order, distinct: node2 writes run under profile ids (freeWriterNim, freeWriterOr, ...) that are never aliases, so the writer of such a unit has the families of its chains; empty for an id that is no profile")
 fn profileChain gatewayText: String id: String -> (List String)
   (match (fm/parseForms gatewayText)
@@ -64,8 +65,9 @@ fn profileChain gatewayText: String id: String -> (List String)
                   (let [(items (fm/itemsOf m))]
                     (if (!= (fm/textOf (optionOr (fm/kvGet items ":id") (fm/makeEmpty))) id) acc
                       (fold (fn [(a2 (List String)) (r rd/SExpr)] -> (List String)
+                              (if (= (fm/textOf (optionOr (fm/kvGet (fm/itemsOf r) ":intent") (fm/makeEmpty))) "grade") a2
                               (fold (fn [(a3 (List String)) (x String)] -> (List String) (if (listContains? a3 x) a3 (listAppend a3 (list x))))
-                                    a2 (fm/atomsOf (optionOr (fm/kvGet (fm/itemsOf r) ":chain") (fm/makeEmpty)))))
+                                    a2 (fm/atomsOf (optionOr (fm/kvGet (fm/itemsOf r) ":chain") (fm/makeEmpty))))))
                             acc (fm/itemsOf (optionOr (fm/kvGet items ":routes") (fm/makeEmpty)))))))
                 (list)
                 (fm/itemsOf (optionOr (fm/kvGet (fm/itemsOf form) ":profiles") (fm/makeEmpty))))))))
