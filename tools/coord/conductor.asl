@@ -2322,7 +2322,8 @@ fn ! ownedStates! wt: String owns: (List String) -> (List (Pair String Int64))
 
 ; (:m :ref COND-TASK-SPEC :do "the brief the writer gets: the stored task text (never rewritten in the store) with the owned paths' states at claim added, then the prior note when there is one")
 fn ! briefTask! wt: String dir: String u: st/Task prior: String -> String
-  (let [(text (bf/briefFor (taskText dir u) (ownedStates! wt u.owns)))]
+  (let [(raw (taskText dir u))
+        (text (str (bf/briefFor raw (ownedStates! wt u.owns)) (bf/outlineFor! wt u.owns raw)))]
     (if (stringEmpty? prior) text (str text "\n\n" prior)))
 
 ; (:m :ref COND-MODEL-ESCALATE :do "the :stop of Leon's receipt: read from the final receipt row, and from the (:agentReceipt ...) form nested in an (:agent ... :receipt ...) wrapper when the row is the wrapper")
