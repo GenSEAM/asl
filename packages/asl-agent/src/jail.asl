@@ -1,5 +1,5 @@
 (module aslAgent/jail
-  :x [Jail envKey secretName? passName? scrubEnv cacheNames jailHome jailCacheEnv! cacheSources! seedCaches! seedCachesWith! seedHow cloneKind! cliHeadName currentHeads seedReportText childEnv! childEnvIn! jailOf! jailPlan! jailMode lexicalOptIn! jailTool! jailWrap! refusedArgv lexicalJail seatbeltProfile bwrapArgs denialText? sandboxNote absentNote]
+  :x [Jail envKey secretName? passName? scrubEnv cacheNames jailHome jailCacheEnv! cacheSources! seedCaches! seedCachesWith! seedHow linkFree! CliSource resyncNeeded? pickSource resyncCli! cloneKind! cliHeadName cliCopyArgv currentHeads seedReportText childEnv! childEnvIn! jailOf! jailPlan! jailMode lexicalOptIn! jailTool! jailWrap! refusedArgv lexicalJail seatbeltProfile bwrapArgs denialText? sandboxNote absentNote]
   :i [(aslAgent/agentConfig :a ac)])
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the lexical guard and the HOME swap are not a boundary. A unit child (run, manage, gate) now gets an allowlisted environment and runs under an OS sandbox: sandbox-exec on macOS, bwrap on Linux, writes only under :root, the jail home and the rebuildable caches, the root's own .git and the real HOME unreadable and unwritable, no network beyond loopback unless the unit declares :net true. Where no sandbox tool applies (none installed, or already inside a sandbox, which cannot nest) the child runs under the lexical guard only and the receipt says :sandbox lexical")
@@ -75,7 +75,20 @@ fn ! cacheSources! inherited: (List String) realHome: String -> (List (Pair Stri
 fn ! jailCacheEnv! absRoot: String home: String -> (List String)
   (let [linked (file? (str absRoot "/.git"))
         wanted (filter (fn [r] (or (!= (pairFirst r) "ASL_NATIVE_TEST_CACHE") linked)) (jailCacheRows))]
-    (map (fn [r] (let [made (dirCreate (str home (pairSecond r)))] (str (pairFirst r) "=" home (pairSecond r)))) wanted))
+    (map (fn [r] (let [made (if (linkFree! absRoot (str home (pairSecond r))) (ok? (dirCreate (str home (pairSecond r)))) false)] (str (pairFirst r) "=" home (pairSecond r)))) wanted))
+
+fn ! linkFreeFrom! at: String segs: (List String) -> Bool
+  (match (listHead segs)
+    ((none) true)
+    ((some s) (let [next (str at "/" s)]
+                (match (fileLstat next)
+                  ((err _) true)
+                  ((ok st) (and (not st.isSymlink) (linkFreeFrom! next (optionOr (listTail segs) (list)))))))))
+
+; (:m :ref JAIL-SEED-SYMLINK :do "the harness writes the jail home and seeds its caches outside the sandbox, and the unit child can plant a symlink anywhere under its root between calls; a write through one would land where the link points (the real HOME, its key files). p is safe when it lies under base, has no .. segment and no part of it below base that exists is a symlink (lstat, the final part included); base itself is the caller's, outside the unit's reach")
+fn ! linkFree! base: String p: String -> Bool
+  (let [segs (filter (fn [x] (not (stringEmpty? x))) (stringSplit (optionOr (stringSlice p (stringLength base) (stringLength p)) "") "/"))]
+    (and (under? p base) (and (not (listContains? segs "..")) (linkFreeFrom! base segs))))
 
 fn ! waitUntil! pid: Int64 deadline: Int64 -> Bool
   (match (procWaitPid pid true)
@@ -139,8 +152,169 @@ fn lastSeg p: String -> String
 
 ; (:m :ref JAIL-LINUX :do "the cli directory one head pointer names, only when it is a cli-<digest> directory directly inside the shared cache; empty otherwise, so a pointer never makes the seed copy anything else")
 fn ! cliDirOf! src: String head: String -> String
-  (let [ptr (firstLine (resultOr (fileReadString (str src "/" head)) ""))]
-    (if (and (stringStartsWith? (lastSeg ptr) "cli-") (and (= (realOr! (parentOf ptr)) (realOr! src)) (dir? ptr))) ptr ""))
+  (let [ptr (firstLine (readPlain! (str src "/" head) 4096))
+        plain (match (fileLstat ptr) ((ok st) (and st.isDir (not st.isSymlink))) ((err _) false))]
+    (if (and (stringStartsWith? (lastSeg ptr) "cli-") (and plain (= (realOr! ptr) (str (realOr! src) "/" (lastSeg ptr))))) ptr ""))
+
+; (:m :ref JAIL-SEED-SYMLINK :do "a regular file by lstat: a head pointer that is a symlink is never read or copied, so a pointer cannot hand the seed the contents of a file outside the shared cache")
+fn ! plainFile? p: String -> Bool
+  (match (fileLstat p) ((ok st) (and st.isFile (not st.isSymlink))) ((err _) false))
+
+fn ! stampOf! p: String -> Int64
+  (match (fileLstat p) ((ok st) (if (and st.isFile (not st.isSymlink)) st.mtimeNs -1)) ((err _) -1))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the stamp a borrowed pointer gets, 1 s past the epoch: every source of the root is newer, so the child's bin/asl takes it as suspect and its refresh verifies the entry byte for byte against the root's own sources (nativeBuild coldCode!) before trusting it, and builds only when they differ")
+fn verifyStamp -> Int64
+  1000000000
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "one shared pointer a private head may follow: the cli directory it names (empty when it names none, cliDirOf!), its mtime, own true for the head's own pointer and false for one borrowed from the tool root, fits true when that entry's source snapshot equals the root's sources byte for byte")
+(schema CliSource
+  (:f dir String)
+  (:f stamp Int64)
+  (:f own Bool)
+  (:f fits Bool :default false))
+
+fn ! sourceOf! src: String head: String own: Bool -> CliSource
+  (let [dir (cliDirOf! src head)]
+    (CliSource :dir dir :stamp (if (stringEmpty? dir) -1 (stampOf! (str src "/" head))) :own own))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "fix round M1/M2: the harness reads a file for the re-seed only when lstat calls it a regular file, not a symlink, and no larger than cap; a FIFO, a device, a directory, a symlink or an oversize file is never opened (an open of a FIFO blocks forever), and reads as absent. There is no open-without-follow primitive, so the lstat type check is the bar")
+fn ! plainSize! p: String cap: Int64 -> Int64
+  (match (fileLstat p) ((ok st) (if (and st.isFile (and (not st.isSymlink) (<= st.size cap))) st.size -1)) ((err _) -1))
+
+fn ! readPlain! p: String cap: Int64 -> String
+  (if (>= (plainSize! p cap) 0) (resultOr (fileReadString p) "") "")
+
+fn depsCap -> Int64
+  1048576
+
+fn depsRowsCap -> Int64
+  4096
+
+fn sourceCap -> Int64
+  16777216
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the dependency list of a cli directory: its deps file read only as a plain file of at most depsCap bytes and depsRowsCap rows, and only when every row is relative and has no .. segment: the deps file of a private copy is the unit's to write, and a row must never make the harness read outside the root. Anything else is the empty list, which never matches and is always suspect")
+fn ! depsOf! dir: String -> (List String)
+  (let [rows (filter (fn [l] (not (stringEmpty? l))) (map stringTrim (stringSplit (readPlain! (str dir "/deps") (depsCap)) "\n")))]
+    (if (or (> (listLength rows) (depsRowsCap)) (listAny? (fn [p] (or (stringStartsWith? p "/") (listContains? (stringSplit p "/") ".."))) rows)) (list) rows))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "one source and its snapshot are the same when both are plain files on symlink-free paths, of equal size by lstat and at most sourceCap bytes, with equal bytes; unequal sizes are a mismatch without a read")
+fn ! samePlain! root: String dir: String p: String -> Bool
+  (let [a (str root "/" p)
+        b (str dir "/src/" p)
+        sa (if (linkFree! root a) (plainSize! a (sourceCap)) -1)
+        sb (if (linkFree! dir b) (plainSize! b (sourceCap)) -1)]
+    (and (>= sa 0) (and (= sa sb) (sameBytes! a b))))
+
+fn ! sameFrom! root: String dir: String deps: (List String) -> Bool
+  (match (listHead deps)
+    ((none) true)
+    ((some p) (and (samePlain! root dir p) (sameFrom! root dir (optionOr (listTail deps) (list))))))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the check nativeCli fresh? makes, without the clang version: every dependency of the entry exists in the root, outside any symlink, with the bytes of the entry's snapshot")
+fn ! sourceMatches! root: String dir: String -> Bool
+  (let [deps (if (stringEmpty? root) (list) (depsOf! dir))]
+    (and (not (listEmpty? deps)) (sameFrom! root dir deps)))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "bin/asl's suspect, by lstat only: a dependency of the entry that is missing in the root, behind a symlink, not a regular file, or newer than the pointer; an unreadable dependency list is suspect")
+fn ! sourceSuspect! root: String dir: String stamp: Int64 -> Bool
+  (let [deps (depsOf! dir)]
+    (or (listEmpty? deps)
+      (listAny? (fn [p] (let [rp (str root "/" p)]
+                          (or (not (linkFree! root rp))
+                            (match (fileLstat rp) ((ok st) (or (not st.isFile) (or st.isSymlink (> st.mtimeNs stamp)))) ((err _) true)))))
+        deps)))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the gate of the re-seed, as data: nothing to follow is nothing to do; a missing private head, a shared pointer newer than it (a deploy moved it) or a private entry the root's sources moved past (bin/asl would take it as stale) is looked at again; anything else costs one stat per pointer")
+fn resyncNeeded? privStamp: Int64 privSuspect: Bool cands: (List CliSource) -> Bool
+  (and (not (listEmpty? cands)) (or (< privStamp 0) (or privSuspect (listAny? (fn [(c CliSource)] -> Bool (> c.stamp privStamp)) cands))))
+
+fn newestOf cands: (List CliSource) -> (Option CliSource)
+  (fold (fn [best c] (match best ((none) (some c)) ((some b) (if (> c.stamp b.stamp) (some c) best)))) (none) cands)
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "what the private head becomes, as (cli dir, stamp), dir empty meaning keep the private entry: a private entry whose snapshot fits the root is kept and stamped now (the harness just made the check bin/asl's refresh would make); else the newest shared entry that fits, stamped now; else the head's own shared pointer with its mtime, as the first seed (an unmodified tree whose sources predate it runs it, a moved one is verified by the child); else the newest borrowed one with verifyStamp. So a worktree runs main's fresh build after a deploy when its CLI sources equal main's, keeps its own when they differ, and builds only when no entry anywhere fits")
+fn pickSource privFits: Bool cands: (List CliSource) now: Int64 -> (Pair String Int64)
+  (let [fit (newestOf (filter (fn [(c CliSource)] -> Bool c.fits) cands))
+        own (listHead (filter (fn [(c CliSource)] -> Bool c.own) cands))
+        newest (newestOf cands)]
+    (if privFits
+      (pair "" now)
+      (match fit
+        ((some f) (pair f.dir now))
+        ((none) (match own
+                  ((some o) (pair o.dir o.stamp))
+                  ((none) (match newest ((some n) (pair n.dir (verifyStamp))) ((none) (pair "" now)))))))))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the shared cli directory copied into the private cache under its own name, plain cp -Rp of a fresh private directory renamed into place; never a hard link, which would let the child rewrite the shared executable through the same inode. An existing private directory of that name is the earlier copy and is kept; one that is a symlink or not a directory is refused. Returns the reason it failed, empty on success")
+fn ! cliCopy! dir: String dst: String -> String
+  (let [name (lastSeg dir)
+        to (str dst "/" name)]
+    (match (fileLstat to)
+      ((ok st) (cond (st.isSymlink "the private cli directory is a symlink") (st.isDir "") (else "the private cli path is not a directory")))
+      ((err _)
+        (let [tmp (str dst "/.seed-" (stringFromInt64 (monotonicNs)))
+              why (cond
+                    ((ok? (fileLstat tmp)) "the private seed directory already exists")
+                    ((not (ok? (dirCreate tmp))) "the private seed directory was not created")
+                    ((not (runBounded! (cliCopyArgv dir tmp))) "the cli directory was not copied")
+                    ((not (ok? (pathRename (str tmp "/" name) to))) "the cli directory was not renamed into place")
+                    (else ""))
+              swept (if (and (!= why "the private seed directory already exists") (ok? (fileLstat tmp))) (ok? (pathRemove tmp)) true)]
+          (if swept why (str why "; its partial copy was not removed"))))))
+
+fn ! pointHead! dst: String head: String dir: String stamp: Int64 -> Bool
+  (let [part (str dst "/.head-" (stringFromInt64 (monotonicNs)) ".part")]
+    (and (not (ok? (fileLstat part)))
+      (and (ok? (fileWrite part (str dst "/" (lastSeg dir) "\n")))
+        (and (ok? (fileUtime part stamp)) (ok? (pathRename part (str dst "/" head)))))))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "one private head: the shared pointers it may follow are its own and, for the first head (the unit's own root, currentHeads), the tool root's; the private entry counts only when it is a plain cli directory inside the private cache. Returns resync when it moved the head, failed: <why>, or empty when nothing changed or the private entry was only restamped")
+fn ! resyncHead! src: String dst: String heads: (List String) head: String root: String -> String
+  (let [first (= (optionOr (listHead heads) "") head)
+        cands (filter (fn [(c CliSource)] -> Bool (not (stringEmpty? c.dir))) (cons (sourceOf! src head true) (if first (map (fn [o] (sourceOf! src o false)) (filter (fn [o] (!= o head)) heads)) (list))))
+        here (if first root "")
+        priv (str dst "/" head)
+        link (match (fileLstat priv) ((ok st) st.isSymlink) ((err _) false))
+        privStamp (stampOf! priv)
+        target (if (< privStamp 0) "" (firstLine (readPlain! priv 4096)))
+        privDir (if (and (stringStartsWith? (lastSeg target) "cli-") (and (= target (str dst "/" (lastSeg target))) (and (linkFree! dst target) (dir? target)))) target "")
+        privSuspect (and (not (stringEmpty? here)) (and (not (stringEmpty? privDir)) (sourceSuspect! here privDir privStamp)))]
+    (cond
+      (link "failed: a private head pointer is a symlink")
+      ((not (resyncNeeded? privStamp privSuspect cands)) "")
+      (else
+        (let [privFits (and (not (stringEmpty? privDir)) (sourceMatches! here privDir))
+              pick (pickSource privFits (map (fn [(c CliSource)] -> CliSource (with c :fits (sourceMatches! here c.dir))) cands) (nowNs))
+              dir (pairFirst pick)
+              stamp (pairSecond pick)]
+          (cond
+            ((stringEmpty? dir) (cond ((stringEmpty? privDir) "") ((pointHead! dst head privDir stamp) "") (else "failed: a private head pointer was not restamped")))
+            ((and (= (lastSeg dir) (lastSeg target)) (= stamp privStamp)) "")
+            (else (let [why (cliCopy! dir dst)]
+                    (cond
+                      ((not (stringEmpty? why)) (str "failed: " why))
+                      ((pointHead! dst head dir stamp) "resync")
+                      (else "failed: a private head pointer was not rewritten")))))))))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the private native CLI cache follows the shared one on every jailed call, not only at the first seed: a deploy of main rebuilds the shared entry and moves its pointer, and a private pointer frozen at the first seed made every later jailed bin/asl rebuild the whole CLI (asl1 and cli, 10 to 25 minutes of clang per worktree) inside its jail. root is the unit's own root (empty: no source check). One outcome per head it moved: resync or failed: <why>; nothing when the private cache does not exist")
+fn ! resyncCli! src: String dst: String heads: (List String) root: String -> (List String)
+  (if (not (dir? dst))
+    (list)
+    (let [outcomes (filter (fn [w] (not (stringEmpty? w))) (map (fn [h] (resyncHead! src dst heads h root)) heads))
+          pruned (if (listContains? outcomes "resync") (pruneCli! dst) 0)]
+      outcomes))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "fix round L3: a copy of a cli directory is a clone where the platform has one (clonefile on macOS, reflink where the file system offers it, plain copy otherwise), never a hard link, which would let the child rewrite the shared executable through the same inode")
+fn cliCopyArgv from: String to: String -> (List String)
+  (if (file? "/usr/bin/sandbox-exec") (list "/bin/cp" "-cRp" from to) (list "cp" "-Rp" "--reflink=auto" from to))
+
+; (:m :ref LEON-JAIL-CLI-CACHE :do "fix round L3: after a re-seed moved a head, every private cli-* entry no private head pointer names is removed: each re-seed after a deploy left one copy behind per jail home (about 49M each). Only direct children of the private cache, whose path the caller found symlink-free; a planted symlink is unlinked, never followed (pathRemove does not follow links). Returns the number removed")
+fn ! pruneCli! dst: String -> Int64
+  (let [names (resultOr (dirList dst) (list))
+        kept (map (fn [h] (lastSeg (firstLine (readPlain! (str dst "/" h) 4096)))) (filter (fn [n] (stringStartsWith? n "head")) names))
+        stale (filter (fn [n] (and (stringStartsWith? n "cli-") (not (listContains? kept n)))) names)]
+    (fold (fn [acc n] (if (ok? (pathRemove (str dst "/" n))) (+ acc 1) acc)) 0 stale))
 
 ; (:m :ref JAIL-LINUX :do "the private pointer names the private copy, and keeps the shared pointer's mtime: bin/asl calls the CLI stale when a source is newer than the pointer, and a pointer written now would hide that")
 fn ! repoint! src: String tmp: String dst: String head: String dir: String -> Bool
@@ -154,41 +328,66 @@ fn ! seedable? dst: String -> Bool
     ((err _) true)
     ((ok _) (listEmpty? (resultOr (dirList dst) (list "x")))))
 
+; (:m :ref LEON-JAIL-CLI-CACHE :do "why one head pointer of the shared cache names no cli directory, so a failed seed names the check that refused it: the pointer file is missing, a symlink, not a regular file or empty; or the path it holds is not a cli-* name, not a plain directory, or does not resolve directly inside the shared cache")
+fn ! headWhy! src: String head: String -> String
+  (let [p (str src "/" head)
+        ptr (firstLine (readPlain! p 4096))
+        why (match (fileLstat p)
+              ((err _) "no such pointer file")
+              ((ok st)
+                (cond
+                  (st.isSymlink "the pointer file is a symlink")
+                  ((not st.isFile) "the pointer file is not a regular file")
+                  ((stringEmpty? ptr) "the pointer file is empty or over 4096 bytes")
+                  ((not (stringStartsWith? (lastSeg ptr) "cli-")) (str "names " ptr ", not a cli-* directory"))
+                  ((not (match (fileLstat ptr) ((ok d) (and d.isDir (not d.isSymlink))) ((err _) false))) (str "names " ptr ", not a plain directory"))
+                  ((!= (realOr! ptr) (str (realOr! src) "/" (lastSeg ptr))) (str "names " ptr ", which resolves to " (realOr! ptr) ", not inside " (realOr! src)))
+                  (else "names a cli directory"))))]
+    (str head ": " why))
+
 ; (:m :ref JAIL-LINUX :do "D2: the active entry of the shared native CLI cache, plain cp -Rp (about 56M): every head pointer file, and the cli directory of each pointer in heads, which is then repointed at the copy; the other pointers keep naming the shared cache, which the jail reads. Built under a private name and renamed into place; returns the reason it failed, empty on success, and a failed seed leaves nothing behind")
 fn ! seedCliEntry! src: String dst: String heads: (List String) -> String
   (let [tmp (str dst ".seed-" (stringFromInt64 (monotonicNs)))
-        names (filter (fn [n] (and (stringStartsWith? n "head") (file? (str src "/" n)))) (resultOr (dirList src) (list)))
+        names (filter (fn [n] (and (stringStartsWith? n "head") (plainFile? (str src "/" n)))) (resultOr (dirList src) (list)))
         live (filter (fn [p] (not (stringEmpty? (pairSecond p)))) (map (fn [h] (pair h (cliDirOf! src h))) (filter (fn [h] (listContains? names h)) heads)))
         why (cond
-              ((listEmpty? live) "no head pointer of this root names a cli directory in the shared cache")
+              ((listEmpty? live) (str "no head pointer of this root names a cli directory in the shared cache (" (stringJoin (map (fn [h] (headWhy! src h)) heads) "; ") ")"))
+              ((ok? (fileLstat tmp)) "the private seed directory already exists")
               ((not (ok? (dirCreate tmp))) "the private cache directory was not created")
               ((not (runBounded! (listAppend (cons "cp" (cons "-p" (map (fn [n] (str src "/" n)) names))) (list tmp)))) "the head pointers were not copied")
-              ((not (listAll? (fn [d] (runBounded! (list "cp" "-Rp" d tmp))) (dedupe (map pairSecond live) (list)))) "the cli directory was not copied")
+              ((not (listAll? (fn [d] (runBounded! (cliCopyArgv d tmp))) (dedupe (map pairSecond live) (list)))) "the cli directory was not copied")
               ((not (listAll? (fn [p] (repoint! src tmp dst (pairFirst p) (pairSecond p))) live)) "a head pointer was not rewritten")
               ((not (ok? (pathRename tmp dst))) "the seeded cache was not renamed into place")
               (else ""))
-        swept (if (or (stringEmpty? why) (not (ok? (fileStat tmp)))) true (ok? (pathRemove tmp)))]
+        swept (if (or (stringEmpty? why) (or (= why "the private seed directory already exists") (not (ok? (fileLstat tmp))))) true (ok? (pathRemove tmp)))]
     (if swept why (str why "; its partial copy was not removed")))
 
 ; (:m :ref FABLE-BLIND-03 :do "a private cache that does not exist yet starts as a clone of its shared source, so the first asl run of a unit is warm; the clone lands under a private name and is renamed into place, a failed clone is removed; the corpus cache is not seeded. JAIL-LINUX D2: kind is how the machine clones (cloneKind!), passed as data so the no-clone path runs on any file system; returns one (cache name, outcome) row per cache it tried: clone, cliEntry, cold, or failed: <why>")
-fn ! seedCachesWith! kind: String home: String sources: (List (Pair String String)) heads: (List String) -> (List (Pair String String))
+fn ! seedCachesWith! kind: String home: String sources: (List (Pair String String)) heads: (List String) root: String -> (List (Pair String String))
   (fold (fn [acc r]
           (let [name (pairFirst r)
                 dst (str home (pairSecond r))
                 src (optionOr (listHead (map pairSecond (filter (fn [s] (= (pairFirst s) name)) sources))) "")]
-            (if (or (stringEmpty? src) (or (not (listContains? (seededNames) name)) (not (seedable? dst))))
-              acc
-              (let [tmp (str dst ".seed-" (stringFromInt64 (monotonicNs)))
-                    parent (dirCreate (parentOf dst))
-                    cloned (and (!= kind "none") (and (!= name "ASL_NATIVE_CLI_CACHE") (and (runBounded! (cloneArgv kind src tmp)) (ok? (pathRename tmp dst)))))
-                    swept (if (or cloned (not (ok? (fileStat tmp)))) true (ok? (pathRemove tmp)))
-                    how (seedHow kind cloned name)
-                    why (if (= how "cliEntry") (seedCliEntry! src dst heads) "")]
-                (listAppend acc (list (pair name (cond
-                                                   ((not swept) "failed: a partial clone was not removed")
-                                                   ((stringEmpty? why) how)
-                                                   (else (str "failed: " why))))))))))
+            (cond
+              ((or (stringEmpty? src) (not (listContains? (seededNames) name))) acc)
+              ((not (linkFree! home dst)) (listAppend acc (list (pair name "failed: a symlink in the private cache path"))))
+              (else
+                (let [seededRows (if (seedable? dst) (list (pair name (seedOne! kind name src dst heads))) (list))
+                      again (if (and (= name "ASL_NATIVE_CLI_CACHE") (not (listAny? seedFailed? seededRows))) (map (fn [w] (pair name w)) (resyncCli! src dst heads root)) (list))]
+                  (listAppend acc (listAppend seededRows again)))))))
     (list) (jailCacheRows))
+
+fn ! seedOne! kind: String name: String src: String dst: String heads: (List String) -> String
+  (let [tmp (str dst ".seed-" (stringFromInt64 (monotonicNs)))
+        parent (dirCreate (parentOf dst))
+        cloned (and (!= kind "none") (and (!= name "ASL_NATIVE_CLI_CACHE") (and (not (ok? (fileLstat tmp))) (and (runBounded! (cloneArgv kind src tmp)) (ok? (pathRename tmp dst))))))
+        swept (if (or cloned (not (ok? (fileStat tmp)))) true (ok? (pathRemove tmp)))
+        how (seedHow kind cloned name)
+        why (if (= how "cliEntry") (seedCliEntry! src dst heads) "")]
+    (cond
+      ((not swept) "failed: a partial clone was not removed")
+      ((stringEmpty? why) how)
+      (else (str "failed: " why))))
 
 fn seedFailed? row: (Pair String String) -> Bool
   (stringStartsWith? (pairSecond row) "failed")
@@ -197,29 +396,34 @@ fn seedFailed? row: (Pair String String) -> Bool
 fn seedReportText rows: (List (Pair String String)) -> String
   (stringJoin (map (fn [r] (str "(:seed :cache \"" (pairFirst r) "\" :how \"" (pairSecond r) "\")\n")) rows) "")
 
+; (:m :ref LEON-JAIL-CLI-CACHE :do "the report keeps every row: the first seed's, then each re-seed of a later call, appended; written only where no symlink lies on its path (JAIL-SEED-SYMLINK)")
 fn ! seedReport! home: String rows: (List (Pair String String)) -> Bool
   (if (listEmpty? rows)
     true
-    (let [wrote (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite (str home "/.asl/seedReport.asn") (seedReportText rows))))]
+    (let [path (str home "/.asl/seedReport.asn")
+          before (readPlain! path (depsCap))
+          wrote (and (linkFree! home path) (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite path (str before (seedReportText rows))))))]
       (do
         (map (fn [r] (eprintln (str "(:leon :seed :cache \"" (pairFirst r) "\" :how \"" (pairSecond r) "\")"))) (filter seedFailed? rows))
         (if wrote true (do (eprintln "(:leon :seed :failed \"the seed report was not written\")") false)))))
 
-; (:m :ref JAIL-LINUX :do "the clone probe runs only when some cache is still to be seeded; jailCacheEnv! creates every private directory right after, so a jail home is seeded once")
-fn ! seedCaches! home: String sources: (List (Pair String String)) heads: (List String) -> (List (Pair String String))
+; (:m :ref JAIL-LINUX :do "the clone probe runs only when some cache is still to be seeded; jailCacheEnv! creates every private directory right after, so a jail home is seeded once. LEON-JAIL-CLI-CACHE: the native CLI cache is re-seeded on every call (seedCachesWith!, resyncCli!), which needs no clone kind")
+fn ! seedCaches! home: String sources: (List (Pair String String)) heads: (List String) root: String -> (List (Pair String String))
   (if (listAny? (fn [r] (and (listContains? (seededNames) (pairFirst r)) (and (listAny? (fn [s] (= (pairFirst s) (pairFirst r))) sources) (seedable? (str home (pairSecond r)))))) (jailCacheRows))
-    (seedCachesWith! (cloneKind! home) home sources heads)
-    (list))
+    (seedCachesWith! (cloneKind! home) home sources heads root)
+    (seedCachesWith! "none" home sources heads root))
 
-; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the child env is an allowlist, not the parent env minus a few names: of the inherited rows only the names passName? knows pass, so provider keys and ASL_ settings never reach a unit child; the rows the harness sets (PWD, HOME, TMPDIR, the private cache directories) are added after, and the names the run hides are dropped last. seed true clones the shared caches into the private ones first; they hold tens of thousands of files inside the root, so <jail home>/.asl then carries a .gitignore of * and the run snapshot (git ls-files of untracked files) never walks them")
+; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the child env is an allowlist, not the parent env minus a few names: of the inherited rows only the names passName? knows pass, so provider keys and ASL_ settings never reach a unit child; the rows the harness sets (PWD, HOME, TMPDIR, the private cache directories) are added after, and the names the run hides are dropped last. seed true clones the shared caches into the private ones first; they hold tens of thousands of files inside the root, so <jail home>/.asl then carries a .gitignore of * and the run snapshot (git ls-files of untracked files) never walks them. JAIL-SEED-SYMLINK: where a symlink lies on the jail home's path inside the root, the harness creates, seeds and writes nothing there and says so on stderr; the rows are the same, and jailPlan! grants no home outside the root")
 fn ! childEnvIn! absRoot: String inherited: (List String) hidden: (List String) realHome: String seed: Bool -> (List String)
   (let [home (jailHome absRoot)
-        made (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp"))))
+        free (listAll? (fn [p] (linkFree! absRoot (str home p))) (list "/tmp" "/.asl/seedReport.asn" "/.asl/.gitignore"))
+        said (if free true (do (eprintln "(:leon :seed :failed \"a symlink lies on the jail home path; nothing was created or seeded there\")") false))
+        made (and free (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp")))))
         kept (filter (fn [r] (passName? (envKey r))) inherited)
-        seeded (if seed (seedCaches! home (cacheSources! inherited realHome) (currentHeads (realOr! absRoot) inherited)) (list))
+        seeded (if (and seed free) (seedCaches! home (cacheSources! inherited realHome) (currentHeads (realOr! absRoot) inherited) (realOr! absRoot)) (list))
         reported (seedReport! home seeded)
         ignore (str home "/.asl/.gitignore")
-        ignored (if (and seed (not (file? ignore))) (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite ignore "*\n"))) true)
+        ignored (if (and (and seed free) (not (file? ignore))) (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite ignore "*\n"))) true)
         caches (jailCacheEnv! absRoot home)
         own (listAppend caches (list (str "PWD=" absRoot) (str "HOME=" home) (str "TMPDIR=" home "/tmp") "PYTHONDONTWRITEBYTECODE=1"))]
     (filter (fn [r] (not (listContains? hidden (envKey r)))) (scrubEnv kept own)))
@@ -314,7 +518,7 @@ fn ! lexicalOptIn! realHome: String -> Bool
   (and (not (stringEmpty? realHome))
     (= (optionOr (ac/agentLoopValue (resultOr (fileReadString (str realHome "/.asl/config.asn")) "") ":jailLexicalOnly") "") "true"))
 
-; (:m :ref LEON-RUN-HOME-JAIL :do "the jail of one child: writes are the root, the jail home (its private caches inside) and the scratch directories the harness adds; reads under the real HOME are those plus the shared repository, the tool root, the shared caches (read-only) and the PATH entries that live there; the root's ancestors up to the real HOME are listable (path and import resolution list them; without that an asl test in the jail cannot stage its sources) but their other children are not readable")
+; (:m :ref LEON-RUN-HOME-JAIL :do "the jail of one child: writes are the root, the jail home (its private caches inside) and the scratch directories the harness adds; reads under the real HOME are those plus the shared repository, the tool root, the shared caches (read-only) and the PATH entries that live there; the root's ancestors up to the real HOME are listable (path and import resolution list them; without that an asl test in the jail cannot stage its sources) but their other children are not readable. JAIL-SEED-SYMLINK: the jail home is granted only where its real path lies inside the root; a symlink the unit planted at <root>/.asl/run/agentLoop/home (or above it) pointing at the real HOME's .asl would otherwise make keys.env and gateway.asn readable and writable")
 fn ! jailPlan! tool: String lexicalOnly: Bool root: String home: String envRows: (List String) extraReads: (List String) extraWrites: (List String) net: Bool realHomeRaw: String sources: (List String) -> Jail
   (let [mode (jailMode tool lexicalOnly)]
     (if (!= mode "os")
@@ -323,7 +527,8 @@ fn ! jailPlan! tool: String lexicalOnly: Bool root: String home: String envRows:
             realHome (if (stringEmpty? realHomeRaw) "" (realOr! realHomeRaw))
             pathRow (optionOr (listHead (filter (fn [r] (= (envKey r) "PATH")) envRows)) "")
             pathDirs (filter (fn [d] (under? d realHome)) (map realOr! (filter dir? (stringSplit (envValue pathRow) ":"))))
-            writes (dedupe (listAppend (list rroot (realOr! home)) (map realOr! (filter dir? extraWrites))) (list))
+            homeReal (realOr! home)
+            writes (dedupe (listAppend (cons rroot (if (under? homeReal rroot) (list homeReal) (list))) (map realOr! (filter dir? extraWrites))) (list))
             reads (dedupe (listAppend (listAppend (listAppend (commonGit! rroot) (map realOr! (filter dir? extraReads))) (map realOr! (filter dir? sources))) pathDirs) (list))
             lists (if (and (under? rroot realHome) (!= rroot realHome)) (cons realHome (ancestorsIn rroot realHome (list))) (list))]
         (Jail :mode "os" :tool tool :root rroot :writes writes :reads reads :lists lists :realHome realHome :net net))))
@@ -404,3 +609,8 @@ fn denialText? text: String -> Bool
 fn sandboxNote j: Jail -> String
   (str "the OS sandbox refused an operation: a unit process may write only under :root (its .git excluded) and its scratch HOME, cannot read the real HOME, its temporary files go under $TMPDIR (the shared /tmp is not writable), it has no ps and cannot signal a process outside its own tree"
     (if j.net "" ", and has no network beyond loopback unless the unit declares :net true"))
+
+fn ! sameBytes! a: String b: String -> Bool
+  (match (fileReadBytes a)
+    ((err _) false)
+    ((ok x) (match (fileReadBytes b) ((err _) false) ((ok y) (= x y)))))

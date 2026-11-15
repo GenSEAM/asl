@@ -13,6 +13,9 @@ fn rowOf rows: (List String) name: String -> String
 fn ! tmpBase! -> String
   (match (fileStat "/private/tmp") ((ok st) (if st.isDir "/private/tmp" "/tmp")) ((err _) "/tmp"))
 
+fn covers? p: String dirs: (List String) -> Bool
+  (listAny? (fn [d] (or (= p d) (stringStartsWith? p (str d "/")))) dirs)
+
 fn ! mtimeOf! p: String -> Int64
   (match (fileStat p) ((ok st) st.mtimeNs) ((err _) -1))
 
@@ -32,6 +35,9 @@ fn ! runTests -> Bool
         wroteEntry (and (ok? (dirCreate activeCli)) (and (ok? (fileWrite (str activeCli "/bin") "binary\n")) (and (ok? (dirCreate (str sharedCli "/cli-other"))) (and (ok? (fileWrite (str sharedCli "/cli-other/bin") "other\n"))
                      (and (ok? (fileWrite (str sharedCli "/" rootHead) (str activeCli "\n"))) (ok? (fileUtime (str sharedCli "/" rootHead) 1700000000000000000)))))))
         wroteNo (fileWrite (str fakeHome "/.asl/config.asn") "(:config (:agentLoop (:jailLexicalOnly false)))\n")
+        wroteDecoys (fileWrite (str fakeHome "/.asl/keys.env") "DECOY_PROVIDER_KEY=decoy\n")
+        wroteGateway (fileWrite (str fakeHome "/.asl/gateway.asn") "(:gateway :decoy true)\n")
+        wroteFree (fileWrite (str fakeHome "/.asl/.env.free") "DECOY_FREE_KEY=decoy\n")
         inherited (list "PATH=/usr/bin:/bin" (str "ASL_CHECK_CACHE=" sharedCheck))
         home (jl/jailHome root)
         kind (jl/cloneKind! base)
@@ -44,7 +50,7 @@ fn ! runTests -> Bool
         heads (jl/currentHeads (resultOr (realPath root) root) (list "PATH=/usr/bin:/bin"))
         plainHome (str base "/plainHome")
         plainCli (str plainHome "/.asl/run/nativeCli")
-        plainRows (jl/seedCachesWith! "none" plainHome (jl/cacheSources! inherited fakeHome) heads)
+        plainRows (jl/seedCachesWith! "none" plainHome (jl/cacheSources! inherited fakeHome) heads "")
         plainHead (readText! (str plainCli "/" rootHead))
         plainOther (readText! (str plainCli "/head_x"))
         plainBin (readText! (str plainCli "/cli-active/bin"))
@@ -53,11 +59,11 @@ fn ! runTests -> Bool
         plainLeft (resultOr (dirList (str plainHome "/.asl/run")) (list))
         plainStamp (mtimeOf! (str plainCli "/" rootHead))
         lostHome (str base "/lostHome")
-        lostRows (jl/seedCachesWith! "none" lostHome (jl/cacheSources! inherited fakeHome) (list "head_absent"))
+        lostRows (jl/seedCachesWith! "none" lostHome (jl/cacheSources! inherited fakeHome) (list "head_absent") "")
         lostLeft (resultOr (dirList (str lostHome "/.asl/run")) (list))
         strayHome (str base "/strayHome")
         wroteStray (fileWrite (str sharedCli "/head_stray") (str fakeHome "/secret.txt\n"))
-        strayRows (jl/seedCachesWith! "none" strayHome (jl/cacheSources! inherited fakeHome) (list "head_stray"))
+        strayRows (jl/seedCachesWith! "none" strayHome (jl/cacheSources! inherited fakeHome) (list "head_stray") "")
         coldRoot (str base "/cold")
         madeCold (dirCreate coldRoot)
         coldRows (jl/childEnvIn! coldRoot inherited (list) fakeHome false)
@@ -70,7 +76,7 @@ fn ! runTests -> Bool
         plan (jl/jailPlan! tool false root home rows (list) (list) false fakeHome sources)
         script (str "echo planted > " sharedCli "/planted 2> /dev/null; echo planted > " sharedCheck "/planted 2> /dev/null; "
                  "cat " sharedCli "/head_x > readShared.txt 2> /dev/null; cat " fakeHome "/secret.txt > readSecret.txt 2> /dev/null; "
-                 "echo own > \"$ASL_NATIVE_CLI_CACHE/own.txt\"; exit 0")
+                 "cat " fakeHome "/.asl/keys.env " fakeHome "/.asl/gateway.asn " fakeHome "/.asl/.env.free > readKeys.txt 2> /dev/null; echo own > \"$ASL_NATIVE_CLI_CACHE/own.txt\"; exit 0")
         ran (if (stringEmpty? tool) -1 (fr/runOneLimited (fr/job (jl/jailWrap! plan (list "/bin/sh" "-c" script)) root rows) (fr/limits 30 16)).exit)
         plantedCli (ok? (fileStat (str sharedCli "/planted")))
         plantedCheck (ok? (fileStat (str sharedCheck "/planted")))
@@ -83,9 +89,26 @@ fn ! runTests -> Bool
         bwrapHomeWrite (c/joinSep (jl/bwrapArgs (with linux :writes (list "/r/unit" "/h"))) " ")
         bwrapNoHome (c/joinSep (jl/bwrapArgs (with linux :realHome "")) " ")
         profile (jl/seatbeltProfile (with linux :tool "sandbox-exec"))
+        readKeys (readText! (str root "/readKeys.txt"))
+        sharedCliReal (resultOr (realPath sharedCli) sharedCli)
+        fakeHomeReal (resultOr (realPath fakeHome) fakeHome)
+        decoyPaths (map (fn [n] (str fakeHomeReal "/.asl/" n)) (list "keys.env" "gateway.asn" ".env.free"))
+        macRows (jl/childEnvIn! root inherited (list) fakeHome true)
+        macPlan (jl/jailPlan! "sandbox-exec" false root home macRows (list) (list) false fakeHome sources)
+        linuxPlan (jl/jailPlan! "/usr/bin/bwrap" false root home macRows (list) (list) false fakeHome sources)
+        macProfile (jl/seatbeltProfile macPlan)
+        linuxArgv (str (c/joinSep (jl/bwrapArgs linuxPlan) " ") " ")
         cleaned (pathRemove base)]
     (do
       (assert (and madeDirs (and wroteShared (and wroteEntry (and (ok? wroteStray) (and (ok? wroteOpt) (and (ok? wroteRootOpt) (and (ok? wroteNo) (ok? madeCold)))))))) "the fixture (root, stand-in HOME with a shared cache holding an active and an unused cli entry and a secret, opt-in HOME) was built")
+      (assert (and (and (ok? wroteDecoys) (and (ok? wroteGateway) (ok? wroteFree))) (= readKeys "")) (str "LEON-JAIL-CLI-CACHE: a unit child cannot read the decoy keys.env, gateway.asn or .env.free of the stand-in HOME's .asl, got " readKeys))
+      (assert (and (listContains? macPlan.reads sharedCliReal) (and (listContains? linuxPlan.reads sharedCliReal) (and (not (covers? sharedCliReal macPlan.writes)) (not (covers? sharedCliReal linuxPlan.writes))))) "LEON-JAIL-CLI-CACHE: both platform plans expose the shared native CLI cache as a read and never as a write")
+      (assert (= (listLength (stringSplit macProfile (str "(subpath \"" sharedCliReal "\")"))) 2) (str "LEON-JAIL-CLI-CACHE: the seatbelt profile names the shared native CLI cache once, in the read allow, never in the write allow: " macProfile))
+      (assert (and (stringContains? linuxArgv (str "--ro-bind " sharedCliReal " " sharedCliReal)) (not (stringContains? linuxArgv (str "--bind " sharedCliReal " ")))) (str "LEON-JAIL-CLI-CACHE: bwrap binds the shared native CLI cache read-only, never read-write: " linuxArgv))
+      (assert (and (= (rowOf macRows "ASL_NATIVE_CLI_CACHE") (str "ASL_NATIVE_CLI_CACHE=" home "/.asl/run/nativeCli")) (covers? (str (resultOr (realPath home) home) "/.asl/run/nativeCli") macPlan.writes)) "LEON-JAIL-CLI-CACHE: the child's native CLI cache is redirected to the private one, which the plan writes")
+      (assert (not (listAny? (fn [k] (or (covers? k (listAppend macPlan.reads macPlan.writes)) (covers? k (listAppend linuxPlan.reads linuxPlan.writes)))) decoyPaths)) (str "LEON-JAIL-CLI-CACHE: no read or write of either plan covers keys.env, gateway.asn or .env.free: " (c/joinSep (listAppend macPlan.reads macPlan.writes) " ")))
+      (assert (and (stringContains? macProfile (str "(deny file-read* (subpath \"" fakeHomeReal "\"))")) (not (listAny? (fn [k] (stringContains? macProfile (str "\"" k "\""))) (cons (str fakeHomeReal "/.asl") decoyPaths)))) "LEON-JAIL-CLI-CACHE: the seatbelt profile denies the stand-in HOME and allows nothing naming its .asl or a key file")
+      (assert (and (stringContains? linuxArgv (str "--tmpfs " fakeHomeReal)) (not (listAny? (fn [k] (stringContains? linuxArgv (str " " k " "))) (cons (str fakeHomeReal "/.asl") decoyPaths)))) "LEON-JAIL-CLI-CACHE: bwrap hides the stand-in HOME under a tmpfs and binds nothing naming its .asl or a key file")
       (assert (= (jl/jailMode "" false) "refused") "no sandbox tool and no opt-in is refused")
       (assert (= (jl/jailMode "" true) "lexical") "no sandbox tool with the opt-in is lexical")
       (assert (and (= (jl/jailMode "sandbox-exec" false) "os") (= (jl/jailMode "/usr/bin/bwrap" true) "os")) "a sandbox tool is used whatever the opt-in says")

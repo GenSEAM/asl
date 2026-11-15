@@ -122,10 +122,23 @@ fn ! testRecordsOf -> Bool
         (assert (listContains? ids "R1") "a trialRun spanning lines is read")
         true))
 
+fn infoRun sig: String -> ta/Verdict
+  (ta/classify (optionOr (listHead (ta/parseForms (str "(:trialRun :stages ((:write :ok false)) :leon (:turns 20 :signals (\"" sig "\") :ops () :lastGate (:exit 1 :failed 2)))"))) (rd/makeList (list))))
+
+fn ! testInfoSignals -> Bool
+  (let [(r (infoRun "reread"))
+        (g (infoRun "greenDoneHeld"))
+        (e (infoRun "modelEscalated"))]
+    (do (assert (= r.class "wReadLoop") (str "reread-only zero-write run is wReadLoop: " r.class " " r.why))
+        (assert (= g.class "wReadLoop") (str "greenDoneHeld-only zero-write run is wReadLoop: " g.class " " g.why))
+        (assert (!= e.class "wReadLoop") (str "modelEscalated is not a read loop: " e.class))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testExtras) "H1, unknown shapes, node2 records and rows map as expected")
       (assert (testClasses) "one fixture per class maps to its class and insert")
       (assert (testPrecedence) "precedence swaps that a fixture pins go red")
       (assert (testReport) "report counts by model, class and insert")
       (assert (testRecordsOf) "file reading: write rows per line, trialRun forms across lines")
+      (assert (testInfoSignals) "informational signals reread and greenDoneHeld keep a zero-write run a read loop")
       true)

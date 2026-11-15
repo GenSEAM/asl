@@ -1,5 +1,5 @@
 (module asl-cli/nativeRefresh
-  :x [refresh! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
+  :x [refresh! acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
   :i [(asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref BIN-ASL-ASL :do "the slow half of bin/asl, moved out of the shell: a native CLI whose deps list names a source that is missing or newer than the head is suspect and never runs before this refresh has taken the shared build lock (lock/pid, created exclusively, dead holders cleared), verified the binary byte for byte or rebuilt it through the builder closure, rewritten the head and checked the sources did not move again; a failure is one ERR_NATIVE_STALE line on stdout and exit 2, progress goes to stderr")
@@ -36,20 +36,21 @@ fn ! heldPid lock: String -> String
 fn ! sinceS beganNs: Int64 -> Int64
   (/ (- (monotonicNs) beganNs) 1000000000)
 
-; (:m :ref BIN-ASL-ASL :do "lock/pid is created exclusively; an empty pid file counts a try and is dropped after five, a dead holder is dropped at once")
+; (:m :ref NATIVE-LOCK-PIDNS :do "lock/pid is created exclusively with its identity (lock/id.PID); an empty pid file counts a try and is dropped after five; a holder that nc/lockStale! names stale (foreign pid namespace, own pid or ancestor, dead, start time changed, older than the wait budget) is dropped by an atomic rename that only succeeds on the pid file that was judged, then the loop claims again")
 fn ! acquire! lock: String beganNs: Int64 deadlineNs: Int64 nextReportNs: Int64 tries: Int64 waitS: Int64 reportS: Int64 -> (Result Int64 String)
-  (if (ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
+  (if (nc/claimLock! lock (procSelf))
     (ok (sinceS beganNs))
     (let [held (heldPid lock)
           heldN (optionOr (stringToInt64 held) 0)
           emptyHeld (stringEmpty? held)
           tries2 (if emptyHeld (+ tries 1) tries)
-          _drop (if (or (and emptyHeld (> tries2 5)) (and (not emptyHeld) (not (nc/alive? heldN)))) (ok? (pathRemove (str lock "/pid"))) false)]
-      (if (>= (monotonicNs) deadlineNs)
+          why (if emptyHeld "" (nc/lockStale! lock waitS))
+          _drop (if (and emptyHeld (> tries2 5)) (ok? (pathRemove (str lock "/pid"))) (if (stringEmpty? why) false (nc/dropStale! lock heldN)))]
+      (if (and (>= (monotonicNs) deadlineNs) (not _drop))
         (err (str "the build lock stayed held by pid " (if emptyHeld "unknown" held) " for " (stringFromInt64 (sinceS beganNs)) "s, past the budget ASL_NATIVE_BUILD_WAIT=" (stringFromInt64 waitS) "s"))
-        (let [report (>= (monotonicNs) nextReportNs)
+        (let [report (and (not _drop) (>= (monotonicNs) nextReportNs))
               _say (if report (do (eprintln (str "(:wait :nativeCli :lockPid " (if emptyHeld "unknown" held) " :elapsedS " (stringFromInt64 (sinceS beganNs)) " :budgetS " (stringFromInt64 waitS) ")")) true) false)
-              _sleep (sleepMs 1000)
+              _sleep (if _drop false (do (sleepMs 1000) true))
               _mk (dirCreate lock)]
           (acquire! lock beganNs deadlineNs (if report (+ (monotonicNs) (* reportS 1000000000)) nextReportNs) tries2 waitS reportS)))))
 

@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
+  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -497,6 +497,101 @@ fn ! heldPid lock: String -> Int64
 fn ! alive? pid: Int64 -> Bool
   (and (> pid 1) (resultOr (procAlive? pid) false))
 
+; (:m :ref NATIVE-LOCK-PIDNS :do "a lock records pid plus identity (lock/id.PID: namespace id, process start, creation time) because a bare pid is meaningless across pid namespaces: a bubblewrap --unshare-pid jail reuses small numbers, so a killed holder's lock read as alive forever; lockStaleWhy names why a holder no longer holds (foreignNamespace, ownPid, ancestor, dead, startMismatch, expired) and an old pid-only lock is judged by the rules that need no identity")
+fn nsFromLink text: String -> String
+  (let [(t (stringTrim text))]
+    (if (and (stringStartsWith? t "pid:[") (and (stringEndsWith? t "]") (> (stringLength t) 6))) t ""))
+
+fn ! nsId! -> String
+  (nsFromLink (resultOr (fileReadlink "/proc/self/ns/pid") ""))
+
+fn statRestOf text: String -> (List String)
+  (let [(parts (stringSplit text ")"))]
+    (if (< (listLength parts) 2)
+      (list)
+      (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (stringTrim (optionOr (listGet parts (- (listLength parts) 1)) "")) " "))))
+
+fn statStartField text: String -> String
+  (let [(f (statRestOf text))]
+    (if (>= (listLength f) 20) (optionOr (listGet f 19) "") ""))
+
+fn statPpidField text: String -> String
+  (let [(f (statRestOf text))]
+    (if (>= (listLength f) 2) (optionOr (listGet f 1) "") ""))
+
+fn ! statRest! pid: Int64 -> (List String)
+  (statRestOf (resultOr (fileReadString (str "/proc/" (stringFromInt64 pid) "/stat")) ""))
+
+fn ! psField! pid: Int64 field: String -> String
+  (let [(d (boundedCapture! (str "ps -o " field "= -p " (stringFromInt64 pid) " 2>/dev/null") 3000))]
+    (stringTrim (stringReplace d.stdout "\n" " ")))
+
+fn ! startOf! pid: Int64 -> String
+  (let [(f (optionOr (listGet (statRest! pid) 19) ""))]
+    (if (stringEmpty? f) (psField! pid "lstart") f))
+
+fn ! ppidOf! pid: Int64 -> Int64
+  (let [(f (optionOr (listGet (statRest! pid) 1) ""))]
+    (optionOr (stringToInt64 (if (stringEmpty? f) (psField! pid "ppid") f)) 0))
+
+fn ! ancestorsOf! pid: Int64 depth: Int64 -> (List Int64)
+  (if (or (<= pid 1) (<= depth 0))
+    (list)
+    (let [(p (ppidOf! pid))]
+      (if (<= p 0) (list) (cons p (ancestorsOf! p (- depth 1))))))
+
+fn ! idText! pid: Int64 -> String
+  (str "ns=" (nsId!) "\nstart=" (startOf! pid) "\ncreated=" (stringFromInt64 (nowNs)) "\n")
+
+fn idField text: String key: String -> String
+  (let [(prefix (str key "="))]
+    (match (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l prefix)) (stringLines text)))
+      ((none) "")
+      ((some l) (stringTrim (optionOr (stringSlice l (stringLength prefix) (stringLength l)) "")))))
+
+fn lockStaleWhy held: Int64 id: String selfPid: Int64 ancestors: (List Int64) selfNs: String curStart: String isAlive: Bool ageS: Int64 budgetS: Int64 -> String
+  (let [(ns (idField id "ns"))
+        (start (idField id "start"))]
+    (cond
+      ((and (not (stringEmpty? ns)) (and (not (stringEmpty? selfNs)) (!= ns selfNs))) "foreignNamespace")
+      ((= held selfPid) "ownPid")
+      ((listContains? ancestors held) "ancestor")
+      ((not isAlive) "dead")
+      ((and (not (stringEmpty? start)) (and (not (stringEmpty? curStart)) (!= start curStart))) "startMismatch")
+      ((> ageS budgetS) "expired")
+      (else "")))
+
+fn ! lockStale! lock: String budgetS: Int64 -> String
+  (let [(held (heldPid lock))
+        (id (resultOr (fileReadString (str lock "/id." (stringFromInt64 held))) ""))
+        (isAlive (alive? held))
+        (made (optionOr (stringToInt64 (idField id "created")) (match (fileStat (str lock "/pid")) ((ok st) st.mtimeNs) ((err _) (nowNs)))))
+        (ageS (/ (- (nowNs) made) 1000000000))
+        (start (idField id "start"))]
+    (if (<= held 0)
+      ""
+      (lockStaleWhy held id (procSelf) (if isAlive (ancestorsOf! (procSelf) 64) (list)) (nsId!) (if (and isAlive (not (stringEmpty? start))) (startOf! held) "") isAlive ageS budgetS)))
+
+fn ! writeId! lock: String pid: Int64 -> Bool
+  (ok? (fileWrite (str lock "/id." (stringFromInt64 pid)) (idText! pid)))
+
+fn ! claimLock! lock: String pid: Int64 -> Bool
+  (if (ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 pid) "\n")))
+    (do (writeId! lock pid) true)
+    false)
+
+fn ! dropStale! lock: String held: Int64 -> Bool
+  (let [(pidPath (str lock "/pid"))
+        (mine (str pidPath ".stale." (stringFromInt64 (procSelf))))
+        (before (stringTrim (resultOr (fileReadString pidPath) "")))]
+    (if (and (= before (stringFromInt64 held)) (ok? (pathRename pidPath mine)))
+      (let [(got (stringTrim (resultOr (fileReadString mine) "")))
+            (same (= got before))
+            (_ (if same (pathRemove (str lock "/id." (stringFromInt64 held))) (fileCreateExclusive pidPath (str got "\n"))))
+            (_r (pathRemove mine))]
+        same)
+      false))
+
 fn detachScript -> String
   "perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' \"$@\" < /dev/null >> \"$NATIVE_CLI_LOG\" 2>&1 & echo $!"
 
@@ -522,7 +617,7 @@ fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
             (part (str lock "/pid.part"))]
         (if (or (!= d.exitCode 0) (<= pid 1))
           (do (pathRemove lock) (str "its build did not start: " (stringReplace (stringTrim (str d.stdout " " d.stderr)) "\n" " ")))
-          (do (match (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
+          (do (writeId! lock pid) (match (fileWrite part (str (stringFromInt64 pid) "\n")) ((ok _) (pathRename part (str lock "/pid"))) ((err e) (err e)))
               (str "its build started in the background (log " log ")"))))))
 
 fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> String
@@ -531,16 +626,17 @@ fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> Str
       last
       (match (dirCreate lock)
         ((err e) (str "cannot create " lock ": " e))
-        ((ok _) (match (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))
-          ((ok _) (spawnBuilder! ctx cache lock))
-          ((err e) (let [(held (heldPid lock))]
-                     (if (alive? held)
-                       (str "pid " (stringFromInt64 held) " is building it")
-                       (do (pathRemove lock) (startBuild! ctx cache (- tries 1) "a stale build lock was cleared"))))))))))
+        ((ok _) (if (claimLock! lock (procSelf))
+          (spawnBuilder! ctx cache lock)
+          (let [(held (heldPid lock))
+                (why (lockStale! lock (buildWaitS! ctx)))]
+            (if (and (> held 1) (stringEmpty? why))
+              (str "pid " (stringFromInt64 held) " is building it")
+              (do (dropStale! lock held) (startBuild! ctx cache (- tries 1) (str "a stale build lock was cleared (" (if (stringEmpty? why) "unreadable" why) ")"))))))))))
 
 fn ! waitBuild! lock: String deadlineNs: Int64 -> Bool
   (let [(owner (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str lock "/owner")) ""))) 0))]
-  (if (and (alive? (heldPid lock)) (or (= owner 0) (alive? owner)) (< (monotonicNs) deadlineNs))
+  (if (and (> (heldPid lock) 1) (stringEmpty? (lockStale! lock 3600)) (or (= owner 0) (alive? owner)) (< (monotonicNs) deadlineNs))
     (do (sleepMs 1000) (waitBuild! lock deadlineNs))
     true))
 
@@ -696,7 +792,7 @@ fn ! takeLock! cache: String -> (Option Bool)
       ((= held (procSelf)) (some false))
       ((and (> held 1) (listContains? (run/descendantsOf (run/psSnapshot) held) (procSelf))) (some false))
       ((not (ok? (dirCreate lock))) (none))
-      ((ok? (fileCreateExclusive (str lock "/pid") (str (stringFromInt64 (procSelf)) "\n"))) (some true))
+      ((claimLock! lock (procSelf)) (some true))
       (else (none))))
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "a build leases every seed, rt, asl1 or cli entry it reuses or makes before it touches it: leases/NAME@PID holds pid and start; a lease of a live pid pins NAME, a dead one is dropped, and the build drops its own at its end")
