@@ -44,6 +44,11 @@ fn ! alternates? events: (List String) -> Bool
                 ((none) (= e "e"))
                 ((some n) (and (!= e n) (alternates? (optionOr (listTail events) (list))))))))
 
+; (:m :ref NATIVE-LOCK-PIDNS :do "the live holder is a process that is neither this test nor an ancestor of the refresh it runs (the lock treats own pid and ancestors as stale), recorded with its real start time and this namespace")
+fn ! otherLive! -> Int64
+  (let [(skip (cons (procSelf) (nc/ancestorsOf! (procSelf) 64)))]
+    (optionOr (listHead (filter (fn [(p Int64)] -> Bool (and (nc/alive? p) (not (listContains? skip p)))) (map (fn [(q (Pair Int64 Int64))] -> Int64 (pairFirst q)) (run/psSnapshot)))) 0))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (built (headDirOf root))
@@ -53,7 +58,8 @@ fn ! runTests -> Bool
         (pointed (put! head (str built "\n")))
         (heldLock (str cache "/lock"))
         (heldMade (dirCreate heldLock))
-        (heldPid (put! (str heldLock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
+        (holder (otherLive!))
+        (heldPid (and (> holder 1) (and (put! (str heldLock "/pid") (str (stringFromInt64 holder) "\n")) (put! (str heldLock "/id." (stringFromInt64 holder)) (str "ns=" (nc/nsId!) "\nstart=" (nc/startOf! holder) "\ncreated=" (stringFromInt64 (nowNs)) "\n")))))
         (held (refresh! root cache (list "ASL_NATIVE_BUILD_WAIT=2" "ASL_NATIVE_WAIT_REPORT_S=1")))
         (stillHeld (stringTrim (resultOr (fileReadString (str heldLock "/pid")) "")))
         (cleared (pathRemove heldLock))
@@ -81,9 +87,9 @@ fn ! runTests -> Bool
     (do (assert (and (ok? madeCache) pointed (ok? heldMade) heldPid) "the private cache, its head and a live lock holder were made")
         (assert (= held.exit 2) (str "a live lock holder that outlasts ASL_NATIVE_BUILD_WAIT fails the refresh: " held.out))
         (assert (stringContains? held.out "ERR_NATIVE_STALE") (str "the held-lock failure is ERR_NATIVE_STALE on stdout: " held.out))
-        (assert (stringContains? held.out (str "the build lock stayed held by pid " (stringFromInt64 (procSelf)))) (str "the failure names the holder: " held.out))
+        (assert (stringContains? held.out (str "the build lock stayed held by pid " (stringFromInt64 holder))) (str "the failure names the holder: " held.out))
         (assert (stringContains? held.out "(:wait :nativeCli :lockPid") (str "waiting on the lock reports progress on stderr: " held.out))
-        (assert (= stillHeld (stringFromInt64 (procSelf))) "a refresh that never got the lock leaves the holder's pid file alone")
+        (assert (= stillHeld (stringFromInt64 holder)) "a refresh that never got the lock leaves the holder's pid file alone")
         (assert (and (ok? cleared) (ok? deadMade) deadPid) "the live lock was replaced by one held by a dead pid")
         (assert (= dead.exit 0) (str "a dead holder is cleared and a fresh head verifies: " dead.out dead.out))
         (assert lockGone "a finished refresh removes the lock")
