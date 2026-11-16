@@ -46,6 +46,11 @@ fn testConfig -> Bool
         (assert (not bad.on) "a value outside its range turns the row off")
         (assert (not (listEmpty? unk)) "an unknown key is an error")
         (assert (= (sl/cfgOf "(:stall)").emptyReplies 4) "defaults are the adopted ones")
+        (assert (= (sl/parkAfterOf "(:stall :stalledMin 20)") 3) "parkAfter defaults to 3")
+        (assert (= (sl/parkAfterOf "(:stall :stalledMin 20 :parkAfter 5)") 5) "a :parkAfter row is read")
+        (assert (sl/cfgOf "(:stall :parkAfter 5)").on "parkAfter is a known key, the row stays on")
+        (assert (not (sl/cfgOf "(:stall :parkAfter 0)").on) "parkAfter 0 is outside its range")
+        (assert (= (sl/parkAfterOf "(:stall :parkAfter 0)") 3) "an invalid row keeps the default bound")
         true))
 
 fn testVerdicts -> Bool

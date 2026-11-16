@@ -3,7 +3,7 @@
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
       NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn readsIn streakIn readAtOf opRowAt readsTop readsKeyChars receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
-      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail redBefore? baselineRan? baselineVerdicts? baselineRanWith? heldRounds rereadEntry? opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
+      providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! providerWaitSleep! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail redBefore? baselineRan? baselineVerdicts? baselineRanWith? heldRounds rereadEntry? opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
@@ -1605,6 +1605,10 @@ fn attractorProvider p: pv/Provider prefill: String left: (Option Int64) -> pv/P
 fn ! liveProviderRetry! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) -> (Pair pv/Turn Int64)
   (rt/retryTurn! provider call 3 (list 1 2 4) wallBudget sleep now)
 
+; (:m :ref WRITE-STAGE-YIELD :do "every pause of the live turn's provider retry and all-down wait first appends (:providerWait :turn N :sec S) to the run journal, so a conductor stall probe sees a writer waiting on its provider instead of a silent hang (node2 2026-11-16: 36 stalls after 00:45 ended 1205-1407 s after the last journal row, with allDownWaitSec 1200)")
+fn ! providerWaitSleep! path: String turn: Int64 sleep: (fn [Int64] -> Bool) -> (fn [Int64] -> Bool)
+  (fn [secs] (do (fileAppend path (str "(:providerWait :turn " (stringFromInt64 turn) " :sec " (stringFromInt64 secs) ")\n")) (sleep secs)))
+
 ; (:m :ref LEON-TURN-ALLDOWN-WAIT :do "the live turn's retry: the quick retries, then waits on an all-down gateway inside the run root's allDownWaitSec and allDownPauseSec, so the same session resumes instead of the unit ending with :stop provider")
 fn ! liveProviderWait! provider: pv/Provider call: (fn [pv/Provider Int64] -> pv/Turn) wallBudget: (Option Int64) sleep: (fn [Int64] -> Bool) now: (fn [] -> Float64) rootDir: String -> (Pair pv/Turn Int64)
   (rt/retryTurnWaiting! provider call 3 (list 1 2 4) wallBudget sleep now (ctx/allDownWaitSecFor! rootDir) (ctx/allDownPauseSecFor! rootDir))
@@ -2256,7 +2260,7 @@ fn ! liveTurn! ra: RunArgs repoRoot: String rootDir: String path: String system:
           (match env.wallBudget
             ((some w) (some (max 0 (- w (optionOr (float64ToInt64 (- (env.now) state.runStarted)) 0)))))
             ((none) none))
-          env.sleep env.now rootDir)))
+          (providerWaitSleep! path turn env.sleep) env.now rootDir)))
         modelEndNs (monotonicNs)
         _unwatched (parentUnwatch! watcher)
         _retryLogged (appendRetryLines! path turn (pairSecond retried))]
