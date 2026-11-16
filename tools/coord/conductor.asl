@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchPick batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchPick batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -575,6 +575,162 @@ fn ! mergeFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
       (let [(c2 (move! ctx c1 "merging" "merge" "" 0 0 (str (if (progressed? c.sig sig) "progress: " "retry: ") (verdictSig sig)) ms))]
         (launch! ctx u c2))))
 
+; (:m :ref MERGE-RED-TO-WRITER :do "a train red the unit's own branch caused goes back to the writer as a fix round instead of a retry of the same train: the ladder row (:mergeRed :fixRounds N) in <store>/ladder.asn grants N such rounds per unit, counted in the journal since its last operator requeue; no row, or a row mergeRedErrors rejects, is 0 and the merge failure path is the one before the row existed")
+fn mergeRedRoundsMax -> Int64
+  10
+
+fn ! mergeRedRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:mergeRed ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn mergeRedErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":mergeRed" ":fixRounds") k))) keys))]
+    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+                (match (stringToInt64 (sp/tokAfter row ":fixRounds"))
+                  ((none) (list ":fixRounds missing or not a whole number"))
+                  ((some v) (if (or (< v 0) (> v (mergeRedRoundsMax))) (list (str ":fixRounds " (n v) " outside 0.." (n (mergeRedRoundsMax)))) (list))))))
+
+fn mergeRedRounds row: String -> Int64
+  (if (or (stringEmpty? row) (not (listEmpty? (mergeRedErrors row)))) 0 (optionOr (stringToInt64 (sp/tokAfter row ":fixRounds")) 0))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the addendum bounds, adopted: at most 4 red suites with at most 600 bytes of error text each; suites past the bound are counted in :more and the bytes cut from a suite's error in its :errCut")
+fn mergeRedSuitesMax -> Int64
+  4
+
+fn mergeRedErrMax -> Int64
+  600
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the red suites of one train attributed to one branch: suites are the rendered (:suite ...) forms the writer gets, more the suites past the bound, key a digest of every such suite's path, exit, assert count and error text with ids masked (sigKey), the same for the same red")
+(schema MergeRed
+  (:f suites (List String)) (:f more Int64) (:f key String))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the entries of a receipt's :red list as balanced forms, string literals skipped, so an error text with parentheses stays inside its entry")
+fn redEntries s: String i: Int64 acc: (List String) -> (List String)
+  (if (>= i (stringLength s)) acc
+    (let [(c (optionOr (stringSlice s i (+ i 1)) ""))]
+      (cond
+        ((= c "(") (let [(e (formEnd s i 0 false false))] (redEntries s e (listAppend acc (list (optionOr (stringSlice s i e) ""))))))
+        ((= c " ") (redEntries s (+ i 1) acc))
+        (else acc))))
+
+fn redListOf receipt: String -> (List String)
+  (let [(parts (stringSplit receipt " :red ("))]
+    (if (< (listLength parts) 2) (list) (redEntries (stringJoin (optionOr (listTail parts) (list)) " :red (") 0 (list))))
+
+fn entryPath e: String -> String
+  (quotedAfter e "(\"")
+
+fn entryBranch e: String -> String
+  (quotedAfter e (str "(\"" (entryPath e) "\" \""))
+
+fn entryNum e: String i: Int64 -> Int64
+  (let [(rest (optionOr (listGet (stringSplit e (str "(\"" (entryPath e) "\" \"" (entryBranch e) "\" ")) 1) ""))]
+    (optionOr (stringToInt64 (optionOr (listGet (stringSplit rest " ") i) "")) -1))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the quoted error lines of a red row, the text between its :err ( and the two closing parens that end the list and the row; empty when the row has none")
+fn errText row: String -> String
+  (let [(parts (stringSplit row " :err ("))]
+    (if (< (listLength parts) 2) ""
+      (let [(rest (stringJoin (optionOr (listTail parts) (list)) " :err ("))]
+        (optionOr (stringSlice rest 0 (max 0 (- (stringLength rest) 2))) ""))))
+
+fn mergeRedSuite lines: (List String) e: String -> String
+  (let [(path (entryPath e))
+        (live (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:redLive " (st/q path) " "))) lines)) ""))
+        (err (errText (if (stringEmpty? live) e live)))
+        (clip (utf8Clip err (mergeRedErrMax)))]
+    (str "(:suite " (st/q path) " :exit " (n (entryNum e 0)) " :asserts " (n (entryNum e 1)) " :err " (st/q clip)
+         (if (< (stringLength clip) (stringLength err)) (str " :errCut " (n (- (stringLength err) (stringLength clip)))) "") ")"))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "a train output whose reds the writer of branch can fix alone: the train ended with its receipt (no kill row, no failed train, no commit error), nothing red on the base (:preexisting empty), no assert loss, every fresh red entry names one branch with the attribution only or alone (no + combination, no interaction, no bisection) and at least one names this branch; none otherwise, so a base red, a timeout or kill, a conflict or guard refusal (no fresh red), an infra failure and a batch-combination red keep the merge failure path")
+fn mergeRedOf out: String branch: String -> (Option MergeRed)
+  (let [(lines (map stringTrim (stringLines out)))
+        (receipt (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:train :head ")) lines)) ""))
+        (killed (listAny? (fn [(l String)] -> Bool (stringStartsWith? l "(:fleetRun :verdict :")) lines))
+        (failed (listAny? (fn [(l String)] -> Bool (stringStartsWith? l "(:train :status :failed")) lines))
+        (pre (stringTrim (segment receipt " :preexisting (" " :assertLoss ")))
+        (lost (stringTrim (segment receipt " :assertLoss (" ")")))
+        (entries (redListOf receipt))
+        (mine (filter (fn [(e String)] -> Bool (= (entryBranch e) branch)) entries))
+        (combined (listAny? (fn [(e String)] -> Bool (or (stringContains? (entryBranch e) "+") (not (listContains? (list "only" "alone") (wordAfter e " :why "))))) entries))]
+    (if (or (stringEmpty? receipt) (or killed (or failed (or (stringContains? receipt " :commitError ") (or (!= pre ")") (or (not (stringEmpty? lost)) (or combined (or (stringEmpty? branch) (listEmpty? mine)))))))))
+      (none)
+      (let [(all (map (fn [(e String)] -> String (mergeRedSuite lines e)) mine))]
+        (some (MergeRed :suites (listTake all (mergeRedSuitesMax)) :more (max 0 (- (listLength all) (mergeRedSuitesMax)))
+                        :key (n (fnv1a64 (sigKey (stringJoin (listSort all) " ")))))))))
+
+fn mergeRedMust -> String
+  "the merge train ran this branch merged onto the current dev and the suites in :red went red, attributed to this branch alone; fix the cause on this branch so that every listed suite passes; no assert may be removed, skipped or weakened"
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the task addendum of one fix round, one ASN form the brief carries after the prior note: (:mergeRed :round K :of N :branch B :red ((:suite P :exit E :asserts A :err TEXT [:errCut BYTES]) ...) :more M :must TEXT)")
+fn mergeRedNote r: MergeRed round: Int64 of: Int64 branch: String -> String
+  (str "(:mergeRed :round " (n round) " :of " (n of) " :branch " (st/q branch) " :red (" (stringJoin r.suites " ") ") :more " (n r.more) " :must " (st/q (mergeRedMust)) ")")
+
+fn mergeRedPath dir: String id: String -> String
+  (runPath dir id "mergeRed" "txt")
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the addendum the next writer run of the unit gets, empty when none; finish! removes it whenever a merge stage of the unit ends, so it rides every writer run between the fix round and the next train, a review fix round after it too")
+fn ! mergeRedNote! dir: String id: String -> String
+  (stringTrim (readOr (mergeRedPath dir id)))
+
+fn withMergeRed prior: String note: String -> String
+  (cond ((stringEmpty? note) prior) ((stringEmpty? prior) note) (else (str prior "\n" note)))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the fix rounds a unit took since its last operator requeue (a :to queued :stage requeue move) and the key of the newest, from its (:mergeRed :unit :action fixRound ...) journal rows")
+fn ! mergeRedHistory dir: String id: String -> (Pair Int64 String)
+  (let [(qid (st/q id))
+        (req (str "(:t :unit " qid " "))
+        (row (str "(:mergeRed :unit " qid " :action fixRound "))]
+    (fold (fn [(acc (Pair Int64 String)) (l String)] -> (Pair Int64 String)
+            (cond
+              ((stringStartsWith? l row) (pair (+ (pairFirst acc) 1) (quotedAfter l " :key \"")))
+              ((and (stringStartsWith? l req) (stringContains? l " :to queued :stage requeue ")) (pair 0 ""))
+              (else acc)))
+          (pair 0 "") (journalLinesOf dir)))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "the newest kept train attempt of the unit when its :trainAttempt row carries this very signature, else empty: a merge that failed before any train (a refusal, a fetch) never reads an older attempt's reds")
+fn ! newestTrainOut! dir: String id: String sig: String -> String
+  (let [(tdir (trainsDir dir id))]
+    (match (listLast (attemptFiles (resultOr (dirList tdir) (list))))
+      ((none) "")
+      ((some f)
+        (let [(t (readOr (str tdir "/" f)))]
+          (if (stringContains? (optionOr (listHead (stringLines t)) "") (str " :sig " (st/q sig) ")")) t "")))))
+
+fn ! mergeRedRow! dir: String id: String action: String round: Int64 of: Int64 r: MergeRed why: String sig: String -> Bool
+  (ok? (fileAppend (journalPath dir) (str "(:mergeRed :unit " (st/q id) " :action " action " :round " (n round) " :of " (n of) " :key " (st/q r.key)
+                                          " :suites " (n (listLength r.suites)) " :more " (n r.more) (if (stringEmpty? why) "" (str " :why " why)) " :sig " (st/q (verdictSig sig)) " :at " (n (nowMs)) ")\n")))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "a merge failure of the unit: a train red mergeRedOf gives to this branch, with rounds left and not the red the last fix round was sent for, is fix round K: the lease dropped, the addendum written, one (:mergeRed :action fixRound) row, and the unit moves to ready at stage mergeRed with its fail count 0, its batch mark cleared and the signature mergeRedFix K/N: SIG, so the writer claims it on the same branch sh/UNIT (reattached, rebased onto its base when that moved, as a review fix round is) and the unit passes gating and review again; with no round left (exhausted) or the same key as the last round (unchanged) it escalates to blocked at once with one (:mergeRed :action escalate) row and the count in the verdict; anything else is mergeFail!")
+fn ! mergeRedOrFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
+  (let [(rounds (mergeRedRounds (mergeRedRowOf ctx.dir)))
+        (red (if (or (<= rounds 0) (not (stringStartsWith? sig "train red:"))) (none) (mergeRedOf (newestTrainOut! ctx.dir c.id sig) c.branch)))]
+    (match red
+      ((none) (mergeFail! ctx u c sig ms))
+      ((some r)
+        (let [(h (mergeRedHistory ctx.dir c.id))
+              (done (pairFirst h))
+              (same (and (> done 0) (= r.key (pairSecond h))))]
+          (if (or same (>= done rounds))
+            (mergeRedEscalate! ctx c sig r done rounds (if same "unchanged" "exhausted") ms)
+            (mergeRedFix! ctx c sig r (+ done 1) rounds ms))))))
+
+fn ! mergeRedFix! ctx: Ctx c: CUnit sig: String r: MergeRed round: Int64 of: Int64 ms: Int64 -> CUnit
+  (let [(_ (dropLease! ctx c))
+        (_ (dirCreate (runsDir ctx.dir)))
+        (_ (fileWrite (mergeRedPath ctx.dir c.id) (str (mergeRedNote r round of c.branch) "\n")))
+        (_ (mergeRedRow! ctx.dir c.id "fixRound" round of r "" sig))
+        (tag (str "mergeRedFix " (n round) "/" (n of) ": " (verdictSig sig)))]
+    (move! ctx (with c :fails 0 :sig tag :epoch 0 :await "" :waited 0) "ready" "mergeRed" "" 0 0 tag ms))
+
+fn ! mergeRedEscalate! ctx: Ctx c: CUnit sig: String r: MergeRed done: Int64 of: Int64 why: String ms: Int64 -> CUnit
+  (let [(c1 (with c :fails (mergeFailsAfter c.sig c.fails sig) :sig sig))
+        (_ (dropLease! ctx c1))
+        (_ (mergeRedRow! ctx.dir c.id "escalate" done of r why sig))
+        (tried (str "merge red on its own branch after " (n done) " of " (n of) " fix rounds" (if (= why "unchanged") ", the last round left the same red" "")))
+        (c2 (escalate! ctx (with c1 :epoch 0 :await (if (= c1.await "solo") "" c1.await)) sig tried))]
+    (move! ctx c2 "blocked" "merge" "" 0 0 (str "escalated: mergeRed " why " " (n done) "/" (n of) ": " (verdictSig sig)) ms))
+
 fn ! poll! ctx: Ctx c: CUnit -> (Option Res)
   (let [(stage (stageName c.st))
         (row (runRow ctx.dir c.id stage))
@@ -723,7 +879,8 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
         (res (ledgerGuard ctx.dir u c res0))
         (stage (stageName c.st))
         (_ (dropRun! ctx.dir c.id stage))
-        (_ (if (= c.st "merging") (applyPassengers! ctx c) 0))]
+        (_ (if (= c.st "merging") (applyPassengers! ctx c) 0))
+        (_ (if (= c.st "merging") (ok? (pathRemove (mergeRedPath ctx.dir c.id))) false))]
     (cond
       ((= c.st "writing")
         (if (providerHit? ctx u c res) (providerRequeue! ctx c res) (let [(_ (pwReset! ctx.dir c.id))] (if (= res.ok 1)
@@ -798,7 +955,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
             ((err e) (let [(_ (mergeFail! ctx u c e res.ms))] ())))
           (if (and (baseRedSig? res.sig) (not (stringEmpty? (trainHead! ctx u))))
             (let [(_ (baseHold! ctx u c res.sig res.ms))] ())
-            (let [(_ (mergeFail! ctx u c res.sig res.ms))] ()))))))
+            (let [(_ (mergeRedOrFail! ctx u c res.sig res.ms))] ()))))))
       (else ())))
 
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "when a merge leader finishes, the rows its child wrote for the passengers are applied first, each through finish! as if the passenger's own merge had ended, the members with a verdict of their own before those retried (rebatch, solo), so a retried member's next train never carries one that just merged; a row is applied only while its unit is still merging, unlaunched and at the epoch the batch saw, any other is journalled as (:batchStale) for the lead; the batch and pass files are removed")
@@ -1533,9 +1690,11 @@ fn ! bpNote! ctx: Ctx cus: (List CUnit) -> String
 ; (:m :ref BP-VISIBLE :do "the ladder rows whose keys and ranges the conductor checks at start and in conductor check, as the lane problems are: a (:backpressure) row bpErrors rejects and a (:train) row trainErrors rejects each name their problems; no row is no problem")
 fn ! ladderProblems dir: String -> (List String)
   (let [(bp (bpRowOf dir))
-        (tr (trainRowOf dir))]
-    (listAppend (if (stringEmpty? bp) (list) (map (fn [(p String)] -> String (str "ladder backpressure: " p)) (bpErrors bp)))
-                (if (stringEmpty? tr) (list) (map (fn [(p String)] -> String (str "ladder train: " p)) (trainErrors tr)))))
+        (tr (trainRowOf dir))
+        (mr (mergeRedRowOf dir))]
+    (listAppend (listAppend (if (stringEmpty? bp) (list) (map (fn [(p String)] -> String (str "ladder backpressure: " p)) (bpErrors bp)))
+                            (if (stringEmpty? tr) (list) (map (fn [(p String)] -> String (str "ladder train: " p)) (trainErrors tr))))
+                (if (stringEmpty? mr) (list) (map (fn [(p String)] -> String (str "ladder mergeRed: " p)) (mergeRedErrors mr)))))
 
 fn ! startupProblemsIn dir: String rc: RealCfg -> (List String)
   (listAppend (startupProblemsFor rc) (ladderProblems dir))
@@ -1660,12 +1819,17 @@ fn ! status! ctx: Ctx -> String
                   (list (str "(:running (" (idList cus active?) "))")
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
                         (str "(:held (" (idList cus (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (= c.await "mergeHold")))) "))")
+                        (str "(:mergeRedFix (" (stringJoin (map (fn [(c CUnit)] -> String (st/q (str c.id " " (segment c.sig "mergeRedFix " ":")))) (filter mergeRedFixing? cus)) " ") "))")
                         (str "(:baseHeld (" (stringJoin (map (fn [(c CUnit)] -> String (st/q (str c.id ": " c.await))) (filter (fn [(c CUnit)] -> Bool (baseAwait? c)) cus)) " ") "))")
                         (str "(:parked (" (stringJoin (map (fn [(p (Pair String String))] -> String (st/q (str (pairFirst p) ":" (optionOr (listHead (stringSplit (pairSecond p) "\n")) ""))) ) (parkedRows! ctx.dir)) " ") "))")
                         (str "(:escalations " (n (listLength esc)) ")")
                         (str "(:quarantined (" (stringJoin (map st/q (quarantinedIds ctx.dir)) " ") "))")
                         (match (storeReadError! ctx.dir) ((some e) (str "(:store :unreadable " (st/q e) ")")) ((none) "(:store :ok)"))))
                 "\n"))
+
+; (:m :ref MERGE-RED-TO-WRITER :do "a unit in a merge-red fix round: its signature is still the fix round's and it is on its way back to the merge (ready through merging); status lists each as \"ID K/N\" under :mergeRedFix")
+fn mergeRedFixing? c: CUnit -> Bool
+  (and (stringStartsWith? c.sig "mergeRedFix ") (listContains? (list "ready" "writing" "gating" "awaitReview" "reviewing" "merging") c.st))
 
 fn allowanceUnlimited lane: String -> Int64
   1000000
@@ -2150,6 +2314,7 @@ fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms:
        :sig (if (= verdict "gating") "" (vacuousSig gate)) :ms ms :exit 0 :asserts asserts :verdict "")
 
 ; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "true when the newest review verdict in the unit's journal, a :from reviewing row to ready or blocked at stage review, is newer than its newest writer run, a (:profile :unit ...) row that writeResWith journals before every writer run; keyed on writer runs, not on the head, because a rebase onto a moved main and a writer's own commit both change the head while the failed review still stands (node2 2026-11-04: RELAY-PUSH-SHORTNAME head 0a32c45 failed review four times, each time sent straight back to review by the ahead check)")
+; (:m :ref MERGE-RED-TO-WRITER :do "a merge-red fix round, a :from merging :to ready :stage mergeRed row, counts like a failed review: the branch is ahead and its unit gate green, yet the writer must run on the addendum")
 fn ! reviewFailedSinceWriter? dir: String id: String -> Bool
   (let [(runHead (str "(:profile :unit " (st/q id) " "))
         (tHead (str "(:t :unit " (st/q id) " "))]
@@ -2157,6 +2322,7 @@ fn ! reviewFailedSinceWriter? dir: String id: String -> Bool
             (cond
               ((stringStartsWith? l runHead) false)
               ((and (stringStartsWith? l tHead) (and (stringContains? l " :from reviewing ") (and (stringContains? l " :stage review ") (or (stringContains? l " :to ready ") (stringContains? l " :to blocked "))))) true)
+              ((and (stringStartsWith? l tHead) (and (stringContains? l " :from merging ") (and (stringContains? l " :to ready ") (stringContains? l " :stage mergeRed ")))) true)
               (else failed)))
           false (journalLinesOf dir)))
 
@@ -2562,7 +2728,7 @@ fn ! writeResWith run: (fn ! [RealCfg String String String String String (List S
         (match (aheadGreen! rc dir u c p)
         ((some done) done)
         ((none)
-        (let [(prior (priorNote! dir u.id))
+        (let [(prior (withMergeRed (priorNote! dir u.id) (mergeRedNote! dir u.id)))
               (task (briefTask! p dir u prior))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
