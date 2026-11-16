@@ -1,6 +1,6 @@
-# Why 3B Local Models Fail at Python but Fly on S-Expressions: Zero-Tax Autonomous Coding on Apple Silicon
+# Why Small Local Models Struggle with Python, and Why S-Expressions Should Help
 *Published on September 10, 2026 · 7 min read · By the GenSEAM Team*
-*Canonical URL: https://aslang.dev/blog/why-3b-local-models-fail-at-python-but-fly-on-s-expressions*
+*Canonical URL: https://aslang.dev/blog/why-small-local-models-struggle-with-python*
 
 ## 1. The Bottleneck
 
@@ -57,13 +57,13 @@ enum Event (event id: Int64 valid: Bool)
 enum Tally (tally good: Int64 bad: Int64)
 
 fn step acc: Tally ev: Event -> Tally
-  (mt acc
+  (match acc
     ((tally good bad)
-      (mt ev
+      (match ev
         ((event id valid) (if valid (tally (+ good 1) bad) (tally good (+ bad 1)))))))
 
 fn processEvents queue: (List Event) maxErrors: Int64 -> (Result Int64 Str)
-  (mt (fold step (tally 0 0) queue)
+  (match (fold step (tally 0 0) queue)
     ((tally good bad) (if (>= bad maxErrors) (err "checksum error threshold exceeded") (ok good))))
 
 fn runTests -> Bool
@@ -73,36 +73,35 @@ fn runTests -> Bool
     true)
 ```
 
-`host/out/asl-host test` on this file reports 2 assertions executed, 2 passed. While drafting it we closed one parenthesis too many; the host answered `ERR_READ_UNBALANCED unmatched ')'` with the position, before running anything. That is the property this post is about: a structural mistake is caught by counting delimiters, and the error points at one specific character rather than at a line whose meaning depends on the lines around it.
+`asl test` on this file reports 2 assertions executed, 2 passed. While drafting it we closed one parenthesis too many; the checker answered `ERR_READ_UNBALANCED unmatched ')'` with the position, before running anything. That is the property this post is about: a structural mistake is caught by counting delimiters, and the error points at one specific character rather than at a line whose meaning depends on the lines around it.
 
 What the language gives a small model, concretely:
 
 1. **Explicit closure.** Every `(` is closed by its own `)`. Ending a block is a token the model emits, not a whitespace decision.
 2. **No precedence table.** `(+ good 1)` and `(>= bad maxErrors)` say their evaluation order outright.
-3. **A checked, closed set of names.** The stage-0 host rejects unbound names, wrong arity, non-exhaustive matches over an `enum` and unmarked effects before running a program, so a hallucinated helper is a load error, not a runtime surprise.
-4. **No nil, no exceptions.** Absence is `(none)`, failure is `(err e)`, and both are taken apart with `mt`.
+3. **A checked, closed set of names.** The checker rejects unbound names, wrong arity, non-exhaustive matches over an `enum` and unmarked effects before running a program, so a hallucinated helper is a load error, not a runtime surprise.
+4. **No nil, no exceptions.** Absence is `(none)`, failure is `(err e)`, and both are taken apart with `match`.
 
-There is also a path to constraining generation itself. The `asl-slm` package contains a grammar token-mask engine (`computeTokenMaskBitset`, `isTokenAllowed`) that, given a grammar state and a vocabulary, computes which tokens may come next; its two test suites pass on the stage-0 host (149 checks). It is a library today: it is not wired into `llama.cpp` or any other inference server.
+There is also a path to constraining generation itself. The `asl-slm` package contains a grammar token-mask engine (`computeTokenMaskBitset`, `isTokenAllowed`) that, given a grammar state and a vocabulary, computes which tokens may come next; its two test suites pass (149 checks). It is a library today: it is not wired into `llama.cpp` or any other inference server.
 
 ## 4. What We Have Measured, and What We Have Not
 
 We have not run a recorded comparison of a 3B model writing Python against the same model writing ASL. There is no pass-rate, token or latency figure in the repository for that experiment, so this post quotes none.
 
-The experiment we intend to run is straightforward: the same task specifications, the same quantized model and the same local server, in Python and in ASL, counting first-pass parse success, first-run test success and repair turns to green, with each language's strict checker (`python3 -m py_compile` plus the task's tests on one side, `asl-host check` and `asl-host test` on the other) as the gate. When it is done, the method and raw results will be in the repository before a number appears here.
+The experiment we intend to run is straightforward: the same task specifications, the same quantized model and the same local server, in Python and in ASL, counting first-pass parse success, first-run test success and repair turns to green, with each language's strict checker (`python3 -m py_compile` plus the task's tests on one side, `asl check` and `asl test` on the other) as the gate. When it is done, the method and raw results will be in the repository before a number appears here.
 
 ## 5. Trying It Locally
 
-You can check and run ASL with the stage-0 host from a checkout of the repository:
+You can check and run ASL with the `asl` CLI from a checkout of the repository. The project is pre-release and ships no binaries, so the CLI comes from that checkout:
 
 ```bash
 git clone https://github.com/GenSEAM/asl.git
 cd asl
-sh host/build.sh                     # builds the C host into host/out/
-host/out/asl-host check events.asl   # names, arity, enums, effects
-host/out/asl-host test events.asl    # runs runTests, prints the assertion count
+asl check events.asl   # names, arity, enums, effects
+asl test events.asl    # runs runTests, prints the assertion count
 ```
 
-To point a local model at ASL, give it [`llms.txt`](https://aslang.dev/llms.txt) as the language reference and use `asl-host check` as the gate in your loop: exit code 0 and an executed assertion count are the evidence.
+To point a local model at ASL, give it [`llms.txt`](https://aslang.dev/llms.txt) as the language reference and use `asl check` as the gate in your loop: exit code 0 and an executed assertion count are the evidence.
 
 ## 6. Resources
 

@@ -1,4 +1,4 @@
-# One Source Across Rust, TypeScript, Python & Wasm: The Case Against Multi-Language Glue Drift
+# One Source for Native and WebAssembly Targets: The Case Against Multi-Language Glue Drift
 *By GenSEAM | September 2026*
 
 Modern architectures are polyglot by necessity.
@@ -29,7 +29,7 @@ Protocol Buffers, OpenAPI and JSON Schema standardize data transfer formats. The
                     │                                                   │
                     ▼                                                   ▼
          ┌─────────────────────┐                             ┌─────────────────────┐
-         │     Rust source     │                             │   TypeScript / JS   │
+         │ Native (LLVM IR)    │                             │ JavaScript (exp.)   │
          └─────────────────────┘                             └─────────────────────┘
                     │                                                   │
                     └─────────────────────────┬─────────────────────────┘
@@ -37,7 +37,7 @@ Protocol Buffers, OpenAPI and JSON Schema standardize data transfer formats. The
                     ┌─────────────────────────┴─────────────────────────┐
                     ▼                                                   ▼
          ┌─────────────────────┐                             ┌─────────────────────┐
-         │    Python source    │                             │ WebAssembly module  │
+         │ Python (prototype)  │                             │ WebAssembly module  │
          └─────────────────────┘                             └─────────────────────┘
 ```
 
@@ -67,17 +67,17 @@ fn runTests -> Bool
     true)
 ```
 
-`asl-host test` on this module reports 2 assertions executed, 2 passed.
+`asl test` on this module reports 2 assertions executed, 2 passed.
 
-The language already fixes the edge cases that cause drift, instead of inheriting them from a host language: integer `/` and `mod` floor (`(/ -7 2)` is `-4`, `(mod -7 3)` is `2`), Int64 overflow and division by zero trap (`ERR_INT_OVERFLOW`, `ERR_DIV_ZERO`) rather than wrap, and an Int never mixes with a Float without an explicit conversion (`(+ 1 2.0)` is rejected with `ERR_TYPE_MISMATCH`). Each of those answers was checked with `asl-host eval` on the stage-0 host.
+The language already fixes the edge cases that cause drift, instead of inheriting them from a host language: integer `/` and `mod` floor (`(/ -7 2)` is `-4`, `(mod -7 3)` is `2`), Int64 overflow and division by zero trap (`ERR_INT_OVERFLOW`, `ERR_DIV_ZERO`) rather than wrap, and an Int never mixes with a Float without an explicit conversion (`(+ 1 2.0)` is rejected with `ERR_TYPE_MISMATCH`). Each of those answers was checked with `asl eval`.
 
 What runs today:
-* **The reference host.** The stage-0 host is a C program that checks and runs ASL directly, and `asl-host build FILE -o OUT` embeds a program's modules, with the interpreter, into a standalone executable. On 2026-10-14, a hello-world built this way in a Linux x86_64 container was a 449,248-byte executable (not stripped).
-* **LLVM IR, native and WebAssembly.** The `asl-target-llvm` package lowers linked ASL programs to LLVM IR, for native code and for `wasm32-unknown-unknown`, with its own allocator and garbage collector. On wasm32 the module imports four functions (`asl.write`, `asl.exit`, `asl.nowNs`, `asl.trap`), and the only host builtin a program can call is `print`; clocks, files, environment and sockets are rejected with `ERR_CAPABILITY_ABSENT`. This website is an ASL program compiled that way and run in your browser as `site.wasm`. A self-hosted native compiler, `asl1`, exists as an LLVM IR seed for `arm64-apple-darwin` only; self-hosting is in progress.
-* **SQL.** The `asl-sql` package builds queries and schema definitions as SQL text for PostgreSQL, SQLite, MySQL and ClickHouse; its four suites pass on the host and check the emitted text.
+* **The `asl` CLI.** `asl check`, `asl test` and `asl run` check and run ASL programs directly. This is the reference run that other targets are compared against.
+* **LLVM IR, native and WebAssembly.** The `asl-target-llvm` package lowers linked ASL programs to LLVM IR, for native code and for `wasm32-unknown-unknown`, with its own allocator and garbage collector. On wasm32 the module imports four functions (`asl.write`, `asl.exit`, `asl.nowNs`, `asl.trap`), and the only host builtin a program can call is `print`; clocks, files, environment and sockets are rejected with `ERR_CAPABILITY_ABSENT`. This website is an ASL program compiled that way and run in your browser as `site.wasm`. The compiler is written in ASL and compiles itself through LLVM IR; that self-compile is gated on macOS only, and the bootstrap seed exists for `arm64-apple-darwin` only.
+* **SQL.** The `asl-sql` package builds queries and schema definitions as SQL text for PostgreSQL, SQLite, MySQL and ClickHouse; its four suites pass and check the emitted text.
 
 What we are building:
-* **Source-level lowerings** to Rust, Python, Go, C, Swift and TypeScript. Emitter packages exist under `asl/packages/asl-target-*`, and their unit suites pass on the host, but those suites check the emitted text; none of them compiles and runs the output against the host's answers. The TypeScript emitter is an AST-level prototype that fails on real multi-module programs, the WebAssembly text emitter (`asl-target-wat`) handles only arithmetic, and the C target's run-parity suite currently fails because its corpus is missing. `asl target` lists these targets but does not compile to them.
+* **Source-level lowerings.** JavaScript is experimental, Python and Go are prototypes, and the WebAssembly text emitter (`asl-target-wat`) handles only arithmetic. There is no Rust, TypeScript or C target and no working Swift or shell target. The unit suites of the emitter packages under `asl/packages/asl-target-*` check the emitted text; none of them compiles and runs the output against the reference run's answers. `asl target` lists targets but does not compile to them.
 
 ---
 
@@ -87,10 +87,10 @@ Cross-compilation without verification is wishful thinking. Runtimes differ on i
 
 The gate we intend to hold every target to is differential:
 
-1. **Function-level:** run pure ASL functions on identical inputs on the reference host and on each target, and require equal results.
+1. **Function-level:** run pure ASL functions on identical inputs in the reference run and on each target, and require equal results.
 2. **Program-level:** run whole programs on each target and compare standard output, exit codes and file effects byte for byte.
 
-A target joins the supported set only when it passes this gate against the stage-0 host. None of the source-level targets has yet; that is the work ahead.
+A target joins the supported set only when it passes this gate against the reference run. None of the source-level targets has yet; that is the work ahead.
 
 ---
 
@@ -99,7 +99,7 @@ A target joins the supported set only when it passes this gate against the stage
 If one ASL source becomes the shared logic layer across a polyglot architecture:
 
 * **Less glue code:** fewer hand-written FFI wrappers, SWIG layers and duplicated type definitions.
-* **Fewer cross-stack bugs:** logic checked once on the reference host behaves the same when lowered to a Rust service or a Python worker, because the gate says so.
-* **Refactoring once:** an agent can change an algorithm in one ASL module, verify it on the host, and regenerate every target.
+* **Fewer cross-stack bugs:** logic checked once in the reference run would behave the same when lowered to a target, because the gate says so. That holds only for targets that pass the gate, and none of the source-level ones does yet.
+* **Refactoring once:** an agent can change an algorithm in one ASL module, verify it with the reference run, and regenerate every target.
 
-Today one source runs on the reference host and, through LLVM, as native code and as WebAssembly in the browser. The source-level targets are the roadmap, and we will say so until each passes its gate.
+Today one source runs through the `asl` CLI and, through LLVM, as native code and as WebAssembly in the browser. The source-level targets are the roadmap, and we will say so until each passes its gate.

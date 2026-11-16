@@ -37,19 +37,19 @@ The effect across a whole codebase is small. Rewriting every camelCase identifie
 
 If shortening keywords does not pay, what should a language choose? AgentSlang's rule is whole words in camelCase and one spelling per concept, and among names that carry the meaning, the measured cheapest wins.
 
-The forms the stage-0 host accepts today:
+The forms the checker accepts today:
 
 | Concept | Form | Accepted alias |
 |---|---|---|
 | Function | `fn name a: Type -> Type` line | `lambda` for anonymous `fn` |
 | Record type | `schema Name` with field lines | |
 | Variants | `enum Name (case field: Type) ...` | |
-| Match | `mt` | `match` |
+| Match | `match` | `mt` (short alias) |
 | Sequence | `do` | `begin` |
 | Module exports, imports | `:x`, `:i` | |
 | Primitive types | `Int64`, `Float64`, `String`, `Bool` | |
 
-The older `defun` and `df` definition heads are rejected by the host (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
+The older `defun` and `df` definition heads are rejected by the checker (`ERR_UNSUPPORTED_TOPLEVEL`), and so are `:d` docstrings (`ERR_READ_DOC`): documentation lives as rows in each package's `doc.asn`, not in the source.
 
 ```agentslang
 (module math/vector :x [dot runTests] :i [])
@@ -65,7 +65,7 @@ fn runTests -> Bool
   (do (assert (= (dot {:x 1.0 :y 2.0} {:x 3.0 :y 4.0}) 11.0) "dot product") true)
 ```
 
-This module passes `asl-host check` and `asl-host test`.
+This module passes `asl check` and `asl test`.
 
 ---
 
@@ -84,7 +84,7 @@ The comment repeats what the names already say.
 The convention we adopt:
 1. **No restating comments:** names carry the *what*.
 2. **Docs out of the source:** a symbol's contract is one row in the package `doc.asn`, looked up with `asl '(:doc :symbol "path#name")'`.
-3. **Rationale in the ledger:** long design justifications live in the project memory under `.asl/mem/` (principles, decisions), where an agent retrieves them only when it needs them, with `(:mem :op query ...)` or `(:query :text "..." :in text)`.
+3. **Rationale in the ledger:** long design justifications live in the project memory (principles, decisions), where an agent retrieves them only when it needs them, with `(:mem :op query ...)` or `(:query :text "..." :in text)`.
 
 ---
 

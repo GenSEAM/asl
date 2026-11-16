@@ -62,7 +62,7 @@ fn calculateTotal items: (List Order) taxRate: Float64 -> Float64
   0.0
 ```
 
-Both files pass `asl-host check`. On this one module the interface is 48.4% smaller under `cl100k_base` (124 to 64 tokens; 123 to 64, 48.0%, under `o200k_base`), counted with js-tiktoken 1.0.15 on 2026-10-14 over each file as checked. A single module is an illustration, not a repository-wide figure.
+Both files pass `asl check`. On this one module the interface is 48.4% smaller under `cl100k_base` (124 to 64 tokens; 123 to 64, 48.0%, under `o200k_base`), counted with js-tiktoken 1.0.15 on 2026-10-14 over each file as checked. A single module is an illustration, not a repository-wide figure.
 
 ### Why Naive Stripping Fails: The Valid Stub Rule
 
@@ -89,7 +89,7 @@ The saving that matters is repository-wide: full-source handoffs against interfa
 
 Token savings are worthless if they cause regressions. Three properties keep a subagent honest when it writes against a stub:
 
-1. **Checked Names, Arity and Types:** `asl-host check` rejects an unknown name (`ERR_UNKNOWN_SYMBOL`), a call with the wrong number of arguments (`ERR_ARITY`) and an argument of the wrong declared type (`ERR_TYPE_MISMATCH`, for example a `String` passed where an `Int64` is declared) before anything runs.
+1. **Checked Names, Arity and Types:** `asl check` rejects an unknown name (`ERR_UNKNOWN_SYMBOL`), a call with the wrong number of arguments (`ERR_ARITY`) and an argument of the wrong declared type (`ERR_TYPE_MISMATCH`, for example a `String` passed where an `Int64` is declared) before anything runs.
 2. **Contract-Carrying Docs:** Handing over the doc rows of the exported names keeps units (for example a `:timeoutMs` field) and preconditions in front of the subagent.
 3. **Hermetic Boundaries:** A private helper is absent from the stub, so a subagent cannot depend on it by reading about it.
 

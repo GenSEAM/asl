@@ -39,7 +39,7 @@ When an autoregressive model writes SQL, it has to track the query's intent and 
 
 `asl-sql` models an expression as the enum `SqlExpr`, whose constructors are `col`, `qualCol`, `litStr`, `litInt`, `litBool`, `litNull`, `binary`, `andExpr`, `orExpr`, `notExpr`, `arith`, `agg`, `alias`, `caseWhen`, `jsonExtract` and `rawSql`. A query is the record `SelectQuery` (columns, table, joins, optional where, group by, having, order, limit, offset). Builders such as `colExpr`, `strExpr`, `intExpr`, `makeJoin` and `makeSelect` construct them, and `renderSelect` turns a query and a dialect into a `RenderedQuery` holding the SQL text, the placeholder count and the literal parameters in traversal order.
 
-The idea fits in a page. The sample below is self-contained and passes `asl-host check` and `asl-host test` (3 checks) on the stage-0 host:
+The idea fits in a page. The sample below is self-contained and passes `asl check` and `asl test` (3 checks):
 
 ```asl
 (module probe/p12aTest :x [renderWhere runTests] :i [])
@@ -49,18 +49,18 @@ enum Dialect (sqlite) (postgres) (mysql) (clickhouse)
 enum Cond (eqText column: String value: String) (gtInt column: String value: Int64)
 
 fn quoteIdent d: Dialect name: String -> String
-  (mt d ((mysql) (str "`" name "`")) ((clickhouse) (str "`" name "`")) (_ (str "\"" name "\"")))
+  (match d ((mysql) (str "`" name "`")) ((clickhouse) (str "`" name "`")) (_ (str "\"" name "\"")))
 
 fn placeholder d: Dialect idx: Int64 -> String
-  (mt d ((postgres) (str "$" idx)) (_ "?"))
+  (match d ((postgres) (str "$" idx)) (_ "?"))
 
 fn renderCond d: Dialect c: Cond idx: Int64 -> String
-  (mt c
+  (match c
     ((eqText column value) (str (quoteIdent d column) " = " (placeholder d idx)))
     ((gtInt column value) (str (quoteIdent d column) " > " (placeholder d idx))))
 
 fn renderFrom d: Dialect conds: (List Cond) idx: Int64 -> (List String)
-  (mt (listHead conds)
+  (match (listHead conds)
     ((none) (list))
     ((some c) (listAppend (list (renderCond d c idx)) (renderFrom d (optionOr (listTail conds) (list)) (+ idx 1)))))
 
@@ -79,7 +79,7 @@ fn runTests -> Bool
 Because the query is data:
 1. **Structure is explicit:** there are no unterminated quotes, missing commas or ambiguous `A AND B OR C` precedence; each node is one balanced form.
 2. **Values are parameters:** a literal renders as a placeholder, and the hostile string in the test above never reaches the SQL text.
-3. **The dialect is an argument:** the same condition list renders `$1` for Postgres and `?` for MySQL. A match that names each dialect without a `_` fallback is checked for exhaustiveness: leave out `clickhouse` and `asl-host check` reports `ERR_MATCH_NONEXHAUSTIVE`.
+3. **The dialect is an argument:** the same condition list renders `$1` for Postgres and `?` for MySQL. A match that names each dialect without a `_` fallback is checked for exhaustiveness: leave out `clickhouse` and `asl check` reports `ERR_MATCH_NONEXHAUSTIVE`.
 
 ---
 
@@ -107,7 +107,7 @@ In `asl-sql`, a literal in value position (`litStr`, `litInt`, `litBool`) render
 3. Column and table names are passed through as written; `renderSelect` does not quote identifiers yet.
 4. A `jsonExtract` path is written inside quotes without escaping, so a quote in the path changes the query.
 
-Closing these is the first item of the project roadmap (ROADMAP.md, P0).
+Closing these is the first priority on the project roadmap.
 
 Code that stays with the expression builders keeps values out of the SQL text; code that reaches for `rawSql` or string WHERE clauses is back to trusting its input.
 
@@ -115,7 +115,7 @@ Code that stays with the expression builders keeps values out of the SQL text; c
 
 ## 5. Where It Runs Today
 
-The whole package now loads on the strict stage-0 host. Measured on 2026-10-14 with `asl/host/out/asl-host check asl/packages/asl-sql/src/core/sql.asl` (exit 0) and `asl-host test` on each suite in `asl/packages/asl-sql/tests/`:
+The whole package loads. Measured on 2026-10-14 with `asl check asl/packages/asl-sql/src/core/sql.asl` (exit 0) and `asl test` on each suite in `asl/packages/asl-sql/tests/`:
 
 | Suite | Assertions | Refutations |
 |---|---|---|
@@ -133,4 +133,4 @@ All four exit 0. These suites check the rendered text; none of them sends a quer
 Treating SQL as a text-completion problem puts dialect rules, schema knowledge and escaping inside the model's sampling loop. Lifting queries and table definitions into typed S-expressions moves them into code:
 * **Dialect as a parameter:** one expression renders to Postgres, SQLite, MySQL or ClickHouse placeholders and JSON paths.
 * **Literals as parameters:** values stay out of the SQL text unless code opts out through `rawSql` or a string WHERE clause.
-* **Checked on the host:** the sample above and the `asl-sql` suites pass on the strict stage-0 host.
+* **Checked:** the sample above and the `asl-sql` suites pass.

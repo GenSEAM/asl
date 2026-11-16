@@ -21,16 +21,16 @@ Before writing a line of agent code or building an abstraction, we climb **The L
 1. Does this need to be built at all? (YAGNI: delete it)
 2. Does it already exist in the codebase? (Reuse existing utils)
 3. Does the standard library cover it? (Use standard forms)
-4. Does the native platform provide it? (POSIX syscalls, zero-copy shm)
+4. Does the native platform provide it? (POSIX syscalls, shared memory)
 5. Can this be one single line? (Make it one line)
 6. Only then: write the minimum verifiable code.
 ```
 
 ### The 3 Core Invariants of AgentSlang (ASL)
 
-1. **Zero-Foreign Code, Measured**: the language packages are ASL. On 2026-10-14 (commit `36deda1`), `git ls-files packages` listed 1,602 `.asl` files; the only other code in it is test material: two shell scripts, two C probes, LLVM IR goldens and upstream parser samples kept as `.sample` fixtures. The foundation underneath is not ASL: the stage-0 host in `host/` is 33 C source and header files, 10,202 lines by `wc -l`. It parses, checks and runs ASL. The way off it is the self-hosted compiler `asl1`, which `asl-target-llvm` lowers to LLVM IR; a seed exists for `arm64-apple-darwin` only, and self-hosting is in progress. The same backend already compiles this website to WebAssembly (`web/dist/site.wasm`, 252,954 bytes in the 2026-10-14 build).
+1. **One Language, Measured**: the language packages are ASL. On 2026-10-14, `git ls-files packages` listed 1,602 `.asl` files; the only other code in it is test material: two shell scripts, two C probes, LLVM IR goldens and upstream parser samples kept as `.sample` fixtures. That count is a dated snapshot, not a gate. The compiler is itself written in ASL and compiles itself through LLVM IR (gated on macOS only), and the same backend compiles this website to WebAssembly.
 2. **Tools as Forms**: agent tools are operations called as S-expressions, `asl '(:read ...) (:edit ...) (:check ...)'`, several forms per call, each answered with an ASN receipt. `asl '(:tools)'` lists them.
-3. **Verification in the Harness, Not in Prose**: an agent does not declare victory in words. A step closes when its gate exits 0: `host/out/asl-host test FILE` fails with `ERR_TEST_FAILED: zero assertions executed` unless the suite's `runTests` returns `true` after at least one assertion ran, and `asl audit gates` runs the gate suites.
+3. **Verification in the Harness, Not in Prose**: an agent does not declare victory in words. A step closes when its gate exits 0: `asl test FILE` fails with `ERR_TEST_FAILED: zero assertions executed` unless the suite's `runTests` returns `true` after at least one assertion ran, and `asl audit gates` runs the gate suites.
 
 ---
 
