@@ -410,3 +410,8 @@
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#bareCaseOwners" :text "The (alias, module) pairs of the direct imports whose enums, exported or not, declare a case with this bare name, sorted by alias, one per module.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#preludeShadows?" :text "True when the bare name is pair, a prelude union case, a generic alias or a builtin: a name the prelude binds before any import.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#preludeUnionForTag" :text "The prelude union (Option, Result, List, IoError, PreludeTree) and its cases for a bare prelude case name, or none.")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#Prior" :text "a foreign-name prior: the names a model brings from other languages, the canonical names asl heal tries instead and the fix text a diagnostic prints")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#priorTable" :text "the table of Prior rows for names from Python, Lisp and TypeScript")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#priorFor" :text "the first Prior whose names include the given name, or none")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#priorNames" :text "the canonical names for a foreign name, an empty list when the name is no known prior")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#priorFix" :text "the fix suffix for an unbound-symbol diagnostic, the canonical form as a :fix snippet, empty when the name is no known prior")

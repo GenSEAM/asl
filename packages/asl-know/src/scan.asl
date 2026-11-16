@@ -135,6 +135,23 @@ fn inlineCtors owner: String text: String -> (List Decl)
   (map (fn [(part String)] -> Decl (Decl :name (firstWord part) :kind "ctor" :sig (capText (compact (str "(:c " part)) 160) :owner owner))
        (optionOr (listTail (stringSplit text "(:c ")) (list)))
 
+; (:m :ref KNOW-CARDS-RED :do "the top-level parenthesised groups of a text, so a constructor whose fields hold a type in parentheses stays one group")
+fn topGroups cs: (List String) depth: Int64 cur: String acc: (List String) -> (List String)
+  (match (listHead cs)
+    ((none) (listReverse acc))
+    ((some c)
+      (let [(rest (optionOr (listTail cs) (list)))]
+        (cond
+          ((= c "(") (if (= depth 0) (topGroups rest 1 "" acc) (topGroups rest (+ depth 1) (str cur c) acc)))
+          ((= c ")") (cond ((= depth 1) (topGroups rest 0 "" (cons cur acc))) ((> depth 1) (topGroups rest (- depth 1) (str cur c) acc)) (else (topGroups rest 0 "" acc))))
+          ((> depth 0) (topGroups rest depth (str cur c) acc))
+          (else (topGroups rest depth cur acc))))))
+
+; (:m :ref KNOW-CARDS-RED :do "constructors written on the head line of a bare enum, enum Space (xs) (sm) on one line")
+fn headCtors owner: String line: String -> (List Decl)
+  (map (fn [(g String)] -> Decl (Decl :name (firstWord g) :kind "ctor" :sig (capText (compact (str "(" g ")")) 160) :owner owner))
+       (topGroups (stringChars (afterPrefix (stringTrim line) (str "enum " owner))) 0 "" (list)))
+
 fn declsAt lines: (List String) acc: (List Decl) -> (List Decl)
   (match (listHead lines)
     ((none) (listReverse acc))
@@ -156,7 +173,7 @@ fn declsAt lines: (List String) acc: (List Decl) -> (List Decl)
             (let [(block (blockLines rest (list)))
                   (name (firstWord (afterPrefix (stringTrim line) (if (stringStartsWith? line "(") "(enum " "enum "))))
                   (text (compact (stringJoin (cons line block) " ")))
-                  (ctors (if (stringStartsWith? line "(") (inlineCtors name text) (ctorDecls name block)))]
+                  (ctors (if (stringStartsWith? line "(") (inlineCtors name text) (listAppend (headCtors name line) (ctorDecls name block))))]
               (declsAt rest (listAppend (listReverse ctors) (cons (Decl :name name :kind "type" :sig (capText text 300) :owner "") acc)))))
           (else (declsAt rest acc))))))
 
