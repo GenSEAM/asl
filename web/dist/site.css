@@ -162,10 +162,9 @@ h1,h2,h3,h4,p,ul,ol,figure,pre,blockquote{margin:0}
 .leon-lid{fill:var(--leon-skin);transform-box:fill-box;transform-origin:50% 0;transform:scaleY(0);animation:leon-blink 5.6s ease-in-out infinite}
 .leon-lash{fill:none;stroke:var(--leon-line);stroke-width:9;stroke-linecap:round;opacity:0;animation:leon-lash 5.6s ease-in-out infinite}
 [data-rest=air] .leon-swing{animation:none}
-.leon-tail{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45;opacity:0;overflow:visible}
-.leon-tail path{stroke-linecap:round}
-.leon-tail-edge{stroke:var(--leon-line)}
-.leon-tail-skin{stroke:var(--leon-skin)}
+.leon-rig{position:absolute;left:-100%;top:-100%;width:300%;height:300%;pointer-events:none;display:none}
+[data-rig=on][data-rest=air] .leon-rig{display:block}
+[data-rig=on][data-rest=air] .leon-swing{visibility:hidden}
 [data-rest=branch] .leon-swing,[data-rest=foot] .leon-swing{animation:leon-land 1.2s ease-out,leon-breathe 4.2s ease-in-out 1.2s infinite}
 @keyframes leon-breathe{0%,100%{transform:rotate(0deg) scale(1)}50%{transform:rotate(-1.6deg) scale(1.018)}}
 @keyframes leon-land{0%{transform:rotate(-16deg) scale(.94,1.06)}30%{transform:rotate(10deg) scale(1.04,.96)}55%{transform:rotate(-6deg)}78%{transform:rotate(3deg)}100%{transform:rotate(0deg)}}
