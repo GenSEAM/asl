@@ -141,13 +141,17 @@ fn ! testRedFixed root: String -> Bool
         (ctx (ctxOf store))
         (picked (cd/batchPlan! ctx u1 (cuOf store "R1")))
         (led (cd/batchPlan! ctx u3 c3))
-        (noRecord (cd/batchableNow! store (with (pf/cuIn "R9" "merging" "" "sh/R9") :fails 1 :sig redSig)))]
+        (noRecord (cd/batchableNow! store (with (pf/cuIn "R9" "merging" "" "sh/R9") :fails 1 :sig redSig)))
+        (killedNew (cd/batchableNow! store (with c3 :fails 2 :sig "killed: timeout after 3600 s")))
+        (timedOut (cd/batchableNow! store (with c3 :fails 2 :sig "stage timeout after 5400 s")))]
     (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? w2)) (and (not (stringEmpty? w3)) (not (stringEmpty? h2))))) "fixture: source repo and three unit branches")
         (assert (= picked (list "R3")) (str "the unit fixed since its red rides, the unchanged one does not: " (stringJoin picked ",")))
         (refute (cd/batchable? c3) "the pure rule alone still keeps a unit with a red out")
         (assert (cd/batchableNow! store c3) "a changed head since the last red makes it batchable")
         (refute (cd/batchableNow! store c2) "the head of its last red train keeps it alone")
         (refute noRecord "failures and no red record: alone as before")
+        (refute killedNew "a fixed head whose last train was killed rides solo until a train of it finishes")
+        (refute timedOut "a stage timeout on the fixed head rides solo too")
         (assert (= led (list "R1")) (str "a fixed unit may lead a batch: " (stringJoin led ",")))
         true))
 

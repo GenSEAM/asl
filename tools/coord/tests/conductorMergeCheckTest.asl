@@ -65,7 +65,7 @@ fn ! testBudgets -> Bool
         (src (resultOr (fileReadString "asl/tools/coord/conductor.asl") ""))
         (stageDefault (cd/stageSecDefault))
         (trainLimit (cd/trainLimitSec))
-        (usesTrainLimit (stringContains? src "(fr/limits (trainLimitSec) 200)"))
+        (usesTrainLimit (stringContains? src "(fr/limits (trainLimitFit! rc store u.id) 200)"))
         (rcBig (cd/realCfg (list "--repo" "/r" "--dev-repo" "/r" "--dev" "dev" "--merge-check-sec" "99999") dir))
         (rcSmallStage (cd/realCfg (list "--repo" "/r" "--dev-repo" "/r" "--dev" "dev" "--stage-sec" "3000") dir))
         (u (pf/unitIn "BG1" "sh check.sh impl.txt"))
