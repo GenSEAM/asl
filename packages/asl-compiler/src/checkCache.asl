@@ -115,7 +115,7 @@ fn ! capFor! -> Int64
   (capOf (resultOr (fileReadString (str (optionOr (envGet "HOME") ".") "/.asl/config.asn")) ""))
 
 ; (:m :ref CHECK-VERDICT-CAP :do "one sweep at a time under sweep.lock: when more than cap verdicts are stored the oldest by mtime go until cap remain; returns the count removed, 0 when the lock is held")
-fn ! sweepWith! dir: String cap: Int64 -> Int64
+fn ! sweepOne! dir: String cap: Int64 -> Int64
   (let [(lock (str dir "/sweep.lock"))]
     (match (fileCreateExclusive lock (stringFromInt64 (procSelf)))
       ((err _) 0)
@@ -129,6 +129,10 @@ fn ! sweepWith! dir: String cap: Int64 -> Int64
                           (listLength (filter (fn [(p (Pair String Int64))] -> Bool (ok? (pathRemove (str dir "/" (pairFirst p))))) oldest)))))
              (_ (pathRemove lock))]
          removed))))
+
+; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "the per-module body stamps of asl-checker/checkCached live in DIR/modules and are swept under the same cap and oldest-first policy as the top level")
+fn ! sweepWith! dir: String cap: Int64 -> Int64
+  (+ (sweepOne! dir cap) (sweepOne! (str dir "/modules") cap))
 
 ; (:m :ref CHECK-VERDICT-CAP :do "a sweep lists every entry, so a store sweeps at most once a minute per cache, marked by the swept file")
 fn ! sweepSoon! dir: String -> Int64

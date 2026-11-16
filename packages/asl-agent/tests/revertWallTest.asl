@@ -1,6 +1,6 @@
 (module aslAgent/tests/revertWallTest
   :x [runTests]
-  :i [(aslAgent/gateIntegrity :a gi) (aslAgent/gates :a g) (aslAgent/main :a m) (asl-tools/fleet/run :a fr) (aslAgent/tests/gitInitKit :a gk)])
+  :i [(aslAgent/gateIntegrity :a gi) (aslAgent/gates :a g) (aslAgent/main :a m) (asl-tools/fleet/run :a fr) (aslAgent/tests/gitInitKit :a gk) (aslAgent/tests/procTreeKit :a pt)])
 
 ; (:m :ref LEON-FINISH-HANG :do "the revert check of a finish ends inside the wall the run has left: a gate that sleeps 40 s on the reverted tree, a 300 s gate timeout with its 900 s revert floor and 14 s of wall end the check unfinished near 14 s, its sleeping child is gone, the implementation is restored; the floor and the grader wall are cut to the wall left")
 
@@ -9,10 +9,6 @@ fn ! out argv: (List String) -> fr/Done
 
 fn ! write root: String name: String contents: String -> Bool
   (ok? (fileWrite (str root "/" name) contents))
-
-fn ! alive? pid: Int64 -> Bool
-  (let [row (stringTrim (out (list "ps" "-p" (stringFromInt64 pid) "-o" "stat=")).out)]
-    (and (> pid 1) (and (not (stringEmpty? row)) (not (stringStartsWith? row "Z")))))
 
 fn ! testPure -> Bool
   (do
@@ -29,7 +25,7 @@ fn ! testWallBound -> Bool
   (let [base (str (optionOr (envGet "TMPDIR") "/tmp") "/asl-revert-wall-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (monotonicNs)))
         made (ok? (dirCreate base))
         root (resultOr (realPath base) base)
-        script "if grep -qx old impl.txt; then sleep 40 & echo $! > sleeper; wait; fi; echo '(:gate :asserts 1 :failed 0)'\n"
+        script (str "if grep -qx old impl.txt; then " (pt/sleeperCmd root) " & echo $! > sleeper; wait; fi; echo '(:gate :asserts 1 :failed 0)'\n")
         setup (and (write root "impl.txt" "old\n") (and (write root "gate.sh" script) (gk/initGitRepoWith! root "revertWall" "revert-wall@example.invalid" (list "impl.txt" "gate.sh"))))
         changed (write root "impl.txt" "new\n")
         started (monotonicNs)
@@ -37,8 +33,10 @@ fn ! testWallBound -> Bool
           (list (g/makeGateResult "sh gate.sh" 0 "(:gate :asserts 1 :failed 0)\n" "" false 0)) 300 (none) (list) (none) "" (some 14))
         ms (/ (- (monotonicNs) started) 1000000)
         sleeper (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString (str root "/sleeper")) ""))) 0)
-        sleeperAlive (alive? sleeper)
-        _killed (if sleeperAlive (ok? (procKill sleeper "SIGKILL")) true)
+        ; (:m :ref NODE-BASE-RED :do "the pid in sleeper is the gate's own view, a namespace number inside the Linux jail; whether the sleeping child lives is read from the host tree that names the root")
+        survivors (pt/liveNaming! root)
+        sleeperAlive (not (listEmpty? survivors))
+        _killed (map (fn [p] (procKill p "SIGKILL")) survivors)
         after (resultOr (fileReadString (str root "/impl.txt")) "")
         cleaned (= (out (list "rm" "-rf" root)).exit 0)]
     (do
@@ -47,6 +45,7 @@ fn ! testWallBound -> Bool
       (refute (pairFirst result) (str "a revert check cut by the wall does not pass: " (pairSecond result)))
       (assert (stringContains? (pairSecond result) "revertCheck unfinished :revertKind wall") (str "the check names the wall as why it is unfinished: " (pairSecond result)))
       (assert (< ms 30000) (str "the check ends near the 14 s wall, not on the 900 s floor or the 40 s gate: " (stringFromInt64 ms) " ms"))
+      (assert (pt/probeSeesSelf!) "the host process probe sees this test process, so an empty tree means gone")
       (refute sleeperAlive "the reverted gate's sleeping child is killed with the run cut by the wall")
       (assert (= after "new\n") (str "the implementation is restored after the check: " after))
       (assert cleaned "the fixture repo is removed")

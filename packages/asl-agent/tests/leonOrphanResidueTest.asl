@@ -1,7 +1,7 @@
 (module aslAgent/tests/leonOrphanResidueTest
   :x [runTests]
   :i [(asl-forms/delegate :a d) (asl-tools/fleet/run :a fr) (aslHarness/tests/agentLoopRecorderKit :a rk)
-      (aslAgent/main :a m) (aslAgent/pool :a pl) (aslAgent/gitOps :a go)])
+      (aslAgent/main :a m) (aslAgent/pool :a pl) (aslAgent/gitOps :a go) (aslAgent/tests/procTreeKit :a pt)])
 
 ; (:m :ref LEON-ORPHAN-RESIDUE :do "four residues of a dead parent: (A) a stand-in run blocked in a model call (a 40 s child) has the call ended, its child killed and itself killed within a bound once the parent dies; (B) the real (:agent) delegate's baseline gate is watched, so its sleeping child dies with the parent; (C) a pool child's form carries the pool pid as :parentPid; (D) a gate run watching a dead pid ends at once, and the integrity re-run is wired to that env. Every fixture process is forked through fleet/run with limits, killed on the way out, and its root removed")
 
@@ -79,14 +79,15 @@ fn ! scenarioModelCall! -> Bool
       (assert cleaned "the fixture root is removed")
       true))
 
-fn baselineGate -> String
-  "echo $PPID >> ppids\nsleep 40 & echo $! >> pids\nwait\necho '(:gate :asserts 1 :failed 1)'\nexit 1\n"
+; (:m :ref NODE-BASE-RED :do "the gate's echoed pid is its started signal only: inside the Linux jail it is a namespace number, so Leon and the sleeping child are taken from the host tree that names the root, before the kill")
+fn baselineGate root: String -> String
+  (str (pt/sleeperCmd root) " & echo $! >> pids\nwait\necho '(:gate :asserts 1 :failed 1)'\nexit 1\n")
 
 fn ! scenarioBaseline! -> Bool
   (let [repo (resultOr (realPath ".") ".")
         root (freshRoot! "base")
         _cfg (fileWrite (str root "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false))\n")
-        _gate (fileWrite (str root "/slow.sh") (baselineGate))
+        _gate (fileWrite (str root "/slow.sh") (baselineGate root))
         fixDir (str root "/tests/fixtures/agentLoop/mvp")
         _dir (dirCreate fixDir)
         _fix (fileWrite (str fixDir "/base.asn") (rk/scriptFixtureTextFromReplies! "base" (map (fn [_] "(:step :op \"note\" :text \"waiting\")") (range 0 20))))
@@ -94,14 +95,16 @@ fn ! scenarioBaseline! -> Bool
         ctx (d/DelegateCtx :rootDir repo :binDir repo :wsDir repo)
         standIn (fr/forkLimited! (str root "/standIn.log") (fr/limits 900 64)
                   (fn [] -> Int64 (let [o (d/agentStep ctx 1 (mapEmpty) form)] (do (fileWrite (str root "/standIn.out") o.line) 0))))
-        started (waitFor! (fn [] (not (listEmpty? (pidsIn! (str root "/pids"))))) (+ (monotonicNs) 600000000000))
+        started (and (waitFor! (fn [] (not (listEmpty? (pidsIn! (str root "/pids"))))) (+ (monotonicNs) 600000000000))
+                  (waitFor! (fn [] (pt/hasArgs? (pt/treeNaming! root) "sleep 40")) (+ (monotonicNs) 10000000000)))
+        tree (pt/treeNaming! root)
+        recorded (map (fn [r] r.pid) tree)
         killedNs (monotonicNs)
         killed (match standIn ((ok f) (do (procKill f.pid "SIGKILL") (procWaitPid f.pid false) true)) ((err _) false))
-        recorded (listAppend (pidsIn! (str root "/ppids")) (pidsIn! (str root "/pids")))
-        gone (waitFor! (fn [] (not (listAny? alive! recorded))) (+ killedNs 15000000000))
+        gone (waitFor! (fn [] (and (not (pt/anyLive! recorded)) (listEmpty? (pt/liveNaming! root)))) (+ killedNs 15000000000))
         goneSec (/ (- (monotonicNs) killedNs) 1000000000)
         journal (journalOf! root)
-        reaped (reapAll! recorded)
+        reaped (reapAll! (listAppend recorded (pt/liveNaming! root)))
         ended (killFork! standIn)
         cleaned (ok? (pathRemove root))]
     (do
@@ -109,7 +112,7 @@ fn ! scenarioBaseline! -> Bool
       (assert started "Leon reached its baseline gate")
       (assert killed "only the stand-in is killed")
       (assert (stringContains? journal ":baseline") "the first gate run is the baseline run")
-      (assert (>= (listLength recorded) 2) "the baseline gate recorded Leon and its sleeping child")
+      (assert (and (pt/hasArgs? tree ":parentPid ") (pt/hasArgs? tree "sleep 40")) "the host process tree under the root holds Leon and the baseline gate's sleeping child")
       (assert gone "the baseline gate's sleeping child and Leon are gone after the parent dies")
       (assert (< goneSec 15) "within a few seconds, not at the 300 s gate timeout")
       (assert cleaned "the fixture root is removed")
@@ -144,7 +147,7 @@ fn ! scenarioWatchEnv! -> Bool
       (assert (> deadPid 1) "a short-lived process gives a dead pid")
       (assert (< secs 10) "a gate run watching a dead pid ends at once, not at its 30 s sleep")
       (assert (= (listLength rows) 1) "the watched gate still reports one row")
-      (assert (stringContains? mainText "newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base)") "the integrity re-run is handed the watched parent pid (source anchor)")
+      (assert (stringContains? mainText "newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget") "the integrity re-run is handed the watched parent pid (source anchor)")
       (assert cleaned "the fixture root is removed")
       true))
 

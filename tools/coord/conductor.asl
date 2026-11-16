@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter progressed? bpErrors bpMaxOf mergeHeld? trainErrors trainArgv baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -1006,6 +1006,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
             (tokensOf pace.tokens)
             (flying (listLength (filter inFlight? (readCUnits! ctx.dir))))
             (_ (offerBacklog! ctx.dir (/ (nowNs) 1000000)))
+            (_ (bpNote! ctx (readCUnits! ctx.dir)))
             (_ (stepAll! ctx units (- (tokensOf) flying)))
             (after (snapshot ctx.dir))]
         (ok (if (= before after) 0 1)))))
@@ -1483,6 +1484,35 @@ fn mergingCount cus: (List CUnit) -> Int64
 fn mergeHeld? maxMerging: Int64 cus: (List CUnit) -> Bool
   (and (>= maxMerging 0) (> (mergingCount cus) maxMerging))
 
+fn bpHeldPath dir: String -> String
+  (str dir "/bpHeld.asn")
+
+fn bpHeldText max: Int64 cus: (List CUnit) -> String
+  (str "(:bpHeld :merging " (n (mergingCount cus)) " :max " (n max) ")")
+
+; (:m :ref BP-VISIBLE :do "the back-pressure hold is visible: status! carries (:bpHeld :merging N :max M) while writers are held, and the journal gets one (:bpHeld ...) row when the hold starts and one (:bpReleased ...) row when it ends, a marker file in the store remembering the state so a tick that changes nothing writes nothing; returns held, released or empty")
+fn ! bpNote! ctx: Ctx cus: (List CUnit) -> String
+  (let [(max (bpMaxOf (bpRowOf ctx.dir)))
+        (held (mergeHeld? max cus))
+        (was (fileExists? (bpHeldPath ctx.dir)))
+        (at (n (nowMs)))]
+    (cond
+      ((and held (not was)) (let [(_ (fileWrite (bpHeldPath ctx.dir) (str (bpHeldText max cus) "\n")))
+                                  (_ (fileAppend (journalPath ctx.dir) (str "(:bpHeld :merging " (n (mergingCount cus)) " :max " (n max) " :at " at ")\n")))] "held"))
+      ((and (not held) was) (let [(_ (pathRemove (bpHeldPath ctx.dir)))
+                                  (_ (fileAppend (journalPath ctx.dir) (str "(:bpReleased :merging " (n (mergingCount cus)) " :max " (n max) " :at " at ")\n")))] "released"))
+      (else "")))
+
+; (:m :ref BP-VISIBLE :do "the ladder rows whose keys and ranges the conductor checks at start and in conductor check, as the lane problems are: a (:backpressure) row bpErrors rejects and a (:train) row trainErrors rejects each name their problems; no row is no problem")
+fn ! ladderProblems dir: String -> (List String)
+  (let [(bp (bpRowOf dir))
+        (tr (trainRowOf dir))]
+    (listAppend (if (stringEmpty? bp) (list) (map (fn [(p String)] -> String (str "ladder backpressure: " p)) (bpErrors bp)))
+                (if (stringEmpty? tr) (list) (map (fn [(p String)] -> String (str "ladder train: " p)) (trainErrors tr)))))
+
+fn ! startupProblemsIn dir: String rc: RealCfg -> (List String)
+  (listAppend (startupProblemsFor rc) (ladderProblems dir))
+
 ; (:m :ref MERGE-TRAIN-THROUGHPUT :do "train parallelism: a (:train :jobs N) row in the store's ladder.asn passes -j N to the merge train, N in 1..64; no row, or a row trainErrors rejects, passes no -j and the train keeps its own default (2)")
 fn trainRowOf dir: String -> String
   (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:train ")) (stringLines (readOr (ladderPath dir)))) "")
@@ -1542,7 +1572,7 @@ fn ! status! ctx: Ctx -> String
                         (str "(:spend :lane " (st/q l) " :tokens " (n (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.tokens)) 0 mine))
                              " :costUsd " (costText (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.costMicro)) 0 mine)) ")"))) lanes))
         (esc (match (fileReadString (escalationsPath ctx.dir)) ((ok t) (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines t))) ((err _) (list))))]
-    (stringJoin (listAppend (listAppend rows spend)
+    (stringJoin (listAppend (listAppend (listAppend rows spend) (let [(max (bpMaxOf (bpRowOf ctx.dir)))] (if (mergeHeld? max cus) (list (bpHeldText max cus)) (list))))
                   (list (str "(:running (" (idList cus active?) "))")
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
                         (str "(:held (" (idList cus (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (= c.await "mergeHold")))) "))")
@@ -1603,9 +1633,10 @@ fn wordAfter line: String marker: String -> String
 fn killSig line: String -> String
   (str "killed: " (wordAfter line "(:fleetRun :verdict :") " after " (n (/ (optionOr (stringToInt64 (wordAfter line " :timeoutMs ")) 0) 1000)) " s")
 
-; (:m :ref TRAIN-NEVER-LANDS :do "the items a killed train had not finished: those its last (:trainRunning :items (...)) row named less every (:itemDone PATH EXIT) row after it (tools/fleet/train.asl runningRow, itemDoneRow); empty when the train streamed no such row")
+; (:m :ref BP-VISIBLE :do "only the first (:trainRunning) row counts, the main run of the suites: a later row is another phase (a rerun at base) whose smaller count must not read as progress against a kill of the main run")
+; (:m :ref TRAIN-NEVER-LANDS :do "the items a killed train had not finished: those its first (:trainRunning :items (...)) row named less every (:itemDone PATH EXIT) row after it (tools/fleet/train.asl runningRow, itemDoneRow); empty when the train streamed no such row")
 fn stillRunning lines: (List String) -> (List String)
-  (let [(start (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trainRunning :items (")) lines)) ""))
+  (let [(start (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trainRunning :items (")) lines)) ""))
         (parts (stringSplit (segment start "(:trainRunning :items (" ")") "\""))
         (items (map (fn [(i Int64)] -> String (optionOr (listGet parts i) "")) (filter (fn [(i Int64)] -> Bool (= (mod i 2) 1)) (range 0 (listLength parts)))))
         (done (map (fn [(l String)] -> String (quotedAfter l "(:itemDone \"")) (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:itemDone ")) lines)))]
@@ -3120,13 +3151,13 @@ fn ! main args: (List String) -> (Result Int64 String)
                            (do (println (str "(:requeue :requested " (if (requestRequeue! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
       ((= cmd "close") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))]
                          (do (println (str "(:close :requested " (if (requestClose! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
-      ((= cmd "check") (let [(ps (startupProblemsFor rc))
+      ((= cmd "check") (let [(ps (startupProblemsIn dir rc))
                              (_ (map (fn [(l String)] -> Unit (println l)) (staleOwnsFor! dir args rc)))]
                          (do (println (str "(:check :problems " (st/qList ps) ")")) (ok (if (listEmpty? ps) 0 1)))))
       ((= cmd "restart") (do (println (str "(:restart :requested " (if (requestRestart! dir (st/intOpt args "grace-sec" 1200)) "true" "false") ")")) (ok 0)))
       ((= cmd "stop") (do (println (str "(:stop :requested " (if (requestStop! dir) "true" "false") ")")) (ok 0)))
       ((= cmd "run")
-        (let [(ps (startupProblemsFor rc))]
+        (let [(ps (startupProblemsIn dir rc))]
           (if (not (listEmpty? ps))
             (do (eprintln (str "(:refuse :why coverage :problems " (st/qList ps) ")")) (ok 1))
             (let [(_ (pathRemove (stopPath dir)))
