@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter progressed? bpErrors bpMaxOf mergeHeld? trainErrors trainArgv baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
@@ -548,14 +548,30 @@ fn ! launchNow! ctx: Ctx u: st/Task c: CUnit -> CUnit
 fn mergeSigKey sig: String -> String
   (sigKey (optionOr (listHead (stringSplit sig " :running ")) sig))
 
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "the item count of a killed train's :running tail, -1 when the signature has none (a red, a refusal, or a kill that streamed no rows)")
+fn runningCount sig: String -> Int64
+  (if (stringContains? sig " :running ") (optionOr (stringToInt64 (sp/tokAfter sig ":running")) -1) -1)
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "a killed train that left fewer items unfinished than the attempt before it made progress: finished suites keep their content-keyed verdicts in the native test cache, so the retry starts past them; such a kill keeps the fail count instead of adding one, so a train longer than its limit lands over several attempts, while a kill with no fewer items left (no progress, or no :running tail) counts as before and the maxSame-th escalates. The count strictly falls on every uncounted retry, so the retries stay bounded")
+fn progressed? prevSig: String sig: String -> Bool
+  (let [(now (runningCount sig))
+        (before (runningCount prevSig))]
+    (and (= (mergeSigKey sig) (mergeSigKey prevSig)) (and (>= now 0) (and (>= before 0) (< now before)))))
+
+fn mergeFailsAfter prevSig: String prevFails: Int64 sig: String -> Int64
+  (cond
+    ((!= (mergeSigKey sig) (mergeSigKey prevSig)) 1)
+    ((progressed? prevSig sig) (max 1 prevFails))
+    (else (+ prevFails 1)))
+
 fn ! mergeFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
-  (let [(fails (if (= (mergeSigKey sig) (mergeSigKey c.sig)) (+ c.fails 1) 1))
+  (let [(fails (mergeFailsAfter c.sig c.fails sig))
         (c1 (with c :fails fails :sig sig))]
     (if (>= fails ctx.maxSame)
       (let [(_ (dropLease! ctx c1))
             (c2 (escalate! ctx (with c1 :epoch 0) sig (str "merge failed " (n fails) "x with the same signature")))]
         (move! ctx c2 "blocked" "merge" "" 0 0 (str "escalated: " (verdictSig sig)) ms))
-      (let [(c2 (move! ctx c1 "merging" "merge" "" 0 0 (str "retry: " (verdictSig sig)) ms))]
+      (let [(c2 (move! ctx c1 "merging" "merge" "" 0 0 (str (if (progressed? c.sig sig) "progress: " "retry: ") (verdictSig sig)) ms))]
         (launch! ctx u c2))))
 
 fn ! poll! ctx: Ctx c: CUnit -> (Option Res)
@@ -797,7 +813,7 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
         (let [(pace ctx.pace)
               (allowOf pace.allowance)
               (allow (allowOf c.lane))]
-          (if (or (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000))) (writerHeld? ctx cus c.id))
+          (if (or (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000))) (or (mergeHeld? (bpMaxOf (bpRowOf ctx.dir)) cus) (writerHeld? ctx cus c.id)))
             cap
             (let [(why (impossibleWhy! ctx u))]
               (if (not (stringEmpty? why))
@@ -1443,6 +1459,49 @@ fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
             (free (- (js/tokenCount jdir) (js/heldCount jdir)))]
         (if (not (admitWriter? free (sc/memFreeMB (readOr minfo)) (wrMinFreeMb row))) true
           (if (wrWarmFirst? row) (warmWait! ctx cus id) false)))))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "merge back-pressure: with a (:backpressure :maxMerging N) row in the store's ladder.asn no ready unit starts its writer while more than N units are in merging, launched or waiting their turn, so the one train gets the CPU the writers and their gates would take (node2 2026-11-16: 21 merging, 7 writing, load 18 on 8 cores, the train ran 8 suites per hour). Gating, review and merge stages are not held. No row, or a row bpErrors rejects, holds nothing (today's behaviour)")
+fn bpRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:backpressure ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn bpErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":backpressure" ":maxMerging") k))) keys))
+        (m (stringToInt64 (sp/tokAfter row ":maxMerging")))]
+    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+                (match m
+                  ((none) (list ":maxMerging missing or not a whole number"))
+                  ((some v) (if (or (< v 0) (> v 10000)) (list (str ":maxMerging " (n v) " outside 0..10000")) (list))))))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "the bound a valid row sets, -1 for no row or a rejected one")
+fn bpMaxOf row: String -> Int64
+  (if (or (stringEmpty? row) (not (listEmpty? (bpErrors row)))) -1 (optionOr (stringToInt64 (sp/tokAfter row ":maxMerging")) -1))
+
+fn mergingCount cus: (List CUnit) -> Int64
+  (listLength (filter (fn [(c CUnit)] -> Bool (= c.st "merging")) cus))
+
+fn mergeHeld? maxMerging: Int64 cus: (List CUnit) -> Bool
+  (and (>= maxMerging 0) (> (mergingCount cus) maxMerging))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "train parallelism: a (:train :jobs N) row in the store's ladder.asn passes -j N to the merge train, N in 1..64; no row, or a row trainErrors rejects, passes no -j and the train keeps its own default (2)")
+fn trainRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:train ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn trainErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":train" ":jobs") k))) keys))
+        (j (stringToInt64 (sp/tokAfter row ":jobs")))]
+    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+                (match j
+                  ((none) (list ":jobs missing or not a whole number"))
+                  ((some v) (if (or (< v 1) (> v 64)) (list (str ":jobs " (n v) " outside 1..64")) (list))))))
+
+fn trainJobsArgs row: String -> (List String)
+  (if (or (stringEmpty? row) (not (listEmpty? (trainErrors row)))) (list)
+    (list "-j" (sp/tokAfter row ":jobs")))
+
+fn trainArgv devRepo: String branch: String row: String -> (List String)
+  (listAppend (list (str devRepo "/bin/asl") "train" branch "--onto" "HEAD" "--repo" devRepo "--commit") (trainJobsArgs row))
 
 fn idList cus: (List CUnit) pred: (fn [CUnit] -> Bool) -> String
   (stringJoin (map (fn [(c CUnit)] -> String (st/q c.id)) (filter pred cus)) " ")
@@ -2505,7 +2564,7 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
           (match verdict
             ((some stopped) stopped)
             ((none)
-              (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "train" c.branch "--onto" "HEAD" "--repo" rc.devRepo "--commit") rc.devRepo (mergeEnv))
+              (let [(d (fr/runOneLimited (fr/job (trainArgv rc.devRepo c.branch (trainRowOf store)) rc.devRepo (mergeEnv))
                                          (fr/limits (trainLimitSec) 200)))
                     (merged (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError")))))
                     (_ (keepTrain! rc store u.id c.branch d (if merged "" (gateSig d.out))))]

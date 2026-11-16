@@ -1,0 +1,153 @@
+(module asl-tools/coord/tests/mergeThroughputTest
+  :x [runTests]
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "three merge-throughput rules: a killed train that left fewer items unfinished keeps its fail count, so a train longer than its limit lands over several attempts while a kill without progress still escalates; a (:backpressure :maxMerging N) ladder row holds new writers while more than N units are merging, and no row holds nothing; a (:train :jobs N) ladder row passes -j N to the train the merge stage runs, and no row passes none")
+fn kill running: Int64 -> String
+  (str "killed: timeout after 3600 s :running " (stringFromInt64 running) " a/tests/aTest.asl b/tests/bTest.asl")
+
+fn ! testFails -> Bool
+  (let [(first (cd/mergeFailsAfter "review pass" 0 (kill 289)))
+        (progress (cd/mergeFailsAfter (kill 289) 1 (kill 200)))
+        (again (cd/mergeFailsAfter (kill 200) 1 (kill 200)))
+        (worse (cd/mergeFailsAfter (kill 200) 2 (kill 250)))
+        (bare (cd/mergeFailsAfter "killed: timeout after 3600 s" 1 "killed: timeout after 3600 s"))
+        (toBare (cd/mergeFailsAfter (kill 10) 1 "killed: timeout after 3600 s"))
+        (red (cd/mergeFailsAfter "train red: a/tests/aTest.asl" 1 "train red: a/tests/aTest.asl"))
+        (redAfterKill (cd/mergeFailsAfter (kill 5) 2 "train red: a/tests/aTest.asl"))
+        (held (cd/mergeFailsAfter (kill 100) 2 (kill 99)))]
+    (do (assert (= first 1) (str "the first kill counts once: " (stringFromInt64 first)))
+        (assert (= progress 1) (str "a kill with fewer items left keeps the count: " (stringFromInt64 progress)))
+        (assert (= held 2) (str "and keeps a count above one as it is: " (stringFromInt64 held)))
+        (assert (= again 2) (str "a kill with as many items left counts: " (stringFromInt64 again)))
+        (assert (= worse 3) (str "a kill with more items left counts: " (stringFromInt64 worse)))
+        (assert (= bare 2) (str "a kill that streamed no rows counts as before: " (stringFromInt64 bare)))
+        (assert (= toBare 2) (str "a kill without a running tail after one with it is no progress: " (stringFromInt64 toBare)))
+        (assert (= red 2) (str "the same red counts as before: " (stringFromInt64 red)))
+        (assert (= redAfterKill 1) (str "a red after a kill is a new failure: " (stringFromInt64 redAfterKill)))
+        (assert (cd/progressed? (kill 289) (kill 200)) "fewer items left is progress")
+        (assert (not (cd/progressed? (kill 200) (kill 200))) "the same count is not progress")
+        true))
+
+fn cu id: String stateName: String -> cd/CUnit
+  (pf/cuIn id stateName "" "")
+
+fn ! testRows -> Bool
+  (let [(two (list (cu "M1" "merging") (cu "M2" "merging") (cu "W1" "writing")))]
+    (do (assert (listEmpty? (cd/bpErrors "(:backpressure :maxMerging 4)")) "a valid back-pressure row")
+        (assert (not (listEmpty? (cd/bpErrors "(:backpressure :maxMerging -1)"))) "a negative bound is rejected")
+        (assert (not (listEmpty? (cd/bpErrors "(:backpressure :maxMerging 10001)"))) "a bound over 10000 is rejected")
+        (assert (not (listEmpty? (cd/bpErrors "(:backpressure :maxMerging four)"))) "a bound that is no number is rejected")
+        (assert (not (listEmpty? (cd/bpErrors "(:backpressure :maxMerging 4 :other 1)"))) "an unknown key is rejected")
+        (assert (= (cd/bpMaxOf "") -1) "no row: no bound")
+        (assert (= (cd/bpMaxOf "(:backpressure :maxMerging x)") -1) "a rejected row: no bound")
+        (assert (= (cd/bpMaxOf "(:backpressure :maxMerging 3)") 3) "a valid row sets the bound")
+        (assert (cd/mergeHeld? 1 two) "two merging over a bound of one holds")
+        (assert (not (cd/mergeHeld? 2 two)) "two merging at a bound of two does not hold")
+        (assert (not (cd/mergeHeld? -1 two)) "no bound never holds")
+        (assert (listEmpty? (cd/trainErrors "(:train :jobs 6)")) "a valid train row")
+        (assert (not (listEmpty? (cd/trainErrors "(:train :jobs 0)"))) "zero jobs is rejected")
+        (assert (not (listEmpty? (cd/trainErrors "(:train :jobs 65)"))) "more than 64 jobs is rejected")
+        (assert (not (listEmpty? (cd/trainErrors "(:train :jobs 6 :nice 3)"))) "an unknown train key is rejected")
+        (assert (= (cd/trainArgv "/d" "sh/X" "") (list "/d/bin/asl" "train" "sh/X" "--onto" "HEAD" "--repo" "/d" "--commit")) "no row: the train argv of today")
+        (assert (= (cd/trainArgv "/d" "sh/X" "(:train :jobs 0)") (cd/trainArgv "/d" "sh/X" "")) "a rejected row: the train argv of today")
+        (assert (= (cd/trainArgv "/d" "sh/X" "(:train :jobs 6)") (list "/d/bin/asl" "train" "sh/X" "--onto" "HEAD" "--repo" "/d" "--commit" "-j" "6")) "a valid row adds -j N")
+        true))
+
+fn ctxOf dir: String -> cd/Ctx
+  (cd/Ctx :dir dir :holder "mergeThroughputTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 60 :maxDesc 50
+          :launch (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String) (list "/usr/bin/true")) :pace (cd/fixedPace 8 8))
+
+fn ! stOf dir: String id: String -> String
+  (match (listFind (fn [(c cd/CUnit)] -> Bool (= c.id id)) (cd/readCUnits! dir))
+    ((some c) c.st)
+    ((none) ""))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "one store per case: two units merging and one ready; the ready unit's step! admits it to writing unless the ladder row holds it")
+fn ! admitCase root: String name: String ladder: String -> String
+  (let [(dir (str root "/" name))
+        (_ (dirCreate root))
+        (_ (dirCreate dir))
+        (_ (map (fn [(id String)] -> Bool (ok? (st/put! dir (pf/unitIn id "true")))) (list "M1" "M2" "R1")))
+        (_ (cd/writeCUnit! dir (cu "M1" "merging")))
+        (_ (cd/writeCUnit! dir (cu "M2" "merging")))
+        (_ (cd/writeCUnit! dir (cu "R1" "ready")))
+        (_ (if (stringEmpty? ladder) () (let [(_ (fileWrite (str dir "/ladder.asn") (str ladder "\n")))] ())))
+        (_ (cd/step! (ctxOf dir) (pf/unitIn "R1" "true") 8))]
+    (stOf dir "R1"))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "mergeFail! itself: a unit merging after a kill with 289 items left, killed again with 200 left, stays merging at fail count 1 and is relaunched; killed again with 200 left it counts 2; a third count escalates to blocked")
+fn ! testMergeFail root: String -> Bool
+  (let [(dir (str root "/fail"))
+        (_ (dirCreate root))
+        (_ (dirCreate dir))
+        (u (pf/unitIn "K1" "true"))
+        (_ (st/put! dir u))
+        (c0 (with (cu "K1" "merging") :fails 1 :sig (kill 289)))
+        (_ (cd/writeCUnit! dir c0))
+        (ctx (ctxOf dir))
+        (c1 (cd/mergeFail! ctx u c0 (kill 200) 5))
+        (c2 (cd/mergeFail! ctx u c1 (kill 200) 5))
+        (c3 (cd/mergeFail! ctx u c2 (kill 200) 5))]
+    (do (assert (and (= c1.fails 1) (= c1.st "merging")) (str "a kill with fewer items left keeps the unit merging at count 1: " c1.st " " (stringFromInt64 c1.fails)))
+        (assert (= c1.launched 1) "and relaunches the merge")
+        (assert (and (= c2.fails 2) (= c2.st "merging")) (str "a kill without progress counts: " c2.st " " (stringFromInt64 c2.fails)))
+        (assert (and (= c3.fails 3) (= c3.st "blocked")) (str "the maxSame-th count escalates: " c3.st " " (stringFromInt64 c3.fails)))
+        true))
+
+fn ! testAdmit root: String -> Bool
+  (let [(none0 (admitCase root "none" ""))
+        (held (admitCase root "held" "(:backpressure :maxMerging 1)"))
+        (atBound (admitCase root "atBound" "(:backpressure :maxMerging 2)"))
+        (bad (admitCase root "bad" "(:backpressure :maxMerging -3)"))]
+    (do (assert (= none0 "writing") (str "no back-pressure row: the ready unit is admitted as today: " none0))
+        (assert (= held "ready") (str "two merging over a bound of one hold the writer: " held))
+        (assert (= atBound "writing") (str "two merging at a bound of two admit the writer: " atBound))
+        (assert (= bad "writing") (str "a rejected row holds nothing: " bad))
+        true))
+
+; (:m :ref MERGE-TRAIN-THROUGHPUT :do "the merge stage itself: a temp source repo with a unit branch and a dev clone whose bin/asl stands in for the train and records its argv (pipeFix devCloneFor!); a (:train :jobs 5) row reaches the train as -j 5, no row passes no -j")
+fn stubPass rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
+  (pair 0 "(:mergeCheck :verdict pass)")
+
+fn ! testTrainArgs root: String -> Bool
+  (let [(repo (pf/repoIn root))
+        (wt1 (pf/seedUnit! root (pf/unitIn "J1" "sh check.sh impl.txt") "merging" "impl.txt"))
+        (dev (pf/devCloneFor! root))
+        (store (str root "/store"))
+        (rc (cd/realCfg (list "--repo" (str root "/repo") "--dev-repo" dev "--dev" "dev" "--worktrees" (str root "/wts") "--home" (str root "/home")) store))
+        (_ (fileWrite (str store "/ladder.asn") "(:train :jobs 5)\n"))
+        (r1 (cd/mergeResWith rc store (pf/unitIn "J1" "sh check.sh impl.txt") (pf/cuIn "J1" "merging" wt1 "sh/J1") stubPass))
+        (args1 (resultOr (fileReadString (str dev "/.git/trainArgs")) ""))
+        (wt2 (pf/seedUnit! root (pf/unitIn "J2" "sh check.sh impl.txt") "merging" "impl2.txt"))
+        (_ (fileWrite (str store "/ladder.asn") "(:writers :minFreeMb 0 :warmFirst false)\n"))
+        (r2 (cd/mergeResWith rc store (pf/unitIn "J2" "sh check.sh impl.txt") (pf/cuIn "J2" "merging" wt2 "sh/J2") stubPass))
+        (args2 (resultOr (fileReadString (str dev "/.git/trainArgs")) ""))
+        (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines args2)))
+        (second (optionOr (listGet lines 1) ""))]
+    (do (assert (and (not (stringEmpty? repo)) (and (not (stringEmpty? dev)) (and (not (stringEmpty? wt1)) (not (stringEmpty? wt2))))) "fixture: source repo, dev clone with the stand-in train, two unit branches")
+        (assert (= r1.ok 1) (str "the first merge lands through the stand-in train: " r1.sig))
+        (assert (stringContains? args1 "train sh/J1 --onto HEAD --repo ") (str "the train ran for the unit branch: " args1))
+        (assert (stringEndsWith? (stringTrim args1) "--commit -j 5") (str "the ladder row reaches the train as -j 5: " args1))
+        (assert (= r2.ok 1) (str "the second merge lands too: " r2.sig))
+        (assert (= (listLength lines) 2) (str "two trains ran: " args2))
+        (assert (stringEndsWith? (stringTrim second) "--commit") (str "without a train row no -j is passed: " second))
+        (assert (not (stringContains? second " -j ")) (str "and the argv carries no -j: " second))
+        true))
+
+fn ! runTests -> Bool
+  (let [(root (pf/scratch "mergeThroughput" "w"))
+        (_ (pf/cleanup root))
+        (_ (dirCreate root))
+        (admit (testAdmit (str root "/admit")))
+        (failed (testMergeFail (str root "/merge")))
+        (args (testTrainArgs root))
+        (_ (pf/cleanup root))
+        (stubGone (fr/stubRemove!))]
+    (do (assert (testFails) "kills with progress keep the merge fail count")
+        (assert (testRows) "back-pressure and train rows")
+        (assert admit "the back-pressure row holds the writer in step!")
+        (assert failed "mergeFail! keeps the count on a kill with progress")
+        (assert args "the train row reaches the merge stage's train")
+        (assert stubGone "the stand-in host dir of this run is removed")
+        true))

@@ -13,4 +13,8 @@
   :gateRanges "checkTimeoutS 30..7200 (default 900, adopted); unknown keys and out-of-range values are errors, the default is used"
   :wake "(:wake :await NAME :readyBelow N) (INTAKE-PARKED-WAKE), any number of rows: units parked in awaitReview on NAME (an intake class or lane that no allowance refresh ever names) wake while a writer slot is free (tokens minus in-flight) and fewer than N units are ready, one per slot, in file order. No row means nothing wakes this way. Read by freeWake!, checked by wakeErrors (tested in conductorTest testFreeWake); a row wakeErrors rejects is ignored"
   :wakeRanges "readyBelow 1..1000; :await non-empty; unknown keys are errors"
+  :backpressure "(:backpressure :maxMerging N) (MERGE-TRAIN-THROUGHPUT), read by asl/tools/coord/conductor.asl bpMaxOf and checked by bpErrors (tested in mergeThroughputTest): no ready unit starts its writer while more than N units are in merging, launched or waiting their turn; gating, review and merge stages are not held; a row bpErrors rejects is ignored"
+  :backpressureRanges "maxMerging 0..10000; no row (default) holds nothing; unknown keys are errors"
+  :train "(:train :jobs N) (MERGE-TRAIN-THROUGHPUT), read by asl/tools/coord/conductor.asl trainArgv and checked by trainErrors (tested in mergeThroughputTest): the merge stage passes -j N to asl train; a row trainErrors rejects is ignored"
+  :trainRanges "jobs 1..64; no row (default) passes no -j, so the train keeps its own default of 2; unknown keys are errors"
   :origin "COND-PROVIDER-FAIL-NO-HOP: 73 of 313 Leon sessions in 12 h on node2 ended ERR_VENDOR (all-breaker, rate limit) and each climbed the ladder as a writer failure")
