@@ -181,6 +181,7 @@
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#ImportPass.index" :text "Index after resolving")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#emptyModIndex" :text "A module index not yet built for any root.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#parentDirOf" :text "The directory part of a path, / for a top-level path, . for a slashless one.")
+(:doc :symbol "asl/packages/asl-checker/src/resolve.asl#packagePure!" :text "True when the nearest manifest.asn above a module path declares :pure true, so its bodies may not call effectful functions; part of a body stamp key.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#resolveImport!" :text "Resolve one import path from an importing file, the way the host loader does.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#resolveDepTarget" :text "Find a dependency ModuleSummary in deps by real path, declared module name, or import suffix. Ambiguous matches are rejected with ERR_AMBIGUOUS_MODULE.")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#loadModuleClosure!" :text "Load the entry file and every module it imports, transitively.")
