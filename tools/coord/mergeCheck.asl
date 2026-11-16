@@ -1,5 +1,5 @@
 (module asl-tools/coord/mergeCheck
-  :x [gateWord cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
+  :x [gateWord cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify effectiveBase! targetTips! isAncestor? untouchedPre judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg) (asl-text/string :a ts)])
 
 ; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
@@ -28,7 +28,8 @@
   (:f headDir String :default "")
   (:f baseDir String :default "")
   (:f cache String :default "")
-  (:f extraEnv (List String) :default (list)))
+  (:f extraEnv (List String) :default (list))
+  (:f target String :default ""))
 
 fn q s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
@@ -439,6 +440,31 @@ fn ! gateOutcome! o: Opts env: (List String) hd: String deadlineNs: Int64 -> Str
       (if (<= s 0) "deadline"
         (gateWord (fr/runShell! o.gate hd env (fr/limits s 64))))))
 
+; (:m :ref MERGECHECK-BASE-ATTRIB :do "the tree the unit is really merged onto: when head carries merges on its first-parent line whose second parent descends from the given base, that parent (the newest one) is main brought in, and its growth is not the unit's; the effective base is that parent, else the given base; the base cache is keyed by it so an older sha never answers")
+fn ! isAncestor? repo: String a: String b: String -> Bool
+  (= (gitOut! repo (list "merge-base" "--is-ancestor" a b)).exit 0)
+
+; (:m :ref MERGECHECK-BASE-ATTRIB :do "the line the unit is merged onto: the explicit --target ref when given, else the local dev and main branch tips of the repo the check runs in; unresolved names are dropped, so no tip means no effective base")
+fn ! targetTips! repo: String target: String -> (List String)
+  (nonEmpty (map (fn [(r String)] -> String (stringTrim (gitOut! repo (list "rev-parse" "--verify" "-q" (str r "^{commit}"))).out))
+                 (if (stringEmpty? target) (list "refs/heads/dev" "refs/heads/main") (list target))))
+
+; (:m :ref MERGECHECK-BASE-ATTRIB :do "a merged-in second parent counts as the target brought in only when it descends from the base and is an ancestor of (or equal to) a target tip; a side branch a unit merges itself is on no target line and never becomes the base")
+fn ! effectiveBase! repo: String base: String head: String tips: (List String) -> String
+  (let [(rows (lines! repo (list "rev-list" "--first-parent" "--merges" "--parents" (str base ".." head))))
+        (parents (listFlatMap (fn [(r String)] -> (List String) (listDrop (nonEmpty (stringSplit r " ")) 2)) rows))
+        (onTarget (fn [(p String)] -> Bool (listAny? (fn [(t String)] -> Bool (isAncestor? repo p t)) tips)))
+        (cands (filter (fn [(p String)] -> Bool (and (!= p base) (and (isAncestor? repo base p) (onTarget p)))) parents))
+        (pick (fn [(best String) (c String)] -> String (if (or (stringEmpty? best) (isAncestor? repo best c)) c best)))]
+    (fold pick "" cands))
+
+; (:m :ref MERGECHECK-BASE-ATTRIB :do "a per-path foreignGrowth red whose path the unit's diff does not touch is pre-existing, never a regression; rows without a path (totals) and every other check stay as classified; pair of (regressions, preExisting)")
+fn untouchedPre regs: (List (Pair String String)) files: (List String) -> (Pair (List (Pair String String)) (List (Pair String String)))
+  (let [(un (fn [(r (Pair String String))] -> Bool
+              (and (= (pairFirst r) "foreignGrowth")
+                   (and (stringContains? (pairSecond r) " :lines ") (not (listContains? files (cutAt (pairSecond r) " :lines ")))))))]
+    (pair (filter (fn [(r (Pair String String))] -> Bool (not (un r))) regs) (filter un regs)))
+
 ; (:m :ref GATEADMIT-FIX :do "the word for one finished --gate run: timeout and runaway and wallOverBound (refused unlaunched, exit 126) are unverified words, never fail")
 fn gateWord d: fr/Done -> String
   (cond
@@ -452,8 +478,9 @@ fn ! run! o: Opts -> (Pair Int64 String)
   (let [(repo (resultOr (realPath o.repo) o.repo))
         (full (= o.mode "full"))
         (deadlineNs (+ (monotonicNs) (* o.totalS 1000000000)))
-        (baseSha (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.base)).out))
-        (headSha (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.head)).out))]
+        (baseReq (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.base)).out))
+        (headSha (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.head)).out))
+        (baseSha (if (or (stringEmpty? baseReq) (stringEmpty? headSha)) baseReq (let [(e (effectiveBase! repo baseReq headSha (targetTips! repo o.target)))] (if (stringEmpty? e) baseReq e))))]
     (if (or (stringEmpty? baseSha) (stringEmpty? headSha))
       (pair 2 (str "(:mergeCheck :verdict block :error " (q "base or head does not resolve") ")"))
       (let [(problems (structure! repo baseSha headSha))
@@ -496,8 +523,9 @@ fn ! run! o: Opts -> (Pair Int64 String)
                 (gate (gateOutcome! o env hd deadlineNs))
                 (gateRegs (if (stringStartsWith? gate "fail") (list (pair "gate" (str o.gate " " gate))) (list)))
                 (gateUnv (if (or (= gate "timeout") (or (= gate "deadline") (= gate "wallOverBound"))) (list (str "gate:" gate)) (list)))
-                (regs (listAppend gateRegs (listAppend (pairFirst (pairFirst c1)) (pairFirst (pairFirst c2)))))
-                (pre (listAppend (pairSecond (pairFirst c1)) (pairSecond (pairFirst c2))))
+                (split (untouchedPre (listAppend (pairFirst (pairFirst c1)) (pairFirst (pairFirst c2))) files))
+                (regs (listAppend gateRegs (pairFirst split)))
+                (pre (listAppend (pairSecond split) (listAppend (pairSecond (pairFirst c1)) (pairSecond (pairFirst c2)))))
                 (unv0 (listAppend dirtyRows (listAppend gateUnv (listAppend (pairSecond c1) (pairSecond c2)))))
                 (mods (if full (nonEmpty (map (fn [(p String)] -> String (gg/moduleName (resultOr (fileReadString (str hd "/" p)) ""))) (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (not (isSuite? p)))) files))) (list)))
                 (imp (if full (importerSuites! repo hd headSha mods) (list)))
@@ -538,7 +566,7 @@ fn ! run! o: Opts -> (Pair Int64 String)
                                (_ (if (listEmpty? miss) false (ok? (fileAppend o.ledger (stringToBytes (str (stringJoin miss "\n") "\n"))))))]
                            miss)))
                 (receipt (str "(:mergeCheck :verdict " verdict " :mode " o.mode
-                              " :base " (q baseSha) " :head " (q headSha)
+                              " :base " (q baseSha) (if (= baseSha baseReq) "" (str " :requestedBase " (q baseReq))) " :head " (q headSha)
                               " :complete " (cond ((not (listEmpty? unv)) "false") ((not full) "partial") (else "true")) " :suitesRun " (if full "true" "false")
                               " :headCheckout " (if headOwn "true" "false") " :baseCheckout " (if baseOwn "true" "false")
                               " :baseCached " (n (+ (if (listOk? cC) 1 0) (if (listOk? cG) 1 0)))
@@ -561,8 +589,8 @@ fn ! main args: (List String) -> (Result Int64 String)
         (mode (optionOr (flagArg args "--mode") "cheap"))
         (num (fn [(k String) (d Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (flagArg args k) "")) d)))]
     (if (or (stringEmpty? base) (or (stringEmpty? head) (not (or (= mode "cheap") (= mode "full")))))
-      (do (eprintln "usage: mergeCheck --base MERGE-BASE --head REF [--mode cheap|full] [--gate CMD] [--repo DIR] [--ledger FILE] [--cli PATH] [--cache DIR] [--head-dir DIR] [--base-dir DIR] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]") (ok 2))
-      (let [(r (run! (Opts :repo (optionOr (flagArg args "--repo") ".") :base base :head head :ledger (optionOr (flagArg args "--ledger") "")
+      (do (eprintln "usage: mergeCheck --base MERGE-BASE --head REF [--mode cheap|full] [--target REF] [--gate CMD] [--repo DIR] [--ledger FILE] [--cli PATH] [--cache DIR] [--head-dir DIR] [--base-dir DIR] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]") (ok 2))
+      (let [(r (run! (Opts :repo (optionOr (flagArg args "--repo") ".") :base base :head head :target (optionOr (flagArg args "--target") "") :ledger (optionOr (flagArg args "--ledger") "")
                            :cli (optionOr (flagArg args "--cli") "") :totalS (num "--deadline" 1500) :stepS (num "--step" 300) :maxSuites (num "--max-suites" 12)
                            :only (nonEmpty (map stringTrim (stringSplit (optionOr (flagArg args "--only") "") ",")))
                            :mode mode :gate (optionOr (flagArg args "--gate") "") :headDir (optionOr (flagArg args "--head-dir") "")
