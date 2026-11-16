@@ -1,5 +1,5 @@
 (module aslSite/tools/build
-  :x [main layoutPrefix prefixIn! webDir distDir]
+  :x [main layoutPrefix prefixIn! webDir distDir stampPage stampBridge]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm :a llvm)
@@ -112,10 +112,25 @@ fn ! aslLines! prefix: String -> Int64
   (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (quoteSh (str (webDir prefix) "/site")) " " (quoteSh (str prefix "packages/asl-html/src")) " -name '*.asl'")).stdout "\n")))]
     (listSum (map lineCount! files)))
 
-fn ! writePage! dist: String route: String node: h/Node -> Bool
+fn stampPage version: String html: String -> String
+  (let [(q (str "?v=" version "\""))]
+    (stringReplace (stringReplace (stringReplace html "\"/site.css\"" (str "\"/site.css" q)) "\"/boot.js\"" (str "\"/boot.js" q)) "\"/site.wasm\"" (str "\"/site.wasm" q)))
+
+fn stampBridge version: String js: String -> String
+  (stringReplace js "fetch('/site.wasm')" (str "fetch('/site.wasm?v=" version "')"))
+
+fn ! assetVersion! dist: String -> String
+  (stringTrim (sh! (str "cat " (quoteSh (str dist "/site.css")) " " (quoteSh (str dist "/boot.js")) " " (quoteSh (str dist "/site.wasm")) " | (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-12")).stdout)
+
+fn ! stampBridge! dist: String version: String -> Bool
+  (match (fileReadString (str dist "/boot.js"))
+    ((ok js) (let [(stamped (stampBridge version js))] (and (not (= stamped js)) (ok? (fileWrite (str dist "/boot.js") stamped)))))
+    ((err e) false))
+
+fn ! writePage! dist: String version: String route: String node: h/Node -> Bool
   (let [(dir (if (= route "/") dist (str dist route)))]
     (and (ok! (str "mkdir " dir) (sh! (str "mkdir -p " (quoteSh dir))))
-      (ok? (fileWrite (str dir "/index.html") (h/renderDocument node)))))
+      (ok? (fileWrite (str dir "/index.html") (stampPage version (h/renderDocument node))))))
 
 fn ! main -> Int64
   (match (prefixIn! ".")
@@ -134,12 +149,14 @@ fn ! buildSite! prefix: String -> Int64
             (all (posts/loadPosts! (str web "/content/blog")))
             (pages (listAppend [(pair "/" (home/homePage stats)) (pair "/docs" (docs/docsPage)) (pair "/blog" (blog/blogIndexPage all))]
                                (map (fn [(p blog/Post)] -> (Pair String h/Node) (pair (str "/blog/" p.slug) (blog/postPage p))) all)))
-            (wrote (and (ok? (fileWrite (str dist "/site.css") (theme/stylesheet)))
+            (cssOk (ok? (fileWrite (str dist "/site.css") (theme/stylesheet))))
+            (version (assetVersion! dist))
+            (wrote (and (and cssOk (and (= (stringLength version) 12) (stampBridge! dist version)))
                      (and (ok? (fileWrite (str dist "/favicon.svg") (h/render (mascot/iconSvg))))
-                     (and (ok? (fileWrite (str dist "/404.html") (h/renderDocument (blog/notFoundPage))))
+                     (and (ok? (fileWrite (str dist "/404.html") (stampPage version (h/renderDocument (blog/notFoundPage)))))
                        (and (ok? (fileWrite (str dist "/sitemap.xml") (feeds/sitemapXml all)))
                          (and (ok? (fileWrite (str dist "/rss.xml") (feeds/rssXml all)))
-                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! dist (pairFirst page) (pairSecond page))) pages)))))))]
+                           (listAll? (fn [(page (Pair String h/Node))] -> Bool (writePage! dist version (pairFirst page) (pairSecond page))) pages)))))))]
         (do
           (sh! (str "rm -rf " (quoteSh work)))
           (println (str "built " dist ": " (stringFromInt64 (listLength pages)) " pages, site.wasm " (stringFromInt64 stats.wasmBytes) " bytes, " (stringFromInt64 stats.aslLines) " lines of ASL"))
