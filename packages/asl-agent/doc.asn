@@ -1118,6 +1118,7 @@
 (:doc :symbol "asl/packages/asl-agent/src/context.asl#allDownWaitSecFor!" :text "seconds a turn of a run root may wait in all on an all-down gateway, else 1200")
 (:doc :symbol "asl/packages/asl-agent/src/context.asl#allDownPauseSecFor!" :text "pause of a run root between all-down rounds without a Retry-After, else 60")
 (:doc :symbol "asl/packages/asl-agent/src/main.asl#liveProviderWait!" :text "the live turn retry with all-down waits configured by the run root")
+(:doc :symbol "asl/packages/asl-agent/src/main.asl#providerWaitSleep!" :text "wraps the live turn sleep so every provider retry pause first appends (:providerWait :turn N :sec S) to the run journal")
 (:doc :symbol "asl/packages/asl-agent/src/main.asl#servedAlias" :text "the gateway alias that answered a turn, from the alias of its served fields")
 (:doc :symbol "asl/packages/asl-agent/src/main.asl#servedLine" :text "the journal row (:served :turn N :model M :alias A) of a turn, none when the reply names neither")
 (:doc :symbol "asl/packages/asl-agent/src/main.asl#servedIn" :text "the alias and model of the last served row of a journal text")

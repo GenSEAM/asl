@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig trainSig stillRunning mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchPick batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gatesRes redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -1059,15 +1059,84 @@ fn ! stallElapsedMs dir: String id: String now: Int64 -> Int64
                    ((none) 0)
                    ((some l) (max 0 (/ (- now l.at) 1000000))))))
 
+; (:m :ref WRITE-STAGE-YIELD :do "a stall that keeps the unit on its lane keeps its writer fail count and signature, since a stall is no writer failure (WRITE-FAIL-COUNT) and the reset let readStreak readStreak stall repeat without bound; only a hop to another lane starts a clean count, as a tierHop does. The parkAfter-th stall of the unit on the same profile without a lane change parks it blocked with the signature stalled: Nx on profile P lane L and one escalate row, instead of a 20-minute retry on the profile that hung")
+fn stallStays? c: CUnit to: String -> Bool
+  (= to c.lane)
+
+fn stallParked run: Int64 parkAfter: Int64 stays: Bool profile: String -> Bool
+  (and stays (and (not (stringEmpty? profile)) (>= run parkAfter)))
+
+; (:m :ref WRITE-STAGE-YIELD :do "the park counts consecutive own stalls, not lifetime ones: each counted stall journals (:stallRun :unit :lane :profile :n :at); an operator requeue (stage requeue), a tierHop, a write attempt that returned a result and a stall whose kill wip-committed owned edits (a (:wip :reason stalled :branch) row) end the run, and a run on another lane or profile starts again at 1")
+fn stallResetRow? l: String id: String -> Bool
+  (let [(t (str "(:t :unit " (st/q id) " "))]
+    (or (stringStartsWith? l (str "(:wip :unit " (st/q id) " :reason \"stalled\" :branch "))
+        (and (stringStartsWith? l t)
+             (or (stringContains? l " :stage requeue ")
+                 (or (stringContains? l ":verdict \"tierHop ")
+                     (and (stringContains? l " :from writing ") (not (stringContains? l ":verdict \"stalled"))))))))
+
+fn stallRunOf lines: (List String) id: String lane: String profile: String -> Int64
+  (let [(head (str "(:stallRun :unit " (st/q id) " "))
+        (key (str lane "\t" profile))
+        (last (fold (fn [(acc (Pair Int64 String)) (l String)] -> (Pair Int64 String)
+                      (cond
+                        ((stringStartsWith? l head) (pair (optionOr (stringToInt64 (sp/tokAfter l ":n")) 0) (str (quotedAfter l ":lane \"") "\t" (quotedAfter l ":profile \""))))
+                        ((stallResetRow? l id) (pair 0 ""))
+                        (else acc)))
+                    (pair 0 "") lines))]
+    (if (and (> (pairFirst last) 0) (= (pairSecond last) key)) (+ (pairFirst last) 1) 1))
+
+; (:m :ref WRITE-STAGE-YIELD :do "a stop that is infrastructure is no stall of the unit: class dead (pid gone: OOM, watchdog, restart), or a writer waiting on its provider, seen as a provider backoff in providerWait.asn or a Leon journal whose newest row is (:providerWait ...); it writes no stalledProfile or stallRun row, keeps fails, sig and lane, and returns to ready with the verdict stalled: dead or stalled: provider, the provider one through the providerFail backoff while :maxInRow has room")
+fn providerWaitTail? journal: String -> Bool
+  (match (listLast (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines journal)))
+    ((some l) (stringStartsWith? (stringTrim l) "(:providerWait "))
+    ((none) false))
+
+fn ! unitWt ctx: Ctx c: CUnit -> String
+  (if (stringEmpty? c.wt) (str (wtBase ctx.dir (stringTrim (readOr (repoPath ctx.dir)))) "/asex-" c.id) c.wt)
+
+fn ! stallInfraWhy ctx: Ctx c: CUnit note: String now: Int64 -> String
+  (cond
+    ((stringContains? note ":class dead") "dead")
+    ((providerWaiting? ctx.dir c.id now) "provider")
+    ((providerWaitTail? (pairSecond (stl/newestJournal! (unitWt ctx c) 0))) "provider")
+    (else ""))
+
+fn ! stallInfra! ctx: Ctx c: CUnit why: String ms: Int64 -> Unit
+  (let [(row (pfCfg ctx.dir))
+        (now (nowMs))
+        (run (+ (pairFirst (pwLast ctx.dir c.id)) 1))
+        (backoff (and (= why "provider") (<= run (pfMaxInRow row))))
+        (_ (if backoff (pwNote! ctx.dir c.id run (+ now (* (pfBackoffS row) 1000))) false))
+        (_ (if backoff (fileAppend (journalPath ctx.dir) (str "(:providerFail :unit " (st/q c.id) " :route \"stall\" :backoffS " (n (pfBackoffS row)) " :n " (n run) " :at " (n now) ")\n")) (ok ())))
+        (_ (move! ctx (with c :epoch 0 :await "") "ready" "write" "" 0 0 (str "stalled: " why) ms))]
+    ())
+
+fn stallParkSig n: Int64 profile: String lane: String -> String
+  (str "stalled: " (stringFromInt64 n) "x on profile " profile " lane " lane)
+
+fn stallKept c: CUnit to: String -> CUnit
+  (if (stallStays? c to) (with c :epoch 0 :esc 0 :await "") (with c :lane to :fails 0 :sig "" :epoch 0 :esc 0 :await ""))
+
 fn ! stallRequeue! ctx: Ctx c: CUnit lane: String note: String -> Unit
-  (let [(profile (quotedAfter (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:profile :unit " (st/q c.id) " "))) (journalLinesOf ctx.dir))) "") ":profile \""))
-        (_ (if (stringEmpty? profile) (ok ()) (fileAppend (stalledProfilePath ctx.dir) (str "(:stalledProfile :unit " (st/q c.id) " :profile " (st/q profile) " :alias " (st/q c.model) " :at " (n (/ (nowNs) 1000000)) ")\n"))))
-        (to (if (and (= lane "strong") (not (rungOpen? ctx.dir "strong" (nowMs)))) c.lane lane))
+  (let [(lines (journalLinesOf ctx.dir))
+        (profile (quotedAfter (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:profile :unit " (st/q c.id) " "))) lines)) "") ":profile \""))
         (_ (priorWrite! ctx.dir c.id c.lane note))
         (ms (stallElapsedMs ctx.dir c.id (nowNs)))
         (_ (dropLease! ctx c))
-        (_ (move! ctx (with c :lane to :fails 0 :sig "" :epoch 0 :esc 0 :await "") "ready" "write" "" 0 0 "stalled" ms))]
-    ())
+        (why (stallInfraWhy ctx c note (nowMs)))]
+    (if (not (stringEmpty? why)) (stallInfra! ctx c why ms)
+      (let [(run (stallRunOf lines c.id c.lane profile))
+            (parkAfter (stl/parkAfterOf (stl/stRowOf (readOr (ladderPath ctx.dir)))))
+            (_ (if (stringEmpty? profile) (ok ()) (fileAppend (stalledProfilePath ctx.dir) (str "(:stalledProfile :unit " (st/q c.id) " :profile " (st/q profile) " :alias " (st/q c.model) " :at " (n (nowMs)) ")\n"))))
+            (_ (fileAppend (journalPath ctx.dir) (str "(:stallRun :unit " (st/q c.id) " :lane " (st/q c.lane) " :profile " (st/q profile) " :n " (n run) " :at " (n (nowMs)) ")\n")))
+            (to (if (and (= lane "strong") (not (rungOpen? ctx.dir "strong" (nowMs)))) c.lane lane))]
+        (if (stallParked run parkAfter (stallStays? c to) profile)
+          (let [(sig (stallParkSig run profile c.lane))
+                (c1 (escalate! ctx (with c :sig sig :epoch 0 :await "" :esc (if (= run parkAfter) 0 1)) sig (str "write stalled " (n run) " times in a row on profile " profile " with no other lane left")))
+                (_ (move! ctx c1 "blocked" "write" "" 0 0 (str "escalated: " sig) ms))]
+            ())
+          (let [(_ (move! ctx (stallKept c to) "ready" "write" "" 0 0 "stalled" ms))] ())))))
 
 fn ! stallHooks ctx: Ctx -> stl/Hooks
   (stl/Hooks
@@ -2309,8 +2378,30 @@ fn ! outsideOwned! p: String mb: String owns: (List String) -> (List String)
 fn ! aheadRow! dir: String id: String -> String
   (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:ahead :unit " (st/q id) " "))) (stringLines (readOr (journalPath dir))))) "")
 
-fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms: Int64 -> Res
-  (Res :tiers "" :ok (if (= verdict "gating") 1 0) :wt p :branch (str "sh/" id) :model "" :tokens 0 :costMicro 0 :claimedGreen 0
+; (:m :ref WRITE-STAGE-YIELD :do "the writer that held the branch last is the run of the unit's newest (:profile ...) row: the model of a writing transition after it when that run returned, else the newest (:served ... :alias A) row of a Leon journal in the worktree written since that profile row (a run that hung and whose edits the stall kill wip-committed); returns (model . profile row :at)")
+fn aheadWriterOf lines: (List String) id: String -> (Pair String Int64)
+  (let [(prof (str "(:profile :unit " (st/q id) " "))
+        (from (str "(:t :unit " (st/q id) " :from writing "))]
+    (fold (fn [(acc (Pair String Int64)) (l String)] -> (Pair String Int64)
+            (cond
+              ((stringStartsWith? l prof) (pair "" (optionOr (stringToInt64 (sp/tokAfter l ":at")) 0)))
+              ((and (stringStartsWith? l from) (not (stringEmpty? (quotedAfter l ":model \"")))) (pair (quotedAfter l ":model \"") (pairSecond acc)))
+              (else acc)))
+          (pair "" 0) lines))
+
+fn servedAliasIn journal: String -> String
+  (quotedAfter (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:served ")) (stringLines journal))) "") ":alias \"")
+
+; (:m :ref WRITE-STAGE-YIELD :do "the ahead check journals (:aheadWriter :unit U :model M) before it promotes or rejects a branch, with :model \"\" :modelUnknown true when no writer can be named rather than a guess: node2 2026-11-16, 86 of 93 writing->gating rows in 48 h carried :model \"\"")
+fn ! aheadWriter! dir: String id: String p: String -> String
+  (let [(runs (aheadWriterOf (journalLinesOf dir) id))
+        (w (if (stringEmpty? (pairFirst runs)) (servedAliasIn (pairSecond (stl/newestJournal! p (pairSecond runs)))) (pairFirst runs)))
+        (_ (fileAppend (journalPath dir) (str "(:aheadWriter :unit " (st/q id) " :model " (st/q w) (if (stringEmpty? w) " :modelUnknown true" "") ")\n")))]
+    w)
+
+; (:m :ref WRITE-STAGE-YIELD :do "the Res of an ahead-check verdict carries the writer aheadWriter! named, empty when unknown")
+fn aheadRes p: String id: String verdict: String gate: String asserts: Int64 ms: Int64 writer: String -> Res
+  (Res :tiers "" :ok (if (= verdict "gating") 1 0) :wt p :branch (str "sh/" id) :model writer :tokens 0 :costMicro 0 :claimedGreen 0
        :sig (if (= verdict "gating") "" (vacuousSig gate)) :ms ms :exit 0 :asserts asserts :verdict "")
 
 ; (:m :ref AHEAD-REVIEW-FAIL-LOOP :do "true when the newest review verdict in the unit's journal, a :from reviewing row to ready or blocked at stage review, is newer than its newest writer run, a (:profile :unit ...) row that writeResWith journals before every writer run; keyed on writer runs, not on the head, because a rebase onto a moved main and a writer's own commit both change the head while the failed review still stands (node2 2026-11-04: RELAY-PUSH-SHORTNAME head 0a32c45 failed review four times, each time sent straight back to review by the ahead check)")
@@ -2336,7 +2427,7 @@ fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Optio
             (cached (aheadRow! dir u.id))]
         (if (stringContains? cached (str " :head " (st/q head) " :mb " (st/q mb) " :gate " (st/q u.gate) " "))
           (let [(v (sp/tokAfter cached ":verdict"))]
-            (if (= v "writer") none (some (aheadRes p u.id v u.gate (optionOr (stringToInt64 (sp/tokAfter cached ":executed")) 0) 0))))
+            (if (= v "writer") none (some (aheadRes p u.id v u.gate (optionOr (stringToInt64 (sp/tokAfter cached ":executed")) 0) 0 (aheadWriter! dir u.id p)))))
           (let [(cw (written c p (str "sh/" u.id)))
                 (task (taskText dir u))
                 (_ (dirCreate (runsDir dir)))
@@ -2348,7 +2439,7 @@ fn ! aheadGreen! rc: RealCfg dir: String u: st/Task c: CUnit p: String -> (Optio
                 (_ (pathRemove marker))
                 (verdict (cond ((not green) "writer") ((and (= (pairFirst before) 0) (not (regressionGuard? task))) "vacuous") (else "gating")))
                 (_ (fileAppend (journalPath dir) (str "(:ahead :unit " (st/q u.id) " :head " (st/q head) " :mb " (st/q mb) " :gate " (st/q u.gate) " :commits " (stringTrim past.out) " :gateExit " (n g.exit) " :executed " (n g.asserts) " :baseExit " (n (pairFirst before)) " :verdict " verdict ")\n")))]
-            (if (= verdict "writer") none (some (aheadRes p u.id verdict u.gate g.asserts g.ms))))))))
+            (if (= verdict "writer") none (some (aheadRes p u.id verdict u.gate g.asserts g.ms (aheadWriter! dir u.id p)))))))))
 
 ; (:m :ref UNIT-AHEAD-GATING :do "the saved pre-onBase refs are keyed by unit id, never by branch name: refs/asex is shared by every worktree of the repo, and a detached worktree named refs/asex/preOnBase/HEAD, so another detached unit healed onto this unit's tip")
 fn onBaseTipRef id: String -> String

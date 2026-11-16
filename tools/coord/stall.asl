@@ -1,5 +1,5 @@
 (module asl-tools/coord/stall
-  :x [Cfg Probe Signal Act Hooks stRowOf cfgOf cfgErrors replyRows sameTrail emptyTrail servedCount opText signalFrom verdictOf stallCount actOf stallRow statMs newestWrite! signalOf! sweep! stallsPath atPath]
+  :x [Cfg Probe Signal Act Hooks stRowOf cfgOf cfgErrors parkAfterOf replyRows sameTrail emptyTrail servedCount opText signalFrom verdictOf stallCount actOf stallRow statMs newestWrite! newestJournal! signalOf! sweep! stallsPath atPath]
   :i [(asl-text/string :a ts)])
 
 ; (:m :ref COND-STALL-AUTO :do "automatic stall handling for writing units: per unit a Signal (newest journal mtime, newest file write outside .asl, trailing identical-reply streak, trailing empty-reply streak, pid alive), a verdict ok|stalled|looping|dead from the (:stall ...) row of <store>/ladder.asn, and an Act (kill the run record's tree, requeue with an ASN note, escalate to the strong lane after :escalateAfter stalls); no valid row means no sweep, today's behaviour. The conductor owns the hooks, this module owns the decision and the rows")
@@ -40,13 +40,13 @@ fn intAfter row: String key: String dflt: Int64 -> Int64
 ; (:m :ref COND-STALL-AUTO :do "ranges, all adopted defaults: stalledMin 20 (1..1440; a served turn took 48 s at p50, 396 s at p99, 534 s max over 662 node2 sessions), sameOp 10 (3..1000; 34 of 708 journals repeated one reply 10 or more times in a row, most legitimate repeats of gate and read stop at 5), emptyReplies 4 (1..100), escalateAfter 2 (1..20), everyS 60 (5..3600)")
 fn cfgErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":stalledMin" ":sameOp" ":emptyReplies" ":escalateAfter" ":everyS") k))) keys))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":stalledMin" ":sameOp" ":emptyReplies" ":escalateAfter" ":everyS" ":parkAfter") k))) keys))
         (ranged (fn [(key String) (dflt Int64) (lo Int64) (hi Int64)] -> (List String)
                   (let [(v (intAfter row key dflt))]
                     (if (or (< v lo) (> v hi)) (list (str key " " (stringFromInt64 v) " outside " (stringFromInt64 lo) ".." (stringFromInt64 hi))) (list)))))]
     (flatten (list (map (fn [(k String)] -> String (str "unknown key " k)) bad)
                       (ranged ":stalledMin" 20 1 1440) (ranged ":sameOp" 10 3 1000) (ranged ":emptyReplies" 4 1 100)
-                      (ranged ":escalateAfter" 2 1 20) (ranged ":everyS" 60 5 3600))))
+                      (ranged ":escalateAfter" 2 1 20) (ranged ":everyS" 60 5 3600) (ranged ":parkAfter" 3 1 100))))
 
 fn flatten xss: (List (List String)) -> (List String)
   (fold (fn [(acc (List String)) (xs (List String))] -> (List String) (listAppend acc xs)) (list) xss)
@@ -56,6 +56,10 @@ fn cfgOf row: String -> Cfg
     (Cfg :on false :stalledMin 20 :sameOp 10 :emptyReplies 4 :escalateAfter 2 :everyS 60)
     (Cfg :on true :stalledMin (intAfter row ":stalledMin" 20) :sameOp (intAfter row ":sameOp" 10) :emptyReplies (intAfter row ":emptyReplies" 4)
          :escalateAfter (intAfter row ":escalateAfter" 2) :everyS (intAfter row ":everyS" 60)))
+
+; (:m :ref WRITE-STAGE-YIELD :do "stalls of one unit on one write profile before the conductor parks it blocked instead of requeueing it to the same profile: :parkAfter of the (:stall ...) row, adopted default 3 (1..100); node2 2026-11-16: 163 of 225 stalls in 48 h ran the strong profile, and CHECKER-REJECT-PREFIX, CHILDENV-STRIP-MORE stalled 3 times each on it, 20 min per stall, with the fail count reset every time")
+fn parkAfterOf row: String -> Int64
+  (if (listEmpty? (cfgErrors row)) (intAfter row ":parkAfter" 3) 3)
 
 ; (:m :ref COND-STALL-AUTO :do "a reply row is one line (:turn N :reply \"...\"); the reply text is everything after :reply, so an op with its arguments is one signature")
 fn replyRows journal: String -> (List String)
