@@ -1,7 +1,7 @@
 (module aslAgent/tests/leonWallBudgetTest
   :x [runTests]
   :i [(aslAgent/main :a m) (aslAgent/loop :a lp) (aslAgent/gateIntegrity :a gi)
-      (aslAgent/tests/gitInitKit :a kit) (aslHarness/tests/agentLoopRecorderKit :a rk)])
+      (aslAgent/tests/gitInitKit :a kit) (aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/tests/procTreeKit :a pt)])
 
 ; (:m :ref LEON-WALLBUDGET-ORPHAN :do "a scripted run whose gate sleeps far past a 5 s :wallBudget ends by itself near the budget, its gate's own sleeping child is killed with the gate's process group, and a reviewer the gateway cannot serve leaves a green gated run needsReview with :reviewer unavailable and exit 0; a gitignored file Leon wrote is code under test and gets the revert check; scripted providers only, no network")
 
@@ -26,11 +26,8 @@ fn ! pidsOf! root: String -> (List Int64)
   (map (fn [l] (optionOr (stringToInt64 (stringTrim l)) 0))
        (filter (fn [l] (not (stringEmpty? (stringTrim l)))) (stringLines (resultOr (fileReadString (str root "/pids")) ""))))
 
-fn ! alive! pid: Int64 -> Bool
-  (and (> pid 0) (resultOr (procAlive? pid) false))
-
-fn slowGate -> String
-  "if [ -f started ]; then sleep 40 & echo $! >> pids; wait; else touch started; fi\necho '(:gate :asserts 1 :failed 1)'\nexit 1\n"
+fn slowGate root: String -> String
+  (str "if [ -f started ]; then " (pt/sleeperCmd root) " & echo $! >> pids; wait; else touch started; fi\necho '(:gate :asserts 1 :failed 1)'\nexit 1\n")
 
 fn fileGate -> String
   "if [ -f scratch/w.txt ]; then echo '(:gate :asserts 1 :failed 0)'; else echo '(:gate :asserts 1 :failed 1)'; exit 1; fi\n"
@@ -58,7 +55,7 @@ fn ! reviewRoot! tag: String -> String
 fn ! runTests -> Bool
   (let [wallRoot (freshRoot! "wall")
         _cfg (fileWrite (str wallRoot "/.asl.config.asn") "(:aslConfig :agentLoop (:specCheck false :wallGateMinSec 1 :wallReserveSec 1))\n")
-        _gate (fileWrite (str wallRoot "/slow.sh") (slowGate))
+        _gate (fileWrite (str wallRoot "/slow.sh") (slowGate wallRoot))
         notes (map (fn [i] (str "(:step :op \"write\" :file \"x.txt\" :content \"w" (stringFromInt64 i) "\")")) (range 0 20))
         startNs (nowNs)
         wallExit (runForm! wallRoot "wall" (rk/scriptFixtureTextFromReplies! "wall" notes)
@@ -66,7 +63,8 @@ fn ! runTests -> Bool
         wallSec (/ (- (nowNs) startNs) 1000000000)
         wallJournal (journalOf! wallRoot)
         pids (pidsOf! wallRoot)
-        liveAfter (filter alive! pids)
+        ; (:m :ref NODE-BASE-RED :do "pids is the gate's own view of its sleeper, a namespace number inside the Linux jail: it says the sleeper started; what still lives is read from the host tree that names the root")
+        liveAfter (pt/liveNaming! wallRoot)
         _reap (map (fn [p] (procKill p "SIGKILL")) liveAfter)
         downRoot (reviewRoot! "down")
         downExit (runForm! downRoot "down" (withGradeError (rk/scriptFixtureTextFromReplies! "down" (list (writeReply))) (downMessage))
@@ -87,6 +85,7 @@ fn ! runTests -> Bool
       (assert (!= wallExit 0) "a wall-budget stop is not a success")
       (assert (< wallSec 20) "a run whose gate sleeps 40 s per turn ends within its 5 s budget plus margin")
       (assert (not (listEmpty? pids)) "the slow gate started its sleeping child")
+      (assert (pt/probeSeesSelf!) "the host process probe sees this test process, so an empty tree means gone")
       (assert (listEmpty? liveAfter) "the gate's sleeping child died with the gate's process group at the capped timeout")
       (assert (= downExit 0) "a green gated run whose reviewer the gateway cannot serve exits 0")
       (assert (stringContains? downJournal ":status :needsReview") "the unserved review stays visible as needsReview")

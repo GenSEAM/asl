@@ -10,8 +10,22 @@ fn ! freshRoot! tag: String -> String
         made (dirCreate path)]
     (resultOr (realPath path) path))
 
+; (:m :ref NODE-BASE-RED :do "a route check runs its gate jailed to the scratch copy, which can neither see nor write the real root (bwrap binds back only the scratch under a private /tmp, seatbelt denies writes outside it), so the scratch gate only marks its scratch and naps a second; what the real tree held during each check, and the scratch's kind, is read from outside the jail by routeWatch!. The gate on the real tree still logs there itself")
 fn gateScript root: String -> String
-  (str "if [ -f .git ]\nthen\necho worktree >> " root "/kind\nelse\necho copy >> " root "/kind\nfi\n" "if [ -f " root "/w.txt ]\nthen\necho present >> " root "/log\nelse\necho absent >> " root "/log\nfi\nif grep -q good w.txt\nthen\necho '(:gate :asserts 1 :failed 0)'\nelse\necho \"BOOM:$(cat w.txt)\"\necho '(:gate :asserts 1 :failed 1)'\nexit 1\nfi\n")
+  (str "if [ \"$(pwd -P)\" = '" root "' ]\nthen\nif [ -f " root "/w.txt ]\nthen\necho present >> " root "/log\nelse\necho absent >> " root "/log\nfi\nelse\ntouch .routeGate\nsleep 1\nfi\n" "if grep -q good w.txt\nthen\necho '(:gate :asserts 1 :failed 0)'\nelse\necho \"BOOM:$(cat w.txt)\"\necho '(:gate :asserts 1 :failed 1)'\nexit 1\nfi\n")
+
+; (:m :ref NODE-BASE-RED :do "outside the jail: each leonRoute_<pid>_ scratch whose gate has marked it is logged once, with whether the real root held w.txt at that moment and whether the scratch is a git worktree (.git is a file) or a copy")
+fn ! routeWatch! root: String prefix: String out: String stop: String seen: (List String) deadlineNs: Int64 -> Int64
+  (if (or (fileExists? stop) (>= (monotonicNs) deadlineNs))
+    0
+    (let [base (optionOr (envGet "TMPDIR") "/tmp")
+          fresh (filter (fn [n] (and (stringStartsWith? n prefix) (and (not (listContains? seen n)) (fileExists? (str base "/" n "/.routeGate"))))) (resultOr (dirList base) (list)))
+          logged (map (fn [n] (fileAppend out (str (if (fileExists? (str root "/w.txt")) "present" "absent") " " (if (match (fileStat (str base "/" n "/.git")) ((ok st) st.isFile) ((err _) false)) "worktree" "copy") "\n"))) fresh)
+          napped (sleepMs 20)]
+      (routeWatch! root prefix out stop (listAppend seen fresh) deadlineNs)))
+
+fn ! watchColumn! out: String col: Int64 -> String
+  (stringJoin (map (fn [l] (str (optionOr (listGet (stringSplit l " ") col) "") "\n")) (filter (fn [l] (not (stringEmpty? l))) (stringLines (resultOr (fileReadString out) "")))) "")
 
 fn gatewayText -> String
   "(:gateway :v 2 :providers ((:provider :id fp :kind openai :base \"http://127.0.0.1:1\" :keyEnv FP_KEY)) :models ((:model :id wr :provider fp :name \"n1\" :temperature 0.8) (:model :id esc :provider fp :name \"n2\" :temperature 0.2)) :profiles ((:profile :id default :routes ((:intent any :chain (wr))))) :uses ((:use :for default :profile default)) :codeRoutes ((:codeRoute :id code :writer wr :escalate esc)))\n"
@@ -38,12 +52,18 @@ fn ! runCase! tag: String gateway: String replies: (List String) useGit: Bool ->
         _dir (dirCreate dir)
         _fix (fileWrite (str dir "/" tag ".asn") (rk/scriptFixtureTextFromReplies! tag replies))
         form (str "(:agent :task \"write w.txt\" :backend \"script/" tag "\" :root \"" root "\" :mode \"implement\" :intent \"code\" :owns (\"w.txt\") :gates (\"sh gate.sh\") :budget 20 :contextTokens 8000 :gateTimeout 30)")
+        out (str root ".routeWatch")
+        stop (str root ".routeStop")
+        prefix (str "leonRoute_" (stringFromInt64 (procSelf)) "_")
+        watcher (fr/forkLimited! (str root ".watch.log") (fr/limits 600 4) (fn [] -> Int64 (routeWatch! root prefix out stop (list) (+ (monotonicNs) 590000000000))))
         exit (m/main (list form))
+        _stop (fileWrite stop "")
+        _end (match watcher ((ok f) (fr/forkKill! f "done")) ((err _) (fr/ForkEnd :exit -1 :verdict "" :desc 0 :note "")))
         journal (journalOf! root)
-        log (resultOr (fileReadString (str root "/log")) "")
-        kind (resultOr (fileReadString (str root "/kind")) "")
+        log (str (watchColumn! out 0) (resultOr (fileReadString (str root "/log")) ""))
+        kind (watchColumn! out 1)
         trees (if useGit (resultOr (fr/shellOut (str "git -C '" root "' worktree list") 30000) "") "")
-        _gone (pathRemove root)]
+        _gone (map pathRemove (list root out stop (str root ".watch.log")))]
     (list journal log kind trees))
 
 fn nth0 xs: (List String) i: Int64 -> String

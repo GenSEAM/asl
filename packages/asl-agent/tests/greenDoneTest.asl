@@ -29,13 +29,15 @@ fn ! closedRunWith! tag: String task: String gate: (fn [String] -> String) repli
   (let [root (rk/freshRecorderRoot! tag)
         wroteS (fileWrite (str root "/subject.txt") "base\n")
         wroteCfg (fileWrite (str root "/.asl.config.asn") (str "(:aslConfig :agentLoop (:specCheck false :baseline " baseline "))"))
-        wroteGate (fileWrite (str root ".gate.sh") (gate root))
+        ; (:m :ref NODE-BASE-RED :do "the gate script lives inside the root: the Linux jail mounts a private /tmp and binds back only the root, so a script beside the root is not there and every gate run exits 2")
+        gateDir (dirCreate (str root "/.asl"))
+        wroteGate (fileWrite (str root "/.asl/gate.sh") (gate root))
         repo (gk/initGitRepo! root "greenDone" "green-done@example.invalid")
         fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         dir (dirCreate fixtureDir)
         fixture (fileWrite (str fixtureDir "/green" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "green" tag) replies))
         form (str "(:agent :task \"" (c/escapeAsn task) "\" :backend \"script/green" tag "\" :root \"" (c/escapeAsn root)
-               "\" :mode \"scout\" :owns (" owns ") :gates (" (if gated (str "\"sh " (c/escapeAsn root) ".gate.sh\"") "") ") :budget 8 :contextTokens 8000 :commit true" tail ")")
+               "\" :mode \"scout\" :owns (" owns ") :gates (" (if gated (str "\"sh " (c/escapeAsn root) "/.asl/gate.sh\"") "") ") :budget 8 :contextTokens 8000 :commit true" tail ")")
         repoRoot (resultOr (realPath ".") ".")
         rootDir (match (envGet "ASL_ROOT_DIR") ((some r) (if (stringEmpty? r) repoRoot r)) ((none) repoRoot))
         res (m/mainWithRoots (list form) repoRoot rootDir)
@@ -45,7 +47,7 @@ fn ! closedRunWith! tag: String task: String gate: (fn [String] -> String) repli
         logged (fr/runOneLimited (fr/job (list "git" "log" "-1" "--format=%s" (str "--output=" root ".subject")) root (fr/childEnv (list))) (fr/limits 10 8))
         message (resultOr (fileReadString (str root ".subject")) "")
         subject (resultOr (fileReadString (str root "/subject.txt")) "")
-        cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root ".gate.sh"))) (and (ok? (pathRemove (str root ".subject"))) (or (ok? (pathRemove (str root ".seen"))) true))))]
+        cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root ".subject"))) (or (ok? (pathRemove (str root ".seen"))) true)))]
     (Closed :journal journal :message message :subject subject :receipt res.stdout))
 
 fn clip s: String n: Int64 -> String
