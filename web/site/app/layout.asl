@@ -48,7 +48,7 @@ fn footCol heading: String links: (List (Pair String String)) -> h/Node
 
 fn leonMascot -> h/Node
   (h/div [(h/cls "leon-stage")]
-    [(mascot/dock "leon-dock" "FIG-02 · Leon rests here")])
+    [(mascot/dock "leon-dock" "Leon rests here")])
 
 fn blockCell label: String value: String -> h/Node
   (h/div [] [(h/span [(h/cls "micro")] [(h/text label)]) (h/el "b" [] [(h/text value)])])

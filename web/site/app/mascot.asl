@@ -23,42 +23,18 @@ fn tailLogoSvg clsName: String gradId: String -> h/Node
 fn tailMark size: String -> h/Node
   (tailLogoSvg (str "cham " size) "tailGrad")
 
-fn tailCurled -> String
-  "M 32 128 C 30 160 56 184 84 176 C 106 170 112 146 98 134 C 86 124 68 130 68 144 C 68 154 78 160 86 154 C 92 149 88 142 82 144"
-
-fn tailOpen -> String
-  "M 32 128 C 28 150 34 168 48 178 C 60 186 76 188 88 184 C 98 181 106 174 108 166 C 110 158 104 152 98 154 C 94 156 93 160 96 163"
-
-fn tailStroke clsName: String -> h/Node
-  (h/path [(h/cls clsName) (h/attr "d" (tailCurled)) (h/attr "data-open" (tailOpen)) (h/attr "data-curl" (tailCurled))])
-
-fn leonBranch -> h/Node
-  (h/g [(h/cls "leon-branch")]
-    [(h/path [(h/cls "leon-wood") (h/attr "d" "M 14 172 C 50 150 96 122 180 110")])
-     (h/path [(h/cls "leon-twig") (h/attr "d" "M 146 115 C 156 108 164 100 170 90")])
-     (h/path [(h/cls "leon-leaf") (h/attr "d" "M 170 90 C 172 78 182 72 192 72 C 192 84 184 92 170 90 Z")])
-     (h/path [(h/cls "leon-leaf") (h/attr "d" "M 160 114 C 168 118 176 128 176 138 C 164 136 158 126 160 114 Z")])])
-
-fn leonBody -> h/Node
-  (h/g [(h/cls "leon-body")]
-    [(h/path [(h/cls "leon-skin") (h/attr "d" "M 98 48 C 72 34 38 48 28 80 C 20 104 22 124 34 138 C 46 146 60 134 74 124 C 88 114 100 108 108 96 C 100 84 96 66 98 48 Z")])
-     (h/path [(h/cls "leon-crest") (h/attr "d" "M 88 40 C 62 33 34 50 24 82")])
-     (h/path [(h/cls "leon-stripe") (h/attr "d" "M 62 52 C 56 66 56 80 62 92 M 44 66 C 40 80 42 94 50 106")])
-     (h/path [(h/cls "leon-limb") (h/attr "d" "M 56 110 C 56 122 62 132 71 139")])
-     (h/path [(h/cls "leon-limb") (h/attr "d" "M 102 96 C 104 106 108 116 114 123")])
-     (h/path [(h/cls "leon-skin") (h/attr "d" "M 92 52 C 90 26 112 10 136 16 C 156 21 170 40 172 62 C 174 72 172 80 164 86 C 150 96 120 100 104 94 C 94 90 92 70 92 52 Z")])
-     (h/path [(h/cls "leon-mouth") (h/attr "d" "M 124 84 C 140 90 156 86 168 76")])
-     (h/circle [(h/cls "leon-eye") (h/attr "cx" "122") (h/attr "cy" "56") (h/attr "r" "17")])
-     (h/circle [(h/cls "leon-iris") (h/attr "cx" "124") (h/attr "cy" "56") (h/attr "r" "9")])
-     (h/circle [(h/cls "leon-pupil") (h/attr "cx" "126") (h/attr "cy" "56") (h/attr "r" "4.5")])
-     (h/circle [(h/cls "leon-glint") (h/attr "cx" "122") (h/attr "cy" "52") (h/attr "r" "2")])
-     (h/circle [(h/cls "leon-pupil") (h/attr "cx" "162") (h/attr "cy" "66") (h/attr "r" "1.4")])])
+fn lid cx: String cy: String rx: String ry: String -> h/Node
+  (h/ellipse [(h/cls "leon-lid") (h/attr "cx" cx) (h/attr "cy" cy) (h/attr "rx" rx) (h/attr "ry" ry)])
 
 fn leon -> h/Node
-  (h/svg [(h/cls "leon") (h/attr "viewBox" "0 0 200 200") (h/attr "role" "img") (h/attr "aria-label" "Leon the chameleon, the AgentSlang mascot")]
-    [(leonBranch)
-     (h/g [(h/cls "leon-tail")] [(tailStroke "leon-tail-edge") (tailStroke "leon-tail-fill")])
-     (leonBody)])
+  (h/div [(h/cls "leon")]
+    [(h/div [(h/cls "leon-swing")]
+      [(h/img [(h/cls "leon-art") (h/src "/leon.webp") (h/alt "Leon the chameleon, the AgentSlang mascot") (h/attr "width" "640") (h/attr "height" "640")])
+       (h/svg [(h/cls "leon-lids") (h/attr "viewBox" "0 0 1024 1024") (h/attr "aria-hidden" "true") (h/attr "focusable" "false")]
+         [(lid "574" "305" "80" "84")
+          (lid "811" "300" "33" "78")
+          (h/path [(h/cls "leon-lash") (h/attr "d" "M 512 338 Q 574 392 636 338")])
+          (h/path [(h/cls "leon-lash") (h/attr "d" "M 786 330 Q 811 372 836 330")])])])])
 
 fn dock dockId: String label: String -> h/Node
   (h/div [(h/cls "leon-dock") (h/id dockId)] [(h/span [(h/cls "micro")] [(h/text label)])])

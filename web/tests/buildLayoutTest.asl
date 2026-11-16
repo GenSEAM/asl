@@ -31,6 +31,8 @@ fn ! runTests -> Bool
       (assert (= inExported (some "")) "under the exported repo root the build's file is web/tools/build.asl, so paths take no prefix")
       (assert (= inEmpty (none)) "a directory that holds neither layout is refused instead of guessed")
       (assert (= (build/layoutPrefix true true) (some "asl/")) "the workspace layout wins when both files exist")
+      (assert (= (build/stampPage "abc" "<link href=\"/site.css\"><script src=\"/boot.js\"></script><link href=\"/site.wasm\"><a href=\"/docs\">") "<link href=\"/site.css?v=abc\"><script src=\"/boot.js?v=abc\"></script><link href=\"/site.wasm?v=abc\"><a href=\"/docs\">") "a page names its stylesheet, bridge and module by build version, and nothing else changes")
+      (assert (= (build/stampBridge "abc" "const source = fetch('/site.wasm');") "const source = fetch('/site.wasm?v=abc');") "the bridge fetches the module of its own build")
       (assert (= (build/webDir "") "web") "the exported site root is web")
       (assert (= (build/distDir "") "web/dist") "the exported output is web/dist, the directory wrangler.toml publishes")
       (assert (= (build/webDir "asl/") "asl/web") "the workspace site root is asl/web")
