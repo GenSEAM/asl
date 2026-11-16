@@ -547,29 +547,43 @@ fn ! testInfra root: String -> Bool
         (assert (listEmpty? (cd/cdErrors "(:conductor :infraFree true :needsPlan true :infraOwnAfter 5)")) "the keys are known")
         true))
 
-; (:m :do "needsPlan: with (:conductor :needsPlan true) V blocked vacuous and S queued with an owns path that cannot exist move to needsPlan; D waits on V and status shows V as its root; reload brings V back to ready; without the key both stay")
+; (:m :do "needsPlan on a fixture repo whose main added and then deleted gone.txt and whose sh/F1 adds own/f.txt and keeps gone.txt (both by one fast-import stream): with (:conductor :needsPlan true) V1 blocked vacuous and S1 owning the deleted gone.txt move to needsPlan; N1 owning newdir/x.txt, G1 owning brandnew/* and F1 owning a file only its branch has stay; B1 behind an unmerged :after stays, B2 behind a merged one moves; D1 waits on V1 and status shows V1 as its root; reload brings V1 back to ready; without the key nothing moves")
 fn ! planCase root: String name: String ladder: String -> String
-  (let [(dir (str root "/" name))
+  (let [(top (str root "/" name))
         (_ (dirCreate root))
-        (_ (dirCreate dir))
+        (_ (dirCreate top))
+        (repo (pf/repoIn top))
+        (dir (str top "/store"))
+        (stream (str top "/stream.fi"))
+        (_ (fileWrite stream (str "commit refs/heads/main\ncommitter t <t@example.invalid> 1700000000 +0000\ndata 3\nadd\nfrom refs/heads/main^0\nM 644 inline gone.txt\ndata 1\nx\n\n"
+                                  "commit refs/heads/main\ncommitter t <t@example.invalid> 1700000001 +0000\ndata 3\ndel\nD gone.txt\n\n"
+                                  "commit refs/heads/sh/F1\ncommitter t <t@example.invalid> 1700000002 +0000\ndata 3\nown\nfrom refs/heads/main^0\nM 644 inline own/f.txt\ndata 1\nf\nM 644 inline gone.txt\ndata 1\ny\n\n")))
+        (fi (pf/sh (str "cd " repo " && git fast-import --quiet < " stream " && echo fiOk")))
         (_ (st/put! dir (unitAfter "V1" (list))))
-        (_ (st/put! dir (with (unitAfter "S1" (list)) :owns (list "no/such/dir/at/all.txt"))))
+        (_ (st/put! dir (with (unitAfter "S1" (list)) :owns (list "gone.txt"))))
+        (_ (st/put! dir (with (unitAfter "N1" (list)) :owns (list "newdir/x.txt"))))
+        (_ (st/put! dir (with (unitAfter "G1" (list)) :owns (list "brandnew/*"))))
+        (_ (st/put! dir (with (unitAfter "F1" (list)) :owns (list "own/f.txt" "gone.txt"))))
         (_ (st/put! dir (unitAfter "D1" (list "V1"))))
         (_ (st/put! dir (unitAfter "A1" (list))))
-        (_ (st/put! dir (with (unitAfter "B1" (list "A1")) :owns (list "fromA/b.txt"))))
+        (_ (st/put! dir (with (unitAfter "B1" (list "A1")) :owns (list "gone.txt"))))
         (_ (st/put! dir (unitAfter "M1" (list))))
-        (_ (st/put! dir (with (unitAfter "B2" (list "M1")) :owns (list "fromM/b.txt"))))
+        (_ (st/put! dir (with (unitAfter "B2" (list "M1")) :owns (list "gone.txt"))))
         (_ (cd/writeCUnit! dir (pf/cuIn "A1" "writing" "" "")))
         (_ (cd/writeCUnit! dir (pf/cuIn "B1" "queued" "" "")))
         (_ (cd/writeCUnit! dir (pf/cuIn "M1" "merged" "" "")))
         (_ (cd/writeCUnit! dir (pf/cuIn "B2" "queued" "" "")))
+        (_ (cd/writeCUnit! dir (pf/cuIn "N1" "queued" "" "")))
+        (_ (cd/writeCUnit! dir (pf/cuIn "G1" "queued" "" "")))
+        (_ (cd/writeCUnit! dir (pf/cuIn "F1" "ready" "" "sh/F1")))
         (_ (cd/writeCUnit! dir (with (pf/cuIn "V1" "blocked" "" "") :sig "vacuousGate: true" :esc 1)))
         (_ (cd/writeCUnit! dir (pf/cuIn "S1" "queued" "" "")))
         (_ (cd/writeCUnit! dir (pf/cuIn "D1" "queued" "" "")))
-        (_ (fileWrite (str dir "/repo.path") (str dir "\n")))
+        (_ (fileWrite (str dir "/repo.path") (str repo "\n")))
         (_ (fileWrite (str dir "/ladder.asn") (str ladder "\n")))
         (n0 (cd/needsPlanSweep! (ctxOf dir) (resultOr (st/readUnits! dir) (list))))]
-    (str (cuOf! dir "V1").st " " (cuOf! dir "S1").st " " (stringFromInt64 n0) " " (cuOf! dir "B1").st " " (cuOf! dir "B2").st))
+    (str (if (stringContains? fi "fiOk") "" "noFixture ") (cuOf! dir "V1").st " " (cuOf! dir "S1").st " " (stringFromInt64 n0) " " (cuOf! dir "B1").st " " (cuOf! dir "B2").st
+         " " (cuOf! dir "N1").st " " (cuOf! dir "G1").st " " (cuOf! dir "F1").st))
 
 ; (:m :do "settled and close: a store whose only unit waits in needsPlan is settled, and conductor close moves it to merged")
 fn ! testPlanSettled root: String -> Bool
@@ -588,7 +602,7 @@ fn ! testPlanSettled root: String -> Bool
 fn ! testNeedsPlan root: String -> Bool
   (let [(on (planCase root "planOn" "(:conductor :needsPlan true)"))
         (off (planCase root "planOff" "(:conductor :blockedRetryMax 2)"))
-        (dir (str root "/planOn"))
+        (dir (str root "/planOn/store"))
         (s1 (cuOf! dir "S1"))
         (status (cd/status! (ctxOf dir)))
         (queue (str root "/planQueue.asn"))
@@ -597,9 +611,9 @@ fn ! testNeedsPlan root: String -> Bool
         (_ (cd/requestReload! dir (list "V1")))
         (_ (cd/reloadDrain! (ctxOf dir)))]
     (do (assert (testPlanSettled root) "a needsPlan unit is settled and close takes it")
-        (assert (= on "needsPlan needsPlan 3 queued needsPlan") (str "a vacuous block and a stale owns move to needsPlan, an owns path an unmerged :after unit may create does not, one behind a merged :after does: " on))
-        (assert (= off "blocked queued 0 queued queued") (str "without the key nothing moves: " off))
-        (assert (= s1.sig "staleOwns: no/such/dir/at/all.txt") (str "the reason is kept: " s1.sig))
+        (assert (= on "needsPlan needsPlan 3 queued needsPlan queued queued ready") (str "a vacuous block and a path deleted on base move to needsPlan; a path in a new directory, a new glob, a file only the unit branch has and a path an unmerged :after unit may create stay; one behind a merged :after moves: " on))
+        (assert (= off "blocked queued 0 queued queued queued queued ready") (str "without the key nothing moves: " off))
+        (assert (= s1.sig "staleOwns: gone.txt") (str "the reason is kept: " s1.sig))
         (assert (stringContains? status "(:root \"V1\" :st needsPlan :holds 1)") (str "a needsPlan unit is the root of its dependants: " status))
         (assert (stringContains? status "(:state :st needsPlan :n 3 ") "status counts needsPlan")
         (assert (= (cuOf! dir "V1").st "ready") (str "reload is the way out: " (cuOf! dir "V1").st))
@@ -656,6 +670,40 @@ fn ! testBound root: String -> Bool
         (assert (= (str m1.st " " (stringFromInt64 m1.writes)) "ready 1") (str "a merge-red fix round is owed its write too: " m1.st))
         true))
 
+; (:m :do "fix-round bound: R1 is admitted, reviewed and fails review with a new defect each time, six cycles under the given attempts row; returns the number of admissions, R1's state, signature, :writes and :fixes, and its escalation rows, then its state and :fixes after an operator requeue")
+fn ! sixCase root: String name: String ladder: String -> String
+  (let [(dir (str root "/" name))
+        (_ (dirCreate root))
+        (_ (dirCreate dir))
+        (_ (st/put! dir (unitAfter "R1" (list))))
+        (_ (cd/writeCUnit! dir (pf/cuIn "R1" "ready" "" "sh/R1")))
+        (_ (fileWrite (str dir "/ladder.asn") (str ladder "\n")))
+        (ctx (ctxOf dir))
+        (admits (fold (fn [(a Int64) (k Int64)] -> Int64
+                        (let [(_ (cd/step! ctx (unitAfter "R1" (list)) 8))
+                              (c (cuOf! dir "R1"))]
+                          (if (!= c.st "writing") a
+                            (let [(_ (cd/writeCUnit! dir (with c :st "reviewing")))
+                                  (_ (cd/finish! ctx (unitAfter "R1" (list)) (cuOf! dir "R1") (resOf (str "review: defect " (stringFromInt64 k)) "fail")))]
+                              (+ a 1)))))
+                      0 (range 0 6)))
+        (c (cuOf! dir "R1"))
+        (esc (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:escalate :unit \"R1\" ")) (stringLines (readOr (str dir "/escalations.asn")))))
+        (_ (cd/requeueOne! ctx (resultOr (st/readUnits! dir) (list)) "R1"))
+        (r (cuOf! dir "R1"))]
+    (str (stringFromInt64 admits) " " c.st " " c.sig " w" (stringFromInt64 c.writes) " f" (stringFromInt64 c.fixes) " e" (stringFromInt64 (listLength esc)) " r" r.st (stringFromInt64 r.fixes)))
+
+fn ! testFixBound root: String -> Bool
+  (let [(on (sixCase root "fixOn" "(:attempts :maxWrites 2 :maxFixRounds 2)"))
+        (off (sixCase root "fixOff" "(:attempts :maxWrites 2)"))]
+    (do (assert (= on "3 blocked fixBound: 2 rounds w0 f3 e1 rqueued0") (str "six review-fail cycles park after two fix rounds, with one escalation: " on))
+        (assert (stringStartsWith? off "6 ") (str "without :maxFixRounds fix rounds are not bounded and do not spend :maxWrites: " off))
+        (assert (listEmpty? (cd/attemptsErrors "(:attempts :maxWrites 2 :maxFixRounds 3)")) "the key is known")
+        (assert (not (listEmpty? (cd/attemptsErrors "(:attempts :maxWrites 2 :maxFixRounds 0)"))) "a bound below 1 is rejected")
+        (assert (= (cd/fixRoundsMax "(:attempts :maxWrites 2)") -1) "no key: off")
+        (assert (= (cd/parseCUnit (cd/renderCUnit (with (pf/cuIn "Z" "ready" "" "") :fixes 2))) (ok (with (pf/cuIn "Z" "ready" "" "") :fixes 2))) "the count round-trips through the row")
+        true))
+
 fn ! runTests -> Bool
   (let [(root (pf/scratch "flowDrain" "t"))
         (_ (pf/cleanup root))
@@ -674,6 +722,7 @@ fn ! runTests -> Bool
         (infra (testInfra root))
         (plan (testNeedsPlan root))
         (bound (testBound root))
+        (fixBound (testFixBound root))
         (_ (pf/cleanup root))]
     (do (assert reload "reload replaces the definition and resets the counters")
         (assert reloadTick "the tick drains reload requests")
@@ -690,4 +739,5 @@ fn ! runTests -> Bool
         (assert infra "infra causes are retried without spending the limit under infraFree")
         (assert plan "defective tasks wait in needsPlan for a reload")
         (assert bound "a write bound parks a unit written too often")
+        (assert fixBound "fix rounds have their own bound")
         true))
