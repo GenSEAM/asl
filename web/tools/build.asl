@@ -1,5 +1,5 @@
 (module aslSite/tools/build
-  :x [main layoutPrefix prefixIn! webDir distDir stampPage stampBridge]
+  :x [main layoutPrefix prefixIn! webDir distDir stampPage stampBridge sourceDigest!]
   :i [(asl-ir/types :a irTy)
       (asl-ir/link :a lk)
       (asl-target-llvm :a llvm)
@@ -127,6 +127,25 @@ fn ! stampBridge! dist: String version: String -> Bool
     ((ok js) (let [(stamped (stampBridge version js))] (and (not (= stamped js)) (ok? (fileWrite (str dist "/boot.js") stamped)))))
     ((err e) false))
 
+fn ! fileDigest! path: String -> String
+  (match (fileReadBytes path) ((ok bytes) (bytesSha256 bytes)) ((err e) "unreadable"))
+
+fn ! entryDigest! dir: String name: String -> String
+  (let [(full (str dir "/" name))]
+    (match (dirList full)
+      ((ok names) (str name "/ " (dirDigest! full) "\n"))
+      ((err e) (str name " " (fileDigest! full) "\n"))))
+
+fn ! dirDigest! dir: String -> String
+  (match (dirList dir)
+    ((ok names) (bytesSha256 (stringToBytes (stringJoin (map (fn [(n String)] -> String (entryDigest! dir n)) (filter (fn [(n String)] -> Bool (not (stringStartsWith? n "."))) names)) ""))))
+    ((err e) "missing"))
+
+fn ! sourceDigest! prefix: String -> String
+  (let [(web (webDir prefix))
+        (parts (listAppend (map dirDigest! [(str web "/site") (str web "/bridge") (str web "/public") (str web "/content") (str web "/tools") (str prefix "packages/asl-html/src")]) [(fileDigest! (str prefix "llms.txt"))]))]
+    (bytesSha256 (stringToBytes (stringJoin parts " "))))
+
 fn ! writePage! dist: String version: String route: String node: h/Node -> Bool
   (let [(dir (if (= route "/") dist (str dist route)))]
     (and (ok! (str "mkdir " dir) (sh! (str "mkdir -p " (quoteSh dir))))
@@ -151,7 +170,7 @@ fn ! buildSite! prefix: String -> Int64
                                (map (fn [(p blog/Post)] -> (Pair String h/Node) (pair (str "/blog/" p.slug) (blog/postPage p))) all)))
             (cssOk (ok? (fileWrite (str dist "/site.css") (theme/stylesheet))))
             (version (assetVersion! dist))
-            (wrote (and (and cssOk (and (= (stringLength version) 12) (stampBridge! dist version)))
+            (wrote (and (and cssOk (and (= (stringLength version) 12) (and (stampBridge! dist version) (ok? (fileWrite (str dist "/build.asn") (str "(:build :version \"" version "\" :sources \"" (sourceDigest! prefix) "\")\n"))))))
                      (and (ok? (fileWrite (str dist "/favicon.svg") (h/render (mascot/iconSvg))))
                      (and (ok? (fileWrite (str dist "/404.html") (stampPage version (h/renderDocument (blog/notFoundPage)))))
                        (and (ok? (fileWrite (str dist "/sitemap.xml") (feeds/sitemapXml all)))
