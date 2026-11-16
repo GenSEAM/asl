@@ -25,7 +25,8 @@ fn step msg: m/Msg model: Int64 -> (Pair Int64 (List b/Op))
       (let [(next (+ 2 (if (light? model) 0 1)))]
         (pair next (listAppend (themeOps next) [(b/storeOp "theme" (themeName next))]))))
     ((m/copyBatch) (pair model (copyOps (home/batchLine) "copy-batch")))
-    ((m/resetCopy) (pair model [(b/textOp "#copy-batch" "Copy")]))
+    ((m/copyInstall) (pair model (copyOps (home/installLine) "copy-install")))
+    ((m/resetCopy) (pair model [(b/textOp "#copy-batch" "Copy") (b/textOp "#copy-install" "Copy")]))
     ((m/unknown) (pair model [])))
 
 fn pad3 n: Int64 -> String

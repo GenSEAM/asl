@@ -526,7 +526,10 @@ fn renderInto acc: (List String) n: Node -> (List String)
       (let [(opened (openTag acc tag attrs))]
         (if (and (voidTag? tag) (listEmpty? kids))
           (cons (if (= tag "br") ">" "/>") opened)
-          (cons ">" (cons tag (cons "</" (fold renderInto (cons ">" opened) kids))))))))
+          (cons ">" (cons tag (cons "</" (cons (renderKids kids) (cons ">" opened)))))))))
+
+fn renderKids kids: (List Node) -> String
+  (stringJoin (listReverse (fold renderInto [] kids)) "")
 
 fn render n: Node -> String
   (stringJoin (listReverse (renderInto [] n)) "")
