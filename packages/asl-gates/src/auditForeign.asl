@@ -78,7 +78,7 @@ fn baselineRel -> String
   "scripts/audit/foreignBaseline.asn"
 
 fn kindNames -> String
-  "javascript machO powershell python shell stage0Host testGenerator"
+  "javascript machO powershell python shell stage0Host testGenerator wasm"
 
 fn byteAt bs: Bytes n: Int64 i: Int64 -> Int64
   (if (and (>= i 0) (< i n)) (bytesGet bs i) -1)
@@ -1059,6 +1059,7 @@ fn lookupKind k: String -> (Option (List String))
     ((= k "machO") (some (list "machO" "machOUniversal")))
     ((= k "stage0Host") (some (list "c" "shell")))
     ((= k "testGenerator") (some (list "python" "shell")))
+    ((= k "wasm") (some (list "wasm")))
     (else (none)))
 
 fn measureAll! root: String t: Tracked paths: (List String) acc: (Map String (Pair Int64 Int64)) -> (Result (Map String (Pair Int64 Int64)) String)
