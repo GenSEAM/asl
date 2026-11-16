@@ -60,16 +60,9 @@ function environment() {
 }
 
 // Leon is one element with three rests: the hero frame, the corner branch, the footer frame.
-// Scroll moves him between them and curls his tail; left-hand eggs leave before they reach him.
+// Scroll moves him between them and names his rest so the stylesheet can swing him on landing; left-hand eggs leave before they reach him.
 const lerp = (a, b, k) => a + (b - a) * k, clamp = (x) => Math.min(1, Math.max(0, x)), ease = (x) => x * x * (3 - 2 * x);
 const still = matchMedia('(prefers-reduced-motion: reduce)');
-const numbers = (s) => s.match(/-?\d+(\.\d+)?/g).map(Number);
-const tailPath = (open, curled, k) => {
-  const n = open.map((v, i) => lerp(v, curled[i], k).toFixed(1));
-  let d = `M${n[0]} ${n[1]}`;
-  for (let i = 2; i < n.length; i += 6) d += `C${n.slice(i, i + 6).join(' ')}`;
-  return d;
-};
 
 function onScroll() {
   const calm = still.matches, step = (x) => (calm ? Math.round(x) : ease(x)), sway = calm ? 0 : 1;
@@ -86,13 +79,9 @@ function onScroll() {
     t2 = gone > 0 ? gone / (gone + left) : 0;
   }
   const e2 = step(t2), across = step(clamp((t2 - 0.7) / 0.3)), x = lerp(lerp(ax, bx, e1), cx, across), y = lerp(lerp(ay, by, e1), cy, e2) - Math.sin(t1 * Math.PI) * 24 * sway, w = lerp(lerp(aw, bw, e1), cw, e2);
-  const curl = e1 * (1 - 0.55 * Math.sin(t2 * Math.PI) * sway), tilt = (Math.sin(t1 * Math.PI) * -6 + Math.sin(t2 * Math.PI) * 8) * sway;
+  const hop = (Math.sin(t1 * Math.PI) + Math.sin(t2 * Math.PI)) * 0.07 * sway, rest = t2 >= 0.98 ? 'foot' : t2 > 0.02 ? 'air' : t1 >= 0.98 ? 'branch' : t1 > 0.02 ? 'air' : 'hero', tilt = (Math.sin(t1 * Math.PI) * -6 + Math.sin(t2 * Math.PI) * 8) * sway;
   const perch = $('#chameleon-perch');
-  if (perch) { perch.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) rotate(${tilt.toFixed(1)}deg)`; perch.style.width = `${w.toFixed(1)}px`; }
-  document.querySelectorAll('.leon-tail path').forEach((el) => {
-    el.open ??= numbers(el.dataset.open); el.curled ??= numbers(el.dataset.curl);
-    el.setAttribute('d', tailPath(el.open, el.curled, curl));
-  });
+  if (perch) { perch.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) rotate(${tilt.toFixed(1)}deg) scale(${(1 - hop).toFixed(3)},${(1 + hop).toFixed(3)})`; perch.style.width = `${w.toFixed(1)}px`; if (perch.dataset.rest !== rest) perch.dataset.rest = rest; }
   const leonY = y + w / 2, drift = sy * 0.65 * sway;
   document.querySelectorAll('[data-egg]').forEach((el) => {
     const ey = Number(el.dataset.y), ex = Number(el.dataset.x), er = Number(el.dataset.r), vy = ((ey - drift) % 3120 + 3120) % 3120 - 160;
