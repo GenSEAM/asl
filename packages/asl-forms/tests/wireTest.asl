@@ -35,6 +35,9 @@ fn testFileNearest! -> Bool
     (assert (= (w/wireReceipt! (ws root) "  (:step :id 1 :op \"read\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"File not found: sub/unique.tx\")" true "read")
                "(:read :status :rejected :error ERR_FILE_NOT_FOUND :message \"File not found: sub/unique.tx\" :nearest (\"sub/unique.txt\" \"sub/dup.txt\") :hint \"paths resolve against the workspace root; :nearest, when present, names entries beside the missing one\" :see \"(:help :op read)\")")
             "a missing file names close siblings")
+    (assert (= (w/wireReceipt! (ws root) "  (:step :id 1 :op \"read\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"File not found: sub/dp\")" true "read")
+               "(:read :status :rejected :error ERR_FILE_NOT_FOUND :message \"File not found: sub/dp\" :nearest (\"sub/deep\" \"sub/dup.txt\") :hint \"paths resolve against the workspace root; :nearest, when present, names entries beside the missing one\" :see \"(:help :op read)\")")
+            "a close sibling is ranked by its name, not by its workspace path")
     true)
 
 fn testKitNearest -> Bool

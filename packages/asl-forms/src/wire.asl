@@ -223,10 +223,10 @@ fn wireNearest! ws: Workspace code: String op: String rest: (List WNode) -> (Lis
             (match (dirList parent)
               ((err _) (list))
               ((ok names)
-                (let [(sibs (map (fn [(nm String)] -> String (k/relPath (k/joinPath parent nm) ws.root)) names))]
-                  (if (listEmpty? (sm/getCloseMatches (k/baseName full) (filter (fn [(nm String)] -> Bool (not (stringStartsWith? nm "."))) names) 3 0.4))
-                    (nearestPaths missing sibs (trackedFiles! ws.root))
-                    (nearestPaths missing sibs (list))))))))))
+                (let [(close (sm/getCloseMatches (k/baseName full) (filter (fn [(nm String)] -> Bool (not (stringStartsWith? nm "."))) names) 3 0.4))]
+                  (if (listEmpty? close)
+                    (nearestPaths missing (list) (trackedFiles! ws.root))
+                    (map (fn [(nm String)] -> String (k/relPath (k/joinPath parent nm) ws.root)) close)))))))))
     (else (list)))
 
 fn quoteAtom s: String -> WNode
