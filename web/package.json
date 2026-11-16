@@ -1,0 +1,8 @@
+{
+  "name": "aslang-site",
+  "private": true,
+  "description": "web/dist is built by web/tools/build.asl and committed; Cloudflare Pages publishes it as it is",
+  "scripts": {
+    "build": "test -f dist/index.html && test -f dist/site.wasm && test -f dist/build.asn"
+  }
+}

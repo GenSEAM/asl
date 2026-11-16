@@ -1,6 +1,6 @@
 # Beyond JSON-RPC: Why ASL Frames Agent Messages as S-Expressions
 *Published on September 10, 2026 · 6 min read · By the GenSEAM Team*
-*Canonical URL: https://aslang.dev/blog/the-death-of-json-rpc-and-zero-copy-wire-protocols*
+*Canonical URL: https://aslang.dev/blog/beyond-json-rpc-s-expression-agent-messages*
 
 ## 1. The Bottleneck
 
@@ -38,7 +38,7 @@ The implemented wire is small and deliberately plain:
 
 - `grammar/wire.asn` declares a `CanonicalWireFrame` of five fields (`identity`, `sessionId`, `causality`, `payload`, `digest`), its errors, and four transports: stdio, Unix socket, HTTP and SSE.
 - `packages/asl-agent-bus/src/wire.asl` validates, encodes and decodes that frame per transport; `transport.asl` adds frame types (handshake, heartbeat, request, response, stream chunk, close); `ndAsn.asl` carries newline-delimited ASN frames.
-- These suites pass on the stage-0 host: `wireTest.asl` (29 assertions), `transportTest.asl` (18), `ndAsnTest.asl` (31), `presenceTest.asl` (24) and `meshTest.asl` (40), run on 2026-10-14.
+- These suites pass: `wireTest.asl` (29 assertions), `transportTest.asl` (18), `ndAsnTest.asl` (31), `presenceTest.asl` (24) and `meshTest.asl` (40), run on 2026-10-14.
 
 Today the frame's `payload` field is a string, so the "form as a form" property above is not yet used on this wire.
 
@@ -62,8 +62,8 @@ An earlier version of this post described a shared-memory ring buffer built on `
 # One batch of agent-plane forms: search, then a bounded read
 asl '(:query :text "handleRequest") (:read :file "src/server.asl" :symbol "handleRequest")'
 
-# The wire codec suites on the stage-0 host (from the directory above the asl checkout)
-asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/wireTest.asl
+# The wire codec suite (from the directory above the asl checkout)
+asl test asl/packages/asl-agent-bus/tests/wireTest.asl
 ```
 
 ## 6. Resources

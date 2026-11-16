@@ -27,28 +27,28 @@ asl    <- staged in the session buffer; (:diff) shows it
 agent  -> (:check :file "core/auth.asl")
 asl    <- ok, or ERR_UNKNOWN_SYMBOL / ERR_ARITY / ERR_MATCH_NONEXHAUSTIVE with line and column
 agent  -> (:flush)
-agent  -> asl-host test tests/authTest.asl
+agent  -> asl test tests/authTest.asl
 asl    <- "N assertion(s) executed (N passed)", exit 0
 ```
 
 ### Operational Properties
 1. **Bounded reads**: `(:read)` returns a symbol or a bounded slice; `(:intel :op outline :file "...")`, or `asl intel outline FILE`, lists a module's items with their kind, signature and export flag without loading bodies.
 2. **Staged edits**: `(:edit)` and `(:write)` stage changes in a session buffer outside the working tree; `(:diff)`, `(:check)` and `(:test)` see the staged content; `(:flush)` writes it to disk and `(:discard)` drops it. `(:txn ...)` stages, checks and flushes in one call and restores every touched file when a step fails.
-3. **Non-interactive execution** (partly built): the process package `asl-proc` redirects standard input from `/dev/null` unless input is supplied, and a timeout wraps the command so it is killed and exits 124. Its session model tracks idle time and steps to SIGTERM after 10 s of silence and SIGKILL after 12 s, recording a receipt. The module loads on the stage-0 host and its suites pass there (`processTest.asl`, `sessionTest.asl`, `rpcProcTest.asl`). Persisting working directory and environment across turns is still a target.
+3. **Non-interactive execution** (partly built): the process package `asl-proc` redirects standard input from `/dev/null` unless input is supplied, and a timeout wraps the command so it is killed and exits 124. Its session model tracks idle time and steps to SIGTERM after 10 s of silence and SIGKILL after 12 s, recording a receipt. The module loads and its suites pass (`processTest.asl`, `sessionTest.asl`, `rpcProcTest.asl`). Persisting working directory and environment across turns is still a target.
 
 ---
 
 ## 2. Checks That Fail on the Claim
 
-A check is only useful to an agent if it fails when the code is wrong. The reference is the stage-0 host (`host/out/asl-host`), and `asl check` and `asl test` on an `.asl` file run on it. It resolves every name before anything runs:
+A check is only useful to an agent if it fails when the code is wrong. The reference is the `asl` CLI: `asl check` and `asl test` on an `.asl` file. The checker resolves every name before anything runs:
 
-- an unknown symbol is `ERR_UNKNOWN_SYMBOL`, a wrong argument count `ERR_ARITY`, a mismatched argument type `ERR_TYPE_MISMATCH`, and an `mt` that misses an enum case `ERR_MATCH_NONEXHAUSTIVE`, each with line and column;
+- an unknown symbol is `ERR_UNKNOWN_SYMBOL`, a wrong argument count `ERR_ARITY`, a mismatched argument type `ERR_TYPE_MISMATCH`, and a `match` that misses an enum case `ERR_MATCH_NONEXHAUSTIVE`, each with line and column;
 - a function that calls an effectful builtin without being marked is `ERR_EFFECT_UNMARKED`;
 - a test passes only when the exported `runTests` returns `true` after at least one assertion executed. A suite with zero assertions fails (`ERR_TEST_FAILED: zero assertions executed`), and `(assert true ...)` is rejected at load as `ERR_CONSTANT_ASSERT`.
 
-A concrete example: a file with a top-level `(defun double [x] (* x 2))` fails `asl-host check` with `ERR_UNSUPPORTED_TOPLEVEL list-form (defun ...) at top level` and exit 1. `lambda` is accepted as an anonymous `fn`.
+A concrete example: a file with a top-level `(defun double [x] (* x 2))` fails `asl check` with `ERR_UNSUPPORTED_TOPLEVEL list-form (defun ...) at top level` and exit 1. `lambda` is accepted as an anonymous `fn`.
 
-An earlier toolchain engine, asl-core, verified delimiter balance only and passed suites that it should have failed. It is retired: the rule for agents is to check and test with the host.
+An earlier toolchain engine verified delimiter balance only and passed suites that it should have failed. It has been retired: the rule for agents is to check and test with `asl check` and `asl test`.
 
 ---
 
@@ -81,7 +81,7 @@ An earlier version of this post claimed 100 percent function coverage across the
 
 A repository that mixes Python test scripts, TypeScript transpilers, Rust binaries, and Bash glue asks an agent to master several package managers, build systems, and diagnostic formats.
 
-Inside `packages/`, the source directories are ASL: on 2026-10-14, of the 720 git-tracked files under `packages/*/src`, 718 are `.asl` and one is `.asn`; the exception is the browser plugin's `popup.html`. Tests and fixtures carry some data files. The stage-0 host that runs all of this is C by design, and the native self-hosted compiler is still in progress.
+Inside `packages/`, the source directories are ASL: on 2026-10-14, of the 720 git-tracked files under `packages/*/src`, 718 are `.asl` and one is `.asn`; the exception is the browser plugin's `popup.html`. Tests and fixtures carry some data files. The compiler is itself written in ASL and compiles itself through LLVM IR; that self-compile is gated on macOS only.
 
 The benefit we are after:
 1. **One cognitive domain**: the agent reads and writes one syntax.
@@ -93,10 +93,8 @@ The benefit we are after:
 
 | Command | Purpose |
 | :--- | :--- |
-| `host/out/asl-host check <file>` | Resolve names, arity, types, enum coverage and effect marks before running. |
-| `host/out/asl-host test <file>` | Strict test runner: `runTests` must return `true` after at least one assertion. |
-| `asl check <file>` | Delimiter balance, then the host check for an `.asl` file. |
-| `asl test <file>` | The host test runner. |
+| `asl check <file>` | Resolve names, arity, types, enum coverage and effect marks before running. |
+| `asl test <file>` | Strict test runner: `runTests` must return `true` after at least one assertion. |
 | `asl intel outline <file>` | Items and signatures of a module without bodies. |
 | `asl audit gates --full` | The workspace gate suite; `--static` skips the suites. |
 | `asl '(:read ...)' '(:edit ...)' '(:flush)'` | Bounded reads and staged edits on the agent plane; `asl '(:tools)'` lists every op. |
@@ -108,4 +106,4 @@ The benefit we are after:
 Autonomous coding is not only about model weights or prompts; it is about **tooling architecture**. The parts that help most are the plain ones: bounded reads, staged edits, and checks that fail on the claim. The parts that look like help but are not, such as a gate that always passes, are worse than no gate at all, because the agent trusts them.
 
 - Learn about token ergonomics in [The Token-Density Fallacy](/blog/the-token-density-fallacy-and-machine-understandability).
-- Run the strict checks: `host/out/asl-host check <file>` and `asl audit gates --full`.
+- Run the strict checks: `asl check <file>` and `asl audit gates --full`.

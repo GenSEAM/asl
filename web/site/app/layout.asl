@@ -60,7 +60,7 @@ fn footBar -> h/Node
         [(leonMascot)
          (h/div [(h/cls "stack")]
           [(h/a [(h/href "/") (h/cls "mark")] [(markNode) (h/span [] [(h/text "AgentSlang")])])
-           (h/p [] [(h/text "A language and data notation designed for model-written code. Pre-release. Dual-licensed MIT or Apache-2.0.")])
+           (h/p [] [(h/text "An agent-oriented language with an open ecosystem of tools and packages. Pre-release. Dual-licensed MIT or Apache-2.0.")])
            (h/p [(h/cls "micro") (h/id "built-with")] [(h/text "This site is an ASL program: markup, styles and event handlers compiled to WebAssembly.")])])
          (footCol "Language" [(pair "Ecosystem" "/#ecosystem") (pair "Docs" "/docs") (pair "llms.txt" "/llms.txt") (pair "Install script (preview)" "/install.sh")])
          (footCol "Project" [(pair "Source" "https://github.com/GenSEAM/asl") (pair "Blog" "/blog") (pair "RSS" "/rss.xml")])])

@@ -1,4 +1,4 @@
-# Building a Developer Cockpit for Synthetic Intelligences
+# Developer Tooling for Coding Agents: Symbol Reads, Staged Edits and Structured Receipts
 *By GenSEAM | September 2026*
 
 Software engineering toolchains (language servers, linters, formatters, debuggers, containerized sandboxes) were designed for human ergonomics. They assume a programmer typing at human speed, reading diagnostics in an IDE gutter, and tolerating compilation pauses.
@@ -37,7 +37,7 @@ Traditional compilers and linters are passive: they find a fault, print a messag
 Checking an ASL file has two layers, and `(:check :file f)` runs both, in order:
 
 * Delimiter balance, answered with a structured receipt such as `ERR_UNBALANCED_DELIMITERS` and the byte where the stray delimiter sits.
-* The stage-0 host's checker (`host/out/asl-host check f`), on the staged content. It resolves names, checks call arity, checks that a match covers every case of an enum and that effectful functions are marked, all before anything runs. Calling `(add 1)` on a two-argument `add` fails with `ERR_ARITY add expects 2 argument(s), got 1`.
+* The name-resolving checker (`asl check f`), on the staged content. It resolves names, checks call arity, checks that a match covers every case of an enum and that effectful functions are marked, all before anything runs. Calling `(add 1)` on a two-argument `add` fails with `ERR_ARITY add expects 2 argument(s), got 1`.
 
 Here is a module that passes both (checked 2026-10-14):
 
@@ -52,7 +52,7 @@ fn recordTick c: Counter -> Counter
   (with c :ticks (+ c.ticks 1))
 ```
 
-For delimiter slips there is `(:fix :file f)`, which proposes a minimal repair with a diff and the basis for choosing it, and stages it only with `:apply`. It refuses with `ERR_AMBIGUOUS_REPAIR` and a list of candidate byte offsets when more than one repair would balance the file. It balances text, not meaning: on a stray `)` at the end of a function body under a bare `fn` header line, it proposes opening a parenthesis before `fn` rather than deleting the extra closer, so its proposals still go through `asl-host check`.
+For delimiter slips there is `(:fix :file f)`, which proposes a minimal repair with a diff and the basis for choosing it, and stages it only with `:apply`. It refuses with `ERR_AMBIGUOUS_REPAIR` and a list of candidate byte offsets when more than one repair would balance the file. It balances text, not meaning: on a stray `)` at the end of a function body under a bare `fn` header line, it proposes opening a parenthesis before `fn` rather than deleting the extra closer, so its proposals still go through `asl check`.
 
 ---
 
@@ -74,11 +74,11 @@ asl '(:discard)'
 
 When several agents modify different modules, coordinators need a view of project health that does not require reading code. `(:observe :dim d)` projects the workspace along one dimension:
 
-* `tokenCost`: tokens by file kind, and the most expensive files, for a scope (it needs the tokenizer tables under `data/tokenizers` and refuses with `ERR_NO_ENCODER` without them).
+* `tokenCost`: tokens by file kind, and the most expensive files, for a scope (it needs the tokenizer tables and refuses with `ERR_NO_ENCODER` without them).
 * `callers`: call sites of a symbol with path, line and kind.
 * `status`: stubs, callers and executing tests of a symbol or path.
 * `coverage`: which requirements of a spec are implemented and tested.
-* `memory`: sizes of the `.asl/mem` ledgers.
+* `memory`: sizes of the memory ledgers.
 * `session`: running agent sessions and overlapping ownership.
 
 For the package graph, `asl coupling` audits imports across the repository. On 2026-10-14 it reported 66 packages, 718 modules and 22 inter-package cycles: debt the audit makes visible, not a clean result.

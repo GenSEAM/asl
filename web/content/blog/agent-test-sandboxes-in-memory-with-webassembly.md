@@ -1,4 +1,4 @@
-# Killing Docker Spin-Up Latency: Why Agent Test Sandboxes Belong in Memory
+# Agent Test Sandboxes in Memory: A WebAssembly Design and What Exists Today
 *By GenSEAM | September 2026*
 
 Autonomous software engineering ("vibe-coding") relies on rapid feedback loops: an agent synthesizes an implementation, executes a test suite, inspects failures, and refines the code.
@@ -31,7 +31,7 @@ The design we are building toward compiles an ASL module to WebAssembly and runs
 
 The compiler half exists. `asl-target-llvm`, written in ASL, lowers a linked program to LLVM IR, and for `wasm32-unknown-unknown` it brings its own allocator and garbage collector. The resulting module imports four functions from its host and nothing else: `asl.write`, `asl.exit`, `asl.nowNs` and `asl.trap`. On that target `print` is the only host builtin; a program that reads a file, the environment or a socket fails to compile with `ERR_CAPABILITY_ABSENT` naming the call. This site is built this way: `web/tools/build.asl` compiles `web/site` to `site.wasm`, and a short JavaScript bridge loads it in your browser.
 
-What does not exist yet is the sandbox runner: an engine embedded in the toolbelt that takes a module an agent just wrote, runs its tests under the wasm32 build, and reports back. (The older `asl-target-wat` emitter, which writes WebAssembly Text directly, handles arithmetic only and is not on this path.)
+What does not exist yet is the sandbox runner: an engine embedded in the asl CLI that takes a module an agent just wrote, runs its tests under the wasm32 build, and reports back. (The older `asl-target-wat` emitter, which writes WebAssembly Text directly, handles arithmetic only and is not on this path.)
 
 A module an agent might hand to such a sandbox:
 
@@ -59,7 +59,7 @@ The isolation properties below come from the WebAssembly specification, which is
 
 We have not benchmarked a WebAssembly sandbox, because the runner does not exist yet, so this post quotes no sandbox latency.
 
-What we can measure is the loop an agent already uses: checking and running a test on the stage-0 host, a native C program with no container. We ran `asl/host/out/asl-host test` on the module above 50 times on 2026-10-14, on a 4-core Linux cloud VM (Intel Xeon, 2.8 GHz), timing the whole process from Python's `subprocess.run`: median 11.9 ms, minimum 10.5 ms, maximum 28.5 ms. That covers loading the prelude, reading, name resolution and the test itself. It has no sandbox, which is the gap the wasm32 target is meant to close without giving back the speed.
+What we can measure is the loop an agent already uses: checking and running a test with no container. These numbers are a dated measurement taken with an earlier build of the runtime, before the toolchain moved to the self-compiled one; they are not a current figure. We ran `asl test` on the module above 50 times on 2026-10-14, on a 4-core Linux cloud VM (Intel Xeon, 2.8 GHz), timing the whole process from Python's `subprocess.run`: median 11.9 ms, minimum 10.5 ms, maximum 28.5 ms. That covers loading the prelude, reading, name resolution and the test itself. It has no sandbox, which is the gap the wasm32 target is meant to close; whether it can do so without giving back the speed is not measured.
 
 ---
 
@@ -67,9 +67,9 @@ What we can measure is the loop an agent already uses: checking and running a te
 
 A sandbox is only useful if the code verified inside it behaves the same where it is deployed.
 
-Testing in one environment and deploying to another creates environment drift: code that passes in a Python sandbox can behave differently in a Go or TypeScript service.
+Testing in one environment and deploying to another creates environment drift: code that passes in a Python sandbox can behave differently in a Go or Node service.
 
-The direction AgentSlang takes is a single source with several lowerings. The repository holds target packages for C, Go, LLVM, Python, Rust, shell, Swift, TypeScript and WebAssembly Text (`asl/packages/asl-target-*`). Only `asl-target-llvm` compiles real multi-module programs today, natively and to wasm32; the source-to-source targets are prototypes.
+The direction AgentSlang takes is a single source with several lowerings. Today `asl-target-llvm` compiles real multi-module programs, natively and to wasm32. JavaScript is experimental, Python and Go are prototypes, and there is no Rust, TypeScript or C target and no working Swift or shell target.
 
 1. **Verify once:** The agent iterates until the unit tests pass.
 2. **Lower to the target:** The same syntax tree is emitted for each target.
