@@ -188,6 +188,7 @@ fn moduleOf path: String text: String -> Module
 fn ! isDir? path: String -> Bool
   (match (fileStat path) ((ok st) st.isDir) ((err _) false))
 
+; (:m :ref TRAIN-DERIVED-REGEN :do "dot files and dot dirs are not sources: a .asl_chk_print_pPID_NS_0.asl temp a killed asl check left beside a source (gitignored, so git clean -fd keeps it) made five cards differ in the node2 train scratch; docLedger skips them the same way")
 fn ! sourceFiles! dir: String -> (List String)
   (match (dirList dir)
     ((err _) (list))
@@ -195,6 +196,7 @@ fn ! sourceFiles! dir: String -> (List String)
       (listFlatMap (fn [(n String)] -> (List String)
                      (let [(p (str dir "/" n))]
                        (cond
+                         ((stringStartsWith? n ".") (list))
                          ((isDir? p) (sourceFiles! p))
                          ((stringEndsWith? n ".asl") (list p))
                          (else (list)))))
