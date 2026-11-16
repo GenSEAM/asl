@@ -334,6 +334,8 @@ fn testRejectedInputs! -> Bool
         (overflowWrite (pq/parquetWrite "/tmp/aslParquetOverflow.parquet" (list (pq/i64Column "x" overflowValues "DELTA_BINARY_PACKED")) options (list)))
         (unwritable (pq/parquetWrite "/no/such/asl-parquet/out.parquet" (list (pq/i64Column "x" values "DELTA_BINARY_PACKED")) options (list)))]
     (do
+      (pathRemove "/tmp/aslParquetLevel22.parquet")
+      (pathRemove "/tmp/aslParquetUnsupportedLevel.parquet")
       (assert (err? wrongType) "incompatible encoding and physical type rejected")
       (assert (err? emptyName) "empty column name rejected")
       (assert (err? badLevel) "ZSTD level outside 1..22 rejected")

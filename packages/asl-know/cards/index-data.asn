@@ -3,7 +3,7 @@
 (:c "asl-csv" "RFC 4180 CSV row reader..." (csvParseRows csvParseColumns))
 (:c "asl-http" "Streaming HTTP/1.1 and..." (makeHeaders getHeader))
 (:c "asl-json" "RFC 8259 JSON parser,..." (jsonParse jsonEmit))
-(:c "asl-parquet" "Parquet writer, footer..." (parquetNumRowGroups parquetNumRows))
+(:c "asl-parquet" "Parquet writer, footer..." (parquetMergeDecodes parquetMergeSourceCount))
 (:c "asl-regex" "regular-expression..." (regex-compile! regex-compile-flags!))
 (:c "asl-s3" "AWS S3 request..." (uriEncode canonicalUri))
 (:c "asl-sql" "Cross-dialect SQL text..." (defaultDialect dialectQuoteChar))

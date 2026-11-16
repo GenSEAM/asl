@@ -140,7 +140,7 @@ fn columnsValid? columns: (List ParquetColumn) -> Bool
     (listAll? (fn [column]
       (and (validName? (columnName column))
         (typeEncodingValid? column)
-        (> (arrayCount column) 0))) columns))
+        (>= (arrayCount column) 0))) columns))
 
 fn firstColumnCount columns: (List ParquetColumn) -> Int64
   (match (listHead columns)
@@ -255,15 +255,6 @@ fn deltaBlocksValid? values: I64Array start: Int64 -> Bool
     (let [(last (min (+ start 127) (- (i64ArrayLen values) 1)))]
       (and (deltaBlockValid? values start last 0 0)
         (deltaBlocksValid? values (+ last 1)))))
-
-fn columnDeltasValid? column: ParquetColumn -> Bool
-  (match column
-    ((i64Column _ values encoding) (if (= encoding "DELTA_BINARY_PACKED") (deltaBlocksValid? values 1) true))
-    ((f64Column _ _ _) true)
-    ((i8Column _ _ _) true))
-
-fn columnsDeltasValid? columns: (List ParquetColumn) -> Bool
-  (listAll? (fn [column] (columnDeltasValid? column)) columns)
 
 fn deltaAt values: I64Array index: Int64 -> Int64
   (if (= index 0) 0 (- (i64ArrayGet values index) (i64ArrayGet values (- index 1))))
@@ -578,47 +569,57 @@ fn ! columnData! column: ParquetColumn -> (Result Bytes String)
       ((= encoding "PLAIN") (ok (plainData! column)))
       ((= encoding "BYTE_STREAM_SPLIT") (splitData! column))
       (else (match column
-        ((i64Column _ values _) (ok (deltaData! values)))
+        ((i64Column _ values _)
+          (if (deltaBlocksValid? values 1) (ok (deltaData! values))
+            (err "DELTA_BINARY_PACKED values contain an overflowing INT64 delta")))
         ((f64Column _ _ _) (err "DELTA_BINARY_PACKED is supported only for INT64 columns"))
         ((i8Column _ _ _) (err "DELTA_BINARY_PACKED is supported only for INT64 columns"))))))
 
-fn ! writeColumns! temp: String columns: (List ParquetColumn) start: Int64 count: Int64 compression: String level: Int64 offset: Int64 -> (Result (List ChunkMeta) String)
+fn ! writePages! temp: String column: ParquetColumn at: Int64 count: Int64 pageRows: Int64 compression: String level: Int64 compressed: Int64 uncompressed: Int64 -> (Result (Pair Int64 Int64) String)
+  (if (>= at count) (ok (pair compressed uncompressed))
+    (let [(n (if (> pageRows 0) (min pageRows (- count at)) (- count at)))
+          (page (columnSlice! column at (+ at n)))]
+      (match (columnData! page)
+        ((err e) (err e))
+        ((ok raw)
+          (match (if (= compression "zstd") (zstdCompress! raw level) (ok raw))
+            ((err e) (err e))
+            ((ok body)
+              (let [(header (pageHeader! n (columnEncoding page) (bytesLength raw) (bytesLength body)))]
+                (match (fileAppend temp header)
+                  ((err e) (err (str e)))
+                  ((ok _)
+                    (match (fileAppend temp body)
+                      ((err e) (err (str e)))
+                      ((ok _)
+                        (writePages! temp column (+ at n) count pageRows compression level
+                          (+ compressed (+ (bytesLength header) (bytesLength body)))
+                          (+ uncompressed (+ (bytesLength header) (bytesLength raw)))))))))))))))
+
+fn ! writeColumns! temp: String columns: (List ParquetColumn) start: Int64 count: Int64 compression: String level: Int64 pageRows: Int64 offset: Int64 -> (Result (List ChunkMeta) String)
   (if (listEmpty? columns) (ok (list))
     (match (listHead columns)
       ((none) (ok (list)))
       ((some wholeColumn)
-        (let [(column (columnSlice! wholeColumn start (+ start count)))
-              (rawResult (columnData! column))]
-          (match rawResult
+        (let [(column (columnSlice! wholeColumn start (+ start count)))]
+          (match (writePages! temp column 0 count pageRows compression level 0 0)
             ((err e) (err e))
-            ((ok raw)
-              (match (if (= compression "zstd") (zstdCompress! raw level) (ok raw))
+            ((ok sizes)
+              (match (writeColumns! temp (listDrop columns 1) start count compression level pageRows (+ offset (pairFirst sizes)))
                 ((err e) (err e))
-                ((ok compressedBytes)
-                  (let [(header (pageHeader! count (columnEncoding column) (bytesLength raw) (bytesLength compressedBytes)))
-                        (compressed (+ (bytesLength header) (bytesLength compressedBytes)))
-                        (uncompressed (+ (bytesLength header) (bytesLength raw)))]
-                    (match (fileAppend temp header)
-                      ((err e) (err (str e)))
-                      ((ok _)
-                        (match (fileAppend temp compressedBytes)
-                          ((err e) (err (str e)))
-                          ((ok _)
-                            (match (writeColumns! temp (listDrop columns 1) start count compression level (+ offset compressed))
-                              ((err e) (err e))
-                              ((ok rest)
-                                (ok (listAppend
-                                  (list (ChunkMeta :name (columnName column) :physical (physicalType column)
-                                         :encoding (columnEncoding column) :values count :offset offset
-                                         :compressed compressed :uncompressed uncompressed :stats (columnStats! column))) rest)))))))))))))))))
+                ((ok rest)
+                  (ok (listAppend
+                    (list (ChunkMeta :name (columnName column) :physical (physicalType column)
+                           :encoding (columnEncoding column) :values count :offset offset
+                           :compressed (pairFirst sizes) :uncompressed (pairSecond sizes) :stats (columnStats! column))) rest))))))))))
 
-fn ! writeGroups! temp: String columns: (List ParquetColumn) start: Int64 total: Int64 groupSize: Int64 compression: String level: Int64 offset: Int64 groups: (List GroupMeta) -> (Result (List GroupMeta) String)
+fn ! writeGroups! temp: String columns: (List ParquetColumn) start: Int64 total: Int64 groupSize: Int64 compression: String level: Int64 pageRows: Int64 offset: Int64 groups: (List GroupMeta) -> (Result (List GroupMeta) String)
   (if (>= start total) (ok groups)
     (let [(count (min groupSize (- total start)))]
-      (match (writeColumns! temp columns start count compression level offset)
+      (match (writeColumns! temp columns start count compression level pageRows offset)
         ((err e) (err e))
         ((ok chunks)
-          (writeGroups! temp columns (+ start count) total groupSize compression level
+          (writeGroups! temp columns (+ start count) total groupSize compression level pageRows
             (+ offset (chunkCompressedSum chunks))
             (listAppend groups (list (GroupMeta :chunks chunks :rows count))))))))
 
@@ -627,12 +628,12 @@ fn ! removeWriteTemp! temp: String cause: String -> (Result Unit String)
     ((err cleanup) (err (str cause "; temporary cleanup failed: " cleanup)))
     ((ok _) (err cause)))
 
-fn ! writeFile! path: String columns: (List ParquetColumn) kv: (List (List String)) groupSize: Int64 compression: String level: Int64 total: Int64 -> (Result Unit String)
+fn ! writeFile! path: String columns: (List ParquetColumn) kv: (List (List String)) groupSize: Int64 compression: String level: Int64 pageRows: Int64 total: Int64 -> (Result Unit String)
   (let [(temp (str path ".asl-parquet-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)) ".tmp"))]
     (match (fileWrite temp "PAR1")
       ((err e) (err e))
       ((ok _)
-        (match (writeGroups! temp columns 0 total groupSize compression level 4 (list))
+        (match (writeGroups! temp columns 0 total groupSize compression level pageRows 4 (list))
           ((err e) (removeWriteTemp! temp e))
           ((ok groups)
             (let [(effectiveKv (if (= compression "zstd") (listAppend kv (list (list "asl.parquet.zstd.level" (stringFromInt64 level)))) kv))
@@ -659,11 +660,13 @@ fn ! parquetWrite path: String columns: (List ParquetColumn) options: (List (Lis
         (levelText (optionValue options "level" "3"))
         (dictionary (optionValue options "dictionary" "false"))
         (groupText (optionValue options "rowGroupRows" "1000000"))
+        (pageText (optionValue options "pageRows" "8192"))
+        (pageRowsResult (optionToResult (stringToInt64 pageText) "pageRows must be an integer"))
         (level (optionToResult (stringToInt64 levelText) "compression level must be an integer"))
         (groupRows (optionToResult (stringToInt64 groupText) "rowGroupRows must be an integer"))]
     (cond
       ((stringEmpty? path) (err "path must not be empty"))
-      ((not (columnsValid? columns)) (err "invalid Parquet column: names, types, encoding and nonempty arrays are required"))
+      ((not (columnsValid? columns)) (err "invalid Parquet column: names, types and encodings are required"))
       ((not (metadataPairsValid? kv)) (err "key-value metadata entries must be string pairs"))
       ((metadataHasKey? kv "asl.parquet.zstd.level") (err "key-value metadata uses reserved key asl.parquet.zstd.level"))
       ((not (or (= compression "zstd") (= compression "none"))) (err "compression must be zstd or none"))
@@ -679,11 +682,13 @@ fn ! parquetWrite path: String columns: (List ParquetColumn) options: (List (Lis
                   (err "compression level must be in 1..22")
                   (if (<= groupValue 0)
                     (err "rowGroupRows must be positive")
+                    (match pageRowsResult
+                      ((err e) (err e))
+                      ((ok pageValue)
+                    (if (< pageValue 0) (err "pageRows must not be negative")
                     (if (not (= dictionary "false"))
                       (err "dictionary encoding is not supported")
                       (if (not (sameColumnLengths? columns (firstColumnCount columns)))
                         (err "Parquet columns must have the same number of rows")
-                        (if (not (columnsDeltasValid? columns))
-                          (err "DELTA_BINARY_PACKED values contain an overflowing INT64 delta")
-                          (writeFile! path columns kv groupValue compression levelValue
-                            (firstColumnCount columns))))))))))))))
+                        (writeFile! path columns kv groupValue compression levelValue pageValue
+                          (firstColumnCount columns))))))))))))))))
