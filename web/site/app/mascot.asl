@@ -110,6 +110,8 @@ fn easterBackdrop -> h/Node
   (h/div [(h/cls "cosmic-bg") (h/id "easter-layer") (h/attr "aria-hidden" "true")]
     [(h/a [(h/href "/") (h/cls "chameleon-perch") (h/id "chameleon-perch") (h/attr "title" "AgentSlang · Leon the chameleon")]
        [(leon)])
+     (h/svg [(h/cls "leon-tail") (h/id "leon-tail") (h/attr "fill" "none")]
+       [(h/path [(h/cls "leon-tail-edge") (h/attr "pathLength" "1")]) (h/path [(h/cls "leon-tail-skin") (h/attr "pathLength" "1")])])
      (h/svg [(h/cls "easter-stream left") (h/attr "viewBox" "0 0 180 1000") (h/attr "preserveAspectRatio" "xMinYMin slice") (h/attr "fill" "none")] (leftEggs))
      (h/svg [(h/cls "easter-stream right") (h/attr "viewBox" "0 0 180 1000") (h/attr "preserveAspectRatio" "xMinYMin slice") (h/attr "fill" "none")] (rightEggs))])
 

@@ -31,7 +31,7 @@ fn band tone: String anchor: String index: String label: String title: String le
 fn heroSection -> h/Node
   (h/section [(h/cls "hero")]
     [(h/div [(h/cls "shell hero-grid")]
-      [(h/figure [(h/cls "hero-art") (h/id "hero-stage")] [(mascot/dock "leon-dock-hero" "Leon · scroll and he jumps to the corner branch")])
+      [(h/figure [(h/cls "hero-art") (h/id "hero-stage")] [(mascot/dock "leon-dock-hero" "Leon · scroll and his tail reels him up to the liana")])
        (h/div [(h/cls "stack")]
         [(l/eyebrow "ASL" "AgentSlang · pre-release")
          (h/h1 [(h/cls "display")] [(h/text "AgentSlang: a language shaped for ") (h/em [] [(h/text "the agents that write it.")])])
