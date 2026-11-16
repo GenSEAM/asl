@@ -46,10 +46,6 @@ fn footCol heading: String links: (List (Pair String String)) -> h/Node
     [(h/h4 [] [(h/text heading)])
      (h/ul [] (map (fn [(l (Pair String String))] -> h/Node (h/li [] [(h/a [(h/href (pairSecond l))] [(h/text (pairFirst l))])])) links))])
 
-fn leonMascot -> h/Node
-  (h/div [(h/cls "leon-stage")]
-    [(mascot/dock "leon-dock" "Leon rests here")])
-
 fn blockCell label: String value: String -> h/Node
   (h/div [] [(h/span [(h/cls "micro")] [(h/text label)]) (h/el "b" [] [(h/text value)])])
 
@@ -57,8 +53,7 @@ fn footBar -> h/Node
   (h/footer [(h/cls "foot")]
     [(h/div [(h/cls "shell")]
       [(h/div [(h/cls "shell-grid")]
-        [(leonMascot)
-         (h/div [(h/cls "stack")]
+        [(h/div [(h/cls "stack")]
           [(h/a [(h/href "/") (h/cls "mark")] [(markNode) (h/span [] [(h/text "AgentSlang")])])
            (h/p [] [(h/text "An agent-oriented language with an open ecosystem of tools and packages. Pre-release. Dual-licensed MIT or Apache-2.0.")])
            (h/p [(h/cls "micro") (h/id "built-with")] [(h/text "This site is an ASL program: markup, styles and event handlers compiled to WebAssembly.")])])

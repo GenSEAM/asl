@@ -1,5 +1,5 @@
 (module aslSite/app/mascot
-  :x [tailMark leon dock iconSvg easterBackdrop]
+  :x [tailMark leon iconSvg easterBackdrop]
   :i [(asl-html/html :a h)])
 
 fn svgText attrs: (List h/Attr) s: String -> h/Node
@@ -26,9 +26,6 @@ fn tailMark size: String -> h/Node
 fn lid cx: String cy: String rx: String ry: String -> h/Node
   (h/ellipse [(h/cls "leon-lid") (h/attr "cx" cx) (h/attr "cy" cy) (h/attr "rx" rx) (h/attr "ry" ry)])
 
-fn tailSections -> String
-  "156,586,62;157,610,62;158,635,62;162,659,63;166,684,64;172,708,64;178,732,64;189,759,62;200,786,59;221,807,55;242,828,51;268,839,48;293,850,45;317,855,42;342,861,39;398,862,36;430,849,35;455,829,34;472,805,33;480,779,32;481,754,30;475,731,29;471,712,29;463,694,28;450,680,28;434,669,27;417,663,27;398,662,26;380,663,26;363,669,26;347,680,26;334,694,26;326,712,26;322,731,25;326,751,26;335,768,26;348,782,26;364,792,27;381,797,27;398,798,27;414,790,26;425,778,24;432,765,22;435,752,21;433,741,19;428,731,18;426,724,17;423,717,17;418,712,17;412,708,17;405,706,17;398,706,17;391,705,16;384,706,16;377,710,15;370,715,15;365,723,14;362,731,14;365,741,13;369,748,12;375,755,12;383,759,11;391,761,10;398,761,10;405,757,9;410,752,8;414,747,8;415,741,7;414,736,7;412,731,6;410,728,5;408,726,5;405,725,4;402,725,4;400,725,3"
-
 fn leon -> h/Node
   (h/div [(h/cls "leon")]
     [(h/div [(h/cls "leon-swing")]
@@ -37,11 +34,7 @@ fn leon -> h/Node
          [(lid "574" "305" "80" "84")
           (lid "811" "300" "33" "78")
           (h/path [(h/cls "leon-lash") (h/attr "d" "M 512 338 Q 574 392 636 338")])
-          (h/path [(h/cls "leon-lash") (h/attr "d" "M 786 330 Q 811 372 836 330")])])])
-     (h/el "canvas" [(h/cls "leon-rig") (h/id "leon-rig") (h/attr "aria-hidden" "true") (h/attr "data-body" "/leon-body.webp") (h/attr "data-art" "/leon.webp") (h/attr "data-tail" (tailSections))] [])])
-
-fn dock dockId: String label: String -> h/Node
-  (h/div [(h/cls "leon-dock") (h/id dockId)] [(h/span [(h/cls "micro")] [(h/text label)])])
+          (h/path [(h/cls "leon-lash") (h/attr "d" "M 786 330 Q 811 372 836 330")])])])])
 
 fn cyberLeaf tx: String ty: String rot: String -> h/Node
   (h/g [(h/cls "vine-leaf") (h/attr "transform" (str "translate(" tx "," ty ") rotate(" rot ")" ))]
