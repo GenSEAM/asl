@@ -20,6 +20,18 @@ fn replies -> (List String)
     (listAppend (map (fn [_] (readReply "b.txt")) (range 0 12)) (list "(:done)")))
 
 fn ! recordedRun! tag: String config: String -> rk/RecordedRun
+  (recordedWith! tag config (replies))
+
+fn badEdit n: Int64 -> String
+  (str "(:step :op \"edit\" :file \"b.txt\" :old \"no-such-text\" :new \"x" (stringFromInt64 n) "\")")
+
+fn mixedReplies -> (List String)
+  (cons "(:step :op \"run\" :argv \"ls\")" (listAppend (fold (fn [acc n] (listAppend acc (list (readReply "b.txt") (badEdit n)))) (list) (range 0 7)) (list (readReply "b.txt") (readReply "b.txt") (readReply "b.txt"))))
+
+fn proseReplies -> (List String)
+  (cons "(:step :op \"run\" :argv \"ls\")" (fold (fn [acc n] (listAppend acc (list (readReply "b.txt") "I think the answer is in b.txt, let me reason about it first."))) (list) (range 0 5)))
+
+fn ! recordedWith! tag: String config: String script: (List String) -> rk/RecordedRun
   (let [root (rk/freshRecorderRoot! tag)
         wroteA (fileWrite (str root "/a.txt") (padded "ENDOFA" 500))
         wroteB (fileWrite (str root "/b.txt") (padded "ENDOFB" 10))
@@ -27,7 +39,7 @@ fn ! recordedRun! tag: String config: String -> rk/RecordedRun
         repo (gk/initGitRepo! root "readStreakCause" "read-streak@example.invalid")
         fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         dir (dirCreate fixtureDir)
-        fixture (fileWrite (str fixtureDir "/streak" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "streak" tag) (replies)))
+        fixture (fileWrite (str fixtureDir "/streak" tag ".asn") (rk/scriptFixtureTextFromReplies! (str "streak" tag) script))
         form (str "(:agent :task \"read a.txt and b.txt then fix\" :backend \"script/streak" tag "\" :root \""
                (c/escapeAsn root) "\" :mode \"scout\" :owns (\"b.txt\") :gates (\"false\") :budget 30 :contextTokens 120000)")
         code (m/main (list form))
@@ -41,6 +53,9 @@ fn ! recordedRun! tag: String config: String -> rk/RecordedRun
 fn sentOf run: rk/RecordedRun turn: Int64 -> String
   (optionOr (listHead (filter (fn [l] (stringStartsWith? l (str "(:turn " (stringFromInt64 turn) " :sent "))) run.sentLines)) "")
 
+fn clip s: String n: Int64 -> String
+  (c/sliceOf s 0 (min n (stringLength s)))
+
 fn ! runTests -> Bool
   (let [bigGot (padded "TAILMARK" 100)
         hist (list (histEntry 1 "s1" bigGot) (histEntry 2 "s2" bigGot) (histEntry 3 "s3" "small"))
@@ -51,7 +66,11 @@ fn ! runTests -> Bool
         run (recordedRun! "cfg" cfg)
         turn3 (sentOf run 4)
         turn5 (sentOf run 5)
-        turn2 (sentOf run 2)]
+        turn2 (sentOf run 2)
+        mixed (recordedWith! "mixed" "(:aslConfig :agentLoop (:specCheck false))" (mixedReplies))
+        pureReads (recordedWith! "pure" "(:aslConfig :agentLoop (:specCheck false))" (map (fn [_] (readReply "b.txt")) (range 0 16)))
+        proseRun (recordedWith! "prose" "(:aslConfig :agentLoop (:specCheck false))" (proseReplies))
+        endless (recordedWith! "endless" "(:aslConfig :agentLoop (:specCheck false))" (map (fn [n] (badEdit n)) (range 0 20)))]
     (do
       (assert (> (ctx/contextKeptCapBytes 120000 8 1500) 10000) "a 120k window keeps more than 10000 bytes of each kept turn")
       (assert (<= (ctx/contextKeptCapBytes 120000 8 1500) (ctx/contextLatestCapBytes 120000)) "a kept turn never keeps more than the newest turn")
@@ -69,4 +88,11 @@ fn ! runTests -> Bool
       (assert (not (stringContains? turn2 "the run stops at")) "no nudge on turn 2, before the configured nudge threshold")
       (assert (stringContains? turn5 "the run stops at 20") "the live prompt carries the nudge with the configured stop turn")
       (assert (not (stringContains? run.journal ":signal :readStreak")) "a configured readStreakEscalate 20 lets 15 turns without a write run past the default 12")
+      (assert (not (stringContains? mixed.journal ":signal :readStreak")) "reads mixed with rejected writes do not stop as readStreak")
+      (assert (stringContains? (sentOf mixed 15) "8 turns without a write") (str "the nudge counts only the read turns, not the rejected write attempts: " (clip (sentOf mixed 15) 200)))
+      (assert (not (stringContains? (sentOf mixed 15) "14 turns without a write")) "a rejected write attempt does not grow the readStreak the nudge shows")
+      (assert (stringContains? pureReads.journal ":signal :readStreak :cause :readOnly") "pure read turns under a red gate still stop as readStreak with cause readOnly")
+      (assert (stringContains? endless.journal ":signal :readStreak :cause :refusedWrites") "an endless rejected write stops at the stalled-turn cap")
+      (assert (< (listLength (filter (fn [l] (stringContains? l " :reply \"")) (stringSplit endless.journal "\n"))) 16) "the endless rejected write is bounded well under the script length")
+      (assert (stringContains? (sentOf proseRun 11) "6 turns without a write") (str "a parse-defect turn (a prose reply with no step) holds the read streak: " (c/sliceOf (sentOf proseRun 11) (max 0 (- (stringLength (sentOf proseRun 11)) 500)) (stringLength (sentOf proseRun 11)))))
       true))
