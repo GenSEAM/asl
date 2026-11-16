@@ -133,7 +133,7 @@ function frame() { if (queued) return; queued = true; requestAnimationFrame((now
 document.addEventListener('scroll', frame, { passive: true, capture: true });
 tick(performance.now());
 
-const source = fetch('/site.wasm?v=759a52f3b90a');
+const source = fetch('/site.wasm?v=0c62ae26cffc');
 const { instance } = await (WebAssembly.instantiateStreaming
   ? WebAssembly.instantiateStreaming(source, imports)
   : source.then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, imports)));

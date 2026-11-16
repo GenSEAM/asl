@@ -33,9 +33,9 @@ fn heroSection -> h/Node
     [(h/div [(h/cls "shell hero-grid")]
       [(h/figure [(h/cls "hero-art") (h/id "hero-stage")] [(mascot/dock "leon-dock-hero" "Leon · scroll and his tail reels him up to the liana")])
        (h/div [(h/cls "stack")]
-        [(l/eyebrow "ASL" "AgentSlang · open source · pre-release")
-         (h/h1 [(h/cls "display")] [(h/text "AgentSlang: an open-source language for ") (h/em [] [(h/text "the agents that write it.")])])
-         (h/p [(h/cls "lead")] [(h/text "You describe what you want and an AI agent writes the code. AgentSlang (ASL) is the language and the toolchain we are building for that code: checked before it runs, inexpensive for an agent to read and change, and compiled for more than one runtime. It is pre-release, dual-licensed and developed in the open.")])
+        [(l/eyebrow "ASL" "AgentSlang · agent-oriented · pre-release")
+         (h/h1 [(h/cls "display")] [(h/text "AgentSlang: an agent-oriented language, shaped for ") (h/em [] [(h/text "the agents that write it.")])])
+         (h/p [(h/cls "lead")] [(h/text "You describe what you want and an AI agent writes the code. AgentSlang (ASL) is the language and the toolchain we are building for that code: checked before it runs, inexpensive for an agent to read and change, and compiled for more than one runtime. It is pre-release, and its ecosystem of packages and tools is open.")])
          (h/div [(h/cls "install")]
           [(shellLine (installLine) "copy-install" (m/copyInstall))
            (h/p [(h/cls "micro")] [(h/text "Preview · not released. The script has not been verified on a clean machine yet: ") (h/a [(h/href "/docs#install")] [(h/text "status in the docs")])])
@@ -47,7 +47,7 @@ fn heroSection -> h/Node
             (h/li [] [(h/a [(h/href "/llms.txt")] [(h/text "llms.txt for your agent")])])
             (h/li [] [(h/a [(h/href "https://github.com/GenSEAM/asl")] [(h/text "Source on GitHub")])])])
          (h/ul [(h/cls "facts")]
-           [(h/li [] [(h/el "b" [] [(h/text "MIT / Apache-2.0")]) (h/text " open source: no account, no hosted service, nothing to buy")])
+           [(h/li [] [(h/el "b" [] [(h/text "MIT / Apache-2.0")]) (h/text " an open ecosystem: no account, no hosted service, nothing to buy")])
             (h/li [] [(h/el "b" [] [(h/text "( )")]) (h/text " structure, names and argument counts are checked before the run")])
             (h/li [] [(h/el "b" [] [(h/text "native + wasm")]) (h/text " one source compiles through LLVM to native code and WebAssembly")])])])])])
 
@@ -134,7 +134,7 @@ fn toolbeltSection -> h/Node
        (step "asl '(:flush)'" "Write the staged edits, each file atomically, or (:discard) to drop them.")])])
 
 fn communitySection -> h/Node
-  (band " sunken" "community" "05" "Open source" "A project and a community, not a product." "There is no company service behind this page. The language, the compiler, the packages and this site live in one public repository under MIT or Apache-2.0, and the work is planned in the open."
+  (band " sunken" "community" "05" "Open ecosystem" "A project and a community, not a product." "There is no company service behind this page. The compiler, the packages, the tools and this site form an open ecosystem in one public repository under MIT or Apache-2.0, and the work is planned in the open."
     [(h/div [(h/cls "grid two")]
       [(costCell "01 · Read" "Start with one page" "The language fits on one page, and llms.txt gives the same to your agent." "/docs · /llms.txt")
        (costCell "02 · Try" "Run it and tell us what broke" "This is a pre-release: there are no binaries and a clean clone does not build yet. A report of what failed on your machine is the most useful contribution right now." "github.com/GenSEAM/asl")
@@ -160,4 +160,4 @@ fn homeContent stats: Stats -> (List h/Node)
   [(heroSection) (goalsSection) (wireSection) (ecosystemSection) (toolbeltSection) (communitySection) (proofSection stats)]
 
 fn homePage stats: Stats -> h/Node
-  (l/document (l/home) "AgentSlang (ASL): an open-source language and toolchain for code written by agents" "AgentSlang (ASL) is an open-source, pre-release programming language, toolchain and package set for code written by AI agents: checked before it runs, a toolbelt that reads and edits by symbol, and compilation through LLVM to native code and WebAssembly." (homeContent stats))
+  (l/document (l/home) "AgentSlang (ASL): an agent-oriented language and an open ecosystem" "AgentSlang (ASL) is a pre-release, agent-oriented programming language with an open ecosystem of tools and packages for code written by AI agents: checked before it runs, a toolbelt that reads and edits by symbol, and compilation through LLVM to native code and WebAssembly." (homeContent stats))
