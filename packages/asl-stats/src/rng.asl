@@ -1,5 +1,5 @@
 (module asl-stats/rng
-  :x [Rng rngFromState rngSeed rngNext rngFloat rngNormal gammaDraw logGammaDraw betaDraw lsr]
+  :x [Rng rngFromState rngSeed rngNext rngFloat rngNormal gammaDraw logGammaDraw betaDraw lsr rngJump rngStream rngFloats rngNormals]
   :i [])
 
 ; (:m :ref workspace-20261031-experimentStats :do "xoshiro256** over four Int64 words; mulWrap, addWrap and rotateLeft have no native lowering yet so the wrapping adds, the times 5 and 9 and the 64-bit multiply in seeding are built from 32-bit halves, shifts and masks; the generator is a value, every draw returns the new state, so a fixed seed reproduces every draw bit for bit; rngSeed expands one Int64 with splitmix64; a float is the top 53 bits times 2^-53; normals by Box-Muller, gamma by Marsaglia-Tsang, beta as two gammas")
@@ -107,3 +107,48 @@ fn ! betaDraw a: Float64 b: Float64 r: Rng -> (Result (Pair Float64 Rng) String)
       (match (logGammaDraw b (pairSecond x))
         ((err e) (err e))
         ((ok y) (ok (pair (/ 1.0 (+ 1.0 (exp (- (pairFirst y) (pairFirst x))))) (pairSecond y)))))))
+
+; (:m :ref NUM-LINALG-STATS :do "independent streams: rngJump is the reference xoshiro256** jump, equal to 2^128 calls of rngNext, so rngStream seed k (the seed's generator jumped k times) gives streams that cannot overlap for 2^128 draws each; stream 0 is rngSeed seed itself; k < 0 is statsRange; verified against a python oracle of the reference jump")
+fn xorState a: Rng b: Rng -> Rng
+  (Rng :s0 (^ a.s0 b.s0) :s1 (^ a.s1 b.s1) :s2 (^ a.s2 b.s2) :s3 (^ a.s3 b.s3))
+
+fn ! jumpWord! w: Int64 b: Int64 cur: Rng acc: Rng -> (Pair Rng Rng)
+  (if (>= b 64) (pair acc cur)
+    (jumpWord! w (+ b 1) (pairSecond (rngNext cur)) (if (= (& (>> w b) 1) 1) (xorState acc cur) acc)))
+
+fn ! jumpWords! ws: (List Int64) cur: Rng acc: Rng -> Rng
+  (match (listHead ws)
+    ((none) acc)
+    ((some w)
+      (let [(r (jumpWord! w 0 cur acc))]
+        (jumpWords! (optionOr (listTail ws) (list)) (pairSecond r) (pairFirst r)))))
+
+fn ! rngJump r: Rng -> Rng
+  (jumpWords! (list 1733541517147835066 -3051731464161248980 -6244198995065845334 4155657270789760540) r (Rng :s0 0 :s1 0 :s2 0 :s3 0))
+
+fn ! jumpN! r: Rng k: Int64 -> Rng
+  (if (<= k 0) r (jumpN! (rngJump r) (- k 1)))
+
+fn ! rngStream seed: Int64 k: Int64 -> (Result Rng String)
+  (if (< k 0)
+    (err "statsRange: stream index must be >= 0")
+    (ok (jumpN! (rngSeed seed) k)))
+
+fn ! fillFloats! b: Bytes i: Int64 n: Int64 r: Rng normal: Bool -> Rng
+  (if (>= i n) r
+    (let [(p (if normal (rngNormal r) (rngFloat r)))]
+      (do (bytesSetFloat64 b i (pairFirst p))
+          (fillFloats! b (+ i 1) n (pairSecond p) normal))))
+
+fn ! drawArray! n: Int64 r: Rng normal: Bool -> (Result (Pair F64Array Rng) String)
+  (if (< n 0)
+    (err "statsRange: count must be >= 0")
+    (let [(b (bytesAlloc (* 8 n)))
+          (r2 (fillFloats! b 0 n r normal))]
+      (ok (pair (f64ArrayGenerate n (fn [(i Int64)] -> Float64 (bytesGetFloat64 b i))) r2))))
+
+fn ! rngFloats n: Int64 r: Rng -> (Result (Pair F64Array Rng) String)
+  (drawArray! n r false)
+
+fn ! rngNormals n: Int64 r: Rng -> (Result (Pair F64Array Rng) String)
+  (drawArray! n r true)

@@ -104,6 +104,51 @@ fn ! testTinySeeded! -> Bool
       (assert (= k (ones (betas! 0.001 0.001 300 (rg/rngSeed 2026)))) "the same seed gives the same count")
       true))
 
+fn stream k: Int64 -> rg/Rng
+  (match (rg/rngStream 42 k) ((err e) (rg/rngSeed 0)) ((ok r) r))
+
+fn arrOf r: (Result (Pair F64Array rg/Rng) String) -> F64Array
+  (match r ((err e) (f64ArrayGenerate 0 (fn [(i Int64)] -> Float64 0.0))) ((ok p) (pairFirst p)))
+
+fn ! corr! a: F64Array b: F64Array -> Float64
+  (let [(n (int64ToFloat64 (f64ArrayLen a)))
+        (ma (/ (f64ArraySum a) n))
+        (mb (/ (f64ArraySum b) n))
+        (sab (f64ArraySum (f64ArrayGenerate (f64ArrayLen a) (fn [(i Int64)] -> Float64 (* (- (f64ArrayGet a i) ma) (- (f64ArrayGet b i) mb))))))
+        (saa (f64ArraySum (f64ArrayGenerate (f64ArrayLen a) (fn [(i Int64)] -> Float64 (* (- (f64ArrayGet a i) ma) (- (f64ArrayGet a i) ma))))))
+        (sbb (f64ArraySum (f64ArrayGenerate (f64ArrayLen a) (fn [(i Int64)] -> Float64 (* (- (f64ArrayGet b i) mb) (- (f64ArrayGet b i) mb))))))]
+    (/ sab (sqrt (* saa sbb))))
+
+fn ! sharedCount! xs: (List Int64) ys: (List Int64) -> Int64
+  (listLength (filter (fn [(x Int64)] -> Bool (listContains? ys x)) xs))
+
+; (:m :ref NUM-LINALG-STATS :do "streams: the jump of stream 0 gives the python-oracle outputs of the reference xoshiro256** jump (2^128 steps), stream k is k jumps, streams share no draw and are uncorrelated, one seed and index reproduce the stream")
+fn ! testStreams! -> Bool
+  (let [(s0 (stream 0))
+        (s1 (stream 1))
+        (s2 (stream 2))
+        (f0 (arrOf (rg/rngFloats 2000 s0)))
+        (f1 (arrOf (rg/rngFloats 2000 s1)))
+        (n0 (arrOf (rg/rngNormals 2000 s0)))
+        (n1 (arrOf (rg/rngNormals 2000 s1)))]
+    (do
+      (assert (= (list s0.s0 s0.s1 s0.s2 s0.s3) (let [(r (rg/rngSeed 42))] (list r.s0 r.s1 r.s2 r.s3))) "stream 0 is rngSeed itself")
+      (assert (= (draws! 3 s1) (list 5766981335298035530 -5032668395946387709 6818771422820058410)) "stream 1 of seed 42 equals the reference jump outputs (python oracle)")
+      (assert (= (draws! 3 s2) (list -8757422928090083711 2258870915674454393 -4690661844597342611)) "stream 2 of seed 42 equals two reference jumps (python oracle)")
+      (assert (= (draws! 3 (rg/rngJump s1)) (draws! 3 s2)) "a jump of stream 1 is stream 2")
+      (assert (= (draws! 100 s1) (draws! 100 (stream 1))) "one seed and index reproduce the stream")
+      (assert (= (sharedCount! (draws! 1000 s0) (draws! 1000 s1)) 0) "streams 0 and 1 share no draw in 1000")
+      (assert (= (sharedCount! (draws! 1000 s1) (draws! 1000 s2)) 0) "streams 1 and 2 share no draw in 1000")
+      (assert (< (abs (corr! f0 f1)) 0.1) "uniforms of streams 0 and 1 are uncorrelated (|r| < 0.1 for n = 2000, sd 0.022)")
+      (assert (< (abs (corr! n0 n1)) 0.1) "normals of streams 0 and 1 are uncorrelated")
+      (assert (and (< (abs (/ (f64ArraySum n0) 2000.0)) 0.12) (< (abs (/ (f64ArraySum n1) 2000.0)) 0.12)) "normal stream means near 0 (sd 0.022)")
+      (assert (= (f64ArraySum (f64ArrayGenerate 2000 (fn [(i Int64)] -> Float64 (if (< (f64ArrayGet f0 i) 0.0) 1.0 (if (>= (f64ArrayGet f0 i) 1.0) 1.0 0.0))))) 0.0) "uniforms lie in [0,1)")
+      (assert (= (f64ArrayGet (arrOf (rg/rngFloats 3 s0)) 1) (pairFirst (rg/rngFloat (pairSecond (rg/rngFloat s0))))) "rngFloats continues rngFloat order")
+      (assert (= (f64ArrayLen (arrOf (rg/rngFloats 0 s0))) 0) "zero count gives an empty array")
+      (assert (match (rg/rngStream 42 -1) ((err e) (stringContains? e "statsRange")) ((ok r) false)) "negative stream index is an error")
+      (assert (match (rg/rngNormals -1 s0) ((err e) (stringContains? e "statsRange")) ((ok r) false)) "negative count is an error")
+      true))
+
 fn ! runTests -> Bool
   (do
     (testXoshiro!)
@@ -111,4 +156,5 @@ fn ! runTests -> Bool
     (testDraws!)
     (testClamp!)
     (testTinySeeded!)
+    (testStreams!)
     true)
