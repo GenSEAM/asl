@@ -4675,7 +4675,6 @@
 "asl-parquet#asl-parquet/writer/f64Column nodoc"
 "asl-parquet#asl-parquet/writer/i64Column nodoc"
 "asl-parquet#asl-parquet/writer/i8Column nodoc"
-"asl-parquet#asl-parquet/writer/parquetWrite nodoc"
 "asl-parser#asl-parser/ast/AstExpr nodoc"
 "asl-parser#asl-parser/ast/AstField nodoc"
 "asl-parser#asl-parser/ast/AstLit nodoc"
