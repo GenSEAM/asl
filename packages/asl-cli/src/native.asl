@@ -530,10 +530,10 @@ fn ! suiteRelPath! ctx: sys/Context path: String -> (Result String String)
       (ok (rootedAbs ctx absPath))
       (stageOutside! ctx absPath)))
 
-fn ! suite! ctx: sys/Context fp: String path: String -> Int64
+fn ! suite! ctx: sys/Context fp: String path: String opts: TestOpts -> Int64
   (match (suiteRelPath! ctx path)
     ((err e) (do (eprintln (str "FAIL " path ": ERR_BUILD cannot stage " path ": " e " (after 0 asserts)")) 1))
-    ((ok rel) (suiteBuilt! ctx fp path rel)))
+    ((ok rel) (let [(_ (if (listEmpty? opts.flags) 0 (nt/reapOrphanedRuns!)))] (suiteBuilt! ctx fp path rel opts))))
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "rel is always root-relative (rooted for an in-root file, stageOutside!'s rel for a staged one); nt/prepare would read it bare against the actual cwd (OUT-OF-ROOT-USERPATH), wrong whenever test! skipped reexecTestAtRoot! (anyOutOfRoot?) and cwd never became ctx.root, so prepareSourceIn reads the absolute ctx.root-anchored path while keeping rel as the logical/import name")
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "a staged package sits at <digest>/<workspace>/ under outsidePkg and its suite runs with <digest> as the working directory, the arrangement of the source tree where the package directory is named by its workspace, so a data path written workspace-qualified (vtbot/asl/tests/fixtures/x.parquet) opens the same file; every other suite keeps the cwd it was started with")
@@ -545,26 +545,90 @@ fn ! suiteCwd ctx: sys/Context rel: String -> (Option String)
         (some (str ctx.root "/" marker digest)))
       (none)))
 
-fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String -> Int64
-  (let [(built (nt/prepareTestSource (str ctx.root "/" rel) rel fp))]
+; (:m :ref TEST-RUNNER-SELECT :do "a selected run builds from a hidden sibling .STEM.only.PID.asl (nt/selectionSource: the file with the function added to :x), beside the file so its imports resolve as the file's do; the pid keeps concurrent selections apart, and the copy and its one-off slot go when the run ends")
+fn selectionRel rel: String pid: Int64 -> String
+  (let [(parts (stringSplit rel "/"))
+        (base (optionOr (listLast parts) rel))
+        (stem (if (stringEndsWith? base ".asl") (optionOr (stringSlice base 0 (- (stringLength base) 4)) base) base))
+        (dir (stringJoin (listTake parts (- (listLength parts) 1)) "/"))]
+    (str (if (stringEmpty? dir) "" (str dir "/")) "." stem ".only." (stringFromInt64 pid) ".asl"))
+
+; (:m :ref TEST-RUNNER-SELECT :do "the pid of a selection copy name .STEM.only.PID.asl, none for any other name")
+fn selectionPid name: String -> (Option Int64)
+  (let [(parts (stringSplit name "."))
+        (n (listLength parts))]
+    (if (and (stringStartsWith? name ".") (and (>= n 5) (and (= (listGet parts (- n 1)) (some "asl")) (= (listGet parts (- n 3)) (some "only")))))
+      (stringToInt64 (optionOr (listGet parts (- n 2)) ""))
+      (none)))
+
+; (:m :ref TEST-RUNNER-SELECT :do "a runner killed before it removed its copy leaves .STEM.only.PID.asl beside the file; the next selected run in that directory removes every copy whose pid is not alive (a procAlive? error counts as alive), and discovery never takes a dot file for a suite")
+fn ! dropStaleSelections! dirAbs: String -> Int64
+  (fold (fn [(n Int64) (name String)] -> Int64
+          (match (selectionPid name)
+            ((some pid) (if (and (!= pid (procSelf)) (not (resultOr (procAlive? pid) true))) (do (pathRemove (str dirAbs "/" name)) (+ n 1)) n))
+            ((none) n)))
+        0 (resultOr (dirList dirAbs) (list)))
+
+fn ! selectedSuite! ctx: sys/Context fp: String path: String rel: String opts: TestOpts -> Int64
+  (let [(copyRel (selectionRel rel (procSelf)))
+        (copyAbs (str ctx.root "/" copyRel))
+        (_ (dropStaleSelections! (sys/parentOf copyAbs)))]
+    (match (nt/selectionSource (resultOr (fileReadString (str ctx.root "/" rel)) "") opts.only)
+      ((err e) (do (eprintln (str "FAIL " path " --only " opts.only ": ERR_USAGE: " e " (after 0 asserts)")) 1))
+      ((ok src) (match (fileWrite copyAbs src)
+                  ((err e) (do (eprintln (str "FAIL " path " --only " opts.only ": ERR_IO: cannot write " copyRel ": " e " (after 0 asserts)")) 1))
+                  ((ok _) (let [(code (suiteBuiltFrom! ctx fp path rel copyRel opts))
+                                (_ (pathRemove copyAbs))]
+                            code))))))
+
+fn ! suiteBuilt! ctx: sys/Context fp: String path: String rel: String opts: TestOpts -> Int64
+  (if (stringEmpty? opts.only) (suiteBuiltFrom! ctx fp path rel rel opts) (selectedSuite! ctx fp path rel opts))
+
+fn ! dropSelectedSlot! rel: String buildRel: String bin: String -> Unit
+  (if (= rel buildRel) () (do (pathRemove (sys/parentOf bin)) ()))
+
+; (:m :ref TEST-RUNNER-SELECT :do "the wall a run gets and where it came from: --wall S, else a declared fn suiteWallS, else the 1800 s default, the limits nt/suiteWall applies")
+fn wallOf opts: TestOpts src: String -> (Pair Int64 String)
+  (cond
+    ((> opts.wallS 0) (pair opts.wallS "--wall"))
+    ((some? (nt/declaredWallS src)) (pair (nt/suiteWall src) "fn suiteWallS"))
+    (else (pair (nt/suiteWall src) "the default")))
+
+fn runLabel path: String opts: TestOpts -> String
+  (if (stringEmpty? opts.only) path (str path " --only " opts.only))
+
+; (:m :ref TEST-RUNNER-SELECT :do "the binary runs under nt/runWatched with the wall of wallOf and the --max-rss cap; ps samples (for the cap and for --stats) are taken only when one of them asks, so a plain run spawns nothing more than before; a binary that ends without an assertion report after the runner killed it, or after a signal, gets the FAIL line naming the limit or the signal; --stats adds one (:testRun ...) receipt line on stderr")
+fn ! suiteBuiltFrom! ctx: sys/Context fp: String path: String rel: String buildRel: String opts: TestOpts -> Int64
+  (let [(built (if (stringEmpty? opts.only) (nt/prepareTestSource (str ctx.root "/" buildRel) buildRel fp) (nt/prepareTestSelected (str ctx.root "/" buildRel) buildRel fp opts.only)))]
     (match built.binary
       ((some binPath)
         (let [(bin (if (stringStartsWith? binPath "/") binPath (str ctx.root "/" binPath)))
-              (out (nt/runProcWithin (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff)))) (nt/suiteWall (resultOr (fileReadString (str ctx.root "/" rel)) ""))))
-              (v (nt/judgeInit! bin path (preludeOverride ctx) (nt/verdictOf path out.exitCode out.stderr)))]
-          (do (print out.stdout)
+              (wall (wallOf opts (resultOr (fileReadString (str ctx.root "/" rel)) "")))
+              (sampling (or opts.stats (> opts.maxRssMb 0)))
+              (env (listAppend (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))
+                               (listAppend (if opts.keepGoing (list "ASL_ASSERT_KEEP_GOING=1") (list)) (if opts.stats (list "ASL_NATIVE_TEST_STATS=1") (list)))))
+              (w (nt/runWatched (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! env)) (pairFirst wall) (* opts.maxRssMb 1024) sampling))
+              (rawErr (if (= rel buildRel) w.out.stderr (stringReplace (stringReplace w.out.stderr (str ctx.root "/" buildRel) (str ctx.root "/" rel)) buildRel rel)))
+              (errText (nt/withoutPeakLines rawErr))
+              (judged (nt/judgeInit! bin path (preludeOverride ctx) (if (stringEmpty? opts.only) (nt/verdictOf path w.out.exitCode errText) (nt/selectedVerdict path opts.only w.out.exitCode errText))))
+              (limit (if (some? (nt/reportCounts errText)) (none) (nt/limitLine (runLabel path opts) w (pairFirst wall) (pairSecond wall) opts.maxRssMb (not (listEmpty? opts.flags)))))
+              (v (match limit ((some l) (nt/Verdict :exit 1 :line l :stderr judged.stderr)) ((none) judged)))]
+          (do (print w.out.stdout)
               (eprintText v.stderr)
               (if (= v.exit 0) (println v.line) (eprintln v.line))
+              (if opts.stats (eprintln (nt/runReceipt (runLabel path opts) w rawErr (pairFirst wall) (pairSecond wall) opts.maxRssMb v.exit)) ())
+              (dropSelectedSlot! rel buildRel bin)
               v.exit)))
-      ((none) (if (= built.cache "checker-reject")
-                (do (eprintln (nt/suiteFailLine ctx.root rel path built.reason)) 1)
-                (hostSuite! ctx path built.reason)))))
+      ((none) (cond
+                ((= built.cache "checker-reject") (do (eprintln (nt/suiteFailLine ctx.root rel path built.reason)) 1))
+                ((not (listEmpty? opts.flags)) (do (eprintln (str "FAIL " path " " (stringJoin opts.flags " ") ": " (unsupportedTag built.reason) ": " (oneLine built.reason) "; asl-host runs whole suites only, so these options need a native build (after 0 asserts)")) 1))
+                (else (hostSuite! ctx path built.reason))))))
 
-fn ! suites! ctx: sys/Context paths: (List String) -> Int64
+fn ! suites! ctx: sys/Context paths: (List String) opts: TestOpts -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/host/out/libaslrt.a")))
     (do (eprintln (str "asl test: " ctx.root "/asl/host/out/libaslrt.a not found; run sh asl/host/build.sh")) 2)
     (let [(fp (nt/fingerprint))
-          (codes (map (fn [(p String)] -> Int64 (if (sys/isFile? p) (suite! ctx fp p) (do (eprintln (str p ":0:0: ERR_IO cannot open file\nFAIL " p ": 1 load error(s) (after 0 asserts)")) 1))) paths))]
+          (codes (map (fn [(p String)] -> Int64 (if (sys/isFile? p) (suite! ctx fp p opts) (do (eprintln (str p ":0:0: ERR_IO cannot open file\nFAIL " p ": 1 load error(s) (after 0 asserts)")) 1))) paths))]
       (optionOr (listHead (filter (fn [(c Int64)] -> Bool (!= c 0)) codes)) 0)))
 
 fn ! absolute path: String -> String
@@ -572,11 +636,11 @@ fn ! absolute path: String -> String
 
 fn ! sweepJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
   (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
-           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err"))))
+           (nt/withoutRunnerSwitches (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".err")))))
 
 fn ! initProbeJob ctx: sys/Context ws: String tmp: String i: Int64 bin: String -> run/Job
   (run/job (list "/bin/sh" "-c" "exec \"$0\" 2>\"$NATIVE_SWEEP_ERR\"" bin) ws
-           (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOn) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".init.err"))))
+           (nt/withoutRunnerSwitches (run/childEnv (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOn) (str "NATIVE_SWEEP_ERR=" tmp "/" (stringFromInt64 i) ".init.err")))))
 
 fn ! initProbed tmp: String timeoutS: Int64 done: sw/Done d: run/Done -> sw/Done
   (if (!= d.verdict "exit")
@@ -757,10 +821,10 @@ fn ! checkPaths! ctx: sys/Context args: (List String) -> Int64
 fn ! rootRelativeArg ctx: sys/Context a: String -> String
   (rootedAbs ctx (resultOr (realPath a) a))
 
-fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String -> Int64
+fn ! reexecTestAtRoot! ctx: sys/Context args: (List String) dir: String flags: (List String) -> Int64
   (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "test")
                           (listAppend (if (stringEmpty? dir) (list) (list "--jobserverDir" dir))
-                          (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args)))
+                          (listAppend (map (fn [(a String)] -> String (rootRelativeArg ctx a)) args) flags)))
               (list))
 
 fn ! outOfRoot? ctx: sys/Context a: String -> Bool
@@ -770,17 +834,70 @@ fn ! outOfRoot? ctx: sys/Context a: String -> Bool
 fn ! anyOutOfRoot? ctx: sys/Context args: (List String) -> Bool
   (listAny? (fn [(a String)] -> Bool (outOfRoot? ctx a)) (filter (fn [(a String)] -> Bool (not (stringStartsWith? a "--"))) args))
 
+; (:m :ref TEST-RUNNER-SELECT :do "the options of asl test FILE: --only NAME runs one test function, --keep-going lets failed assertions pass on and lists them all; every other argument stays a file in its order, so a run without options sees exactly the arguments it was given; flags keeps the option words for a re-exec at the root and the FAIL line")
+(schema TestOpts (:f only String) (:f keepGoing Bool) (:f wallS Int64) (:f maxRssMb Int64) (:f stats Bool) (:f flags (List String)) (:f files (List String)) (:f error String))
+
+fn noTestOpts -> TestOpts
+  (TestOpts :only "" :keepGoing false :wallS 0 :maxRssMb 0 :stats false :flags (list) :files (list) :error "")
+
+fn testOptsStep acc: TestOpts args: (List String) -> TestOpts
+  (match (listHead args)
+    ((none) acc)
+    ((some a)
+      (cond
+        ((not (stringEmpty? acc.error)) acc)
+        ((= a "--only")
+          (let [(n (optionOr (listGet args 1) ""))]
+            (cond
+              ((or (stringEmpty? n) (stringStartsWith? n "-")) (with acc :error "--only needs a test function name"))
+              ((not (stringEmpty? acc.only)) (with acc :error "--only is given twice; one run selects one function"))
+              (else (testOptsStep (with acc :only n :flags (listAppend acc.flags (list "--only" n))) (listDrop args 2))))))
+        ((or (= a "--wall") (= a "--max-rss"))
+          (let [(v (optionOr (listGet args 1) ""))
+                (n (optionOr (stringToInt64 v) 0))]
+            (cond
+              ((or (< n 1) (and (= a "--wall") (> n (nt/maxWallS)))) (with acc :error (str a " needs a whole number " (if (= a "--wall") "of seconds from 1 to 7200" "of megabytes above 0") ", got " v)))
+              ((= a "--wall") (testOptsStep (with acc :wallS n :flags (listAppend acc.flags (list a v))) (listDrop args 2)))
+              (else (testOptsStep (with acc :maxRssMb n :flags (listAppend acc.flags (list a v))) (listDrop args 2))))))
+        ((= a "--stats") (testOptsStep (with acc :stats true :flags (listAppend acc.flags (list a))) (rest args)))
+        ((= a "--keep-going") (testOptsStep (with acc :keepGoing true :flags (listAppend acc.flags (list a))) (rest args)))
+        (else (testOptsStep (with acc :files (listAppend acc.files (list a))) (rest args))))))
+
+fn ! testUsageError! message: String -> Int64
+  (do (sys/say! (str "(:test :status :failed :error ERR_USAGE :message \"asl test FILE [--only NAME] [--keep-going] [--wall S] [--max-rss MB] [--stats]: " message "\")")) 2)
+
+fn plainFileArgs? args: (List String) -> Bool
+  (and (not (listEmpty? args)) (not (listAny? (fn [(a String)] -> Bool (stringStartsWith? a "--")) args)))
+
+; (:m :ref TEST-RUNNER-SELECT :do "--only NAME must name one of the file's test functions (nt/testFunctionsOf); an unknown name is refused before anything is built, with the names it could have been")
+fn ! selectionRefused? opts: TestOpts path: String -> Bool
+  (if (stringEmpty? opts.only)
+    false
+    (let [(names (nt/testFunctionsOf (resultOr (fileReadString path) "")))]
+      (if (listContains? names opts.only)
+        false
+        (do (sys/say! (str "(:test :status :failed :error ERR_UNKNOWN_TEST :message \"asl test --only " opts.only ": " path " has no top-level fn " opts.only " -> Bool without parameters\" :available (" (stringJoin names " ") "))")) true))))
+
 fn ! test! ctx: sys/Context args: (List String) dir: String -> Int64
+  (let [(opts (testOptsStep (noTestOpts) args))
+        (tracing (= (optionOr (envGet "ASL_TRACE") "0") "1"))]
+    (cond
+      ((not (stringEmpty? opts.error)) (testUsageError! opts.error))
+      ((listEmpty? opts.flags) (testRun! ctx args dir opts))
+      ((or tracing (not (plainFileArgs? opts.files))) (testUsageError! (str (stringJoin opts.flags " ") " applies to plain FILE arguments, not to --all, --changed, --native, --compare or --trace")))
+      (else (testRun! ctx opts.files dir opts))))
+
+fn ! testRun! ctx: sys/Context args: (List String) dir: String opts: TestOpts -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))
         (plainFiles (and (not (listEmpty? args)) (and (not (listContains? args "--changed")) (and (not (listContains? args "--all")) (not (= (first args) "--native"))))))
         (hosted (or (listContains? args "--compare") (or tracing (and (not plainFiles) (not (atRoot? ctx))))))]
     (cond
       (hosted (cmd/dispatch! ctx "test" args))
-      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir))
+      ((and plainFiles (not (atRoot? ctx)) (not (anyOutOfRoot? ctx args))) (reexecTestAtRoot! ctx args dir opts.flags))
       ((listContains? args "--changed") (changedTest! ctx args))
       ((listEmpty? args) (bareSweepRefused! "test"))
       ((listContains? args "--all") (if (= args (list "--all")) (sweepTest! ctx) (allWithPaths! "test")))
-      ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args))))
+      ((= (first args) "--native") (if (listEmpty? (rest args)) (cmd/dispatch! ctx "test" args) (suites! ctx (rest args) opts)))
       (else (match (cmd/testFiles! args (list))
               ((err code) code)
               ((ok paths)
@@ -789,7 +906,10 @@ fn ! test! ctx: sys/Context args: (List String) dir: String -> Int64
                       (selected (pairFirst selection))
                       (frozen (pairSecond selection))
                       (note (if (listEmpty? dirs) true (sys/say! (str "(:test :frozen " (stringFromInt64 (listLength frozen)) ")"))))]
-                  (suites! ctx selected)))))))
+                  (cond
+                    ((and (not (stringEmpty? opts.only)) (!= (listLength selected) 1)) (testUsageError! (str "--only selects a function of one file; " (stringFromInt64 (listLength selected)) " test files were given")))
+                    ((selectionRefused? opts (optionOr (listHead selected) "")) 2)
+                    (else (suites! ctx selected opts)))))))))
 
 fn readCode msg: String -> String
   (if (or (or (stringStartsWith? msg "unmatched") (stringStartsWith? msg "unclosed")) (or (stringContains? msg "' closes '") (stringContains? msg "unterminated")))
