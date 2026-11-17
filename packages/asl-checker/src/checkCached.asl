@@ -106,14 +106,15 @@ fn ! bodyStep! paths: (List String) roots: (List String) known: (Map String r/Mo
                       (ds (pairFirst r))]
                   (bodyStep! rest roots known (Tally :diags (listAppend t.diags ds) :checked (+ t.checked 1) :summarised t.summarised :cache (Cache :index (pairSecond r) :bodies (mapSet t.cache.bodies p ds) :stampDir t.cache.stampDir :checkerId t.cache.checkerId)))))))))))
 
-; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "a body checked clean is also stamped on its own, in stampDir/modules apart from the closure stamps: its key is this checker, its path from the base with its content digest, and the keys of the modules it imports, so it covers the module's whole import closure; a closure whose stamp misses after one edit checks only the edited module and its importers, and a second root with that closure checks none of them (cardTest: 273 bodies, 149 s, on one leaf edit)")
-(schema KeyMemo (:f keys (Map String String)) (:f index r/ModIndex))
+; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "a body checked clean is also stamped on its own, in stampDir/modules apart from the closure stamps: its key is this checker, its path from the base with its content digest, and the interface keys of the modules it imports; a closure whose stamp misses after one edit checks only the edited module and the importers whose view of it changed, and a second root with that closure checks none of them")
+; (:m :ref CHECKER-IFACE-KEY :do "a body verdict reads its imports only through their ModuleSummary (resolve collectSummary, effects refined over the closure), so an import enters the key by its interface key, not its bytes: a body-only edit of a widely imported module rechecks that module alone (cardTest: 273 bodies on one edit before)")
+(schema KeyMemo (:f keys (Map String String)) (:f ifaces (Map String String)) (:f mods (Map String r/ModuleSummary)) (:f index r/ModIndex))
 
 fn modStampDir dir: String -> String
   (str dir "/modules")
 
-fn setKey m: KeyMemo p: String k: String -> KeyMemo
-  (KeyMemo :keys (mapSet m.keys p k) :index m.index)
+fn setKeys m: KeyMemo p: String k: String i: String -> KeyMemo
+  (KeyMemo :keys (mapSet m.keys p k) :ifaces (mapSet m.ifaces p i) :mods m.mods :index m.index)
 
 fn anyEmpty? xs: (List String) -> Bool
   (listAny? (fn [(x String)] -> Bool (stringEmpty? x)) xs)
@@ -141,32 +142,69 @@ fn ! directDeps! dep: String roots: (List String) known: (Map String r/ModuleSum
       (let [(paths (filter (fn [(p String)] -> Bool (!= p "sys")) (r/mapValuesList s.imports)))]
         (pair (if (listAll? (fn [(p String)] -> Bool (mapHas? known p)) paths) (some paths) (none)) ix))))
 
+; (:m :ref CHECKER-IFACE-KEY :do "effects are refined once over the whole closure, as checkModule does per body (resolve refineEffects): the effect flag and witness an importer reads are the refined ones, and a function's refined effect follows only its callees, so the closure of any root gives the same flags as the module's own closure")
+fn refinedMods known: (Map String r/ModuleSummary) -> (Map String r/ModuleSummary)
+  (let [(ix (pairSecond (r/refineEffects (r/emptyModuleSummary) (r/depScanOf known))))] ix.deps)
+
+fn flag b: Bool -> String
+  (if b "1" "0")
+
+fn pairsText ps: (List (Pair String String)) -> String
+  (stringJoin (map (fn [(p (Pair String String))] -> String (str (pairFirst p) ": " (pairSecond p))) ps) " ")
+
+fn funIfaceLine f: r/FunSummary -> String
+  (str "fn " f.name " effect=" (flag f.effect) " witness=" f.witness " doc=" (flag f.hasDoc) " tvars=[" (stringJoin f.typevars " ") "] [" (pairsText f.params) "] -> " f.ret)
+
+fn schemaIfaceLine s: r/SchemaSummary -> String
+  (str "schema " s.name " tvars=[" (stringJoin s.typevars " ") "] " (stringJoin (map (fn [(f r/FieldSummary)] -> String (str "(:f " f.name " " f.type (if f.hasDefault " :default" "") ")")) s.fields) " "))
+
+fn enumIfaceLine e: r/EnumSummary -> String
+  (str "enum " e.name " tvars=[" (stringJoin e.typevars " ") "] " (stringJoin (map (fn [(c r/CaseSummary)] -> String (str "(" c.name " " (pairsText c.params) ")")) e.cases) " "))
+
+fn mapLines label: String m: (Map String String) -> (List String)
+  (map (fn [(k String)] -> String (str label " " k "=" (optionOr (mapGet m k) ""))) (listSort (mapKeys m)))
+
+; (:m :ref CHECKER-IFACE-KEY :do "what an importer's check reads of a dependency, from resolve and check: its name, header and doc marks, exports and exported types, its imports by alias (signature types resolve in its scope); every function a qualified name may reach (exported, or a Pascal name exported as a type) with params, typevars, the signature return text (an omitted one reads :inferredUnit, never the body), the refined effect and witness; every schema with typevars and fields with types and defaults and every enum with its cases, private ones too (a qualified constructor accepts a private schema, case lookups read caseOwner); caseOwner, exportedCases and exportedFields, the last including the curly keys of its bodies (collectAllFieldNames); bodies, private signatures and call lists stay out, call lists only through the refined effects")
+fn ifaceText base: String s: r/ModuleSummary -> String
+  (let [(funs (map funIfaceLine (filter (fn [(f r/FunSummary)] -> Bool (or (listContains? s.exports f.name) (listContains? s.exportedTypes f.name))) (mapValues s.funs))))
+        (lines (listAppend (list (str "name " s.name) (str "header=" (flag s.hasHeader) " doc=" (flag s.hasDoc)) (str "exports [" (stringJoin s.exports " ") "]") (str "types [" (stringJoin s.exportedTypes " ") "]"))
+                 (listAppend (listSort (map (fn [(al String)] -> String (str "import " al " " (stampLabel base (optionOr (mapGet s.imports al) "")))) (mapKeys s.imports)))
+                   (listAppend (listSort funs)
+                     (listAppend (listSort (map schemaIfaceLine (mapValues s.schemas)))
+                       (listAppend (listSort (map enumIfaceLine (mapValues s.enums)))
+                         (listAppend (mapLines "caseOwner" s.caseOwner)
+                           (listAppend (mapLines "exportedCase" s.exportedCases)
+                             (list (str "fields [" (stringJoin (listSort (mapKeys s.exportedFields)) " ") "]"))))))))))]
+    (stringJoin lines "\n"))
+
 ; (:m :ref TRAIN-SUITE-FRONTEND-SHARE :do "an empty key marks a module in progress or without a key, so an import cycle or an unreadable or unresolved dependency yields no key and that body is checked as before")
-fn ! modKey! base: String id: String roots: (List String) known: (Map String r/ModuleSummary) path: String memo: KeyMemo -> (Pair String KeyMemo)
+; (:m :ref CHECKER-IFACE-KEY :do "two keys per module: the check key (its bytes and pure mark, and each import's interface key) stamps its body; the interface key (its interface text and each import's interface key) is what its importers chain on, so an interface change two imports away still re-keys them; a non-ASL file keys on its bytes for both; a module without a loaded summary gives its importers no key")
+fn ! modKey! base: String id: String roots: (List String) known: (Map String r/ModuleSummary) path: String memo: KeyMemo -> KeyMemo
   (match (mapGet memo.keys path)
-    ((some k) (pair k memo))
+    ((some _) memo)
     ((none)
       (match (fileReadBytes path)
-        ((err _) (pair "" (setKey memo path "")))
+        ((err _) (setKeys memo path "" ""))
         ((ok b)
-          (let [(own (str "aslModStamp 1\n" id "\n" (stampLabel base path) "=" (bytesSha256 b) (pureMark path)))]
+          (let [(own (str "aslModStamp 2\n" id "\n" (stampLabel base path) "=" (bytesSha256 b) (pureMark path)))]
             (if (not (stringEndsWith? path ".asl"))
-              (let [(k (bytesSha256 (stringToBytes own)))] (pair k (setKey memo path k)))
+              (let [(k (bytesSha256 (stringToBytes own)))] (setKeys memo path k k))
               (let [(dd (directDeps! path roots known memo.index))
-                    (m1 (setKey (KeyMemo :keys memo.keys :index (pairSecond dd)) path ""))]
+                    (m1 (setKeys (KeyMemo :keys memo.keys :ifaces memo.ifaces :mods memo.mods :index (pairSecond dd)) path "" ""))]
                 (match (pairFirst dd)
-                  ((none) (pair "" m1))
+                  ((none) m1)
                   ((some ps)
-                    (let [(acc (fold (fn [(st (Pair (List String) KeyMemo)) (p String)] -> (Pair (List String) KeyMemo)
-                                       (let [(r (modKey! base id roots known p (pairSecond st)))]
-                                         (pair (cons (if (stringEmpty? (pairFirst r)) "" (str (stampLabel base p) " " (pairFirst r))) (pairFirst st)) (pairSecond r))))
-                                     (pair (list) m1) ps))
-                          (m2 (pairSecond acc))
-                          (k (if (anyEmpty? (pairFirst acc)) "" (bytesSha256 (stringToBytes (str own "\n" (stringJoin (listSort (pairFirst acc)) "\n"))))))]
-                      (pair k (setKey m2 path k))))))))))))
+                    (let [(m2 (fold (fn [(m KeyMemo) (p String)] -> KeyMemo (modKey! base id roots known p m)) m1 ps))
+                          (lines (map (fn [(p String)] -> String (let [(i (optionOr (mapGet m2.ifaces p) ""))] (if (stringEmpty? i) "" (str (stampLabel base p) " " i)))) ps))
+                          (deps (stringJoin (listSort lines) "\n"))
+                          (k (if (anyEmpty? lines) "" (bytesSha256 (stringToBytes (str own "\n" deps)))))
+                          (i (match (mapGet memo.mods path)
+                               ((none) "")
+                               ((some s) (if (anyEmpty? lines) "" (bytesSha256 (stringToBytes (str "aslIface 1\n" id "\n" (stampLabel base path) "\n" (ifaceText base s) "\n" deps)))))))]
+                      (setKeys m2 path k i)))))))))))
 
 fn ! modKeysOf! base: String id: String roots: (List String) known: (Map String r/ModuleSummary) paths: (List String) ix: r/ModIndex -> KeyMemo
-  (fold (fn [(m KeyMemo) (p String)] -> KeyMemo (pairSecond (modKey! base id roots known p m))) (KeyMemo :keys (mapEmpty) :index ix) paths)
+  (fold (fn [(m KeyMemo) (p String)] -> KeyMemo (modKey! base id roots known p m)) (KeyMemo :keys (mapEmpty) :ifaces (mapEmpty) :mods (refinedMods known) :index ix) paths)
 
 fn modKeyOf memo: KeyMemo p: String -> String
   (optionOr (mapGet memo.keys p) "")
@@ -191,13 +229,13 @@ fn ! closureVerdict! base: String path: String src: String forms: (List a/TopFor
     (if (and (not (listEmpty? fresh)) (match key ((some k) (stampHit! cache.stampDir k)) ((none) false)))
       (pair (ok (Verdict :diags own :checked 1 :summarised (listLength depPaths))) start)
       (let [(known (realDeps cl))
-            (mods (if (or (listEmpty? fresh) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :index cl.index) (modKeysOf! base cache.checkerId roots known fresh cl.index)))
+            (mods (if (or (listEmpty? fresh) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :ifaces (mapEmpty) :mods (mapEmpty) :index cl.index) (modKeysOf! base cache.checkerId roots known fresh cl.index)))
             (mDir (modStampDir cache.stampDir))
             (hits (filter (fn [(p String)] -> Bool (let [(k (modKeyOf mods p))] (and (not (stringEmpty? k)) (stampHit! mDir k)))) fresh))
             (seeded (Cache :index mods.index :bodies (fold (fn [(acc (Map String (List ty/Diagnostic))) (p String)] -> (Map String (List ty/Diagnostic)) (mapSet acc p (list))) start.bodies hits) :stampDir cache.stampDir :checkerId cache.checkerId))
             (t (bodyStep! depPaths roots known (Tally :diags own :checked 1 :summarised 0 :cache seeded)))
             (written (filter (fn [(p String)] -> Bool (and (not (listContains? hits p)) (match (mapGet t.cache.bodies p) ((some ds) (listEmpty? ds)) ((none) false)))) fresh))
-            (post (if (or (listEmpty? written) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :index t.cache.index) (modKeysOf! base cache.checkerId roots known written t.cache.index)))
+            (post (if (or (listEmpty? written) (stringEmpty? cache.checkerId)) (KeyMemo :keys (mapEmpty) :ifaces (mapEmpty) :mods (mapEmpty) :index t.cache.index) (modKeysOf! base cache.checkerId roots known written t.cache.index)))
             (modsWritten (modStampsWrite! mDir mods post hits t.cache.bodies written))
             (clean (= (listLength t.diags) (listLength own)))
             (stamped (match key ((some k) (and clean (stampWrite! cache.stampDir k))) ((none) false)))]

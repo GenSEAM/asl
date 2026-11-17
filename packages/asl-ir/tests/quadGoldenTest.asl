@@ -32,7 +32,7 @@ fn entries -> (List String)
 ; (:m :ref LOWLEVEL-WRAP-NATIVE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on WRAPNAT d448d30b8 (+702 bytes, 5837165): closure change only lowLevelSigs.asl and check.asl wrap-builtin routing")
 ; (:m :ref MATCH-BY-SCRUTINEE :do "checkSemanticTest linked IR re-recorded by goldenRegen --apply on 62db78e74 over main 668522103 (+59227 bytes, 6104690): closure change only check.asl and resolve.asl (match patterns resolved by the inferred enum, ERR_NESTED_CASE_ATOM, unreachable-arm covering arm) and link.asl elaborateUnits")
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-8883695896353586377:6104690")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-5745465689938443658:6135497")
         (pair "lowerSourceWith" "6806003338108627551:8856"))
 
 fn diagLine d: ty/IrDiag -> String
