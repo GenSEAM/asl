@@ -98,6 +98,11 @@ fn ! main args: (List String) -> (Result Int64 String)
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))]
     (cond
       ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (genLine! root n)) (ok 0)))))
+      ((= cmd "missing")
+        (let [(d (ratchetDiff (ratchetRows! root) (r/missingOf (r/allCards! root))))]
+          (do (println (str "(:know :missing :new " (listLength (pairFirst d)) ")"))
+              (if (listEmpty? (pairFirst d)) () (println (stringJoin (pairFirst d) "\n")))
+              (ok 0))))
       ((= cmd "ratchet") (match (writeRatchet! root) ((err e) (err e)) ((ok n) (do (println (str "(:know :ratchet :rows " n ")")) (ok 0)))))
       ((= cmd "check")
         (let [(stale (staleFiles! root))]
@@ -106,4 +111,4 @@ fn ! main args: (List String) -> (Result Int64 String)
             (do (println (str "(:know :check :status stale :files (" (stringJoin (map r/q stale) " ") "))")) (ok 1)))))
       ((= cmd "q") (do (println (know! root (stringJoin (listTake (listDrop args 2) (optionOr (optionMap (fn [(i Int64)] -> Int64 (- i 2)) (listIndexOf args "--budget")) (listLength args))) " ") (budgetArg args))) (ok 0)))
       ((= cmd "index") (do (println (resultOr (fileReadString (str (cardsDir root) "/" (indexFileOf (listGet args 2)))) "(:know :error \"no such index; run gen, groups are listed in index.asn\")")) (ok 0)))
-      (else (do (println "(:know :usage \"gen ROOT | check ROOT | ratchet ROOT | index ROOT [GROUP] | q ROOT words... [--budget N]\")") (ok 2)))))
+      (else (do (println "(:know :usage \"gen ROOT | check ROOT | missing ROOT | ratchet ROOT | index ROOT [GROUP] | q ROOT words... [--budget N]\")") (ok 2)))))

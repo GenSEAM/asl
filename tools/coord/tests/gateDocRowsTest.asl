@@ -1,0 +1,112 @@
+(module asl-tools/coord/tests/gateDocRowsTest
+  :x [runTests]
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/docRows :a dr) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
+
+; (:m :ref GATE-DOC-ROWS :do "the gate stage's early doc-row check on fixture repos in a temp dir: the worktree's bin/asl is a fake that logs every call to .fakeLog and prints the rows of .fakeRows (exit 7 when .fakeFail exists); a unit that exports a new symbol without a doc row is red with the symbol, the file and the literal row; a diff without package source never starts the tool (asserted on the log); a miss the base already had is not charged; a tool that fails never blocks and the note says infra")
+fn fakeTool -> String
+  "#!/bin/sh\necho \"$@\" >> \"$ASL_ROOT/.fakeLog\"\nif [ \"$1\" = check ]; then exit 0; fi\nif [ -f \"$ASL_ROOT/.fakeRows\" ]; then cat \"$ASL_ROOT/.fakeRows\"; else echo \"(:know :missing :new 0)\"; fi\nif [ -f \"$ASL_ROOT/.fakeFail\" ]; then exit 7; fi\n"
+
+fn trieBase -> String
+  "(module asl-utils/trie\n  :x [empty]\n  :i [])\n\nfn empty -> Int64\n  1\n"
+
+fn trieNew -> String
+  "(module asl-utils/trie\n  :x [empty insert]\n  :i [])\n\nfn empty -> Int64\n  1\n\nfn insert k: Int64 -> Int64\n  k\n"
+
+fn trieBody -> String
+  "(module asl-utils/trie\n  :x [empty]\n  :i [])\n\nfn empty -> Int64\n  2\n"
+
+fn rowsBoth -> String
+  "(:know :missing :new 2)\nasl-utils#asl-utils/trie/empty nodoc\nasl-utils#asl-utils/trie/insert nodoc\n"
+
+fn ! repoOf! root: String -> String
+  (let [(repo (str root "/repo"))
+        (w (sh (str "mkdir -p " repo "/bin " repo "/asl/packages/asl-utils/src " repo "/docs " root "/wts && echo initOk")))
+        (_ (g repo "init -q -b main"))
+        (_ (fileWrite (str repo "/bin/asl") (fakeTool)))
+        (_ (fileWrite (str repo "/docs/readme.txt") "r\n"))
+        (_ (fileWrite (str repo "/asl/packages/asl-utils/src/trie.asl") (trieBase)))
+        (_ (fileWrite (str repo "/asl/packages/asl-utils/doc.asn") "(:doc :symbol \"asl/packages/asl-utils/src/trie.asl#\" :text \"tries\")\n"))
+        (_ (sh (str "chmod +x " repo "/bin/asl")))
+        (a (g repo "add -A"))
+        (made (g repo "-c user.email=t@example.invalid -c user.name=t commit -qm c0"))]
+    (if (and (stringContains? w "initOk") (and (= a.exit 0) (= made.exit 0))) repo ""))
+
+fn sh c: String -> String
+  (pf/sh c)
+
+fn ! g dir: String words: String -> fr/Done
+  (cd/gitOut dir (stringSplit words " "))
+
+; (:m :do "a unit worktree on sh/ID off main, the file written and committed, and the rows the fake tool prints; returns the CUnit")
+fn ! unitWith! root: String id: String file: String text: String rows: String -> cd/CUnit
+  (let [(wt (str root "/wts/w-" id))
+        (made (g (str root "/repo") (str "worktree add -q -b sh/" id " " wt " main")))
+        (_ (fileWrite (str wt "/" file) text))
+        (_ (if (stringEmpty? rows) () (let [(_ (fileWrite (str wt "/.fakeRows") rows))] ())))
+        (a (g wt (str "add -A -- " file)))
+        (c (g wt "-c user.email=t@example.invalid -c user.name=t commit -qm unit"))]
+    (if (and (= made.exit 0) (and (= a.exit 0) (= c.exit 0))) (pf/cuIn id "gating" wt (str "sh/" id)) (pf/cuIn id "gating" "" "")))
+
+fn unitOf id: String -> st/Task
+  (with (pf/unitIn id "echo '(:gate :asserts 1 :failed 0)'") :owns (list "asl/packages/asl-utils/src/trie.asl"))
+
+fn logOf wt: String -> String
+  (resultOr (fileReadString (str wt "/.fakeLog")) "")
+
+fn toolRuns log: String -> Int64
+  (listLength (filter (fn [(l String)] -> Bool (stringContains? l "know.asl")) (stringLines log)))
+
+fn ! pureParts -> Bool
+  (let [(diff "--- a/x\n+++ b/x\n-  :x [empty]\n+  :x [empty insert]\n+fn insert k: Int64 -> Int64\n")
+        (rows (dr/parseRows "(:know :missing :new 2)\nasl-utils#asl-utils/trie/empty nodoc\nasl-utils#asl-utils/trie/insert nodoc\nnoise line\nx#y nodecl\n"))
+        (msg (dr/message (dr/charged rows (dr/addedNames diff)) (list (pair "asl/packages/asl-utils/src/trie.asl" (trieNew)))))]
+    (do (assert (listContains? (dr/addedNames diff) "insert") "a name the diff adds is listed")
+        (assert (not (listContains? (dr/addedNames diff) "empty")) "a name on an edited :x line that the diff also removes is not added")
+        (assert (= (listLength rows) 2) (str "the header, noise and a row without a module slash are not rows: " (stringFromInt64 (listLength rows))))
+        (assert (stringContains? msg "(:doc :symbol \"asl/packages/asl-utils/src/trie.asl#insert\" :text \"one sentence: what it returns and when it fails\")") (str "the message carries the literal row: " msg))
+        (assert (and (stringContains? msg "asl/packages/asl-utils/doc.asn") (not (stringContains? msg "trie/empty"))) "the doc.asn path is named and an uncharged symbol is not")
+        (assert (not (stringContains? msg "\n")) "the message is one line")
+        (assert (dr/relevant? (list "README.md" "asl/packages/asl-utils/src/trie.asl")) "a package source is relevant")
+        (assert (dr/relevant? (list "asl/packages/asl-utils/doc.asn")) "a doc.asn is relevant")
+        (assert (not (dr/relevant? (list "asl/packages/asl-utils/tests/xTest.asl" "docs/a.txt" "asl/tools/coord/conductor.asl"))) "tests, docs and tools are not")
+        true))
+
+fn ! runTests -> Bool
+  (let [(root (pf/scratch "gdr" "x"))
+        (_ (pf/cleanup root))
+        (repo (repoOf! root))
+        (cA (unitWith! root "A" "asl/packages/asl-utils/src/trie.asl" (trieNew) (rowsBoth)))
+        (rA (cd/gatesResN 60 60 "" (unitOf "A") cA))
+        (cB (unitWith! root "B" "asl/packages/asl-utils/src/trie.asl" (trieNew) ""))
+        (_ (fileAppend (str cB.wt "/.fakeRows") "(:know :missing :new 0)\n"))
+        (rB (cd/gatesResN 60 60 "" (unitOf "B") cB))
+        (cC (unitWith! root "C" "docs/a.txt" "x\n" (rowsBoth)))
+        (rC (cd/gatesResN 60 60 "" (unitOf "C") cC))
+        (cD (unitWith! root "D" "asl/packages/asl-utils/src/trie.asl" (trieBody) (str "(:know :missing :new 1)\nasl-utils#asl-utils/trie/empty nodoc\n")))
+        (rD (cd/gatesResN 60 60 "" (unitOf "D") cD))
+        (cE (unitWith! root "E" "asl/packages/asl-utils/src/trie.asl" (trieNew) (rowsBoth)))
+        (_ (fileWrite (str cE.wt "/.fakeFail") "1"))
+        (rE (cd/gatesResN 60 60 "" (unitOf "E") cE))
+        (lA (logOf cA.wt)) (lB (logOf cB.wt)) (lC (logOf cC.wt)) (lD (logOf cD.wt)) (lE (logOf cE.wt))
+        (_ (pf/cleanup root))]
+    (do (assert (not (stringEmpty? repo)) "fixture repo exists")
+        (assert (and (not (stringEmpty? cA.wt)) (and (not (stringEmpty? cB.wt)) (and (not (stringEmpty? cC.wt)) (and (not (stringEmpty? cD.wt)) (not (stringEmpty? cE.wt)))))) "five unit worktrees exist")
+        (assert (pureParts) "pure parts")
+        (assert (= (pairFirst rA).exit 3) (str "A: a new exported fn without a doc row is red: " (pairFirst rA).sig))
+        (assert (stringContains? (pairFirst rA).sig "asl-utils/trie/insert") "A: the symbol is named")
+        (assert (stringContains? (pairFirst rA).sig "(:doc :symbol \"asl/packages/asl-utils/src/trie.asl#insert\" :text \"one sentence: what it returns and when it fails\")") (str "A: the literal row form: " (pairFirst rA).sig))
+        (assert (stringContains? (pairFirst rA).sig "asl/packages/asl-utils/doc.asn") "A: the doc.asn path")
+        (assert (not (stringContains? (pairFirst rA).sig "trie/empty")) "A: the base's own miss is not charged")
+        (assert (= (toolRuns lA) 1) (str "A: the tool ran once: " lA))
+        (assert (= (pairFirst rB).exit 0) (str "B: with the row the gate is green: " (pairFirst rB).sig))
+        (assert (stringContains? (pairSecond rB) ":ran true :charged 0") (str "B: the note says ran and charged 0: " (pairSecond rB)))
+        (assert (= (toolRuns lB) 1) "B: the tool ran")
+        (assert (= (toolRuns lC) 0) (str "C: no package source in the diff, the tool is not started: " lC))
+        (assert (stringContains? (pairSecond rC) "noPackageSource") (str "C: the note says why: " (pairSecond rC)))
+        (assert (= (pairFirst rC).exit 0) "C: the gate runs and is green")
+        (assert (and (= (pairFirst rD).exit 0) (stringContains? (pairSecond rD) ":charged 0")) (str "D: a miss only the base had is not charged: " (pairFirst rD).sig " " (pairSecond rD)))
+        (assert (= (toolRuns lD) 1) "D: the check ran")
+        (assert (= (pairFirst rE).exit 0) (str "E: a failing tool does not block: " (pairFirst rE).sig))
+        (assert (and (stringContains? (pairSecond rE) ":why infra") (stringContains? (pairSecond rE) "exit 7")) (str "E: the note says infra: " (pairSecond rE)))
+        (assert (= (toolRuns lE) 1) "E: the tool was started")
+        true))
