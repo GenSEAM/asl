@@ -3,7 +3,7 @@
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
-      stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? firstCallSeen? warmPath
+      stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
@@ -965,6 +965,13 @@ fn awaiting c: CUnit lane: String -> CUnit
 fn inFlight? c: CUnit -> Bool
   (and (!= c.launched 0) (!= (stageName c.st) ""))
 
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "a unit holds a scheduler slot while a stage of it runs that is not its merge: the merge child is the train, CPU work bounded by the jobserver, (:train :jobs) and one train at a time (mergeBusy?), so a unit waiting its turn or riding a train holds none (2026-11-17: 4 merging units took all 4 slots for hours); a merge-red fix round runs as writing and holds one; gating keeps holding one, it is the only bound on how many gate children run at once, each waiting on a writer-class jobserver token for its gate command")
+fn slotHolder? c: CUnit -> Bool
+  (and (inFlight? c) (!= c.st "merging"))
+
+fn freeSlots tokens: Int64 cus: (List CUnit) -> Int64
+  (- tokens (listLength (filter slotHolder? cus)))
+
 ; (:m :ref LANDED-AUDIT :do "GRADE-COMMIT-AUTH: the conductor records every grade commit it makes as (:gradeCommit :unit :sha :row) in <store>/gradeCommits.asn, outside any worktree; a unit branch is forged when a commit past the base touching .asl/mem/grades.asn has a sha that is not in that store file (an author or subject a writer can write proves nothing), or the log is unreadable")
 fn gradeCommitsPath dir: String -> String
   (str dir "/gradeCommits.asn")
@@ -1201,10 +1208,7 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
             ((none? (cuOf cus u.id)) (let [(_ (writeCUnit! ctx.dir c))] cap))
             (else cap))))
       ((= c.st "ready")
-        (let [(pace ctx.pace)
-              (allowOf pace.allowance)
-              (allow (allowOf c.lane))]
-          (if (or (or (or (or (<= cap 0) (>= (laneActive cus c.lane) allow)) (draining? ctx.dir)) (providerWaiting? ctx.dir c.id (/ (nowNs) 1000000))) (or (mergeHeld? (bpMaxOf (bpRowOf ctx.dir)) cus) (writerHeld? ctx cus c.id)))
+        (if (not (stringEmpty? (readyWhy! ctx cus c cap true)))
             cap
             (let [(why (impossibleWhy! ctx u))]
               (if (not (stringEmpty? why))
@@ -1213,9 +1217,10 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
                   ((err e) (let [(_ (waitMore! ctx c e))] cap))
                   ((ok text)
                     (let [(epoch (match (st/parseLease text) ((ok l) l.epoch) ((err _) 0)))
+                          (_ (pathRemove (idlePath ctx.dir)))
                           (c1 (move! ctx (writeCounted! ctx (admitted c epoch)) "writing" "claim" "" 0 0 "admitted" 0))
                           (_ (launch! ctx u c1))]
-                      (- cap 1))))))))))
+                      (- cap 1)))))))))
       ((= c.st "awaitReview")
         (if (or (= c.parked 1) (or ctx.hold (draining? ctx.dir))) cap
           (let [(c1 (move! ctx c "reviewing" "review" "" 0 0 "start" 0))
@@ -1466,12 +1471,13 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
             (before (snapshot ctx.dir))
             (pace ctx.pace)
             (tokensOf pace.tokens)
-            (flying (listLength (filter inFlight? (readCUnits! ctx.dir))))
+            (flying (listLength (filter slotHolder? (readCUnits! ctx.dir))))
             (_ (offerBacklog! ctx.dir (/ (nowNs) 1000000)))
             (_ (bpNote! ctx (readCUnits! ctx.dir)))
             (_ (let [(flow (flowRowOf ctx.dir))] (if (flowOn? flow) (flowStep! ctx units flow) (stepAll! ctx units (- (tokensOf) flying)))))
             (_ (rootRelease! ctx units))
             (_ (dwellNote! ctx))
+            (_ (idleNote! ctx))
             (after (snapshot ctx.dir))]
         (ok (if (= before after) 0 1)))))
 
@@ -1533,7 +1539,7 @@ fn ! freeWake! ctx: Ctx -> Int64
   (let [(cus (readCUnits! ctx.dir))
         (pace ctx.pace)
         (tokensOf pace.tokens)
-        (slots (- (tokensOf) (listLength (filter inFlight? cus))))
+        (slots (freeSlots (tokensOf) cus))
         (ready (listLength (filter (fn [(c CUnit)] -> Bool (= c.st "ready")) cus)))
         (rows (filter (fn [(r String)] -> Bool (listEmpty? (wakeErrors r))) (wakeRowsOf ctx.dir)))]
     (fold (fn [(done Int64) (r String)] -> Int64
@@ -2235,7 +2241,7 @@ fn ! impossibleRecheck! ctx: Ctx u: st/Task c: CUnit -> Bool
 fn impossibleSig? sig: String -> Bool
   (stringStartsWith? sig "impossible: ")
 
-; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH) row in the store's ladder.asn, a ready unit starts its writer only while the node has a free jobserver token (tokenCount - heldCount > 0) and MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
+; (:m :ref COND-ADMIT-TOKENS :do "writer admission: with a (:writers :minFreeMb N :warmFirst true|false :jobserver DIR :meminfo PATH :needToken true|false :idleMin M) row in the store's ladder.asn, a ready unit starts its writer only while MemAvailable >= :minFreeMb (default 2000, adopted), and, after each conductor start, one writer starts alone: the rest wait until that writer's session journal shows its first served model turn, its unit left writing, or warmMaxMs passed. No row, or a row wrOpts rejects: no gate. :jobserver and :meminfo default to the node's own and exist so tests can fake them")
 fn wrRowOf dir: String -> String
   (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:writers ")) (stringLines (readOr (ladderPath dir)))) "")
 
@@ -2248,20 +2254,39 @@ fn wrMinFreeMb row: String -> Int64
 fn wrWarmFirst? row: String -> Bool
   (not (stringContains? row ":warmFirst false"))
 
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "writers and reviewers wait on a model, not the CPU: by default the admission takes no jobserver token (a -j 4 train held all 4 for hours and no writer started, build node 2026-11-17); the checks they run take one when they run; :needToken true restores the old token gate without a deploy")
+fn wrNeedToken? row: String -> Bool
+  (stringContains? row ":needToken true")
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "minutes ready units may wait with none admitted before one (:idle) journal row names the top hold, 30 adopted, :idleMin of the (:writers) row")
+fn wrIdleMin row: String -> Int64
+  (wrInt row ":idleMin" 30)
+
 fn wrErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":minFreeMb" ":warmFirst" ":jobserver" ":meminfo") k))) keys))
-        (m (wrMinFreeMb row))]
-    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
-                (if (or (< m 0) (> m 1000000)) (list (str ":minFreeMb " (n m) " outside 0..1000000")) (list))))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":minFreeMb" ":warmFirst" ":jobserver" ":meminfo" ":needToken" ":idleMin") k))) keys))
+        (m (wrMinFreeMb row))
+        (idle (wrIdleMin row))
+        (need (stringReplace (sp/tokAfter row ":needToken") ")" ""))]
+    (listAppend (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+                            (if (or (< m 0) (> m 1000000)) (list (str ":minFreeMb " (n m) " outside 0..1000000")) (list)))
+                (listAppend (if (or (< idle 0) (> idle 10080)) (list (str ":idleMin " (n idle) " outside 0..10080")) (list))
+                            (if (or (not (listContains? keys ":needToken")) (listContains? (list "true" "false") need)) (list) (list (str ":needToken " need " is not true or false"))))))
 
 fn wrCfg dir: String -> String
   (let [(row (wrRowOf dir))]
     (if (listEmpty? (wrErrors row)) row ""))
 
-; (:m :ref COND-ADMIT-TOKENS :do "the pure decision: a free token and enough memory; an unreadable meminfo (-1) does not block")
-fn admitWriter? free: Int64 freeMb: Int64 minMb: Int64 -> Bool
-  (and (> free 0) (or (< freeMb 0) (>= freeMb minMb)))
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the pure writer hold: memory under the floor (an unreadable meminfo, -1, does not block), else no free token when the row needs one, else empty")
+fn writerHoldOf need: Bool free: Int64 freeMb: Int64 minMb: Int64 -> String
+  (cond
+    ((and (>= freeMb 0) (< freeMb minMb)) "memory")
+    ((and need (<= free 0)) "token")
+    (else ""))
+
+; (:m :ref COND-ADMIT-TOKENS :do "the pure decision: enough memory and, when need, a free token")
+fn admitWriter? need: Bool free: Int64 freeMb: Int64 minMb: Int64 -> Bool
+  (stringEmpty? (writerHoldOf need free freeMb minMb))
 
 fn warmPath dir: String -> String
   (str dir "/warm.asn")
@@ -2274,6 +2299,13 @@ fn ! firstCallSeen? dir: String id: String -> Bool
         (names (filter (fn [(f String)] -> Bool (stringEndsWith? f ".journal")) (resultOr (dirList jd) (list))))]
     (listAny? (fn [(f String)] -> Bool (stringContains? (readOr (str jd "/" f)) "(:served :turn ")) names))
 
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the warm writer of row is still before its first model turn: in writing, no served turn in its journal, within warmMaxMs of its start; reads only")
+fn ! warmStill? dir: String cus: (List CUnit) row: String now: Int64 -> Bool
+  (let [(w (quotedAfter row ":unit \""))
+        (at (wrInt row ":at" now))]
+    (and (< (- now at) (warmMaxMs))
+         (match (cuOf cus w) ((some wc) (and (= wc.st "writing") (not (firstCallSeen? dir w)))) ((none) false))))
+
 ; (:m :ref COND-ADMIT-TOKENS :do "warm gate: true while this conductor's warm writer is still before its first model turn; the first unit asked after a start becomes the warm writer (row (:warm :holder :unit :at) in <store>/warm.asn, rewritten with :done when it is over)")
 fn ! warmWait! ctx: Ctx cus: (List CUnit) id: String -> Bool
   (let [(row (readOr (warmPath ctx.dir)))
@@ -2284,21 +2316,109 @@ fn ! warmWait! ctx: Ctx cus: (List CUnit) id: String -> Bool
         (let [(_ (fileWrite (warmPath ctx.dir) (str "(:warm :holder " (st/q ctx.holder) " :unit " (st/q id) " :at " (n now) ")\n")))] false))
       ((stringContains? row " :done") false)
       (else
-        (let [(w (quotedAfter row ":unit \""))
-              (at (wrInt row ":at" now))
-              (stillWarming (and (< (- now at) (warmMaxMs))
-                                 (match (cuOf cus w) ((some wc) (and (= wc.st "writing") (not (firstCallSeen? ctx.dir w)))) ((none) false))))
-              (_ (if stillWarming true (ok? (fileWrite (warmPath ctx.dir) (str "(:warm :holder " (st/q ctx.holder) " :unit " (st/q w) " :at " (n at) " :done " (n now) ")\n")))))]
+        (let [(stillWarming (warmStill? ctx.dir cus row now))
+              (_ (if stillWarming true (ok? (fileWrite (warmPath ctx.dir) (str "(:warm :holder " (st/q ctx.holder) " :unit " (st/q (quotedAfter row ":unit \"")) " :at " (n (wrInt row ":at" now)) " :done " (n now) ")\n")))))]
           stillWarming))))
 
-fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the warm gate as status sees it, writing nothing: status runs in another process with another holder, so a warm row of any holder counts as the running conductor's; no row means the next admitted unit becomes the warm writer")
+fn ! warmHeldNow? dir: String cus: (List CUnit) -> Bool
+  (let [(row (readOr (warmPath dir)))]
+    (and (not (stringEmpty? row)) (and (not (stringContains? row " :done")) (warmStill? dir cus row (/ (nowNs) 1000000)))))
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "why the writer admission holds unit id: memory, token (only with :needToken true) or warm, empty when it admits or no valid (:writers) row exists; commit false asks without making id the warm writer")
+fn ! writerWhy! ctx: Ctx cus: (List CUnit) id: String commit: Bool -> String
   (let [(row (wrCfg ctx.dir))]
-    (if (stringEmpty? row) false
-      (let [(jdir (quotedAfter row ":jobserver \""))
+    (if (stringEmpty? row) ""
+      (let [(need (wrNeedToken? row))
+            (jdir (quotedAfter row ":jobserver \""))
             (minfo (let [(m (quotedAfter row ":meminfo \""))] (if (stringEmpty? m) "/proc/meminfo" m)))
-            (free (- (js/tokenCount jdir) (js/heldCount jdir)))]
-        (if (not (admitWriter? free (sc/memFreeMB (readOr minfo)) (wrMinFreeMb row))) true
-          (if (wrWarmFirst? row) (warmWait! ctx cus id) false)))))
+            (free (if need (- (js/tokenCount jdir) (js/heldCount jdir)) 0))
+            (hold (writerHoldOf need free (sc/memFreeMB (readOr minfo)) (wrMinFreeMb row)))]
+        (cond
+          ((not (stringEmpty? hold)) hold)
+          ((not (wrWarmFirst? row)) "")
+          ((if commit (warmWait! ctx cus id) (warmHeldNow? ctx.dir cus)) "warm")
+          (else "")))))
+
+fn ! writerHeld? ctx: Ctx cus: (List CUnit) id: String -> Bool
+  (not (stringEmpty? (writerWhy! ctx cus id true)))
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "why the claim of step! leaves a ready unit c ready this tick, the first of: cap (no free scheduler slot), lane (allowance used), draining, provider (backoff), merge (back-pressure), then the writer hold (memory, token, warm); empty when the claim may proceed; status counts with the same function, commit false")
+fn ! readyWhy! ctx: Ctx cus: (List CUnit) c: CUnit cap: Int64 commit: Bool -> String
+  (let [(pace ctx.pace)
+        (allowOf pace.allowance)]
+    (cond
+      ((<= cap 0) "cap")
+      ((>= (laneActive cus c.lane) (allowOf c.lane)) "lane")
+      ((draining? ctx.dir) "draining")
+      ((providerWaiting? ctx.dir c.id (/ (nowNs) 1000000)) "provider")
+      ((mergeHeld? (bpMaxOf (bpRowOf ctx.dir)) cus) "merge")
+      (else (writerWhy! ctx cus c.id commit))))
+
+fn holdNames -> (List String)
+  (list "admit" "cap" "lane" "draining" "provider" "merge" "memory" "token" "warm")
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the ready units of the store in tick order, each judged by readyWhy! as the claim judges it: an admitted one takes a slot, becomes writing for the lane count, and after it the rest wait warm when no warm row existed; returns (name count) for holdNames, admit counting the units the conditions let through (the claim may still refuse one as impossible)")
+fn ! readyHoldCounts! ctx: Ctx -> (List (Pair String Int64))
+  (let [(cus0 (readCUnits! ctx.dir))
+        (units (resultOr (st/readUnits! ctx.dir) (list)))
+        (pace ctx.pace)
+        (tokensOf pace.tokens)
+        (row (wrCfg ctx.dir))
+        (warmNext (and (not (stringEmpty? row)) (and (wrWarmFirst? row) (stringEmpty? (readOr (warmPath ctx.dir))))))
+        (ready (filter (fn [(c CUnit)] -> Bool (= c.st "ready")) (map (fn [(u st/Task)] -> CUnit (optionOr (cuOf cus0 u.id) (newStamped u 0))) units)))
+        (end (fold (fn [(acc (Pair (Pair Int64 Bool) (Pair (List CUnit) (List String)))) (c CUnit)] -> (Pair (Pair Int64 Bool) (Pair (List CUnit) (List String)))
+                     (let [(cap (pairFirst (pairFirst acc)))
+                           (warmTaken (pairSecond (pairFirst acc)))
+                           (cus (pairFirst (pairSecond acc)))
+                           (why0 (readyWhy! ctx cus c cap false))
+                           (why (if (and (stringEmpty? why0) warmTaken) "warm" why0))]
+                       (if (stringEmpty? why)
+                         (pair (pair (- cap 1) warmNext) (pair (map (fn [(x CUnit)] -> CUnit (if (= x.id c.id) (with x :st "writing" :launched 1) x)) cus) (listAppend (pairSecond (pairSecond acc)) (list "admit"))))
+                         (pair (pairFirst acc) (pair cus (listAppend (pairSecond (pairSecond acc)) (list why)))))))
+                   (pair (pair (freeSlots (tokensOf) cus0) false) (pair cus0 (list))) ready))
+        (whys (pairSecond (pairSecond end)))]
+    (map (fn [(k String)] -> (Pair String Int64) (pair k (listLength (filter (fn [(w String)] -> Bool (= w k)) whys)))) (holdNames)))
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the hold that keeps the most ready units, flow when none does and the flow hold is on, else claim")
+fn ! topHold! dir: String counts: (List (Pair String Int64)) -> String
+  (let [(held (filter (fn [(p (Pair String Int64))] -> Bool (and (!= (pairFirst p) "admit") (> (pairSecond p) 0))) counts))
+        (best (fold (fn [(b (Pair String Int64)) (p (Pair String Int64))] -> (Pair String Int64) (if (> (pairSecond p) (pairSecond b)) p b)) (pair "" 0) held))]
+    (cond
+      ((not (stringEmpty? (pairFirst best))) (pairFirst best))
+      ((fileExists? (flowHeldPath dir)) "flow")
+      (else "claim")))
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the status row of the ready class: (:readyHold :ready N :slots S :free F :admit A :cap .. :lane .. :draining .. :provider .. :merge .. :memory .. :token .. :warm .. :disk LEVEL [:base B :cut N]), counts from readyHoldCounts!, the disk cut from the scheduler's slots.asn")
+fn ! readyHoldText! ctx: Ctx -> String
+  (let [(counts (readyHoldCounts! ctx))
+        (pace ctx.pace)
+        (tokensOf pace.tokens)
+        (slots (tokensOf))
+        (cus (readCUnits! ctx.dir))]
+    (str "(:readyHold :ready " (n (listLength (filter (fn [(c CUnit)] -> Bool (= c.st "ready")) cus))) " :slots " (n slots) " :free " (n (freeSlots slots cus))
+         (stringJoin (map (fn [(p (Pair String Int64))] -> String (str " :" (pairFirst p) " " (n (pairSecond p)))) counts) "")
+         (sc/diskCutText! ctx.dir) ")"))
+
+fn idlePath dir: String -> String
+  (str dir "/idle.asn")
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "an idle episode: ready units exist and none was admitted; <store>/idle.asn holds (:idle :since T), a claim removes it, so does a tick with no ready unit; once the episode is :idleMin minutes old one (:idle :ready N :forMin M :top COND :since T :at T) row goes to the journal and the file gets :noted so the episode writes no second row; returns noted or empty")
+fn ! idleNote! ctx: Ctx -> String
+  (let [(ready (listLength (filter (fn [(c CUnit)] -> Bool (= c.st "ready")) (readCUnits! ctx.dir))))
+        (row (readOr (idlePath ctx.dir)))
+        (now (nowMs))
+        (since (wrInt row ":since" now))]
+    (cond
+      ((= ready 0) (let [(_ (if (stringEmpty? row) (ok ()) (pathRemove (idlePath ctx.dir))))] ""))
+      ((stringEmpty? row) (let [(_ (fileWrite (idlePath ctx.dir) (str "(:idle :since " (n now) ")\n")))] ""))
+      ((stringContains? row ":noted") "")
+      ((< (- now since) (* (wrIdleMin (wrCfg ctx.dir)) 60000)) "")
+      (else
+        (let [(top (topHold! ctx.dir (readyHoldCounts! ctx)))
+              (_ (fileAppend (journalPath ctx.dir) (str "(:idle :ready " (n ready) " :forMin " (n (/ (- now since) 60000)) " :top " top " :since " (n since) " :at " (n now) ")\n")))
+              (_ (fileWrite (idlePath ctx.dir) (str "(:idle :since " (n since) " :noted " (n now) ")\n")))]
+          "noted"))))
 
 ; (:m :ref MERGE-TRAIN-THROUGHPUT :do "merge back-pressure: with a (:backpressure :maxMerging N) row in the store's ladder.asn no ready unit starts its writer while more than N units are in merging, launched or waiting their turn, so the one train gets the CPU the writers and their gates would take (node2 2026-11-16: 21 merging, 7 writing, load 18 on 8 cores, the train ran 8 suites per hour). Gating, review and merge stages are not held. No row, or a row bpErrors rejects, holds nothing (today's behaviour)")
 fn bpRowOf dir: String -> String
@@ -2472,7 +2592,7 @@ fn ! flowStep! ctx: Ctx units: (List st/Task) row: String -> Unit
                          (let [(cus (readCUnits! ctx.dir))
                                (classOf (fn [(u st/Task)] -> String (match (cuOf cus u.id) ((some c) (flowClassOf narrow c)) ((none) "new"))))
                                (mine (filter (fn [(u st/Task)] -> Bool (and (not (listContains? done u.id)) (= (classOf u) k))) units))
-                               (cap (- (tokensOf) (listLength (filter inFlight? cus))))
+                               (cap (freeSlots (tokensOf) cus))
                                (_ (if (!= k "new") (stepAll! ctx mine cap)
                                     (let [(held (filter (fn [(p (Pair String (List String)))] -> Bool (not (listEmpty? (pairSecond p))))
                                                         (map (fn [(s String)] -> (Pair String (List String)) (pair s (flowHeldBy ctx cus0 cus s narrow))) before)))
@@ -2787,7 +2907,7 @@ fn ! status! ctx: Ctx -> String
                         (str "(:spend :lane " (st/q l) " :tokens " (n (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.tokens)) 0 mine))
                              " :costUsd " (costText (fold (fn [(a Int64) (c CUnit)] -> Int64 (+ a c.costMicro)) 0 mine)) ")"))) lanes))
         (esc (match (fileReadString (escalationsPath ctx.dir)) ((ok t) (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines t))) ((err _) (list))))]
-    (stringJoin (listAppend (listAppend (listAppend (listAppend rows spend) (let [(max (bpMaxOf (bpRowOf ctx.dir)))] (if (mergeHeld? max cus) (list (bpHeldText max cus)) (list)))) (let [(fh (stringTrim (readOr (flowHeldPath ctx.dir))))] (if (stringEmpty? fh) (list) (list fh))))
+    (stringJoin (listAppend (listAppend (listAppend (listAppend rows spend) (let [(max (bpMaxOf (bpRowOf ctx.dir)))] (if (mergeHeld? max cus) (list (bpHeldText max cus)) (list)))) (let [(fh (stringTrim (readOr (flowHeldPath ctx.dir))))] (if (stringEmpty? fh) (list (readyHoldText! ctx)) (list fh (readyHoldText! ctx)))))
                   (list (str "(:running (" (idList cus active?) "))")
                         (str "(:blocked (" (idList cus (fn [(c CUnit)] -> Bool (= c.st "blocked"))) "))")
                         (rootsTextIn cus roots)

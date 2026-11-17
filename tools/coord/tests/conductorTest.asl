@@ -2083,6 +2083,10 @@ fn ! testDepWake -> Bool
 
 ; (:m :ref COND-ADMIT-TOKENS :do "writer admission fixtures: a fake jobserver dir (config.asn :tokens N, tokens/tokK with a live :ownerPid) and a fake meminfo, wired by the store's (:writers ...) row")
 fn ! admitStore name: String tokens: Int64 held: Int64 memKb: Int64 warm: Bool -> String
+  (admitStoreWith name tokens held memKb warm "")
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "extra: more keys of the (:writers) row, :needToken true for the token gate")
+fn ! admitStoreWith name: String tokens: Int64 held: Int64 memKb: Int64 warm: Bool extra: String -> String
   (let [(dir (scratch name))
         (_ (cleanup dir))
         (js (str dir "/js"))
@@ -2090,7 +2094,7 @@ fn ! admitStore name: String tokens: Int64 held: Int64 memKb: Int64 warm: Bool -
         (_ (fileWrite (str js "/config.asn") (str "(:cfg :tokens " (stringFromInt64 tokens) ")\n")))
         (_ (map (fn [(i Int64)] -> Bool (ok? (fileWrite (str js "/tokens/tok" (stringFromInt64 i)) (str "(:tok :ownerPid " (stringFromInt64 (procSelf)) " :cls writer)\n")))) (range 0 held)))
         (_ (fileWrite (str dir "/mi") (str "MemTotal: 16000000 kB\nMemAvailable: " (stringFromInt64 memKb) " kB\n")))
-        (_ (fileWrite (str dir "/ladder.asn") (str "(:writers :minFreeMb 2000 :warmFirst " (if warm "true" "false") " :jobserver \"" js "\" :meminfo \"" dir "/mi\")\n")))]
+        (_ (fileWrite (str dir "/ladder.asn") (str "(:writers :minFreeMb 2000 :warmFirst " (if warm "true" "false") " :jobserver \"" js "\" :meminfo \"" dir "/mi\"" extra ")\n")))]
     dir)
 
 fn ! admitCtx dir: String -> cd/Ctx
@@ -2100,6 +2104,7 @@ fn ! admitCtx dir: String -> cd/Ctx
 fn ! testAdmitGate -> Bool
   (let [(ok1 (admitStore "adm1" 2 0 8000000 false))
         (noTok (admitStore "adm2" 2 2 8000000 false))
+        (needTok (admitStoreWith "adm6" 2 2 8000000 false " :needToken true"))
         (lowMem (admitStore "adm3" 2 0 1000000 false))
         (noRow (admitStore "adm4" 2 2 100 false))
         (_ (pathRemove (str noRow "/ladder.asn")))
@@ -2107,19 +2112,22 @@ fn ! testAdmitGate -> Bool
         (_ (fileWrite (str badRow "/ladder.asn") "(:writers :minFreeMb 2000 :bogus 1)\n"))
         (a (cd/writerHeld? (admitCtx ok1) (list) "X"))
         (b (cd/writerHeld? (admitCtx noTok) (list) "X"))
+        (b2 (cd/writerHeld? (admitCtx needTok) (list) "X"))
         (c (cd/writerHeld? (admitCtx lowMem) (list) "X"))
         (d (cd/writerHeld? (admitCtx noRow) (list) "X"))
         (e (cd/writerHeld? (admitCtx badRow) (list) "X"))
-        (_ (map cleanup (list ok1 noTok lowMem noRow badRow)))]
+        (_ (map cleanup (list ok1 noTok needTok lowMem noRow badRow)))]
     (do (assert (not a) "a free token and memory above the floor: the writer starts")
-        (assert b "every token held: the writer waits")
+        (refute b "every token held, no :needToken: the writer starts (writers wait on a model, not the CPU)")
+        (assert b2 "every token held with :needToken true: the writer waits")
         (assert c "MemAvailable 1000 MB under the 2000 MB floor: the writer waits")
         (assert (not d) "no (:writers) row: no gate")
         (assert (not e) "a row with an unknown key is ignored whole: no gate")
-        (assert (cd/admitWriter? 1 2000 2000) "pure: floor is inclusive")
-        (assert (not (cd/admitWriter? 1 1999 2000)) "pure: one MB under the floor waits")
-        (assert (cd/admitWriter? 1 -1 2000) "pure: unreadable meminfo does not block")
-        (assert (not (cd/admitWriter? 0 99999 2000)) "pure: no token waits")
+        (assert (cd/admitWriter? true 1 2000 2000) "pure: floor is inclusive")
+        (assert (not (cd/admitWriter? true 1 1999 2000)) "pure: one MB under the floor waits")
+        (assert (cd/admitWriter? true 1 -1 2000) "pure: unreadable meminfo does not block")
+        (assert (not (cd/admitWriter? true 0 99999 2000)) "pure: no token waits when one is needed")
+        (assert (cd/admitWriter? false 0 99999 2000) "pure: no token needed, none free: admitted")
         true))
 
 ; (:m :ref COND-ADMIT-TOKENS :do "warm first: the first writer after a start goes alone, the next wait until that writer's journal shows a served turn, then they go and the row says :done")
@@ -2149,7 +2157,7 @@ fn ! testAdmitWarm -> Bool
 
 ; (:m :ref COND-ADMIT-TOKENS :do "through the tick: with every token held a ready unit stays ready and journals no claim; freeing a token starts it")
 fn ! testAdmitTick bin: String -> Bool
-  (let [(dir (admitStore "admt" 1 1 8000000 false))
+  (let [(dir (admitStoreWith "admt" 1 1 8000000 false " :needToken true"))
         (put (putAll! dir (list (task "AW" (list "p/aw") (list) (greenGate) "leon"))))
         (ctx (admitCtx dir))
         (_ (cd/drain! ctx 8))

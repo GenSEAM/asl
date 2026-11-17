@@ -1,5 +1,5 @@
 (module asl-tools/coord/sched
-  :x [schedTick! schedTickDisk! slotsDue? slotsRead! baseRead! levelRead! Disk diskLevel diskSlots diskWorst parseDf probeDisk! unknownDisk Cfg Win Stats defaultCfg parseCfg cfgIssues quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
+  :x [schedTick! schedTickDisk! slotsDue? slotsRead! baseRead! levelRead! diskCutText! Disk diskLevel diskSlots diskWorst parseDf probeDisk! unknownDisk Cfg Win Stats defaultCfg parseCfg cfgIssues quoted rowAt winOf nextSlots nextFlat okPerMin rateShare nonOkShare healthRows memFreeMB loadOne okShareOf clampF]
   :i [(aslGateway/subPace :a sp) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref SCHED :do "the light pool (Leon write slots, network bound) is bounded by machine resources and grows on goodput, the successful calls per minute of the last ledger window against the one before; a 429 share above softShare never halves the pool, it only holds growth or, when goodput is flat too, steps down by one; the strong reaction to 429 is per provider through the health multiplier of the rotation")
@@ -226,6 +226,12 @@ fn ! baseRead! dir: String -> Int64
 fn ! levelRead! dir: String -> String
   (let [(l (sp/tokAfter (resultOr (fileReadString (slotsPath dir)) "") ":level"))]
     (if (stringEmpty? l) "ok" l))
+
+; (:m :ref WRITER-ADMIT-DECOUPLE :do "the disk cut as status fields: ' :disk LEVEL' from slots.asn, with ' :base B :cut N' when the level is not ok (B the AIMD slots, N what the level leaves); ' :disk ok' without a slots file")
+fn ! diskCutText! dir: String -> String
+  (let [(level (levelRead! dir))]
+    (if (= level "ok") " :disk ok"
+      (str " :disk " level " :base " (stringFromInt64 (baseRead! dir)) " :cut " (stringFromInt64 (pairFirst (slotsRead! dir))))))
 
 fn ! slotsDue? dir: String now: Int64 periodMs: Int64 -> Bool
   (let [(s (slotsRead! dir))]
