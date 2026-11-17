@@ -9,14 +9,17 @@ fn agentBusEvent unit: String stop: String receipt: String exit: Int64 at: Int64
   (bus/BusEvent :unit unit :stop stop :head (receiptToken receipt ":head") :gates "" :exit exit :asserts 0
     :receiptPath (receiptToken receipt ":journal") :at at)
 
+; (:m :ref MAIN-BASE-RED-3 :do "a run with no unit has no waiter (the Leon loop emits only for a named :unit for the same reason), so it posts nothing and reads no inbox: a dry run or a plain (:agent) used to print an agent-event-not-written line ahead of its receipt and touch the shared events file")
 ; (:m :ref ULOOP-LOWS2 :do "Leon already emits for a run with :unit; the dispatcher adds a row only when none for the unit landed since the run started, so a killed or failed run still signals and a finished one is not doubled")
 fn ! postBusEvent! path: String ev: bus/BusEvent sinceMs: Int64 -> (Result Bool String)
-  (match (bus/readEvents! path)
-    ((err e) (err e))
-    ((ok evs)
-      (match (bus/findEvent evs ev.unit sinceMs)
-        ((some _) (ok false))
-        ((none) (bus/emitTerminal! path ev)))))
+  (if (stringEmpty? ev.unit)
+    (ok false)
+    (match (bus/readEvents! path)
+      ((err e) (err e))
+      ((ok evs)
+        (match (bus/findEvent evs ev.unit sinceMs)
+          ((some _) (ok false))
+          ((none) (bus/emitTerminal! path ev))))))
 
 ; (:m :ref SIGNAL-LEON-DONE :do "the value after key in a receipt line: a quoted string unquoted, else the bare token up to a space or close paren; empty when absent")
 fn receiptToken text: String key: String -> String

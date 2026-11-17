@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! fleetRunDir sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp) (asl-gates/suiteTimes :a st)])
 
 (schema Job
@@ -579,9 +579,14 @@ fn ! spawnSep argv: (List String) cwd: String env: (List String) -> (Result Runn
                 (ok (RunningSep :pid p.pid :outFd p.stdout :errFd p.stderr :outText "" :errText ""
                       :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list (- 0 start))))))))
 
+; (:m :ref MAIN-BASE-RED-3 :do "ASL_FLEET_RUN_DIR moves the whole lease and sweep store off HOME: a child given a throwaway HOME (a test's isolated install root) otherwise creates .asl/run/fleet/leases there on its first pooled child, which an isolated-HOME purity oracle reads as a write; empty or unset keeps HOME/.asl/run/fleet")
+fn ! fleetRunDir -> String
+  (let [(given (optionOr (envGet "ASL_FLEET_RUN_DIR") ""))]
+    (if (stringEmpty? given) (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet") given))
+
 ; (:m :ref ORPHAN-EVAL-ESCAPE :do "a detached /bin/sh watchdog was rejected: D157 forbids shell in the tree, and a watchdog process is itself a child with no timeout/descendant-limit accounting through this file, exactly the escape spawnSafety forbids. Lease reaping replaces it: no extra process, no shell text, just a row-keyed record under ~/.asl/run/fleet/leases a later runGuarded call can find and act on")
 fn ! leaseDir -> String
-  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet/leases")
+  (str (fleetRunDir) "/leases")
 
 fn ! leasePath pgid: Int64 -> String
   (str (leaseDir) "/" pgid ".asn")
@@ -709,10 +714,10 @@ fn sweepEveryNs -> Int64
 
 ; (:m :ref PROC-REAPER-ALL :do "every tree the sweep kills is first logged as one (:sweep ...) row, so a kill outside a lease can be traced to it")
 fn ! sweepLog -> String
-  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet/sweep.log")
+  (str (fleetRunDir) "/sweep.log")
 
 fn ! sweepStamp -> String
-  (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/fleet/sweep.stamp")
+  (str (fleetRunDir) "/sweep.stamp")
 
 ; (:m :ref PROC-REAPER-ALL :do "run the sweep at most once per sweepEveryNs across all processes of this user (a wall-clock stamp next to the leases), so a pool start pays one ps only every 5 min; a candidate that still holds a lease is left to the lease reaper; the count of trees killed, 0 when skipped or when ps or id fails")
 fn ! sweepOrphanTests! -> Int64

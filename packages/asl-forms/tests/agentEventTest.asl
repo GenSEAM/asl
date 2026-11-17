@@ -19,6 +19,7 @@ fn ! runTests -> Bool
         (notDir (str dir "/not-a-directory"))
         (badFixture (fileWrite notDir "file blocks directory creation"))
         (bad (d/postBusEvent! (str notDir "/events.asn") (d/agentBusEvent "u" "error" "" 1 5) 0))
+        (rNoUnit (d/postBusEvent! (str dir "/never/events.asn") (d/agentBusEvent "" "done" "" 0 3000) 0))
         (removed (pathRemove dir))]
     (do
       (assert (ok? mk) "fixture root created")
@@ -36,5 +37,7 @@ fn ! runTests -> Bool
       (assert (= (d/receiptToken receipt ":journal") ".asl/run/agentLoop/s9.journal") "a quoted receipt value is unquoted")
       (assert (= (d/receiptToken receipt ":turns") "4") "a token before the closing paren ends there")
       (assert (= (d/receiptToken receipt ":missing") "") "an absent key gives empty")
+      (assert (= rNoUnit (ok false)) "a run with no unit posts nothing, reports no error and creates no inbox")
+      (assert (not (fileExists? (str dir "/never"))) "the unit-less call left no directory behind")
       (assert (ok? removed) "fixture removed")
       true))
