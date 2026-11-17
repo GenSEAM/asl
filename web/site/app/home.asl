@@ -1,6 +1,6 @@
 (module aslSite/app/home
   :x [Stats placeholderStats batchLine installLine homeContent homePage]
-  :i [(asl-html/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
+  :i [(asl-html/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m)])
 
 (schema Stats (:f wasmBytes Int64) (:f aslLines Int64) (:f bridgeLines Int64))
 
@@ -31,8 +31,7 @@ fn band tone: String anchor: String index: String label: String title: String le
 fn heroSection -> h/Node
   (h/section [(h/cls "hero")]
     [(h/div [(h/cls "shell hero-grid")]
-      [(h/figure [(h/cls "hero-art") (h/id "hero-stage")] [(mascot/dock "leon-dock-hero" "Leon · scroll and his tail reels him up to the liana")])
-       (h/div [(h/cls "stack")]
+      [(h/div [(h/cls "stack")]
         [(l/eyebrow "ASL" "AgentSlang · agent-oriented · pre-release")
          (h/h1 [(h/cls "display")] [(h/text "AgentSlang: an agent-oriented language, shaped for ") (h/em [] [(h/text "the agents that write it.")])])
          (h/p [(h/cls "lead")] [(h/text "You describe what you want and an AI agent writes the code. AgentSlang (ASL) is the language and the toolchain we are building for that code: checked before it runs, inexpensive for an agent to read and change, and compiled for more than one runtime. It is pre-release, and its ecosystem of packages and tools is open.")])

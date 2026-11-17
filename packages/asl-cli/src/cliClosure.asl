@@ -11,13 +11,13 @@ fn fnKey path: String name: String -> String
 fn testEntry -> String
   "asl/packages/asl-cli/src/native.asl"
 
-; (:m :ref PERF-CLI-REBUILD :do "asl test FILE... reaches main, the native gate, entry!, localEntry!, dispatch! and test!; the handlers of the other verbs, the hosted path through cmd/dispatch! (taken only for --trace, --compare, bare --native or a non-root cwd without plain files) and the re-exec at the root (a new bin/asl that decides again) are cut, and only the dispatchers in testGates may name them")
+; (:m :ref PERF-CLI-REBUILD :do "asl test FILE... reaches main, the native gate, entry!, localEntry!, dispatch! and test!; the handlers of the other verbs, the hosted path through cmd/dispatch! (taken only for --trace, --compare, bare --native or a non-root cwd without plain files) and the re-exec at the root (a new bin/asl that decides again) are cut, and only the dispatchers in testGates may name them; testRun! is test! after its options are parsed (TEST-RUNNER-SELECT)")
 fn testCuts -> (List String)
   (list "forms!" "intel!" "run!" "parse!" "eval!" "launch!" "pkg!" "check!" "runInline!" "stdinEntry!" "fileEntry!" "runPath!"
         "changedTest!" "sweepTest!" "reexecTestAtRoot!" "allWithPaths!" "cmd/dispatch!")
 
 fn testGates -> (List String)
-  (list "main" "entry!" "localEntry!" "dispatch!" "dispatchRaw!" "test!")
+  (list "main" "entry!" "localEntry!" "dispatch!" "dispatchRaw!" "test!" "testRun!")
 
 fn qualified? s: String -> Bool
   (and (not (stringStartsWith? s "/")) (stringContains? s "/"))

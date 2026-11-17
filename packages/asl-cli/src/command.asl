@@ -16,7 +16,7 @@ fn helpText -> String
        "Commands:\n"
        "  check <file|--all>  Balance, then asl-host check for .asl (names, arity, enums); --all: every tracked file, bare is refused\n"
        "  heal <file>         Repair generated ASL with the named heal rules; a file that already checks is unchanged\n"
-       "  test <file|dir|--all> Run suites, --all runs every suite and bare is refused; --changed [BASE] selects impacts (default main), --dry-run lists without execution\n"
+       "  test <file|dir|--all> Run suites, --all runs every suite and bare is refused; --changed [BASE] selects impacts (default main), --dry-run lists without execution; FILE takes --only NAME (one test fn), --keep-going (every failure), --wall S, --max-rss MB, --stats (a :testRun receipt)\n"
        "  repair <file...>    Repair unbalanced delimiters in place; --check reports without writing; does not re-indent\n"
        "  parse <file>        Count top-level forms on asl-host\n"
        "  eval [--native] <expr> Host evaluates expressions and echoes (:keyword ...) as ASN data; --native evaluates a single Int64 expression only\n"
@@ -355,6 +355,7 @@ fn suiteName? n: String -> Bool
 fn aslName? n: String -> Bool
   (stringEndsWith? n ".asl")
 
+; (:m :ref TEST-RUNNER-SELECT :do "a dot file is never a suite: the hidden selection copy .STEM.only.PID.asl asl test --only writes beside a file, left by a killed runner, is not discovered")
 fn ! walk! dir: String dirReal: String suites: Bool acc: (List String) -> (List String)
   (match (dirList dir)
     ((err _) acc)
@@ -366,6 +367,7 @@ fn ! walk! dir: String dirReal: String suites: Bool acc: (List String) -> (List 
                   ((ok real)
                     (cond
                       ((!= real (str dirReal "/" n)) found)
+                      ((and (stringStartsWith? n ".") (sys/isFile? p)) found)
                       ((sys/isDir? p) (walk! p real suites found))
                       ((and (sys/isFile? p) (if suites (suiteName? n) (aslName? n))) (cons p found))
                       (else found))))))
