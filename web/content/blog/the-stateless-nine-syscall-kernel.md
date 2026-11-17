@@ -1,6 +1,8 @@
-# A Small Host Boundary: What an ASL Program May Ask of Its Host
+# Four Imports and a Short List: How ASL Fences In Agent-Written Code
 *Published on September 12, 2026 · 4 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/the-stateless-nine-syscall-kernel*
+
+Agents write the code, but something still has to decide what that code may touch. In ASL the answer is written down before anything runs: a program reaches its host only through a short, declared list, every effectful function says so in its signature, and on the WebAssembly target a call to a missing capability is refused at compile time. The site you are reading runs this way, on exactly four host imports. A reviewer checks one short list instead of auditing every line for a stray file write or socket.
 
 ## 1. Sandboxing Through a Small Surface
 

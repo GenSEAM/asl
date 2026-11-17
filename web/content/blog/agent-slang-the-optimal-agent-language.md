@@ -1,7 +1,9 @@
-# Prefix Heads and Closed Variants: Why S-Expressions and Algebraic Types Suit LLMs
+# Written for the Model, Checked for the Human: Why ASL Uses S-Expressions and Closed Variants
 *By GenSEAM | September 2026*
 
-Programming languages designed between 1970 and 2015 share a common design premise: **syntax should optimize for human visual cognition**.
+**AgentSlang (ASL)** is built so that a model writes it and a checker vouches for it. Three choices carry that: **single-pass S-expressions**, **closed algebraic variants with exhaustive matching**, and **explicit effect markers**. The model gets a syntax with nothing to guess at; the reviewer gets a checker verdict instead of a wall of code. And because ASL code, ASN data and toolbelt calls share one syntax, the same habits cover all three.
+
+The languages most agents write today were designed between 1970 and 2015 around a different premise: **syntax should optimize for human visual cognition**.
 
 Infix operators (`a + b * c`), indentation-based block hierarchies, implicit type coercion, ternary conditionals, and semicolon delimiters were all chosen to reduce human typing strain and follow natural reading habits.
 
@@ -9,7 +11,7 @@ Large language models do not have eyes, biological working memory, or keyboards.
 
 When an LLM generates Python, JavaScript, or C++, part of its work goes into resolving lexical ambiguities, tracking invisible indentation, and applying operator precedence.
 
-**AgentSlang (ASL)** is designed for model authors first. It combines **single-pass S-expressions**, **closed algebraic variants with exhaustive matching**, and **explicit effect markers**. This post argues why that combination suits LLM generation and verification, and says which parts are checked today.
+ASL is designed for model authors first. This post argues why its combination suits LLM generation and verification, and marks which parts the checker enforces today.
 
 ---
 

@@ -1526,16 +1526,17 @@ fn contextOverflowed cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pa
         (declared (match a.v2 ((some e) (optionOr e.params.contextBudget 0)) ((none) 0)))
         (l1 (with l :ctxFails (+ l.ctxFails 1) :ctxEst (max l.ctxEst est) :ctxNeed (max l.ctxNeed (if (> declared 0) declared est))
                     :lastErr (some (str a.alias " HTTP " (stringFromInt64 status) ": prompt about " (stringFromInt64 est) " tokens overflowed its context window")) :retryAfterSec 0))]
-    (tellAll (listAppend (overflowBreakerEffects a status headers body)
+    (tellAll (listAppend (overflowBreakerEffects cx a status headers body)
                          (list (usageNote a.upstream.provider a.alias "contextOverflow")
                                (effLog (str "[Gateway Context] " a.alias " overflowed its context window (HTTP " (stringFromInt64 status) "). Trying a larger member...\n"))))
       (fn [] -> ChatStep (loopStep cx (advance l1 l1.body)))))
 
 ; (:m :ref CTX-PIN-RELAY :do "the breaker event httpFailedParked would send for this failure, none for an empty pool or a reply the gateway made itself")
-fn overflowBreakerEffects a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> (List ChatEffect)
-  (let [(pool (b/breakerScope status body a.providerPool a.pool))
+fn overflowBreakerEffects cx: Ctx a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> (List ChatEffect)
+  (let [(limited (accountLimited? cx a))
+        (pool (b/breakerScopeFor status body a.providerPool a.pool limited))
         (event (cond
-                 ((or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))) "markDown")
+                 ((b/breakerProviderWide status body limited) "markDown")
                  ((or (= status 429) (b/breakerIsQuotaError body)) "note429")
                  ((= status 503) "note503")
                  (else "reset503")))]
@@ -2449,12 +2450,22 @@ fn memberWindowSec cx: Ctx a: Attempt -> Int64
             (secs (filter (fn [(n Int64)] -> Bool (> n 0)) (cons fromRpm (map (fn [(l c/GatewayLimit)] -> Int64 (limitWindowSec l.window)) own))))]
         (fold (fn [(m Int64) (n Int64)] -> Int64 (if (or (= m 0) (< n m)) n m)) 0 secs))))
 
+; (:m :ref GW-BREAKER-ALIAS-SCOPE :do "true when the attempt's provider declares an account or group limit row: only then may a billing or account-quota 429 close the whole provider, since that 429 is the account's own limit; a provider with only model-scope rows, or none, keeps every 429 on its alias")
+fn accountLimited? cx: Ctx a: Attempt -> Bool
+  (let [(prov a.upstream.provider)
+        (rows (match cx.world.table ((ok t) t.limits) ((err _) (list))))]
+    (and (not (stringEmpty? prov))
+      (listAny? (fn [(l c/GatewayLimit)] -> Bool
+                  (and (= l.provider prov) (or (= l.scope "account") (= l.scope "group"))))
+                rows)))
+
 fn httpFailedParked cx: Ctx l: Loop a: Attempt status: Int64 reason: String headers: (List (Pair String String)) body: String parkSec: Int64 now: Float64 -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
-        (providerWide (or (= status 401) (or (= status 402) (b/breakerIsProviderWideQuota body))))
+        (limited (accountLimited? cx a))
+        (providerWide (b/breakerProviderWide status body limited))
         (quota (or (= status 429) (b/breakerIsQuotaError body)))
-        (pool (b/breakerScope status body a.providerPool a.pool))
+        (pool (b/breakerScopeFor status body a.providerPool a.pool limited))
         (park (if (and (> parkSec 0) (and quota (not providerWide))) parkSec 0))
         ; (:m :ref GW-429-WINDOW-WAIT :do "a 429 that is not a daily cap sends note429 (note429window:SECONDS for a member with an aligned window, see memberWindowSec) with the wait its headers name; the breaker turns that into the hint, the minute window end or the growing base")
         (windowSec (memberWindowSec cx a))

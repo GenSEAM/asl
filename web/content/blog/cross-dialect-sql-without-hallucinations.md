@@ -1,7 +1,9 @@
-# Bound Literals, Unquoted Names: Rendering Relational S-Expressions to Postgres, SQLite, MySQL & ClickHouse
+# One Query Value, Four Dialects: How ASL Renders SQL for Postgres, SQLite, MySQL & ClickHouse
 *By GenSEAM | September 2026*
 
-When autonomous coding agents are tasked with database operations (schema changes, analytical queries, data filtering) the default industry pattern is to prompt the LLM to emit raw SQL strings:
+In ASL a SQL query is a typed value, not a string a model has to get right. The `asl-sql` package renders that value for PostgreSQL, SQLite, MySQL or ClickHouse, writes each engine's placeholder style, and sends literals in value position as bound parameters, so a value with a quote in it stays a value. The agent writes one query shape for four engines; the reviewer checks one renderer instead of hand-built SQL at every call site.
+
+The usual pattern, when agents are tasked with database operations (schema changes, analytical queries, data filtering), is to prompt the LLM to emit raw SQL strings:
 
 ```text
 Prompt: "Fetch the top 5 highest-spending users in 2026 who signed up via organic search."
@@ -16,7 +18,7 @@ This pattern has three structural traps:
 
 We have not measured how often each trap occurs; the failure modes are well known, and their rate depends on the model, the schema and the task.
 
-Relational queries should not be manipulated as freeform prose. In AgentSlang, a query is a value of an algebraic type, and the `asl-sql` package renders it to a target dialect.
+Rendering from an algebraic value takes the dialect and the literal quoting off the model's plate. The sections below show how far that goes today, including the gaps in the injection boundary (section 4).
 
 ---
 

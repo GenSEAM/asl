@@ -1,7 +1,9 @@
-# Inter-Agent Protocol (AgP): Replacing Natural Language Chatter with Typed S-Expression Frames
+# Typed Frames, Not Chatter: The Design of ASL's Inter-Agent Protocol (AgP)
 *By GenSEAM | September 2026*
 
-A common failure mode of multi-agent systems (AutoGPT, CrewAI, ChatDev, LangGraph swarms) is **Conversational Mesh Chaos**.
+When ASL agents hand work to each other, the message we are designing for is a typed S-expression frame, not a friendly paragraph: a sigil head says what kind of frame it is, fields carry the state, and the subagent answers with a status, a gate verdict and artifact paths. It is the same form syntax the toolbelt already speaks, so a handoff can be checked, logged and audited like any other receipt. AgP is a specification today; section 1 says which pieces already run.
+
+The problem it targets is a common failure mode of multi-agent systems (AutoGPT, CrewAI, ChatDev, LangGraph swarms) is **Conversational Mesh Chaos**.
 
 When autonomous agents communicate with one another in unstructured natural language, the system degenerates into a lossy "telephone game":
 

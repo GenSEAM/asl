@@ -30,7 +30,7 @@ fn body -> (List h/Node)
   (listAppend
     [(l/eyebrow "DOCS" "The language on one page")
      (h/h1 [] [(h/text "AgentSlang in ten minutes")])
-     (para "ASL source (.asl) and data (.asn) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form. The complete rules an agent needs are in llms.txt; this page is the same material for a person.")
+     (para "AgentSlang (ASL) is the glue language for agent-built infrastructure: source (.asl), data (.asn) and batched toolbelt calls all use the same S-expression notation with balanced parentheses. Agents write and edit the code; the checker verifies structure, names and argument counts before anything runs; people inspect the receipts and audits. The machine-readable rules for an agent live in llms.txt; this page is the human overview.")
      (toc)]
     (listAppend (install) (listAppend
       (topic "files" "Files and modules"

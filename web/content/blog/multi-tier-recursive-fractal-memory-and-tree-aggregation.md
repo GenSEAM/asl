@@ -1,20 +1,14 @@
-# Beyond Flat Context: Tiered Memory and Tree Aggregation in AgentSlang
+# Memory That Follows the Tree: Git-Tracked ASN Ledgers and Tiered Aggregation in ASL
 *By GenSEAM | September 2026*
 
-When designing memory architectures for autonomous software development agents, the prevailing industry default is a flat context dump.
+In AgentSlang (ASL), agent memory lives in the repository as typed ASN S-expression ledgers—the same notation used for code and tool calls—queried on demand instead of dumped wholesale into every prompt. Decisions, audits and architectural invariants sit in git alongside the modules they govern, so a reviewer or another agent can inspect them with one query.
 
-An agent is dropped into a repository, and whenever it needs context, external tooling either dumps entire files into the prompt (`cat`, `view_file`) or injects loose Markdown notes and vector chunks into a single monolithic memory buffer.
+Most agent harnesses start with the opposite habit: a flat context dump. Whenever an agent needs orientation, tooling pours whole files (`cat`, `view_file`) or loose Markdown notes into one buffer. As a codebase grows into dozens of packages, that flat buffer breaks down:
+1. **Context contamination**: unrelated source files crowd out working memory and invite hallucinations.
+2. **Attention dilution**: constraints buried mid-prompt are easy for a model to miss.
+3. **Repeated cost**: every reasoning step pays to re-read the same structural facts.
 
-When a repository grows from a single script into many subsystems and packages, flat context breaks down:
-1. **Context contamination**: large dumps of unrelated source code crowd out working memory and invite hallucinations.
-2. **Attention dilution**: constraints buried in the middle of a long prompt are easy for a model to miss.
-3. **Repeated cost**: every reasoning step re-reads the same structural data.
-
-Some systems answer with a **two-tier memory model**: "global" repository memory and "local" package memory.
-
-Real systems are not two-tier. A workspace contains subsystems, packages, internal sub-packages, and modules. A binary global/local split either leaks package-level decisions into the global store or hides them where no one looks.
-
-This post describes the memory we run today in AgentSlang (ASL), and the recursive, tiered design we are building toward.
+Even a binary "global vs. local" split is too blunt for a tree of subsystems, packages and modules. This post describes the git-tracked ledger memory we run today in ASL, and the recursive, tree-aggregated design we are building on top of it.
 
 ---
 

@@ -1,18 +1,11 @@
-# The Zero-Server IDE: Why We Are Building Agent Sandboxes That Run Inside a Browser Tab
+# From This WebAssembly Page to an In-Browser Agent Sandbox: Running ASL with Zero Backend Servers
 *By GenSEAM | September 2026*
 
-The dominant architecture for AI developer tools today is centralized and server-heavy.
+Because AgentSlang (ASL) compiles through LLVM to compact, self-contained `wasm32` modules with only four host imports, ASL programs run directly inside a browser tab with no backend server. The website you are reading is built and rendered that way today, and the same WebAssembly runtime is the foundation for running the checker, test runner and agent sandbox client-side.
 
-When a developer asks an AI assistant to generate or test code, the request travels to a cloud backend. The backend provisions a container or microVM, mounts a cloned Git workspace, starts a language runtime, runs the test suite, and streams logs back to the browser.
+Most AI coding environments take the opposite route: every check or test round-trips to a cloud backend that boots a container, mounts a workspace, and streams logs back over the network—adding container cold-start latency, server bills and data-privacy exposure on every turn.
 
-This architecture has real ceilings:
-1. **Infrastructure Cost:** Keeping cloud sandboxes alive for free-tier users or short coding tasks is expensive.
-2. **Execution Latency:** Cold-booting a container, opening network tunnels and synchronizing file diffs adds overhead to every execution cycle.
-3. **Data Privacy and Security:** Sending proprietary source code and credentials to a third-party execution sandbox creates legal and compliance exposure.
-
-What if the whole development environment (the compiler, the test runner, the virtual filesystem, the git storage and the coding agent) **ran locally inside the user's browser tab, with no backend server**?
-
-This is the direction we are building AgentSlang (ASL) toward. The IDE is not shipped; this post describes the design and the part that already runs.
+Running the toolchain inside the browser tab removes the server tier altogether. Below we describe the in-browser architecture we are building toward and the `wasm32` compilation pipeline that already runs in production on this site.
 
 ---
 

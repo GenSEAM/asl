@@ -1,10 +1,12 @@
-# The Zero-Line-Number Invariant: Semantic Anchoring and AST Navigation in Autonomous Coding
+# Edit by Symbol, Not by Line Number: How the ASL Toolbelt Keeps Batch Patches Exact
 *Published on September 11, 2026 · 4 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/zero-line-number-invariant*
 
-## 1. The Fragility of Line Numbers
+When an agent sends a batch of operations to the `asl` toolbelt—`(:read :file "src/app.asl" :symbol "area")` followed by `(:edit :file "src/app.asl" :old "..." :new "...")` and `(:check ...)`—it addresses code by symbol name and exact content, never by line number. Whether an agent stages five edits in one call or several subagents work across the repository, every replacement either matches the exact target text and parses cleanly, or stops with a structured receipt (`ERR_NO_MATCH`, `ERR_AMBIGUOUS`).
 
-Conventional tools identify code by line and column. For a coding agent, those coordinates are volatile: one insertion near the top of a file shifts every reference below it, and an edit planned against yesterday's line 40 lands on whatever is at line 40 today. When several edits are planned from one read, or several agents work on one tree, each edit can invalidate the coordinates the next one relies on.
+## 1. Why Line Numbers Break Agent Batches
+
+Conventional patch tools identify code by line and column. For an agent planning a multi-step batch, line coordinates are quicksand: one insertion near the top of a file shifts every line number below it, so the second or third edit in a batch lands on the wrong span.
 
 ## 2. Anchoring by Name and Content
 

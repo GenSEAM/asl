@@ -4,7 +4,8 @@
       fetchReq fetchResult fetchSinglePage! parallelCrawlDistill!
       researchPrompt researchEntryLabel researchEntryProvider researchCall! breakerDownFor
       researchDebracket researchParse researchNorm researchWords researchQuoteFound researchVerify researchAuditPrompt researchAudit!
-      auditVerdicts researchRelation researchExtract! executeResearchHub! researchRelationAsn formatResearchAsn]
+      auditVerdicts researchRelation researchExtract! executeResearchHub! researchRelationAsn formatResearchAsn
+      researchModeOf researchParts subQueries executeResearchPlan! stageSeconds stageEntry wallLeftMs]
   :i [(asl-json/json :a j)
       (pyText :a pt)
       (search :a srch)])
@@ -1022,7 +1023,27 @@ fn breakerSkip st: srch/HubState prov: j/Json alias: j/Json name: j/Json -> (Pai
 
 (schema Attempt (:f tried (List j/Json)) (:f won (Option j/Json)))
 
+; (:m :ref RESEARCH-DEPTH :do "what one stage may take: its own timeout, cut to the wall that is left, never below one second")
+fn stageSeconds own: Int64 leftMs: Int64 -> Int64
+  (min own (max 1 (/ (+ leftMs 999) 1000)))
+
+fn entryTimeoutMs entry: j/Json -> Int64
+  (match (optionOr (pt/jget entry "timeoutSec") (j/jnull))
+    ((j/jint v) (if (> v 0) (* 1000 v) 45000))
+    ((j/jfloat f) (if (> f 0.0) (match (float64ToInt64 (* f 1000.0)) ((some i) i) ((none) 45000)) 45000))
+    (_ 45000))
+
+; (:m :do "a route entry whose timeout is longer than the wall left gets the wall left as its :timeoutSec; any other entry is returned as it is")
+fn stageEntry entry: j/Json leftMs: Int64 -> j/Json
+  (match entry
+    ((j/jobj _) (if (> (entryTimeoutMs entry) leftMs) (pt/jset entry "timeoutSec" (j/jint (stageSeconds (/ (entryTimeoutMs entry) 1000) leftMs))) entry))
+    (_ entry))
+
 fn ! chainLoop! entries: (List j/Json) st: srch/HubState tried: (List j/Json) prompt: String up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) finish: (fn [j/Json] -> (Result j/Json String)) -> (Pair (Result Attempt pt/PyErr) srch/HubState)
+  (chainUntil! entries st tried prompt up dispatch finish (fn [(u Int64)] -> Int64 9000000000000))
+
+; (:m :ref RESEARCH-DEPTH :do "the model chain under a wall: every entry attempt asks leftMs first, is not started without wall left and runs no longer than the wall left")
+fn ! chainUntil! entries: (List j/Json) st: srch/HubState tried: (List j/Json) prompt: String up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) finish: (fn [j/Json] -> (Result j/Json String)) leftMs: (fn [Int64] -> Int64) -> (Pair (Result Attempt pt/PyErr) srch/HubState)
   (match (listHead entries)
     ((none) (pair (ok (Attempt :tried tried :won (none))) st))
     ((some entry)
@@ -1035,15 +1056,18 @@ fn ! chainLoop! entries: (List j/Json) st: srch/HubState tried: (List j/Json) pr
               ((ok prov)
                 (let [(sk (breakerSkip st prov (pairFirst lab) (pairSecond lab)))]
                   (match (pairFirst sk)
-                    ((some row) (chainLoop! rest (pairSecond sk) (listAppend tried (list row)) prompt up dispatch finish))
+                    ((some row) (chainUntil! rest (pairSecond sk) (listAppend tried (list row)) prompt up dispatch finish leftMs))
                     ((none)
-                      (let [(call (researchCall! (pairSecond sk) entry prompt up dispatch)) (st2 (pairSecond call))]
-                        (match (pairFirst call)
-                          ((err e) (chainLoop! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish))
-                          ((ok text)
-                            (match (finish text)
-                              ((err why) (chainLoop! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) why))) prompt up dispatch finish))
-                              ((ok won) (pair (ok (Attempt :tried tried :won (some (pt/jset (pt/jset won "alias" (pairFirst lab)) "model" (pairSecond lab))))) st2))))))))))))))))
+                      (let [(left (leftMs 0))]
+                        (if (< left 1)
+                          (pair (ok (Attempt :tried (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) "no wall left"))) :won (none))) (pairSecond sk))
+                          (let [(call (researchCall! (pairSecond sk) (stageEntry entry left) prompt up dispatch)) (st2 (pairSecond call))]
+                            (match (pairFirst call)
+                              ((err e) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish leftMs))
+                              ((ok text)
+                                (match (finish text)
+                                  ((err why) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) why))) prompt up dispatch finish leftMs))
+                                  ((ok won) (pair (ok (Attempt :tried tried :won (some (pt/jset (pt/jset won "alias" (pairFirst lab)) "model" (pairSecond lab))))) st2))))))))))))))))))
 
 fn withTried won: (Option j/Json) tried: (List j/Json) order: (List String) -> j/Json
   (match won
@@ -1056,14 +1080,18 @@ fn attemptJson r: (Pair (Result Attempt pt/PyErr) srch/HubState) order: (List St
     ((ok a) (pair (ok (withTried a.won a.tried order)) (pairSecond r))))
 
 fn ! researchAudit! st: srch/HubState facts: (List j/Json) byUrl: j/Json entries: (List j/Json) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
+  (researchAuditUntil! st facts byUrl entries up dispatch (fn [(u Int64)] -> Int64 9000000000000))
+
+fn ! researchAuditUntil! st: srch/HubState facts: (List j/Json) byUrl: j/Json entries: (List j/Json) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) leftMs: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
   (match (researchAuditPrompt facts byUrl)
     ((err e) (pair (err e) st))
     ((ok prompt)
       (attemptJson
-        (chainLoop! entries st (list) prompt up dispatch
+        (chainUntil! entries st (list) prompt up dispatch
           (fn [(text j/Json)] -> (Result j/Json String)
             (let [(v (auditVerdicts (pt/pyStr text)))]
-              (if (= (listLength (match v ((j/jobj kvs) kvs) (_ (list)))) 0) (err "no (:check) verdicts") (ok (j/jobj (list (pair "verdicts" v))))))))
+              (if (= (listLength (match v ((j/jobj kvs) kvs) (_ (list)))) 0) (err "no (:check) verdicts") (ok (j/jobj (list (pair "verdicts" v)))))))
+          leftMs)
         (list "alias" "model" "verdicts"))))
 
 fn researchRelation pred: j/Json -> (Result (List String) pt/PyErr)
@@ -1293,7 +1321,7 @@ fn factLine f: j/Json triage: Bool -> (Result String pt/PyErr)
                 (ok (str "    (:fact :id \"" (esc (repGet f "id")) "\" :predicate " pred " :claim \"" (esc (repGet f "claim")) "\" :evidence \"" (esc ev8)
                          "\" :srcRef " (pt/pyStr (repGet f "srcRef")) " :source \"" (esc (repGet f "sourceUrl")) "\" :sourceKind :" (pt/pyStr (repGet f "sourceKind"))
                          " :verificationStatus :" (pt/pyStr (repGet f "verificationStatus")) (if (pt/pyTruthy (repGet f "crawled")) " :crawled true" "")
-                         (if (pt/pyTruthy (repGet f "audit")) (str " :audit :" (pt/pyStr (repGet f "audit"))) "") " :isFalsifying " fals ")")))))))))))
+                         (if (pt/pyTruthy (repGet f "audit")) (str " :audit :" (pt/pyStr (repGet f "audit"))) "") (if (pt/pyTruthy (repGet f "sub")) (str " :sub \"" (esc (repGet f "sub")) "\"") "") " :isFalsifying " fals ")")))))))))))
 
 fn formatResearchAsn rep: j/Json triage: Bool -> (Result String pt/PyErr)
   (let [(t (fn [(k String)] -> Bool (pt/pyTruthy (repGet rep k))))]
@@ -1310,15 +1338,587 @@ fn formatResearchAsn rep: j/Json triage: Bool -> (Result String pt/PyErr)
                     (if (t "profile") (list (str "  :profile \"" (esc (repGet rep "profile")) "\"")) (list))
                     (if (t "alias") (list (str "  :alias \"" (esc (repGet rep "alias")) "\" :model \"" (esc (repGet rep "model")) "\"")) (list))
                     (if (t "auditor") (list (str "  :auditor (:alias \"" (esc (repGet (repGet rep "auditor") "alias")) "\" :model \"" (esc (repGet (repGet rep "auditor") "model")) "\")")) (list))
+                    (if (t "auditorIndependent") (list (str "  :auditorIndependent " (pt/pyStr (repGet rep "auditorIndependent")) (if (t "auditNote") (str " :auditNote \"" (esc (repGet rep "auditNote")) "\"") ""))) (list))
                     (if (t "reason") (list (str "  :reason \"" (esc (repGet rep "reason")) "\"")) (list))
                     (if (some? (pt/jget rep "searched")) (list (str "  :searched " (pt/pyStr (repGet rep "searched")))) (list))
                     (if (t "tried") (list (triedLine "tried" (repGet rep "tried"))) (list))
                     (if (t "auditTried") (list (triedLine "auditTried" (repGet rep "auditTried"))) (list))
                     (if (t "rejected") (list (str "  :rejected (" (pt/joinSep (map (fn [(r j/Json)] -> String (str "\"" (esc r) "\"")) (listOf (repGet rep "rejected"))) " ") ")")) (list))
                     (if (t "errors") (list (str "  :errors (" (pt/joinSep (map (fn [(x j/Json)] -> String (str "(:engine \"" (esc (optionOr (pt/jget x "engine") (j/jstr ""))) "\" :error \"" (esc (optionOr (pt/jget x "error") (j/jstr ""))) "\")")) (listOf (repGet rep "errors"))) " ") ")")) (list))
+                    (planLines rep)
                     (if (and (not triage) (pt/pyEq status (j/jstr "verified")))
                       (fold (fn [(acc (List String)) (k String)] -> (List String) (if (t k) (listAppend acc (list (str "  :" k " \"" (esc (repGet rep k)) "\""))) acc)) (list) (list "summary" "positiveSynthesis" "falsificationCritique"))
                       (list))
                     (list (str "  :facts (" (if (listEmpty? facts) "" (str "\n" (pt/joinSep facts "\n"))) ")"))
                     (list (str "  :sources (" (pt/joinSep (map (fn [(s j/Json)] -> String (str "\"" (esc s) "\"")) (listOf (optionOr (pt/jget rep "sources") (j/jarr (list))))) " ") "))"))))]
               (ok (pt/joinSep (fold (fn [(acc (List String)) (l (List String))] -> (List String) (listAppend acc l)) (list) lines) "\n"))))))))
+
+; (:m :ref RESEARCH-DEPTH :do "depth as a declared mode: a (:mode ...) row of asl/packages/asl-gateway/researchModes.asn names every budget; pipeline plan = decompose the topic, research each sub-question as its own bounded unit, follow up only below the coverage floor, audit once, report coverage per sub-question; pipeline single is researchHubMain! unchanged")
+(schema PlanState (:f st srch/HubState) (:f searches Int64) (:f fetches Int64) (:f modelCalls Int64) (:f stopped String) (:f tried (List j/Json)) (:f errors (List j/Json)) (:f alias j/Json) (:f model j/Json) (:f dropped (List String)) (:f seen (List j/Json)) (:f writers (List j/Json)))
+
+fn modeInt mode: j/Json k: String -> Int64
+  (match (optionOr (pt/jget mode k) (j/jnull)) ((j/jint v) v) (_ 0))
+
+fn modeStr mode: j/Json k: String -> String
+  (match (optionOr (pt/jget mode k) (j/jnull)) ((j/jstr s) s) (_ ""))
+
+fn modeIntKeys -> (List String)
+  (list "subQuestions" "queriesPerSub" "resultsPerQuery" "fetchPerQuery" "batchSources" "maxSourcesPerSub" "saturationBatches" "resolveMargin" "maxDepth" "maxChildren" "maxNodes" "childSharedTerms" "childChars" "minFacts" "minSources" "followUpRounds" "followUpQueries" "maxSearches" "maxFetches" "maxModelCalls" "wallSeconds" "queryChars")
+
+fn modeRow forms: (List j/Json) id: String -> (Option j/Json)
+  (fold (fn [(acc (Option j/Json)) (f j/Json)] -> (Option j/Json)
+          (if (some? acc)
+            acc
+            (match (asnProps f (some ":mode"))
+              ((err _) (none))
+              ((ok p) (if (= (lstripColon (asnText (propGet p "id" (j/jstr "")))) id) (some p) (none))))))
+        (none) forms)
+
+fn modeAtom p: j/Json k: String d: String -> j/Json
+  (j/jstr (lstripColon (asnText (propGet p k (j/jstr d)))))
+
+fn researchModeOf text: String id: String -> (Result j/Json pt/PyErr)
+  (match (asnRead text)
+    ((err e) (err e))
+    ((ok forms)
+      (match (if (> (modeCount forms id) 1) (none) (modeRow forms id))
+        ((none) (err (valueErr (str "research mode table has " (if (> (modeCount forms id) 1) "more than one" "no") " (:mode :id " id " ...) row"))))
+        ((some p)
+          (let [(pipeline (pt/pyStr (modeAtom p "pipeline" "")))
+                (base (j/jobj (list (pair "id" (j/jstr id)) (pair "pipeline" (j/jstr pipeline)) (pair "depth" (modeAtom p "depth" "targeted"))
+                                    (pair "engine" (modeAtom p "engine" "auto")) (pair "decompose" (modeAtom p "decompose" "enumerated"))
+                                    (pair "counterQuery" (j/jbool (pt/pyEq (asnScalar (propGet p "counterQuery" (asnAtom "false"))) (j/jbool true))))
+                                    (pair "reformulations" (j/jarr (filter (fn [(r j/Json)] -> Bool (match r ((j/jstr s) (not (stringEmpty? s))) (_ false))) (listOf (propGet p "reformulations" (j/jarr (list))))))))))]
+            (cond
+              ((not (match (propGet p "reformulations" (j/jarr (list))) ((j/jarr _) true) (_ false))) (err (valueErr (str "research mode " id " needs :reformulations as a list of strings"))))
+              ((= pipeline "single") (ok base))
+              ((not (= pipeline "plan")) (err (valueErr (str "research mode " id " has :pipeline \"" pipeline "\"; allowed: single plan"))))
+              (else
+                (match (fold (fn [(acc (Result j/Json pt/PyErr)) (k String)] -> (Result j/Json pt/PyErr)
+                               (match acc
+                                 ((err e) (err e))
+                                 ((ok m)
+                                   (match (asnScalar (propGet p k (j/jnull)))
+                                     ((j/jint v) (if (>= v 0) (ok (pt/jset m k (j/jint v))) (err (valueErr (str "research mode " id " has a negative :" k)))))
+                                     (_ (err (valueErr (str "research mode " id " lacks an integer :" k))))))))
+                             (ok base) (modeIntKeys))
+                  ((err e) (err e))
+                  ((ok m)
+                    (match (listHead (filter (fn [(k String)] -> Bool (< (modeInt m k) 1)) (list "subQuestions" "queriesPerSub" "resultsPerQuery" "fetchPerQuery" "batchSources" "maxSourcesPerSub" "maxNodes" "maxSearches" "maxFetches" "maxModelCalls" "wallSeconds")))
+                      ((some k) (err (valueErr (str "research mode " id " needs :" k " of at least 1"))))
+                      ((none) (ok m))))))))))))
+
+; (:m :do "a marker opens a part only at a part boundary: the start of the text, or after sentence or line punctuation (spaces between do not count), so option 1) or version 1. 2 in running text is not an enumeration")
+fn partBoundary? bs: Bytes at: Int64 -> Bool
+  (if (< at 1)
+    true
+    (let [(b (bytesGet bs (- at 1)))]
+      (if (or (= b 32) (= b 9))
+        (partBoundary? bs (- at 1))
+        (or (= b 10) (= b 59) (= b 58) (= b 44) (= b 46)))))
+
+fn enumMarks bs: Bytes n: Int64 opener: String closer: String k: Int64 from: Int64 acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
+  (if (> k 32)
+    acc
+    (let [(lit (stringToBytes (str opener (stringFromInt64 k) closer))) (m (bytesLength lit)) (at (pt/findFrom bs n lit m from))
+          (end (+ at m))
+          (spaced (or (not (= closer ".")) (>= end n) (= (bytesGet bs end) 32) (= (bytesGet bs end) 10) (= (bytesGet bs end) 9)))]
+      (cond
+        ((< at 0) acc)
+        ((and (partBoundary? bs at) spaced) (enumMarks bs n opener closer (+ k 1) end (listAppend acc (list (pair at end)))))
+        (else (enumMarks bs n opener closer k (+ at 1) acc)))))
+
+; (:m :do "markers count from 1 and ascend by 1: when the next number already stands before the last marker found, the text is not one enumeration")
+fn orderedMarks bs: Bytes n: Int64 opener: String closer: String -> (List (Pair Int64 Int64))
+  (let [(marks (enumMarks bs n opener closer 1 0 (list)))
+        (lastAt (match (listGet marks (- (listLength marks) 1)) ((some m) (pairFirst m)) ((none) 0)))
+        (stray (enumMarks bs n opener closer (+ (listLength marks) 1) 0 (list)))]
+    (if (match (listHead stray) ((some s) (< (pairFirst s) lastAt)) ((none) false)) (list) marks))
+
+fn modeCount forms: (List j/Json) id: String -> Int64
+  (listLength (filter (fn [(f j/Json)] -> Bool (match (asnProps f (some ":mode")) ((err _) false) ((ok p) (= (lstripColon (asnText (propGet p "id" (j/jstr "")))) id)))) forms))
+
+fn psSeen ps: PlanState urls: (List j/Json) -> PlanState
+  (with ps :seen (mergeErrors ps.seen urls))
+
+fn failSub sub: j/Json e: pt/PyErr -> j/Json
+  (pt/jset (pt/jset (pt/jset sub "state" (j/jstr "failed")) "stop" (j/jstr "error")) "errors" (j/jarr (listAppend (subList sub "errors") (list (j/jstr (str e.kind ": " e.msg))))))
+
+fn rstripPunct s: String -> String
+  (let [(t (pt/pyStrip s))]
+    (if (or (stringEndsWith? t ";") (stringEndsWith? t ",") (stringEndsWith? t ":") (stringEndsWith? t "."))
+      (rstripPunct (pt/sliceB t 0 (- (stringLength t) 1)))
+      t))
+
+; (:m :do "the topic's own enumeration wins over any model split: (1) (2) .., then 1) 2) .., then 1. 2. ..; the stem is the text before the first marker")
+fn researchParts topic: String -> (Pair String (List String))
+  (let [(bs (stringToBytes topic)) (n (bytesLength bs))
+        (marks (fold (fn [(acc (List (Pair Int64 Int64))) (s (Pair String String))] -> (List (Pair Int64 Int64))
+                       (if (>= (listLength acc) 2) acc (orderedMarks bs n (pairFirst s) (pairSecond s))))
+                     (list) (list (pair "(" ")") (pair "" ")") (pair "" "."))))
+        (parts (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
+                       (map (fn [(p (Pair Int64 (Pair Int64 Int64)))] -> String
+                              (rstripPunct (pt/sliceB topic (pairSecond (pairSecond p)) (match (listGet marks (+ (pairFirst p) 1)) ((some nx) (pairFirst nx)) ((none) n)))))
+                            (enumerate marks))))]
+    (if (< (listLength parts) 2)
+      (pair "" (list))
+      (pair (rstripPunct (pt/sliceB topic 0 (match (listHead marks) ((some m) (pairFirst m)) ((none) 0)))) parts)))
+
+fn stemClause stem: String -> String
+  (pt/pyStrip (optionOr (listHead (stringSplit stem ",")) stem))
+
+; (:m :do "query variants of one sub-question, in the order rounds consume them: stem clause + part, the bare part, then the part with each declared reformulation; the counter-evidence query belongs to the first round only")
+fn subQueries mode: j/Json stem: String part: String -> (List (Pair Bool String))
+  (let [(clip (fn [(s String)] -> String (pt/pyStrip (pt/cpPrefix s (max 16 (modeInt mode "queryChars"))))))
+        (sc (stemClause stem))
+        (lead (if (stringEmpty? sc) (list (pair false (clip part))) (list (pair false (clip (str sc " " part))) (pair false (clip part)))))]
+    (listAppend lead (map (fn [(r j/Json)] -> (Pair Bool String) (pair false (clip (str part " " (pt/pyStr r))))) (listOf (optionOr (pt/jget mode "reformulations") (j/jarr (list)))))))
+
+fn subList sub: j/Json k: String -> (List j/Json)
+  (listOf (optionOr (pt/jget sub k) (j/jarr (list))))
+
+fn subStr sub: j/Json k: String -> String
+  (match (optionOr (pt/jget sub k) (j/jnull)) ((j/jstr s) s) (_ ""))
+
+fn newSub i: Int64 question: String part: String state: String -> j/Json
+  (j/jobj (list (pair "id" (j/jstr (str "s" (stringFromInt64 (+ i 1))))) (pair "question" (j/jstr question)) (pair "part" (j/jstr part)) (pair "state" (j/jstr state))
+                (pair "evidence" (j/jarr (list))) (pair "facts" (j/jarr (list))) (pair "rejected" (j/jarr (list))) (pair "queries" (j/jarr (list))) (pair "stop" (j/jstr ""))
+                (pair "errors" (j/jarr (list)))))
+
+fn distinctJ xs: (List j/Json) -> (List j/Json)
+  (mergeErrors (list) xs)
+
+fn urlDomain u: j/Json -> j/Json
+  (j/jstr (pt/pyLower (optionOr (listGet (stringSplit (pt/pyStr u) "/") 2) "")))
+
+; (:m :do "the registrable host of a url: no port, no www, the last two labels, or three under a two-letter country code with a generic second level (co.uk, com.au)")
+fn sourceDomain u: j/Json -> j/Json
+  (let [(host (optionOr (listHead (stringSplit (pt/pyStr (urlDomain u)) ":")) ""))
+        (labels (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit host ".")))
+        (n (listLength labels))
+        (tld (optionOr (listGet labels (- n 1)) ""))
+        (second (optionOr (listGet labels (- n 2)) ""))
+        (keep (if (and (> n 2) (= (stringLength tld) 2) (listContains? (list "co" "com" "org" "net" "ac" "gov" "edu") second)) 3 2))]
+    (j/jstr (pt/joinSep (listDrop labels (max 0 (- n keep))) ".")))
+
+; (:m :do "facts whose evidence text is the same after normalising to lower-case word tokens count once: a mirror or a tracking-parameter copy is not a second finding")
+fn distinctEvidence facts: (List j/Json) -> (List j/Json)
+  (pairFirst (fold (fn [(acc (Pair (List j/Json) (List String))) (f j/Json)] -> (Pair (List j/Json) (List String))
+                     (let [(key (wordNorm (pt/pyStr (optionOr (pt/jget f "evidence") (j/jstr "")))))]
+                       (if (and (not (stringEmpty? key)) (listContains? (pairSecond acc) key))
+                         acc
+                         (pair (listAppend (pairFirst acc) (list f)) (listAppend (pairSecond acc) (list key))))))
+                   (pair (list) (list)) facts))
+
+; (:m :do "independent sources of a set of facts: distinct registrable hosts, after facts with the same evidence text are counted once")
+fn factSources facts: (List j/Json) -> (List j/Json)
+  (distinctJ (map (fn [(f j/Json)] -> j/Json (sourceDomain (optionOr (pt/jget f "sourceUrl") (j/jnull)))) (distinctEvidence facts)))
+
+fn subCovered? mode: j/Json facts: (List j/Json) -> Bool
+  (and (>= (listLength (distinctEvidence facts)) (max 1 (modeInt mode "minFacts"))) (>= (listLength (factSources facts)) (modeInt mode "minSources")))
+
+fn wallLeftMs mode: j/Json startMs: Int64 clock: (fn [Int64] -> Int64) -> Int64
+  (- (* 1000 (modeInt mode "wallSeconds")) (- (clock 0) startMs))
+
+; (:m :do "empty = the run may go on; a model stage keeps :reserve stages back for the audit")
+fn budgetStop ps: PlanState mode: j/Json model: Bool reserve: Int64 startMs: Int64 clock: (fn [Int64] -> Int64) -> String
+  (cond
+    ((< (wallLeftMs mode startMs clock) 1) "wall")
+    ((and model (>= (+ ps.modelCalls reserve) (modeInt mode "maxModelCalls"))) "modelCalls")
+    ((and (not model) (>= ps.searches (modeInt mode "maxSearches"))) "searches")
+    (else ""))
+
+; (:m :do "a round needs both a search and a model stage: with either budget spent a sub-question is not started and a follow-up is not run")
+fn roundStop ps: PlanState mode: j/Json reserve: Int64 startMs: Int64 clock: (fn [Int64] -> Int64) -> String
+  (let [(s (budgetStop ps mode false 0 startMs clock))]
+    (if (stringEmpty? s) (budgetStop ps mode true reserve startMs clock) s))
+
+fn noteStop ps: PlanState why: String -> PlanState
+  (if (stringEmpty? ps.stopped) (with ps :stopped why) ps)
+
+fn psSearched ps: PlanState st: srch/HubState -> PlanState
+  (with ps :st st :searches (+ ps.searches 1))
+
+fn psModelCall ps: PlanState st: srch/HubState -> PlanState
+  (with ps :st st :modelCalls (+ ps.modelCalls 1))
+
+fn psFetched ps: PlanState k: Int64 -> PlanState
+  (with ps :fetches (+ ps.fetches k))
+
+fn psErrors ps: PlanState more: (List j/Json) -> PlanState
+  (with ps :errors (mergeErrors ps.errors more))
+
+fn psTried ps: PlanState more: (List j/Json) -> PlanState
+  (with ps :tried (mergeErrors ps.tried more))
+
+fn psWriter ps: PlanState alias: j/Json model: j/Json -> PlanState
+  (let [(w (if (pt/pyTruthy model) (mergeErrors ps.writers (list model)) ps.writers))]
+    (if (pt/pyTruthy ps.model) (with ps :writers w) (with ps :alias alias :model model :writers w)))
+
+fn subInt sub: j/Json k: String -> Int64
+  (match (optionOr (pt/jget sub k) (j/jnull)) ((j/jint v) v) (_ 0))
+
+fn setStop sub: j/Json why: String -> j/Json
+  (if (stringEmpty? (subStr sub "stop")) (pt/jset sub "stop" (j/jstr why)) sub)
+
+fn counterQueryOf mode: j/Json part: String -> String
+  (pt/pyStrip (pt/cpPrefix (str part " limitations drawbacks failure criticisms") (max 16 (modeInt mode "queryChars"))))
+
+fn factCon? f: j/Json -> Bool
+  (or (pt/pyTruthy (optionOr (pt/jget f "isFalsifying") (j/jnull)))
+      (listContains? (list "disputed" "refuted") (pt/pyStr (optionOr (pt/jget f "verificationStatus") (j/jstr "")))))
+
+; (:m :do "sources contradict each other while both polarities hold verified facts and neither leads by :resolveMargin distinct sources")
+fn subConflict? mode: j/Json facts: (List j/Json) -> Bool
+  (let [(con (listLength (factSources (filter factCon? facts))))
+        (pro (listLength (factSources (filter (fn [(f j/Json)] -> Bool (not (factCon? f))) facts))))]
+    (and (> con 0) (> pro 0) (< (if (> pro con) (- pro con) (- con pro)) (max 1 (modeInt mode "resolveMargin")))))
+
+; (:m :do "extract and verify the facts of one batch of evidence against the sub-question; a chain with no reply is an error row on the sub-question, not a failed run")
+fn ! batchFacts! ps: PlanState mode: j/Json sub: j/Json fresh: (List j/Json) entries: (List j/Json) triage: Bool up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) leftMs: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) PlanState)
+  (cond
+    ((listEmpty? fresh) (pair (ok sub) ps))
+    ((< (leftMs 0) 1) (pair (ok (setStop sub "budget")) (noteStop ps "wall")))
+    (else
+    (let [(question (subStr sub "question"))
+          (xp (planExtract! ps.st (planPrompt mode question fresh triage) entries triage up dispatch leftMs))
+          (ps1 (psModelCall ps (pairSecond xp)))]
+      (match (pairFirst xp)
+        ((err e) (pair (err e) ps1))
+        ((ok ext)
+          (let [(ps2 (psTried ps1 (listOf (optionOr (pt/jget ext "tried") (j/jarr (list))))))]
+            (match (pt/jget ext "props")
+              ((none) (pair (ok (pt/jset sub "errors" (j/jarr (listAppend (subList sub "errors") (list (j/jstr "research chain exhausted")))))) ps2))
+              ((some props)
+                (match (researchVerify props (listOf (optionOr (pt/jget ext "facts") (j/jarr (list)))) question fresh triage)
+                  ((err e) (pair (err e) ps2))
+                  ((ok vr)
+                    (let [(sid (subStr sub "id"))
+                          (passed (map (fn [(f j/Json)] -> j/Json (pt/jset f "sub" (j/jstr sid))) (listOf (optionOr (listGet (listOf vr) 0) (j/jnull)))))
+                          (rejected (map (fn [(r j/Json)] -> j/Json (j/jstr (str sid " " (pt/pyStr r)))) (listOf (optionOr (listGet (listOf vr) 1) (j/jnull)))))
+                          (opened (filter (fn [(q j/Json)] -> Bool (pt/pyTruthy q)) (map (fn [(q j/Json)] -> j/Json (j/jstr (childText mode q))) (listOf (optionOr (pt/jget props "openQuestions") (j/jarr (list)))))))
+                          (sub1 (pt/jset (pt/jset (pt/jset sub "facts" (j/jarr (listAppend (subList sub "facts") passed))) "rejected" (j/jarr (listAppend (subList sub "rejected") rejected))) "open" (j/jarr (distinctJ (listAppend (subList sub "open") opened)))))]
+                      (pair (ok sub1) (psWriter ps2 (optionOr (pt/jget ext "alias") (j/jnull)) (optionOr (pt/jget ext "model") (j/jnull)))))))))))))))
+
+; (:m :ref RESEARCH-DEPTH :do "one research unit, as much work as is necessary and sufficient: sources are taken in batches of :batchSources from the results of one query at a time, and after every batch the unit stops as sufficient (floor met, initial queries asked, no open contradiction), goes on while sources contradict each other (a counter-evidence query is added once), stops as saturated after :saturationBatches batches without a new verified fact, as ceiling at :maxSourcesPerSub, as queriesExhausted when its queries are used up, as budget when a shared budget is spent")
+fn ! unit! ps: PlanState mode: j/Json sub: j/Json queries: (List (Pair Bool String)) queue: (List (Pair Bool j/Json)) taken: Int64 entries: (List j/Json) triage: Bool reserve: Int64 up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) startMs: Int64 clock: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) PlanState)
+  (let [(sources (listLength (subList sub "evidence")))
+        (room (min (min (modeInt mode "batchSources") (- (modeInt mode "fetchPerQuery") taken)) (- (modeInt mode "maxSourcesPerSub") sources)))]
+    (cond
+      ((not (stringEmpty? (subStr sub "stop"))) (pair (ok sub) ps))
+      ((>= sources (modeInt mode "maxSourcesPerSub")) (pair (ok (setStop sub "ceiling")) ps))
+      ((or (listEmpty? queue) (< room 1))
+        (match (listHead queries)
+          ((none) (pair (ok (setStop sub "queriesExhausted")) ps))
+          ((some q)
+            (let [(stop (roundStop ps mode reserve startMs clock))]
+              (if (not (stringEmpty? stop))
+                (pair (ok (setStop sub "budget")) (noteStop ps stop))
+                (let [(sp (srch/executeSearchHub! ps.st (pairSecond q) (modeStr mode "engine") (modeInt mode "resultsPerQuery")))
+                      (ps1 (psSearched ps (pairSecond sp)))
+                      (sub1 (pt/jset (pt/jset sub "queries" (j/jarr (listAppend (subList sub "queries") (list (j/jstr (pairSecond q)))))) "initialLeft" (j/jint (max 0 (- (subInt sub "initialLeft") 1)))))
+                      (rest (optionOr (listTail queries) (list)))]
+                  (match (pairFirst sp)
+                    ((err e) (unit! (psErrors ps1 (list (j/jobj (list (pair "engine" (j/jstr "search")) (pair "error" (j/jstr (errWord e))))))) mode sub1 rest (list) 0 entries triage reserve up dispatch startMs clock))
+                    ((ok sd)
+                      (let [(seen ps1.seen)
+                            (results (filter (fn [(r j/Json)] -> Bool (not (listAny? (fn [(u j/Json)] -> Bool (pt/pyEq u (optionOr (pt/jget r "url") (j/jnull)))) seen)))
+                                             (listOf (optionOr (pt/jget sd "results") (j/jarr (list))))))]
+                        (unit! (psErrors ps1 (listOf (optionOr (pt/jget sd "errors") (j/jarr (list))))) mode sub1 rest
+                               (map (fn [(r j/Json)] -> (Pair Bool j/Json) (pair (pairFirst q) r)) results) 0 entries triage reserve up dispatch startMs clock))))))))))
+      (else
+        (let [(mstop (budgetStop ps mode true reserve startMs clock))
+              (leftMs (fn [(u Int64)] -> Int64 (wallLeftMs mode startMs clock)))
+              (n (min room (- (modeInt mode "maxFetches") ps.fetches)))]
+          (cond
+            ((not (stringEmpty? mstop)) (pair (ok (setStop sub "budget")) (noteStop ps mstop)))
+            ((< n 1) (pair (ok (setStop sub "budget")) (noteStop ps "fetches")))
+            (else
+              (let [(batch (listTake queue n))
+                    (later (listDrop queue n))]
+                (match (parallelCrawlDistill! ps.st (map (fn [(b (Pair Bool j/Json))] -> j/Json (pairSecond b)) batch) n (j/jfloat (min 3.5 (/ (int64ToFloat64 (max 1 (leftMs 0))) 1000.0))))
+                  ((err e) (pair (err e) ps))
+                  ((ok crawled)
+                    (match (buildEvidence batch crawled (subList sub "evidence"))
+                      ((err e) (pair (err e) ps))
+                      ((ok evidence)
+                        (let [(xp (batchFacts! (psSeen (psFetched ps (listLength batch)) (map (fn [(b (Pair Bool j/Json))] -> j/Json (optionOr (pt/jget (pairSecond b) "url") (j/jnull))) batch)) mode (pt/jset sub "evidence" (j/jarr evidence)) (listDrop evidence sources) entries triage up dispatch leftMs))
+                              (ps1 (pairSecond xp))]
+                          (match (pairFirst xp)
+                            ((err e) (pair (err e) ps1))
+                            ((ok sub2)
+                              (let [(facts (subList sub2 "facts"))
+                                    (chainDead (> (listLength (subList sub2 "errors")) (listLength (subList sub "errors"))))
+                                    (live (listAny? (fn [(e j/Json)] -> Bool (pt/pyTruthy (optionOr (pt/jget e "crawled") (j/jnull)))) (listDrop evidence sources)))
+                                    (streak (cond
+                                              ((> (listLength facts) (listLength (subList sub "facts"))) 0)
+                                              ((or chainDead (not live)) (subInt sub "streak"))
+                                              (else (+ (subInt sub "streak") 1))))
+                                    (conflict (subConflict? mode facts))
+                                    (settled (and (subCovered? mode facts) (not conflict)))
+                                    (counter (and conflict (not (pt/pyTruthy (optionOr (pt/jget sub2 "countered") (j/jnull))))))
+                                    (sub3 (pt/jset (pt/jset sub2 "streak" (j/jint streak)) "countered" (j/jbool (or counter (pt/pyTruthy (optionOr (pt/jget sub2 "countered") (j/jnull)))))))
+                                    (queries1 (if counter (cons (pair true (counterQueryOf mode (subStr sub "part"))) queries) queries))
+                                    (took (+ taken (listLength batch)))]
+                                (cond
+                                  ((and settled (< (subInt sub3 "initialLeft") 1)) (pair (ok (setStop sub3 "sufficient")) ps1))
+                                  (settled (unit! ps1 mode sub3 queries1 (list) 0 entries triage reserve up dispatch startMs clock))
+                                  (conflict (unit! ps1 mode sub3 queries1 later took entries triage reserve up dispatch startMs clock))
+                                  ((>= streak (max 1 (modeInt mode "saturationBatches"))) (pair (ok (setStop sub3 "saturated")) ps1))
+                                  (else (unit! ps1 mode sub3 queries1 later took entries triage reserve up dispatch startMs clock))))))))))))))))))
+
+fn psDropped ps: PlanState more: (List String) -> PlanState
+  (with ps :dropped (listAppend ps.dropped more))
+
+; (:m :ref RESEARCH-DEPTH :do "the extraction prompt of a mode that may grow children asks, after the pinned research prompt, for an optional :openQuestions list; a mode of depth 0 sends the pinned prompt unchanged")
+fn planPrompt mode: j/Json question: String fresh: (List j/Json) triage: Bool -> String
+  (let [(base (researchPrompt question (modeStr mode "depth") (j/jarr fresh) triage))]
+    (if (< (modeInt mode "maxDepth") 1)
+      base
+      (str base "\n\nOpen questions: beside :facts the form may carry :openQuestions (\"...\" ...) with at most " (stringFromInt64 (max 1 (modeInt mode "maxChildren")))
+           " short questions a web search can answer, each raised but not answered by the evidence above: a gap, a point on which the sources contradict each other, or a term the facts depend on that no source defines. Without such a question the key is left out.\n")))
+
+fn ! planExtract! st: srch/HubState prompt: String entries: (List j/Json) triage: Bool up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) leftMs: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
+  (attemptJson
+    (chainUntil! entries st (list) prompt up dispatch
+      (fn [(text j/Json)] -> (Result j/Json String)
+        (match (researchParse text triage)
+          ((err e) (err (errWord e)))
+          ((ok p) (ok (j/jobj (list (pair "props" (pairFirst p)) (pair "facts" (pairSecond p))))))))
+      leftMs)
+    (list "alias" "model" "props" "facts"))
+
+; (:m :do "a child question is data, never plan control: only the string items of the extractor's :openQuestions field, rebuilt from their word tokens in lower case and cut to :childChars")
+fn childText mode: j/Json v: j/Json -> String
+  (match v
+    ((j/jstr s) (pt/pyStrip (pt/cpPrefix (pt/joinSep (researchWords (j/jstr s)) " ") (max 8 (modeInt mode "childChars")))))
+    (_ ""))
+
+fn wordNorm s: String -> String
+  (pt/joinSep (researchWords (j/jstr s)) " ")
+
+fn keyTerms s: String -> (List String)
+  (filter (fn [(w String)] -> Bool (>= (stringLength w) 4)) (researchWords (j/jstr s)))
+
+; (:m :ref RESEARCH-DEPTH :do "children of a finished unit, regulated by the mode row: none below :maxDepth, none that repeats a node by normalised text, none that shares fewer than :childSharedTerms key terms with the root topic or the parent question, at most :maxChildren per node and :maxNodes in the tree; every candidate not spawned is counted by its reason")
+fn growChildren mode: j/Json root: String sub: j/Json known: (List String) total: Int64 -> (Pair (List j/Json) (List String))
+  (let [(depth (subInt sub "depth"))
+        (pid (subStr sub "id"))
+        (anchor (listAppend (keyTerms root) (keyTerms (subStr sub "question"))))
+        (out (fold (fn [(acc (Pair (List j/Json) (List String))) (c j/Json)] -> (Pair (List j/Json) (List String))
+                     (let [(text (pt/pyStr c))
+                           (kids (pairFirst acc))
+                           (taken (listAppend known (map (fn [(k j/Json)] -> String (wordNorm (subStr k "part"))) kids)))
+                           (shared (listLength (filter (fn [(w String)] -> Bool (listContains? anchor w)) (keyTerms text))))
+                           (why (cond
+                                  ((= (subStr sub "stop") "budget") "budget")
+                                  ((>= depth (modeInt mode "maxDepth")) "depth")
+                                  ((listContains? taken (wordNorm text)) "duplicate")
+                                  ((< shared (max 1 (modeInt mode "childSharedTerms"))) "irrelevant")
+                                  ((>= (listLength kids) (modeInt mode "maxChildren")) "children")
+                                  ((>= (+ total (listLength kids)) (modeInt mode "maxNodes")) "nodes")
+                                  (else "")))]
+                       (if (stringEmpty? why)
+                         (pair (listAppend kids (list (pt/jset (pt/jset (pt/jset (newSub 0 text text "") "id" (j/jstr (str pid "." (stringFromInt64 (+ (listLength kids) 1))))) "parent" (j/jstr pid)) "depth" (j/jint (+ depth 1)))))
+                               (pairSecond acc))
+                         (pair kids (listAppend (pairSecond acc) (list why))))))
+                   (pair (list) (list)) (subList sub "open")))]
+    out)
+
+; (:m :ref RESEARCH-DEPTH :do "the research tree, breadth first: every node is one unit; a finished node may append children to the queue; all nodes share the run's budgets")
+fn ! planSubs! ps: PlanState mode: j/Json stem: String root: String subs: (List j/Json) acc: (List j/Json) entries: (List j/Json) triage: Bool reserve: Int64 up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) startMs: Int64 clock: (fn [Int64] -> Int64) -> (Pair (Result (List j/Json) pt/PyErr) PlanState)
+  (match (listHead subs)
+    ((none) (pair (ok acc) ps))
+    ((some sub)
+      (let [(rest (optionOr (listTail subs) (list)))
+            (stop (roundStop ps mode reserve startMs clock))]
+        (cond
+          ((= (subStr sub "state") "budget") (planSubs! (noteStop ps "subQuestions") mode stem root rest (listAppend acc (list (setStop sub "budget"))) entries triage reserve up dispatch startMs clock))
+          ((not (stringEmpty? stop)) (planSubs! (noteStop ps stop) mode stem root rest (listAppend acc (list (setStop (pt/jset sub "state" (j/jstr "budget")) "budget"))) entries triage reserve up dispatch startMs clock))
+          (else
+            (let [(part (subStr sub "part"))
+                  (variants (subQueries mode (if (> (subInt sub "depth") 0) "" stem) part))
+                  (pre (pt/pyTruthy (optionOr (pt/jget mode "counterQuery") (j/jnull))))
+                  (initial (listAppend (listTake variants (modeInt mode "queriesPerSub")) (if pre (list (pair true (counterQueryOf mode part))) (list))))
+                  (follow (listTake (listDrop variants (modeInt mode "queriesPerSub")) (* (modeInt mode "followUpRounds") (modeInt mode "followUpQueries"))))
+                  (sub0 (pt/jset (pt/jset sub "initialLeft" (j/jint (listLength initial))) "countered" (j/jbool pre)))
+                  (rp (unit! ps mode sub0 (listAppend initial follow) (list) 0 entries triage reserve up dispatch startMs clock))]
+              (match (pairFirst rp)
+                ((err e) (planSubs! (pairSecond rp) mode stem root rest (listAppend acc (list (failSub sub0 e))) entries triage reserve up dispatch startMs clock))
+                ((ok sub1)
+                  (let [(grown (growChildren mode root sub1 (map (fn [(k j/Json)] -> String (wordNorm (subStr k "part"))) (listAppend acc (cons sub1 rest))) (+ (+ (listLength acc) 1) (listLength rest))))
+                        (ps1 (psDropped (pairSecond rp) (pairSecond grown)))]
+                    (planSubs! (if (listContains? (pairSecond grown) "nodes") (noteStop ps1 "nodes") ps1) mode stem root (listAppend rest (pairFirst grown)) (listAppend acc (list sub1)) entries triage reserve up dispatch startMs clock))))))))))
+
+fn decomposePrompt topic: String k: Int64 -> String
+  (pt/treeJoin (list
+    "Research planning: the topic below splits into at most " (stringFromInt64 k) " independent sub-questions that together cover it.\n"
+    "Each sub-question is one short line a web search engine can answer on its own, naming its subject in full; none repeats another.\n"
+    "The reply is read by an ASN parser: one form only, parentheses only; markdown code fences, JSON, brackets and backticks make it unreadable.\n\n"
+    "Format specification:\n(:subQuestions \"first sub-question\" \"second sub-question\" ...)\n\n"
+    "Topic: " topic "\n"))
+
+fn parseSubQuestions text: j/Json k: Int64 -> (Result j/Json String)
+  (match (extractOutermostSexpr (pt/pyStr text))
+    ((none) (err "reply holds no (:subQuestions ...) form"))
+    ((some sx)
+      (match (asnRead (researchDebracket sx))
+        ((err e) (err (errWord e)))
+        ((ok forms)
+          (match (optionOr (listHead forms) (j/jnull))
+            ((j/jarr xs)
+              (let [(qs (listTake (filter (fn [(q j/Json)] -> Bool (match q ((j/jstr s) (not (stringEmpty? (pt/pyStrip s)))) (_ false))) (optionOr (listTail xs) (list))) (max k 0)))]
+                (cond
+                  ((not (= (optionOr (atomOf (optionOr (listHead xs) (j/jnull))) "") ":subQuestions")) (err "reply holds no (:subQuestions ...) form"))
+                  ((< (listLength qs) 2) (err "fewer than two sub-questions"))
+                  (else (ok (j/jobj (list (pair "questions" (j/jarr qs)))))))))
+            (_ (err "reply holds no (:subQuestions ...) form")))))))
+
+; (:m :do "sub-questions and their origin: the topic's own enumerated parts; else, when the mode says :decompose model, one model stage; else the topic itself as the only unit. Parts beyond :subQuestions stay in the plan as state budget so the report names them")
+fn ! decompose! ps: PlanState mode: j/Json topic: String entries: (List j/Json) reserve: Int64 up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) startMs: Int64 clock: (fn [Int64] -> Int64) -> (Pair (Result (Pair (Pair String String) (List j/Json)) pt/PyErr) PlanState)
+  (let [(cap (modeInt mode "subQuestions"))
+        (sp (researchParts topic))
+        (stem (pairFirst sp))
+        (subsOf (fn [(qs (List String)) (st0 String)] -> (List j/Json)
+                  (map (fn [(p (Pair Int64 String))] -> j/Json
+                         (newSub (pairFirst p) (if (stringEmpty? st0) (pairSecond p) (str st0 ": " (pairSecond p))) (pairSecond p) (if (< (pairFirst p) cap) "" "budget")))
+                       (enumerate qs))))]
+    (cond
+      ((and (not (= (modeStr mode "decompose") "none")) (not (listEmpty? (pairSecond sp)))) (pair (ok (pair (pair "enumerated" stem) (subsOf (pairSecond sp) stem))) ps))
+      ((or (not (= (modeStr mode "decompose") "model")) (< cap 2) (not (stringEmpty? (budgetStop ps mode true reserve startMs clock))))
+        (pair (ok (pair (pair "none" "") (subsOf (list topic) ""))) ps))
+      (else
+        (let [(ap (attemptJson (chainUntil! entries ps.st (list) (decomposePrompt topic cap) up dispatch (fn [(text j/Json)] -> (Result j/Json String) (parseSubQuestions text cap)) (fn [(u Int64)] -> Int64 (wallLeftMs mode startMs clock))) (list "alias" "model" "questions")))
+              (ps1 (psModelCall ps (pairSecond ap)))]
+          (match (pairFirst ap)
+            ((err e) (pair (err e) ps1))
+            ((ok won)
+              (let [(qs (map (fn [(q j/Json)] -> String (pt/pyStrip (pt/pyStr q))) (listOf (optionOr (pt/jget won "questions") (j/jarr (list))))))
+                    (ps2 (psTried ps1 (listOf (optionOr (pt/jget won "tried") (j/jarr (list))))))]
+                (if (< (listLength qs) 2)
+                  (pair (ok (pair (pair "none" "") (subsOf (list topic) ""))) ps2)
+                  (pair (ok (pair (pair "model" "") (subsOf qs ""))) ps2)))))))))
+
+; (:m :do "an auditor that is not the writer's model goes first; the report says whether the one that answered is independent")
+fn auditOrder entries: (List j/Json) writers: (List j/Json) -> (List j/Json)
+  (let [(same (fn [(e j/Json)] -> Bool (match (researchEntryLabel e) ((ok lab) (listAny? (fn [(w j/Json)] -> Bool (pt/pyEq (pairSecond lab) w)) writers)) ((err _) false))))]
+    (listAppend (filter (fn [(e j/Json)] -> Bool (not (same e))) entries) (filter same entries)))
+
+fn coverageRow mode: j/Json sub: j/Json kept: (List j/Json) -> j/Json
+  (let [(sid (subStr sub "id"))
+        (facts (filter (fn [(f j/Json)] -> Bool (pt/pyEq (optionOr (pt/jget f "sub") (j/jnull)) (j/jstr sid))) kept))
+        (state (cond
+                 ((= (subStr sub "state") "failed") "failed")
+                 ((= (subStr sub "state") "budget") "budget")
+                 ((subConflict? mode facts) "contested")
+                 ((subCovered? mode facts) "covered")
+                 ((listEmpty? facts) "noEvidence")
+                 (else "thin")))]
+    (j/jobj (list (pair "id" (j/jstr sid)) (pair "state" (j/jstr state)) (pair "stop" (j/jstr (if (stringEmpty? (subStr sub "stop")) "budget" (subStr sub "stop")))) (pair "facts" (j/jint (listLength facts))) (pair "factSources" (j/jint (listLength (factSources facts))))
+                  (pair "sourcesTaken" (j/jint (listLength (subList sub "evidence")))) (pair "searches" (j/jint (listLength (subList sub "queries"))))
+                  (pair "error" (optionOr (listHead (subList sub "errors")) (j/jstr ""))) (pair "parent" (j/jstr (subStr sub "parent"))) (pair "depth" (j/jint (subInt sub "depth"))) (pair "question" (j/jstr (subStr sub "question"))))))
+
+fn planReport rep: j/Json mode: j/Json origin: String subs: (List j/Json) ps: PlanState kept: (List j/Json) rejected: (List j/Json) evidence: (List j/Json) -> j/Json
+  (let [(refs (assignRefs kept))
+        (rows (map (fn [(s j/Json)] -> j/Json (coverageRow mode s (pairFirst refs))) subs))
+        (tops (filter (fn [(r j/Json)] -> Bool (pt/pyEq (optionOr (pt/jget r "depth") (j/jnull)) (j/jint 0))) rows))
+        (gaps (filter (fn [(r j/Json)] -> Bool (not (pt/pyEq (optionOr (pt/jget r "state") (j/jnull)) (j/jstr "covered")))) tops))
+        (count (fn [(why String)] -> j/Json (j/jint (listLength (filter (fn [(d String)] -> Bool (= d why)) ps.dropped)))))
+        (urls (distinctJ (map (fn [(e j/Json)] -> j/Json (optionOr (pt/jget e "url") (j/jnull))) evidence)))
+        (plan (j/jobj (list (pair "mode" (j/jstr (modeStr mode "id"))) (pair "decomposition" (j/jstr origin)) (pair "subQuestions" (j/jint (listLength tops)))
+                            (pair "tree" (j/jobj (list (pair "nodes" (j/jint (listLength subs))) (pair "depthCeiling" (j/jint (modeInt mode "maxDepth"))) (pair "childrenCeiling" (j/jint (modeInt mode "maxChildren"))) (pair "nodeCeiling" (j/jint (modeInt mode "maxNodes")))
+                                                       (pair "duplicate" (count "duplicate")) (pair "irrelevant" (count "irrelevant")) (pair "depth" (count "depth")) (pair "children" (count "children")) (pair "nodes!" (count "nodes")) (pair "budget" (count "budget")))))
+                            (pair "floor" (j/jobj (list (pair "minFacts" (j/jint (max 1 (modeInt mode "minFacts")))) (pair "minSources" (j/jint (modeInt mode "minSources"))))))
+                            (pair "followUpRounds" (j/jint (modeInt mode "followUpRounds"))) (pair "batchSources" (j/jint (modeInt mode "batchSources"))) (pair "sourceCeiling" (j/jint (modeInt mode "maxSourcesPerSub")))
+                            (pair "budget" (j/jobj (list (pair "searches" (j/jint (modeInt mode "maxSearches"))) (pair "fetches" (j/jint (modeInt mode "maxFetches")))
+                                                         (pair "modelCalls" (j/jint (modeInt mode "maxModelCalls"))) (pair "wallSeconds" (j/jint (modeInt mode "wallSeconds"))))))
+                            (pair "spent" (j/jobj (list (pair "searches" (j/jint ps.searches)) (pair "fetches" (j/jint ps.fetches)) (pair "modelCalls" (j/jint ps.modelCalls)))))
+                            (pair "stoppedBy" (j/jstr (if (stringEmpty? ps.stopped) "none" ps.stopped)))
+                            (pair "domains" (j/jint (listLength (distinctJ (map urlDomain urls))))))))
+        (r1 (pt/jset (pt/jset (pt/jset (pt/jset rep "plan" plan) "coverage" (j/jarr rows)) "uncovered" (j/jarr (map (fn [(r j/Json)] -> j/Json (optionOr (pt/jget r "question") (j/jnull))) gaps))) "searched" (j/jint (listLength urls))))
+        (r2 (pt/jset (pt/jset (pt/jset r1 "facts" (j/jarr (pairFirst refs))) "sources" (j/jarr (pairSecond refs))) "rejected" (j/jarr rejected)))
+        (r3 (if (listEmpty? ps.tried) r2 (pt/jset r2 "tried" (j/jarr ps.tried))))
+        (r4 (if (listEmpty? ps.errors) r3 (pt/jset r3 "errors" (j/jarr ps.errors))))
+        (r5 (if (pt/pyTruthy ps.model) (pt/jset (pt/jset r4 "alias" ps.alias) "model" ps.model) r4))
+        (covered (- (listLength tops) (listLength gaps)))
+        (gap (if (listEmpty? gaps) "" (str (stringFromInt64 (listLength gaps)) " of " (stringFromInt64 (listLength tops)) " sub-questions below the coverage floor"
+                                           (if (stringEmpty? ps.stopped) "" (str "; stopped by the " ps.stopped " budget")))))]
+    (cond
+      ((listEmpty? evidence) (pt/jset (pt/jset r5 "status" (j/jstr "noEvidence")) "reason" (j/jstr (if (stringEmpty? ps.stopped) "no search results" (str "no search results; stopped by the " ps.stopped " budget")))))
+      ((listEmpty? kept) (pt/jset (pt/jset r5 "status" (j/jstr "unverified")) "reason" (j/jstr (str "no fact passed verification; " gap))))
+      (else
+        (let [(r6 (pt/jset (pt/jset r5 "status" (j/jstr "verified")) "summary"
+                           (j/jstr (str (stringFromInt64 covered) " of " (stringFromInt64 (listLength tops)) " sub-questions reached the coverage floor; "
+                                        (if (listEmpty? gaps) "none stayed open" (str "without enough evidence: " (pt/joinSep (map (fn [(r j/Json)] -> String (pt/pyStr (optionOr (pt/jget r "question") (j/jnull)))) gaps) " | ")))))))]
+          (if (stringEmpty? gap) r6 (pt/jset r6 "reason" (j/jstr gap)))))))
+
+fn ! planAudit! ps: PlanState rep: j/Json mode: j/Json origin: String subs: (List j/Json) facts: (List j/Json) rejected: (List j/Json) evidence: (List j/Json) auditEntries: (List j/Json) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) leftMs: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
+  (let [(byUrl (fold (fn [(acc j/Json) (e j/Json)] -> j/Json (pt/jset acc (pt/pyStr (optionOr (pt/jget e "url") (j/jnull))) e)) (j/jobj (list)) evidence))
+        (ap (researchAuditUntil! ps.st facts byUrl (auditOrder auditEntries ps.writers) up dispatch leftMs))
+        (ps1 (psModelCall ps (pairSecond ap)))]
+    (match (pairFirst ap)
+      ((err e) (pair (err e) ps1.st))
+      ((ok aud)
+        (let [(rep1 (pt/jset rep "auditTried" (optionOr (pt/jget aud "tried") (j/jarr (list)))))]
+          (match (pt/jget aud "verdicts")
+            ((none)
+              (let [(r (planReport rep1 mode origin subs ps1 (list) rejected evidence))]
+                (pair (ok (pt/jset (pt/jset r "status" (j/jstr "unverified")) "reason"
+                                   (j/jstr (str "auditor unavailable after " (stringFromInt64 (listLength (listOf (optionOr (pt/jget aud "tried") (j/jarr (list)))))) " model(s); " (stringFromInt64 (listLength facts)) " fact(s) not audited"))))
+                      ps1.st)))
+            ((some verdicts)
+              (let [(amodel (optionOr (pt/jget aud "model") (j/jnull)))
+                    (independent (not (listAny? (fn [(w j/Json)] -> Bool (pt/pyEq amodel w)) ps1.writers)))
+                    (rep2 (pt/jset (pt/jset rep1 "auditor" (j/jobj (list (pair "alias" (optionOr (pt/jget aud "alias") (j/jnull))) (pair "model" amodel)))) "auditorIndependent" (j/jstr (if independent "true" "false"))))
+                    (rep3 (if independent rep2 (pt/jset rep2 "auditNote" (j/jstr "the auditor is the writer's model: the audit chain of this profile has no other entry that answered"))))
+                    (sorted (auditSort verdicts rejected facts))]
+                (pair (ok (planReport rep3 mode origin subs ps1 (pairFirst sorted) (pairSecond sorted) evidence)) ps1.st))))))))
+
+fn ! executeResearchPlan! st: srch/HubState topic: String mode: j/Json entries: (List j/Json) triage: Bool auditEntries: (Option (List j/Json)) up: (fn [String] -> j/Json) dispatch: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) startMs: Int64 clock: (fn [Int64] -> Int64) -> (Pair (Result j/Json pt/PyErr) srch/HubState)
+  (let [(rep0 (j/jobj (list (pair "topic" (j/jstr topic)) (pair "depth" (j/jstr (modeStr mode "id"))) (pair "facts" (j/jarr (list))) (pair "sources" (j/jarr (list))))))
+        (audits (if triage (list) (optionOr auditEntries (list))))
+        (reserve (if (listEmpty? audits) 0 1))
+        (ps0 (PlanState :st st :searches 0 :fetches 0 :modelCalls 0 :stopped "" :tried (list) :errors (list) :alias (j/jnull) :model (j/jnull) :dropped (list) :seen (list) :writers (list)))]
+    (cond
+      ((stringEmpty? topic) (done rep0 "failed" "no topic" st))
+      ((listEmpty? entries) (done rep0 "failed" "no research route is configured" st))
+      (else
+        (let [(dp (decompose! ps0 mode topic entries reserve up dispatch startMs clock)) (ps1 (pairSecond dp))]
+          (match (pairFirst dp)
+            ((err e) (pair (err e) ps1.st))
+            ((ok d)
+              (let [(origin (pairFirst (pairFirst d)))
+                    (sp (planSubs! ps1 mode (pairSecond (pairFirst d)) topic (pairSecond d) (list) entries triage reserve up dispatch startMs clock))
+                    (ps2 (pairSecond sp))]
+                (match (pairFirst sp)
+                  ((err e) (pair (err e) ps2.st))
+                  ((ok subs)
+                    (let [(gatherAll (fn [(k String)] -> (List j/Json) (fold (fn [(acc (List j/Json)) (s j/Json)] -> (List j/Json) (listAppend acc (subList s k))) (list) subs)))
+                          (facts (map (fn [(p (Pair Int64 j/Json))] -> j/Json (pt/jset (pairSecond p) "id" (j/jstr (str "fact-" (stringFromInt64 (+ (pairFirst p) 1)))))) (enumerate (gatherAll "facts"))))
+                          (rejected (gatherAll "rejected"))
+                          (evidence (gatherAll "evidence"))]
+                      (cond
+                        ((or (listEmpty? facts) (listEmpty? audits)) (pair (ok (planReport rep0 mode origin subs ps2 facts rejected evidence)) ps2.st))
+                        ((= (budgetStop ps2 mode false 0 startMs clock) "wall")
+                          (pair (ok (pt/jset (pt/jset (planReport rep0 mode origin subs (noteStop ps2 "wall") facts rejected evidence) "status" (j/jstr "unverified")) "reason" (j/jstr "the wall budget was spent before the audit stage; the facts are not audited"))) ps2.st))
+                        (else (planAudit! ps2 rep0 mode origin subs facts rejected evidence audits up dispatch (fn [(u Int64)] -> Int64 (wallLeftMs mode startMs clock)))))))))))))))
+
+fn planLines rep: j/Json -> (List String)
+  (match (pt/jget rep "plan")
+    ((none) (list))
+    ((some p)
+      (let [(g (fn [(o j/Json) (k String)] -> String (pt/pyStr (repGet o k))))
+            (b (repGet p "budget")) (s (repGet p "spent")) (f (repGet p "floor")) (t (repGet p "tree"))]
+        (list (str "  :plan (:mode :" (g p "mode") " :decomposition :" (g p "decomposition") " :subQuestions " (g p "subQuestions")
+                   " :floor (:minFacts " (g f "minFacts") " :minSources " (g f "minSources") ") :batchSources " (g p "batchSources") " :sourceCeiling " (g p "sourceCeiling") " :followUpRounds " (g p "followUpRounds")
+                   " :budget (:searches " (g b "searches") " :fetches " (g b "fetches") " :modelCalls " (g b "modelCalls") " :wallSeconds " (g b "wallSeconds")
+                   ") :spent (:searches " (g s "searches") " :fetches " (g s "fetches") " :modelCalls " (g s "modelCalls") ") :stoppedBy :" (g p "stoppedBy") " :domains " (g p "domains")
+                   " :tree (:nodes " (g t "nodes") " :depthCeiling " (g t "depthCeiling") " :childrenCeiling " (g t "childrenCeiling") " :nodeCeiling " (g t "nodeCeiling")
+                   " :notSpawned (:duplicate " (g t "duplicate") " :irrelevant " (g t "irrelevant") " :depth " (g t "depth") " :children " (g t "children") " :nodes " (g t "nodes!") " :budget " (g t "budget") ")))")
+              (str "  :coverage ("
+                   (pt/treeJoin (map (fn [(r j/Json)] -> String
+                                       (str "\n    (:sub :id \"" (esc (repGet r "id")) "\" :state :" (g r "state") " :stop :" (g r "stop") " :facts " (g r "facts") " :factSources " (g r "factSources") " :sourcesTaken " (g r "sourcesTaken")
+                                            " :searches " (g r "searches") (if (pt/pyTruthy (repGet r "error")) (str " :error \"" (esc (repGet r "error")) "\"") "") (if (pt/pyTruthy (repGet r "parent")) (str " :parent \"" (esc (repGet r "parent")) "\"") "") " :question \"" (esc (repGet r "question")) "\")"))
+                                     (listOf (repGet rep "coverage"))))
+                   ")")
+              (str "  :uncovered (" (pt/joinSep (map (fn [(q j/Json)] -> String (str "\"" (esc q) "\"")) (listOf (repGet rep "uncovered"))) " ") ")")))))

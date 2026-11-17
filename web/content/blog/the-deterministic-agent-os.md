@@ -1,17 +1,15 @@
-# Stop Making LLMs Do OS Work: Why Autonomous Coding Needs an ALU / Kernel Split
+# The Model Proposes, the Toolchain Verifies: ASL's Split Between Agent ALU and Deterministic Host
 *By GenSEAM | September 2026*
 
-When building autonomous software engineering agents, the prevailing industry pattern is asking the language model to act as a complete, self-contained computer.
+In AgentSlang (ASL), the language model does what only a model can do—choose the design and write the forms—while a deterministic toolchain handles symbol lookup, staged file transactions, static checking and test execution. The two sides meet over a clean contract: the agent sends a batch of ASN forms in one call, and the host returns a batch of verified receipts that both the agent and human reviewers can trust.
 
-The model is prompted to be the planner, the terminal shell, the compiler, the file system browser, the test runner, and the quality inspector all at once. When something breaks, a long stack trace is dumped back into the prompt, and the agent is asked to "figure it out."
+Most agent stacks blur that boundary by asking the LLM to act as a whole operating system at once: planner, bash shell, file browser, compiler and test inspector. Without a deterministic kernel underneath, four failures repeat:
+1. **Context Drowning**: Whole-file `cat` dumps fill the context window in a few turns.
+2. **Interactive Terminal Deadlocks**: Commands hang on unseen `stdin` prompts.
+3. **Memory Drift**: External vector stores fall out of sync with git branches and rollbacks.
+4. **Unverified Victory**: Agents declare work done without a checker or non-vacuous test receipt.
 
-The result is fragile:
-1. **Context Drowning**: Reading whole files via `cat` fills the window within a few turns. The model loses track of its original goal.
-2. **Interactive Terminal Deadlocks**: Commands hang waiting on unmonitored `stdin` prompts (`[y/N]`, sudo passwords), freezing execution until a hard timeout kills the task.
-3. **Database & Memory Drift**: External vector databases store stale representations outside of Git. When a developer switches branches or rolls back a commit, the agent's memory desynchronizes from reality.
-4. **Hallucinated Victory**: Models declare tasks "fixed" without running compilers or reproducing green test passes.
-
-Our position: separate **the stochastic semantic ALU** from **the deterministic operating system**.
+Our architecture separates **the stochastic semantic ALU** from **the deterministic toolchain**.
 
 ---
 

@@ -1,15 +1,15 @@
-# The Single Grammar Doctrine: Why Multi-Agent Systems Need One Homoiconic Notation
+# One Grammar for Code, Data, Markup and Queries: Closing the Agent Operational Circle
 *By GenSEAM | September 2026*
 
-When building autonomous AI coding agents, engineering teams tend to recreate the Tower of Babel inside the model's context window.
+AgentSlang (ASL) gives coding agents a single S-expression notation across their entire loop: program modules, configuration ledgers, batched tool calls, HTML/SVG views and SQL queries are all written as balanced forms and checked before they run. Renderers in the standard packages turn those checked forms into the SQL dialect, HTML5/SVG markup or shell invocation the outside world expects.
 
-During a single coding task, an agent juggles several mutually incompatible syntaxes:
-1. **Configuration**: JSON (comma drift, bracket mismatches) and YAML (invisible whitespace, indentation failures).
-2. **Visual Output & Markup**: raw SVG XML and HTML, where models spend output budget on attribute boilerplate and can truncate mid-tag.
-3. **Command Execution**: Bash and POSIX shell strings, where nested quotes, dollar expansions and pipes cause silent failures and shell injection.
-4. **Data Querying**: SQL dialects (SQLite, Postgres, DuckDB) with divergent string-escaping and type-casting rules.
+Compare that with the Tower of Babel inside a typical agent's context window. During a single task, a model is asked to juggle incompatible syntaxes and escaping rules at once:
+1. **Configuration**: JSON (comma drift, quote escaping) and YAML (indentation traps).
+2. **Visual Output & Markup**: raw SVG XML and HTML, with verbose closing tags and unescaped attributes.
+3. **Command Execution**: raw Bash strings, where nested quotes and `$()` expansions trigger silent failures or injection.
+4. **Data Querying**: hand-concatenated SQL across PostgreSQL, SQLite, MySQL and ClickHouse.
 
-Each switch is a new set of escaping and closing rules for the model to get right. We have not measured what share of agent tokens or task failures this costs; the claim of this post is architectural. To keep long autonomous runs reliable, we want to close **The Agent Operational Circle**: one notation the agent writes, rendered to whatever format the outside world needs.
+Closing **The Agent Operational Circle** removes those syntax switches by letting the model author one checked notation everywhere. (The claim of this post is architectural; we have not measured what share of task failures multi-syntax switching accounts for.)
 
 ---
 

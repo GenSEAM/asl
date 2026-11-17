@@ -1,13 +1,11 @@
-# Debugging Autonomous Swarms Without Reading Their Logs
+# Topology, Cost and Boundaries: How ASL Observes Agent Swarms Through Receipts
 *By GenSEAM | September 2026*
 
-A common failure mode of scaling autonomous coding swarms is the **Observability Inversion Trap**.
+In AgentSlang (ASL), an agent swarm is observed through structured queries and ASN receipts, not by dumping terminal logs into a coordinator's prompt. A single `asl` batch call can query module dependency topology, check interface boundaries and verify workspace path jails, returning compact S-expression receipts that both the coordinator and human reviewers inspect directly.
 
-When humans debug applications, they read terminal logs, scan stack traces and inspect local variables. When teams deploy multi-agent swarms, they replicate this pattern: they capture every subagent's `stdout`, stream JSON tool invocations into a dashboard, and ask a coordinator agent to "read the logs and diagnose the problem."
+That replaces a common failure mode of scaling coding swarms: the **Observability Inversion Trap**. When humans debug applications, they read terminal logs and scan stack traces. When teams deploy multi-agent swarms, they often copy that habit—streaming every subagent's `stdout` into a dashboard and asking a coordinator model to "read the logs and diagnose the problem." Within a few turns the context window is full of console noise and the failure is buried hundreds of lines deep.
 
-After a few execution cycles, the coordinator's context window is full of raw console output. Attention is spread over noise, the actual point of failure is buried hundreds of lines in, and the tokens spent on parsing text are tokens not spent on the task.
-
-Autonomous agents do not think in scrolling terminal text. To govern swarms, observability has to move up the stack: from character streams to **structured queries over the code's topology, its token cost, and what it is allowed to touch**.
+Autonomous agents do not work best on scrolling terminal text. Observability for agent-built infrastructure belongs one level higher: **structured queries over the code's topology, its token cost, and what it is allowed to touch**.
 
 ---
 

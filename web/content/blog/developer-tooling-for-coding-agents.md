@@ -1,7 +1,9 @@
-# Developer Tooling for Coding Agents: Symbol Reads, Staged Edits and Structured Receipts
+# A Toolbelt Built for Agents: Symbol Reads, Staged Edits and One Batch of Receipts
 *By GenSEAM | September 2026*
 
-Software engineering toolchains (language servers, linters, formatters, debuggers, containerized sandboxes) were designed for human ergonomics. They assume a programmer typing at human speed, reading diagnostics in an IDE gutter, and tolerating compilation pauses.
+The `asl` toolbelt hands a coding agent exactly what it asks for. One call, `asl '(:read ...) (:edit ...) (:check ...)'`, runs every form as a batch and answers with one `(:batch ...)` of ASN receipts: the one definition it needed, an edit staged until it flushes, a diagnostic it can act on. Every receipt is structured data, so the person reviewing the run reads verdicts, not scrollback.
+
+Most toolchains (language servers, linters, formatters, debuggers, containerized sandboxes) were designed for human ergonomics. They assume a programmer typing at human speed, reading diagnostics in an IDE gutter, and tolerating compilation pauses.
 
 Autonomous AI agents operate under different constraints.
 
@@ -11,7 +13,7 @@ An agentic coding loop may generate, inspect, test and refactor many modules in 
 * Unconstrained file access risks directory traversal and changes to the host.
 * Without a structural view of the project, multiple agents drift out of alignment.
 
-So we build the toolchain for the agent first: every operation takes an S-expression and returns an S-expression receipt, sized to what the agent needs. This post describes the pieces that exist today in the `asl` toolbelt, and where they fall short.
+So the `asl` toolchain is built for the agent first: every operation takes an S-expression and returns an S-expression receipt, sized to what the agent needs. This post walks through the pieces that exist today, and where they still fall short.
 
 ---
 

@@ -1,11 +1,9 @@
-# Why Autonomous LLMs Break on Human Languages (and What We Are Building Instead)
+# Designed for Left-to-Right Generation: Why ASL Replaces Indentation and Borrow Puzzles with Prefix Forms
 *By GenSEAM | September 2026*
 
-Autonomous coding agents can spend a good part of their inference compute and context budget in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 
+AgentSlang (ASL) is shaped around how transformer models actually generate code: left to right, one token at a time. Every construct is a prefix S-expression with explicit parentheses, closed algebraic variants and value semantics—so block boundaries never depend on whitespace column counts, and memory management never requires solving lifetime constraints in a single forward pass. Combined with `asl check`, structural mistakes stop before execution.
 
-In compiler engineering, we characterize this phenomenon as the **Syntax Repair Tax**. Our hypothesis is that it is not only an artifact of model size or pre-training data, but a mismatch between **left-to-right autoregressive token generation** and **20th-century human-centric grammar designs**.
-
-Python and Rust represent two dominant paradigms of modern systems and application programming. Both, for radically different architectural reasons, are hostile to the computational geometry of transformer attention heads.
+When coding agents write languages designed for human eyes—like Python and Rust—they pay the **Syntax Repair Tax**: generate, hit an indentation cascade or borrow-checker wall, patch, re-query, repeat. Both languages are triumphs of human-oriented design, and both create friction for autoregressive generation.
 
 ---
 

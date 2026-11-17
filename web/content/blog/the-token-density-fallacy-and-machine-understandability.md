@@ -1,13 +1,11 @@
-# Why Disemvoweling Breaks BPE: How Naive Token Optimization Hurts Coding Agents
+# Whole Words, Fewer Tokens: Why ASL Uses camelCase Names Built for BPE Tokenizers
 *By GenSEAM | September 2026*
 
-When designing domain languages and interfaces for autonomous AI coding agents, the natural instinct of engineers is to optimize for raw string brevity.
+In AgentSlang (ASL), every builtin and user identifier is written in whole-word `camelCase` (`stringContains?`, `listLength`, `cleanTerminalText`). Under modern Byte-Pair Encoding (BPE) tokenizers, whole English words map to single vocabulary tokens, keep `(:query :text ...)` and `(:edit ...)` matches unambiguous, and let agents guess the right builtin on the first try without consulting a table of cryptic abbreviations.
 
-If context windows are expensive and attention degrades with sequence length, shouldn't we shorten every identifier to the minimum possible number of characters? Why write `cleanTerminalText` when you can write `ctermtxt` or `clnTerm`?
+When engineers design interfaces for coding agents, their first instinct is often the opposite: strip vowels and abbreviate (`ctermtxt`, `clnTerm`, `strCnt`) to save characters. Under a BPE tokenizer, character brevity backfires—abbreviated clusters shatter into multiple subword tokens, invite hallucinated spellings, and make exact-match toolbelt edits harder to anchor.
 
-In practice this compression rarely saves tokens and often costs correctness. Micro-shortened identifiers split into rare subword fragments, invite synonym guessing, and make text edits ambiguous.
-
-Here is why character-level disemvoweling is an anti-pattern, and the naming rule AgentSlang adopted instead.
+Here is what we measured under `o200k_base` and `cl100k_base`, and the naming rule ASL enforces across its standard library and toolbelt.
 
 ---
 

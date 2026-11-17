@@ -1,11 +1,9 @@
-# One Source for Native and WebAssembly Targets: The Case Against Multi-Language Glue Drift
+# One Glue Language, Native and WebAssembly: Ending Multi-Language Drift in ASL
 *By GenSEAM | September 2026*
 
-Modern architectures are polyglot by necessity.
+AgentSlang (ASL) is the glue language for agent-built infrastructure: one source file compiles through LLVM to a native binary and to a `wasm32` module, with fixed 64-bit integer rules, explicit option and result types, and no implicit conversions between them. The agent writes a schema, a validator or a renderer once, the checker verifies it once, and the same logic runs on the command line and in the browser.
 
-Latency-critical services and data engines are built in **Rust**. Web frontends and interactive tools run in **TypeScript**. Machine learning pipelines, evaluation harnesses and orchestration scripts live in **Python**. Edge compute and client sandboxes execute in **WebAssembly**.
-
-This creates the **Multi-Ecosystem Glue Tax**: teams spend real time writing, debugging and maintaining "glue code" that keeps business logic synchronized across languages.
+Without a shared glue language, polyglot stacks pay the **Multi-Ecosystem Glue Tax**. Services live in **Rust**, frontends in **TypeScript**, orchestration in **Python**, and client sandboxes in **WebAssembly**—and every boundary between them needs hand-synced glue code that drifts whenever one side changes.
 
 ---
 

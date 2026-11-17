@@ -1,17 +1,15 @@
-# Why Bash Wrappers Fail Coding Agents: Action Loops and Checks That Run Before Code Does
+# Batch Tool Calls and Staged Transactions: Why Agents Need More Than a Bash Wrapper
 *By GenSEAM | September 2026*
 
-When building developer tools, compilers, and harnesses for autonomous software engineering agents, the prevailing industry approach is wrapping standard command-line tools in raw bash subprocesses.
+Give an agent the `asl` toolbelt and its action loop changes shape: instead of firing a dozen fragile shell commands one turn at a time, it sends a batch of S-expression forms—`(:query ...) (:read ...) (:edit ...) (:check ...)`—in one call and gets back one structured `(:batch ...)` of receipts. Edits sit in a session-isolated staging buffer until the checker passes and `(:flush)` writes them atomically, or `(:txn ...)` wraps the whole sequence with automatic rollback.
 
-The agent is given a shell prompt and asked to navigate multi-file repositories using tools designed for humans: `cat`, `grep`, `npm test`, `cargo build`, and interactive prompts. When a command fails, thousands of lines of unformatted compiler output flood the context window, and the agent is left to guess how to proceed.
+By contrast, the default industry harness wraps human command-line tools in raw bash subprocesses (`cat`, `grep`, `sed`, interactive build tools) and dumps thousands of lines of raw terminal output back into the prompt. That creates four recurring failure modes:
+1. **Interactive Deadlocks**: Commands freeze waiting on unseen `stdin` prompts (`[y/N]`, pagers).
+2. **Subshell Ephemerality**: Working directory and state vanish between turns.
+3. **Blind Text Rewrites**: `sed` and line-number patches corrupt files when lines shift.
+4. **Weak Feedback Loops**: Unstructured exit output hides whether a check actually verified the change.
 
-The result is operational fragility:
-1. **Interactive Deadlocks**: Commands freeze when waiting for unseen `stdin` prompts (`[y/N]`, sudo, or pagers like `less`).
-2. **Subshell Ephemerality**: Directory changes (`cd`) and environment exports (`export VAR=val`) disappear between turns, so agents repeat failed setup steps.
-3. **Foreign Dependency Drift**: Multi-language projects break when host environments drift across Python, Node, Rust, or C toolchains.
-4. **Weak Feedback Loops**: A check that passes when it should fail teaches the agent to declare success.
-
-Tools for agents should match how language models operate. This post describes the loop we are building for AgentSlang (ASL), the checks that already exist, and the parts that are still design.
+This post describes the loop we are building for AgentSlang (ASL), the checks that already exist, and the parts that are still design.
 
 ---
 

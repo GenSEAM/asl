@@ -13,7 +13,7 @@ fn postItem p: Post -> h/Node
 fn blogIndexPage posts: (List Post) -> h/Node
   (l/document (l/blog) "AgentSlang blog" "Notes on AgentSlang (ASL): language design for model-written code, the wire protocol, the toolbelt and the WebAssembly target."
     [(h/div [(h/cls "shell page")]
-      [(h/div [(h/cls "head")] [(l/eyebrow "BLOG" "Engineering notes") (h/h1 [(h/cls "h2")] [(h/text "Notes from building a language for models.")])])
+      [(h/div [(h/cls "head")] [(l/eyebrow "BLOG" "Engineering notes") (h/h1 [(h/cls "h2")] [(h/text "Notes on the glue language for agent-built infrastructure.")])])
        (h/div [(h/cls "head")] [(staleNotice)])
        (h/ul [(h/cls "posts")] (map postItem posts))])])
 

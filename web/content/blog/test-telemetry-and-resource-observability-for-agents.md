@@ -1,16 +1,11 @@
-# Test Telemetry for Agents: Time, Memory and Assertion Counts in Every Receipt
+# Every Test Answers with a Receipt: Assertion Counts and Telemetry in ASL
 *By GenSEAM | September 2026*
 
-When autonomous AI coding agents work on large codebases, verification cannot stay a bare pass/fail bit.
+In AgentSlang (ASL), people do not review agent-written code by reading every function—they read the verification receipts. When an agent runs `asl test` or includes `(:test ...)` in a toolbelt batch, the runner checks the module graph, executes `runTests`, and refuses to pass unless at least one assertion actually ran, reporting the exact executed assertion count in the receipt.
 
-In human workflows, tests run by hand or on remote CI. If a test takes 500ms or holds 200MB of memory, the developer barely notices. In an agent loop, where an agent may run dozens of edit-verify cycles within a single task, unobserved latency, memory growth and vacuous tests compound: the loop slows, the context fills with noise, and a green bar that measured nothing reads as success.
+That turns testing from a bare pass/fail bit into evidence an agent coordinator or human reviewer can trust. In a fast agent edit-verify loop, a green exit code from an empty test or an unmeasured memory spike compounds across dozens of turns, while heavy external profilers distort timing and flood the context window with trace output.
 
-Traditional instrumentation brings its own costs:
-1. **Timing distortion**: bytecode rewriting and dynamic hooks inflate execution time and change the behaviour being measured.
-2. **Allocation pressure**: profilers allocate telemetry objects of their own.
-3. **Telemetry bloat**: verbose traces dump large payloads into the agent's observation window.
-
-This post describes what the AgentSlang (ASL) test runner reports today, what the runtime can already tell you about memory, and the telemetry we want in every receipt.
+This post describes what the strict `asl test` runner enforces and reports today, what the runtime exposes for memory inspection, and the per-test resource fields we are adding to the receipt schema.
 
 ---
 

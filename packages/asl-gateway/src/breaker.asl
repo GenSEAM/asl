@@ -30,6 +30,8 @@
       breakerIsConcurrency429
       breakerIsProviderWideQuota
       breakerScope
+      breakerScopeFor
+      breakerProviderWide
       breakerSnapshot
       formatBreakerSnapshotAsn
       stepBreaker
@@ -157,9 +159,19 @@ fn breakerIsProviderWideQuota text: String -> Bool
         (or (stringContains? t "BILLING")
           (and (stringContains? t "ACCOUNT") (stringContains? t "QUOTA"))))))
 
-; (:m :ref PAIDCHEAP-BREAKER-ALL-OPEN :do "the key a failure counts under: an account-wide failure (401, 402, a provider-wide quota body) trips the provider pool; every other failure (429, 503, 5xx, 4xx) counts on the member's own providerPool:alias key, so one member's 503 streak never closes its siblings on the same provider")
+; (:m :ref GW-BREAKER-ALIAS-SCOPE :do "the key a failure counts under: 401, 402, an explicit insufficient_quota body, a monthly cap, and a billing or account-quota body that is not a 429 (or is a 429 while the provider declares an account or group limit row, accountLimited) trip the provider pool; every other failure (a plain 429, a billing-worded 429 on a provider with no account limit, a concurrency 429, 5xx, 4xx) counts on the member's own providerPool:alias key, so one alias's quota never closes its siblings on the same provider")
+fn breakerScopeFor status: Int64 body: String providerPool: String pool: String accountLimited: Bool -> String
+  (if (or (breakerProviderWide status body accountLimited) (breakerIsMonthlyCap body)) providerPool pool)
+
+; (:m :ref GW-BREAKER-ALIAS-SCOPE :do "the failures that exhaust the whole account: 401, 402, an insufficient_quota body, and the softer billing or account-quota wording only off a 429 or on a provider with a declared account or group limit row (a 429 there is the account's own limit, not one model's)")
+fn breakerProviderWide status: Int64 body: String accountLimited: Bool -> Bool
+  (or (= status 401)
+    (or (= status 402)
+      (or (stringContains? (stringUpper body) "INSUFFICIENT_QUOTA")
+        (and (breakerIsProviderWideQuota body) (or (!= status 429) accountLimited)))))
+
 fn breakerScope status: Int64 body: String providerPool: String pool: String -> String
-  (if (or (= status 401) (or (= status 402) (or (breakerIsProviderWideQuota body) (breakerIsMonthlyCap body)))) providerPool pool)
+  (breakerScopeFor status body providerPool pool false)
 
 ; (:m :ref OLLAMA-MONTHLY-EXHAUSTED :do "a monthly usage limit (ollama: you have reached your monthly usage limit) is the account's, so breakerScope counts it on the provider pool; it stays out of breakerIsProviderWideQuota because chat.asl parks only a quota that is not provider-wide until its reset (upstream dailyCapKind monthly); keep the wording in sync with upstream")
 fn breakerIsMonthlyCap text: String -> Bool

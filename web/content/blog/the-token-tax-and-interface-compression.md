@@ -1,13 +1,11 @@
-# The Context Tax: How AST Interface Extraction Stops Agent Working Memory Rot
+# Read the Interface, Not the File: How ASL Outline and Symbol Queries Keep Agent Context Sharp
 *By GenSEAM | September 2026*
 
-In multi-agent software engineering swarms, the limiting factor is rarely model intelligence. Frontier LLMs can reason through complex algorithms, synthesize tricky data structures, and resolve subtle edge cases.
+When an agent works in an AgentSlang (ASL) repository, it does not dump whole files into its prompt to learn how a module works. In one batched toolbelt call, `(:intel :op outline :file ...)` and `(:read :file ... :symbol ...)` return just the exported signatures and the exact definition the task touches, while the checker's module headers (`:x [...]`) state explicitly what is public.
 
-The ceiling that makes agentic workflows collapse in multi-file codebases is **Context Rot**.
+That directly prevents the failure mode that stalls multi-agent swarms on large codebases: **Context Rot**. When a coordinator injects full source files into subagent prompts, working memory fills with private implementation details, attention drifts, and subagents start calling internal helpers or misquoting signatures.
 
-When a coordinator agent hands work to several subagents, the naive approach is to inject full source files into each prompt. Prompts grow quickly, the relevant interface becomes harder to find, and subagents begin calling private functions, misquoting type signatures, and rewriting untouched files.
-
-This is the **Token Tax**: much of what a caller receives is implementation it does not need. How much depends on the repository, the tokenizer and the task, so this post measures one module below and states the scope of that number.
+Feeding an agent only the interface and the symbols it edits keeps prompts small and boundaries clear. Below we show how ASL's interface extraction works and measure the reduction on a representative module.
 
 ---
 

@@ -1,15 +1,15 @@
-# Agent Test Sandboxes in Memory: A WebAssembly Design and What Exists Today
+# Tests at the Speed of Thought: ASL's Container-Free Test Loop and the WebAssembly Sandbox Ahead
 *By GenSEAM | September 2026*
 
-Autonomous software engineering ("vibe-coding") relies on rapid feedback loops: an agent synthesizes an implementation, executes a test suite, inspects failures, and refines the code.
+An agent fixing code lives in a loop: write, test, read the failure, repair. ASL keeps that loop tight. `asl test` checks and runs a module with no container to start, and the same LLVM backend that compiles this website to WebAssembly is the base for the next step: running agent code in an in-memory wasm sandbox, inside the agent's own process, where a test run costs about as much as the computation it performs.
 
-In practice, this loop hits an infrastructure wall.
+That matters because, for most agent stacks, the loop hits an infrastructure wall.
 
 Testing agent-generated code requires an isolated sandbox. Today that usually means starting a container or provisioning a remote microVM. When an agent iterates through many repair cycles, the start-up cost of the sandbox, not the test itself, sets the pace of the loop.
 
 The alternative, running agent-generated code directly in a host subprocess, is a security hole. Unconstrained agents can traverse directories, leak API keys, exhaust file descriptors, or open network connections.
 
-AgentSlang (ASL) is aiming at a third option: **in-memory WebAssembly sandboxing**, where a test run costs about as much as the computation it performs. This post describes that direction, what exists today, and what we have measured.
+**In-memory WebAssembly sandboxing** is the third option AgentSlang (ASL) is building toward. This post describes that design, what already runs, and what we have measured; the sandbox runner itself is still being built.
 
 ---
 

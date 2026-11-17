@@ -1,10 +1,12 @@
-# Why Small Local Models Struggle with Python, and Why S-Expressions Should Help
+# Keeping 3B Local Models Parse-Clean: Why Explicit S-Expressions Beat Significant Whitespace
 *Published on September 10, 2026 · 7 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/why-small-local-models-struggle-with-python*
 
-## 1. The Bottleneck
+AgentSlang (ASL) uses explicit prefix S-expressions so that even a small, quantized local model can generate and edit code without losing track of block scope. Every form opens with `(` and a head symbol and closes with `)`, which means delimiter balance can be enforced token-by-token during decoding and checked in milliseconds by `asl check` before a test ever runs.
 
-Picture an autonomous coding loop running entirely on a laptop: a 3B-parameter coder model, quantized, served by `llama.cpp` on Apple Silicon. No cloud calls, no network latency, no data leaving the machine. The model is fast and cheap to run. The question is whether what it writes survives the first parse.
+## 1. Where Small Models Trip on Indentation
+
+Picture an autonomous coding loop running entirely on a laptop: a 3B-parameter coder model served locally on Apple Silicon. It is fast, private and free per token—provided its edits survive the first parse. Look at what happens when that model edits a nested Python loop:
 
 The task: take an event loop, add an error accumulator, and keep the priority dispatch. The model writes Python:
 

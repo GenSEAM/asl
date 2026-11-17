@@ -1,9 +1,9 @@
-# Stop Your Agent from Faking Green Tests: Closure Checks and Anti-Hallucination Firewalls
+# Let the Checker Hold the Line: Closure Checks, Honest Tests and Anti-Hallucination Firewalls
 *By GenSEAM | September 2026*
 
-Prompt engineering is an inadequate defense against autonomous agent failure.
+In ASL, an agent cannot ship a call to a function that does not exist, cannot report green from a test that asserted nothing, and, working through the toolbelt, cannot write outside its workspace: the checker and the tool layer refuse first, with a named error. "Don't hallucinate" stops being a line in the prompt and becomes a boundary the machine enforces, and the people reviewing agent work get receipts to read instead of promises.
 
-In many agent architectures, developers try to enforce safety and accuracy by adding negative constraints to the system prompt:
+The usual defense is prose. Many agent architectures try to enforce safety and accuracy by adding negative constraints to the system prompt:
 ```text
 "Never invent API endpoints. Always cite sources accurately.
 Do not hallucinate parameters. Never touch directories outside /workspace."

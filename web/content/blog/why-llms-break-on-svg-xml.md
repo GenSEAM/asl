@@ -1,7 +1,9 @@
-# Why LLMs Choke on SVG XML: Vector Graphics as Native S-Expressions
+# Vector Graphics as Checked S-Expressions: How ASL Builds SVG and HTML Without XML Boilerplate
 *By GenSEAM | September 2026*
 
-When autonomous coding agents generate user interfaces, icons, architecture diagrams or vector illustrations, the industry default is prompting the LLM to emit raw SVG XML:
+In AgentSlang (ASL), user interfaces, icons and vector diagrams are written in the same checked S-expression language as the rest of the codebase. Using `asl-html` and ASN vector forms, an agent composes drawings with functions, loops and typed helpers, the checker verifies bracket balance and argument counts before anything runs, and the renderer emits escaped HTML5 and SVG.
+
+By contrast, prompting a model to stream raw SVG XML forces it to spend output budget on repetitive attribute quotes and closing tags:
 
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
@@ -11,9 +13,7 @@ When autonomous coding agents generate user interfaces, icons, architecture diag
 </svg>
 ```
 
-On large drawings this runs into **the verbose delimiter blowup**: the model spends its output budget on repeated attribute names and closing tags, and a capped generation stops mid-element.
-
-Vector graphics do not have to be authored as XML during agent inference. In AgentSlang they are written as **ASN (AgentSlang Notation)** S-expressions and rendered to SVG afterwards.
+On complex drawings, raw XML hits **verbose delimiter blowup** and truncates mid-tag. Authoring graphics as ASL forms keeps the source compact, programmable and statically checked.
 
 ---
 

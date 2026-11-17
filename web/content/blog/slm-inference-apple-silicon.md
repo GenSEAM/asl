@@ -1,12 +1,12 @@
-# Small Models on Local Hardware: What AgentSlang Offers Them Today
+# Constrained Decoding for Small Local Models: How ASL Keeps 3B Agents on the Rails
 *Published on September 10, 2026 · 4 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/slm-inference-apple-silicon*
 
-## 1. Why Local Small Models
+## 1. Giving Small Local Models a Grammar Guardrail
 
-Much agent work is narrow: a structural refactor, a rename, a syntactic transformation. Doing it with a small language model (SLM) on the developer's own machine removes the network round trip and the per-token bill. Apple Silicon machines, with CPU and GPU sharing one pool of memory, are a natural place to try.
+Much of the work in an agent-built codebase is narrow and mechanical: renaming a symbol across modules, extracting a helper, or rewriting a call site from a checker receipt. Running those steps on a small language model (SLM) on local Apple Silicon hardware—where CPU and GPU share unified memory—avoids network round trips and API bills, provided the model's output parses on the first try.
 
-We have not benchmarked any model's speed, memory use or accuracy in this repository, so this post quotes none. An earlier version gave tokens-per-second, memory and pass-rate figures with no run behind them; we removed them.
+AgentSlang (ASL) helps small models succeed by keeping the grammar regular—every form is a prefix S-expression—and by pairing the language with `packages/asl-slm`, a token-masking state machine that restricts decoding to tokens that keep delimiters balanced and head keywords valid. (We have not yet run speed, memory or accuracy benchmarks for local models in this repository, so this post covers the implemented masker and checker mechanics rather than throughput numbers.)
 
 ## 2. The Grammar Argument
 

@@ -1,6 +1,8 @@
-# Beyond JSON-RPC: Why ASL Frames Agent Messages as S-Expressions
+# One Form per Call, One Batch per Turn: Why ASL Frames Agent Messages as S-Expressions
 *Published on September 10, 2026 · 6 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/beyond-json-rpc-s-expression-agent-messages*
+
+In ASL a tool call is a form: `(:read :file "src/server.asl" :symbol "handleRequest")`. Put several side by side, `asl '(:query ...) (:read ...)'`, and the toolbelt runs them as one batch and answers with one `(:batch ...)` of ASN receipts. Code, data and calls share that one syntax, so a message can carry code as structure rather than as an escaped string. Here is why we chose that over JSON-RPC, and how much of it is wired up today.
 
 ## 1. The Bottleneck
 

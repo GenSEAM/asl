@@ -1,7 +1,9 @@
-# Against Agent Framework Bloat: The Case for Radical Simplicity over Large Orchestrators
+# Fewer Moving Parts: How ASL Keeps Agent-Built Infrastructure Small
 *By GenSEAM | September 2026*
 
-Over the past three years, AI engineering teams have tried to make LLMs write software by piling layers of speculative abstraction on top of standard programming environments:
+Agents now write much of the glue that holds infrastructure together, and every layer they add is a layer someone has to verify. AgentSlang (ASL) bets on fewer layers: one language for code, data and tool calls, a checker that rejects bad code before it runs, and a toolbelt where `asl '(:read ...) (:edit ...) (:check ...)'` is a single call answered by a single `(:batch ...)` of receipts. Fewer moving parts means less to break, and less for the person reviewing the run to read.
+
+It is a deliberate answer to what piled up over the past three years, as teams tried to make LLMs write software by stacking speculative abstraction on top of standard programming environments:
 
 1. **The Wrapper Trap**: large orchestration frameworks wrapping simple API calls in dozens of classes, abstract interfaces and state graphs.
 2. **Subprocess Hell & Memory Leaks**: agents spawning unmonitored Python subshells, hanging Docker containers and orphan child processes.

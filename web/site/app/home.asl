@@ -33,8 +33,8 @@ fn heroSection -> h/Node
     [(h/div [(h/cls "shell hero-grid")]
       [(h/div [(h/cls "stack")]
         [(l/eyebrow "ASL" "AgentSlang · agent-oriented · pre-release")
-         (h/h1 [(h/cls "display")] [(h/text "AgentSlang: an agent-oriented language, shaped for ") (h/em [] [(h/text "the agents that write it.")])])
-         (h/p [(h/cls "lead")] [(h/text "You describe what you want and an AI agent writes the code. AgentSlang (ASL) is the language and the toolchain we are building for that code: checked before it runs, inexpensive for an agent to read and change, and compiled for more than one runtime. It is pre-release, and its ecosystem of packages and tools is open.")])
+         (h/h1 [(h/cls "display")] [(h/text "The glue language for ") (h/em [] [(h/text "agent-built infrastructure.")])])
+         (h/p [(h/cls "lead")] [(h/text "Agents write the code, the checker verifies it, people read the receipts. AgentSlang (ASL) is one agent-oriented language for code, data and tool calls, compiled to native code and WebAssembly. Pre-release.")])
          (h/div [(h/cls "install")]
           [(shellLine (installLine) "copy-install" (m/copyInstall))
            (h/p [(h/cls "micro")] [(h/text "Preview · not released. The script has not been verified on a clean machine yet: ") (h/a [(h/href "/docs#install")] [(h/text "status in the docs")])])
@@ -46,7 +46,7 @@ fn heroSection -> h/Node
             (h/li [] [(h/a [(h/href "/llms.txt")] [(h/text "llms.txt for your agent")])])
             (h/li [] [(h/a [(h/href "https://github.com/GenSEAM/asl")] [(h/text "Source on GitHub")])])])
          (h/ul [(h/cls "facts")]
-           [(h/li [] [(h/el "b" [] [(h/text "MIT / Apache-2.0")]) (h/text " an open ecosystem: no account, no hosted service, nothing to buy")])
+           [(h/li [] [(h/el "b" [] [(h/text "MIT / Apache-2.0")]) (h/text " an open ecosystem in one public repository")])
             (h/li [] [(h/el "b" [] [(h/text "( )")]) (h/text " structure, names and argument counts are checked before the run")])
             (h/li [] [(h/el "b" [] [(h/text "native + wasm")]) (h/text " one source compiles through LLVM to native code and WebAssembly")])])])])])
 
@@ -54,7 +54,7 @@ fn costCell n: String title: String body: String cost: String -> h/Node
   (h/div [(h/cls "cell")] [(h/span [(h/cls "n")] [(h/text n)]) (h/h3 [(h/cls "h3")] [(h/text title)]) (h/p [] [(h/text body)]) (h/span [(h/cls "cost")] [(h/text cost)])])
 
 fn goalsSection -> h/Node
-  (band " sunken" "goals" "01" "Goals" "What we are building, and where each goal stands." "Six goals, in the order we work on them. Each is marked with what works today, what is partial and what is only planned, so you can check us against the repository."
+  (band " sunken" "goals" "01" "Goals" "Six goals, each with its status." "Six goals, in the order we work on them. Each is marked with what works today, what is partial and what is only planned, so you can check us against the repository."
     [(h/div [(h/cls "grid three")]
       [(costCell "01 · Safe" "Mistakes stop before they run" "No nil and no exceptions: a missing value or a failure is an ordinary value the program has to handle. Unbalanced brackets, unknown names and wrong argument counts are rejected by the checker, and integer overflow or division by zero stops the program." "Works today")
        (costCell "02 · Frugal" "Less model work per change" "The asl toolbelt hands an agent one function instead of a whole file, applies exact edits and reports whether the file still parses. How much model usage this saves is not measured yet: the experiment is written down and has not been run." "Tools work · saving not measured")
@@ -63,34 +63,23 @@ fn goalsSection -> h/Node
        (costCell "05 · Web and systems" "From a browser tab to a native tool" "The site you are reading is an ASL program compiled to WebAssembly. Native programs have files, processes and network access. Calling libraries written in other languages is planned." "Partial · foreign calls planned")
        (costCell "06 · Small footprint" "With the standard library or without it" "The WebAssembly build carries its own allocator and garbage collector and asks its host for four functions. Freestanding and embedded targets are planned." "Planned")])])
 
-fn scaleBar tokens: String -> h/Node
-  (h/svg [(h/cls "dim") (h/attr "viewBox" "0 0 51 6") (h/attr "preserveAspectRatio" "none") (h/attr "aria-hidden" "true")]
-    [(h/path [(h/attr "d" (str "M0 3H" tokens "M0 0V6M" tokens " 0V6"))])])
-
-fn countCell label: String frame: String tokens: String active: Bool -> h/Node
+fn codeCell label: String frame: String note: String active: Bool -> h/Node
   (h/div [(h/cls (if active "cell active" "cell"))]
     [(h/span [(h/cls "micro")] [(h/text label)])
-     (h/div [(h/cls "count")] [(h/text tokens)])
-     (scaleBar tokens)
-     (h/span [(h/cls "micro")] [(h/text "tokens (cl100k_base), bar to scale")])
-     (h/pre [] [(h/code [] [(h/text frame)])])])
+     (h/pre [] [(h/code [] [(h/text frame)])])
+     (h/span [(h/cls "micro")] [(h/text note)])])
 
-fn jsonFrame -> String
-  "{\n  \"tool\": \"execute_command\",\n  \"payload\": {\n    \"binary\": \"git\",\n    \"arguments\": [\"status\", \"--short\"],\n    \"working_dir\": \"/app\",\n    \"timeout_ms\": 5000\n  }\n}"
+fn batchCall -> String
+  "asl '(:query :text \"handleRequest\")\n     (:read :file \"src/server.asl\" :symbol \"handleRequest\")\n     (:edit :file \"src/server.asl\" :old \"…\" :new \"…\")\n     (:check :file \"src/server.asl\")'"
 
-fn jsonMinified -> String
-  "{\"tool\":\"execute_command\",\"payload\":{\"binary\":\"git\",\"arguments\":[\"status\",\"--short\"],\"working_dir\":\"/app\",\"timeout_ms\":5000}}"
-
-fn jsonPositional -> String
-  "[\"cmd\",\"git\",[\"status\",\"--short\"],\"/app\",5000]"
+fn batchReceipt -> String
+  "(:batch\n  (:query :in :code :defs (\"src/server.asl#handleRequest\") …)\n  (:read :file \"src/server.asl\" :symbol \"handleRequest\" :start 12 :end 31 …)\n  (:edit :file \"src/server.asl\" :staged true :syntax :ok …)\n  (:check :file \"src/server.asl\" :source :staged :valid true …))"
 
 fn wireSection -> h/Node
-  (band "" "wire" "02" "Honest numbers" "One tool call, counted four ways." "The same git status call in four encodings, counted with cl100k_base. Most of the saving comes from dropping whitespace and repeated key names, which JSON can do as well: the like-for-like comparison is a positional JSON array, and it counts 17 tokens against our 18. For program code ASL currently costs more tokens than typed Python: about 1.8 times in our own comparison of nine modules (o200k_base; the Python versions were not run against the tests)."
+  (band "" "wire" "02" "Protocol" "Many tool calls in one round trip." "Requests and answers are ASN forms, the same notation the code is written in. One asl call carries a batch of forms: a query, a read, an edit and a check go out together, and the answer is one (:batch …) with a receipt for each form, in order. Where an agent would make four tool calls, it makes one, and each receipt is data it reads directly."
     [(h/div [(h/cls "grid two")]
-      [(countCell "JSON, pretty-printed" (jsonFrame) "51" false)
-       (countCell "JSON, minified" (jsonMinified) "30" false)
-       (countCell "JSON, positional array" (jsonPositional) "17" false)
-       (countCell "ASL positional frame" "(! cmd \"git\" [\"status\" \"--short\"] \"/app\" 5000)" "18" true)])])
+      [(codeCell "One call, four operations" (batchCall) "The edit stays staged until (:flush) writes it." false)
+       (codeCell "One answer, four receipts" (batchReceipt) "Receipt fields shortened with …" true)])])
 
 fn ecoStat num: String label: String -> h/Node
   (h/div [(h/cls "eco-stat")] [(h/el "b" [] [(h/text num)]) (h/span [(h/cls "micro")] [(h/text label)])])
@@ -106,12 +95,12 @@ fn ecoCard idx: String title: String desc: String pkgs: (List String) -> h/Node
      (h/div [(h/cls "pkg-tags")] (map pkgTag pkgs))])
 
 fn ecosystemSection -> h/Node
-  (band " sunken" "ecosystem" "03" "Language & ecosystem" "One notation for code, data and tool calls." "A small core language with first-party packages for agent loops, memory, data, web UI and checks, all in one public repository. Maturity varies: some packages are a single module."
+  (band " sunken" "ecosystem" "03" "Language & ecosystem" "Agent loops, memory, data and web, in one language." "A small core language with first-party packages for agent loops, memory, data, web UI and checks, all in one public repository. Maturity varies: some packages are a single module."
     [(h/div [(h/cls "eco-stats")]
       [(ecoStat "69" "First-party packages in the tree")
        (ecoStat "1" "Notation for code, data and tool calls")
        (ecoStat "MIT / Apache-2.0" "Dual licence")
-       (ecoStat "0" "Accounts, servers or fees")])
+       (ecoStat "1" "Public repository")])
      (h/div [(h/cls "grid two")]
       [(ecoCard "Agents & memory" "Loops, code queries and ledgers" "Agent loops, worker coordination, symbol-level call-graph queries and git-tracked ASN memory ledgers." ["asl-agent" "asl-coord" "asl-mem" "asl-know" "asl-intel"])
        (ecoCard "Data & storage" "SQL, Parquet and CSV" "SQL construction for SQLite, Postgres, MySQL and ClickHouse, a Parquet reader and writer, a CSV reader and a content-addressed store." ["asl-sql" "asl-parquet" "asl-csv" "asl-cas"])
@@ -124,7 +113,7 @@ fn step command: String does: String -> h/Node
   (h/li [] [(h/code [] [(h/text command)]) (h/span [] [(h/text does)])])
 
 fn toolbeltSection -> h/Node
-  (band "" "toolbelt" "04" "The toolbelt" "One call, several operations, one flush." "Inside a git repository an agent queries symbols, reads exact definitions, stages edits, checks them and writes them, several forms to a call."
+  (band "" "toolbelt" "04" "The toolbelt" "Read a function, not a file." "Inside a git repository an agent queries symbols, reads exact definitions, stages edits, checks them and writes them, several forms to a call."
     [(h/ol [(h/cls "steps")]
       [(step "asl '(:query :text \"handleRequest\")'" "Find the definitions and uses of a symbol in code, with a count of mentions elsewhere.")
        (step "asl '(:read :file \"src/server.asl\" :symbol \"handleRequest\")'" "Read one function with its line range instead of the whole file.")
@@ -133,7 +122,7 @@ fn toolbeltSection -> h/Node
        (step "asl '(:flush)'" "Write the staged edits, each file atomically, or (:discard) to drop them.")])])
 
 fn communitySection -> h/Node
-  (band " sunken" "community" "05" "Open ecosystem" "A project and a community, not a product." "There is no company service behind this page. The compiler, the packages, the tools and this site form an open ecosystem in one public repository under MIT or Apache-2.0, and the work is planned in the open."
+  (band " sunken" "community" "05" "Community" "An open ecosystem. Come build it." "The compiler, the packages, the tools and this site form one open ecosystem in a public repository under MIT or Apache-2.0, and the work is planned in the open."
     [(h/div [(h/cls "grid two")]
       [(costCell "01 · Read" "Start with one page" "The language fits on one page, and llms.txt gives the same to your agent." "/docs · /llms.txt")
        (costCell "02 · Try" "Run it and tell us what broke" "This is a pre-release: there are no binaries and a clean clone does not build yet. A report of what failed on your machine is the most useful contribution right now." "github.com/GenSEAM/asl")
@@ -144,7 +133,7 @@ fn proofCell label: String value: String valueId: String live: Bool -> h/Node
   (h/div [] [(h/span [(h/cls "micro") (h/id (str valueId "-note"))] [(h/text label)]) (h/el "b" [(h/id valueId) (h/cls (if live "live" ""))] [(h/text value)])])
 
 fn proofSection stats: Stats -> h/Node
-  (band "" "proof" "06" "This page" "You are reading an ASL program." (str "The markup, styles and event handlers of this site are written in ASL and compiled through asl-target-llvm to a wasm32 module. A JavaScript bridge of " (stringFromInt64 stats.bridgeLines) " lines loads it, forwards clicks and moves Leon.")
+  (band "" "proof" "06" "Infrastructure glue" "One language for every part of the ecosystem." (str "ASL is the glue between the parts of an agent's infrastructure: the compiler, the packages, the tools and this site are written in it. Agents write and change the code; people review it through checks, receipts and audits, not line by line. This page is an example: its markup, styles and event handlers compile through asl-target-llvm to a wasm32 module. A JavaScript bridge of " (stringFromInt64 stats.bridgeLines) " lines loads it, forwards clicks and moves Leon.")
     [(h/div [(h/cls "proof")]
       [(proofCell "wasm32 module" (kb stats.wasmBytes) "proof-wasm" false)
        (proofCell "lines of ASL (site and asl-html)" (stringFromInt64 stats.aslLines) "proof-asl" false)
@@ -153,10 +142,10 @@ fn proofSection stats: Stats -> h/Node
      (h/ul [(h/cls "toc")]
       [(h/li [] [(h/a [(h/href "/docs")] [(h/text "Read the language on one page →")])])
        (h/li [] [(h/a [(h/href "/llms.txt")] [(h/text "Give your agent llms.txt")])])
-       (h/li [] [(h/a [(h/href "https://github.com/GenSEAM/asl/tree/main/web")] [(h/text "Read this site's source")])])])])
+       (h/li [] [(h/a [(h/href "https://github.com/GenSEAM/asl/tree/main/web")] [(h/text "This site's source")])])])])
 
 fn homeContent stats: Stats -> (List h/Node)
   [(heroSection) (goalsSection) (wireSection) (ecosystemSection) (toolbeltSection) (communitySection) (proofSection stats)]
 
 fn homePage stats: Stats -> h/Node
-  (l/document (l/home) "AgentSlang (ASL): an agent-oriented language and an open ecosystem" "AgentSlang (ASL) is a pre-release, agent-oriented programming language with an open ecosystem of tools and packages for code written by AI agents: checked before it runs, a toolbelt that reads and edits by symbol, and compilation through LLVM to native code and WebAssembly." (homeContent stats))
+  (l/document (l/home) "AgentSlang (ASL): the glue language for agent-built infrastructure" "AgentSlang (ASL) is a pre-release, agent-oriented glue language for infrastructure written by AI agents: one notation for code, data and tool calls, checked before it runs, a toolbelt that batches many tool calls into one, and compilation through LLVM to native code and WebAssembly." (homeContent stats))

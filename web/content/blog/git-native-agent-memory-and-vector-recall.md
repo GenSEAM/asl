@@ -1,9 +1,9 @@
-# Git-Native Agent Memory: Versioned Ledgers and In-Process Vector Recall
+# Memory That Moves With the Code: Git-Versioned Agent Ledgers and In-Process Recall
 *By GenSEAM | September 2026*
 
-Autonomous agents cannot act effectively without persistent memory. When a coding agent explores a large codebase, inspects test failures or checks architectural invariants, it has to keep what it learned across subagent delegations and session boundaries.
+An ASL agent keeps what it learns (plans, decisions, findings) as ASN ledgers inside the repository it works on. Tracked in Git, that memory follows every checkout, merge and revert, travels with every clone, and is searched in the agent's own process: no API key, no daemon, no hosted index drifting out of sync with the code. Embedding recall over the same ledgers is the next step.
 
-The contemporary approach to agent memory relies on **cloud vector databases over HTTP**:
+A coding agent that explores a large codebase, inspects test failures or checks architectural invariants has to keep what it learned across subagent delegations and session boundaries. The common approach puts that memory in **cloud vector databases over HTTP**:
 
 ```text
 Agent Execution Loop:

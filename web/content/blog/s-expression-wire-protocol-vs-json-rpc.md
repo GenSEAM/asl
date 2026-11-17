@@ -1,14 +1,16 @@
-# S-Expression Wire Frames vs. JSON-RPC: What the Notation Saves, and What Is Built
+# Many Calls in One Frame: ASN Wire Batches vs. Chatty JSON-RPC
 *Published on September 11, 2026 · 4 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/s-expression-wire-protocol-vs-json-rpc*
 
-## 1. The BPE Tokenization Tax
+When an agent works through the `asl` toolbelt or across the agent bus, requests and receipts are written in Agent Slang Notation (ASN)—the same S-expression grammar as the code itself. Because every operation is a self-contained form, an agent packs a query, a symbol read, a staged edit and a checker run into one call, and receives one `(:batch ...)` frame with an ordered receipt for each step. Code and structured receipts travel as native forms rather than double-escaped strings inside JSON-RPC envelopes.
 
-Models read and write through byte-pair encoders such as `cl100k_base` and `o200k_base`. JSON makes them pay for its punctuation: quotes around every key, a colon after it, a comma between members, braces around every object. When the payload is itself code, every quote inside it has to be escaped, and the backslashes are paid for too.
+## 1. Why JSON-RPC Adds Friction to Agent Loops
 
-## 2. S-Expressions as Wire Payloads
+JSON-RPC was designed for single request/response pairs with named-field objects. Under byte-pair encoders (`cl100k_base`, `o200k_base`), every call pays for repeated key quotes, colons, commas and braces—and when the payload is source code, every quote and newline inside it has to be backslash-escaped. Worse, running four dependent repository operations one tool call at a time costs four model round trips.
 
-Agent Slang Notation (ASN) writes the same data as S-expressions: bare keywords instead of quoted keys, whitespace instead of commas, one kind of bracket per structure. The design goal for the wire is that code travels as forms rather than as escaped strings inside a JSON field.
+## 2. S-Expressions as Batchable Wire Payloads
+
+ASN writes wire frames as S-expressions: bare keywords (`:read`, `:edit`, `:check`), whitespace separation, and balanced parentheses. A batch is simply a list of forms sent in one turn and answered in one receipt.
 
 ## 3. One Measured Example
 

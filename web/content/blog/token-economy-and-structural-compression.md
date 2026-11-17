@@ -1,13 +1,11 @@
-# Stop Burning Money on JSON Context: Structural Compaction Saves Tokens, Abbreviation Does Not
+# Structural Compaction Over Abbreviation: How ASN Tables and Batches Keep Agent Payloads Lean
 *By GenSEAM | September 2026*
 
-In AI-assisted software engineering, tokens are currency and bandwidth. Every extra token in an agent prompt adds to the inference bill, adds latency to tool-calling loops, and dilutes attention.
+AgentSlang Notation (ASN) keeps agent payloads and git-tracked memory ledgers compact through **structure**, not cryptic abbreviations: shared schemas, tabular row layouts and batched tool calls remove repeated keys and wrapper boilerplate across whole collections of records.
 
-Faced with this, developers often jump to an intuitive conclusion: *if we abbreviate everything (shorten `function` to `fn`, `config` to `cfg`, `message` to `msg`) we will slash our token consumption.*
+When teams first try to shrink agent context, they often reach for character-level abbreviation—shortening `function` to `fn`, `config` to `cfg`, or `message` to `msg`. Under byte-pair tokenizers (`cl100k_base`, `o200k_base`), common full words are already single tokens, so abbreviating keywords buys almost nothing while hurting readability and searchability.
 
-Under a byte-pair tokenizer, that assumption is mostly false.
-
-In this essay we measure why abbreviating keywords saves little or nothing, and where the large reductions actually come from: **structural compaction and tabular serialization**. Every count below was taken with js-tiktoken 1.0.15 on 2026-10-14, and each covers only the strings shown.
+In this post we show the BPE measurements behind that design choice (taken with `js-tiktoken` 1.0.15 on 2026-10-14 for the exact strings shown) and demonstrate how structural compaction in ASN cuts payload size where it actually counts.
 
 ---
 
