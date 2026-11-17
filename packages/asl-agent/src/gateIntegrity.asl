@@ -265,12 +265,24 @@ fn countName name: String texts: (List String) -> Int64
     0
     texts)
 
+fn exportedNames text: String -> (List String)
+  (let [parts (stringSplit text ":x [")]
+    (if (< (listLength parts) 2)
+      (list)
+      (filter (fn [t] (not (stringEmpty? t))) (stringSplit (stringReplace (c/firstOf (stringSplit (optionOr (listGet parts 1) "") "]")) "\n" " ") " "))))
+
+; (:m :ref GI-UNWIRED-NEWMODULE :do "a new module (absent at the revert revision) is a library: its exports have no caller yet but tests, and main is a script entry point; neither is unwired")
+fn unwiredExempt defs: (Pair String String) implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> Bool
+  (or (= (pairSecond defs) "main")
+    (and (listAny? (fn [h] (and (= (pairFirst h) (pairFirst defs)) (stringEmpty? (pairSecond h)))) implHead)
+      (listAny? (fn [n] (= n (pairSecond defs))) (exportedNames (pairSecond (optionOr (listFind (fn [p] (= (pairFirst p) (pairFirst defs))) implNow) (pair "" "")))))))
+
 fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> (List String)
   (let [defs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implNow)
         headDefs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implHead)
         newDefs (filter (fn [d] (not (listAny? (fn [h] (and (= (pairFirst h) (pairFirst d)) (= (pairSecond h) (pairSecond d)))) headDefs))) defs)
         texts (map pairSecond implNow)]
-    (map pairSecond (filter (fn [d] (= (countName (pairSecond d) texts) 1)) newDefs)))
+    (map pairSecond (filter (fn [d] (and (= (countName (pairSecond d) texts) 1) (not (unwiredExempt d implNow implHead)))) newDefs)))
 
 ; (:m :ref REVERT-REBUILD-FLOOR :do "a revert run of an asl-agent source rebuilds the native closure, 557 s for toolMemoLoopTest on 2026-11-09 against a 3 s run with the change, so a revert gate gets at least 900 s; under the 300 s gate timeout every such revert timed out")
 fn revertTimeout timeout: Int64 -> Int64
