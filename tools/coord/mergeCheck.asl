@@ -1,8 +1,8 @@
 (module asl-tools/coord/mergeCheck
-  :x [gateWord cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify effectiveBase! targetTips! isAncestor? untouchedPre judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
+  :x [gateWord cachePaths auditArgv failedRows quotedEnd unquote normEv evDelta rowKey classify effectiveBase! targetTips! isAncestor? untouchedPre judgeSuite SuiteRun Opts cleanEnvWith keepEnv? secretLike? redactWhy whyOf failId toolVersion cacheHeader cacheLoad! cacheSave! cachePath pruneEntries! entryName? toolIdIn! freshToolId! headIdent! headHeader headPath headReceipt! headLoad! baseOf! cleanAt? suiteReceipt planRow planId missingRows oneAsnLine? conflictMarkers? ledgerGrows grownLedgers! LRow structure! touchedSuites checkSide! gitOut! run! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/gateGuard :a gg) (asl-text/string :a ts)])
 
-; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
+; (:m :ref MERGE-CHECK :do "asl run asl/tools/coord/mergeCheck.asl --base REF --head REF [--repo DIR] [--ledger FILE] [--cli PATH] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..] [--reuse-head]: one merge-time audit that blocks only on what the change introduces; structure of base..head, asl audit consistency and gates (no suites) on both sides compared by check id and normalised :ev, then the suites of the touched packages at head against base; pre-existing reds never block, they print as plan rows and --ledger appends the missing ones; steps the deadline cut off are listed unverified, never passed; exit 0 pass, 1 block, 2 bad invocation")
 
 (schema SuiteRun
   (:f path String)
@@ -29,7 +29,9 @@
   (:f baseDir String :default "")
   (:f cache String :default "")
   (:f extraEnv (List String) :default (list))
-  (:f target String :default ""))
+  (:f target String :default "")
+  (:f reuseHead Bool :default false)
+  (:f nativeCache String :default ""))
 
 fn q s: String -> String
   (str "\"" (stringReplace (stringReplace s "\\" "\\\\") "\"" "\\\"") "\"")
@@ -229,13 +231,17 @@ fn auditArgv cli: String sub: String -> (List String)
 
 ; (:m :do "audit sub (consistency|gates) at side with the step bound: the failed rows and whether the audit ran (exit 0 or 1 with a receipt); gates run with suites off by default")
 fn ! checkSide! side: String cli: String sub: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Result (List (Pair String String)) String)
+  (resultMap (checkSideAll! side cli sub deadlineNs stepS env) (fn [(p (Pair (List (Pair String String)) Bool))] -> (List (Pair String String)) (pairFirst p)))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "checkSide! plus whether the audit itself passed (exit 0 and a :passed receipt): a not-computed check fails the audit yet is no failed row, so an empty row list alone is not a green audit")
+fn ! checkSideAll! side: String cli: String sub: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Result (Pair (List (Pair String String)) Bool) String)
   (let [(s (leftS deadlineNs stepS))]
     (if (<= s 0) (err "deadline")
       (let [(d (fr/runOneLimited (fr/job (auditArgv (cliOf side cli) sub) side env) (fr/limits s 64)))]
         (cond
           ((or (= d.verdict "timeout") (= d.verdict "runaway")) (err (str "timeout " sub)))
           ((not (stringContains? d.out "(:audit ")) (err (str "no receipt " sub " exit " (n d.exit))))
-          (else (ok (failedRows d.out)))))))
+          (else (ok (pair (failedRows d.out) (and (= d.exit 0) (stringContains? d.out (str "(:audit :sub " sub " :status :passed"))))))))))
 
 ; (:m :do "NAME=value tokens whose NAME looks like a credential lose the value: a suite's output is echoed into the receipt")
 fn redactWhy s: String -> String
@@ -391,30 +397,130 @@ fn cachePath dir: String sha: String sub: String id: String -> String
   (str dir "/" sha "-" sub "-" id ".asn")
 
 fn toolVersion -> String
-  "mergeCheck-2"
+  "mergeCheck-3"
 
-fn ! cliIdent o: Opts -> String
-  (if (stringEmpty? o.cli) "tree" (str o.cli "@" (n (match (fileStat o.cli) ((ok st) st.mtime) ((err _) 0)))))
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the native CLI cache the bin/asl wrapper reads its head pointers from: Opts.nativeCache, else ASL_NATIVE_CLI_CACHE, else HOME/.asl/run/nativeCli, as the wrapper resolves it")
+fn ! nativeCacheOf o: Opts -> String
+  (if (stringEmpty? o.nativeCache) (optionOr (envGet "ASL_NATIVE_CLI_CACHE") (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/nativeCli")) o.nativeCache)
 
-fn ! cacheId o: Opts -> String
-  (digest8 (str (toolVersion) "|1|" (cliIdent o)))
+fn baseName p: String -> String
+  (optionOr (listLast (stringSplit p "/")) p)
 
-; (:m :do "the provenance a cache entry carries: tool version, format, cli identity, base sha and sub-audit; a file whose header differs in any of them is a miss")
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the wrapper's own suspect test by builtins: a head dir whose deps list is unreadable or empty, or names a source missing under the root or newer than the pointer, is rebuilt before the next call, so its name is not the tool that call runs")
+fn ! headStale? root: String dir: String pointer: String -> Bool
+  (match (fileReadString (str dir "/deps"))
+    ((err _) true)
+    ((ok text)
+     (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
+       (match (fileStat pointer)
+         ((err _) true)
+         ((ok stamp) (or (listEmpty? paths)
+                         (listAny? (fn [(p String)] -> Bool (match (fileStat (str root "/" p)) ((err _) true) ((ok st) (> st.mtimeNs stamp.mtimeNs)))) paths)))))))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the content id of the tool an audit runs: tree with no --cli (each side runs its own bin/asl, fixed by the sha); a native dir's bin is its cli-<source digest> dir name; a bin/asl wrapper is the dir its head pointer names while no source it was built from is newer than the pointer, else unknown, and a wrapper with no pointer is unknown; any other file is the sha256 of its bytes. Path and mtime never enter it, so a deploy that leaves the sources as they were keeps the id; an unknown id (empty) caches and reuses nothing")
+fn ! toolIdIn! cache: String cli: String -> String
+  (if (stringEmpty? cli) "tree"
+    (let [(real (resultOr (realPath cli) cli))
+          (dir (parentDir real))
+          (root (parentDir dir))
+          (pointer (str cache "/head" (stringReplace root "/" "_")))]
+      (cond
+        ((and (= (baseName real) "bin") (stringStartsWith? (baseName dir) "cli-")) (str "cli:" (baseName dir)))
+        ((fileExists? pointer)
+          (let [(nd (stringTrim (resultOr (fileReadString pointer) "")))]
+            (if (and (not (stringEmpty? nd)) (and (fileExists? (str nd "/bin")) (not (headStale? root nd pointer)))) (str "cli:" (baseName nd)) "")))
+        ((or (fileExists? (str root "/asl/host")) (stringContains? (resultOr (fileReadString real) "") "nativeCli")) "")
+        (else (match (fileReadBytes real) ((ok b) (str "bytes:" (bytesSha256 b))) ((err _) ""))))))
+
+fn ! toolIdOf! o: Opts -> String
+  (toolIdIn! (nativeCacheOf o) o.cli)
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the tool id at the start of a run: a wrapper whose head pointer is stale (a landed merge touched its sources) is refreshed once with --fresh version, which verifies or rebuilds under the build lock as the first audit would, and the id is read again; still unknown is unknown. Without it no run on a node after a merge could key anything")
+fn ! freshToolId! o: Opts env: (List String) deadlineNs: Int64 -> String
+  (let [(t (toolIdOf! o))]
+    (if (or (not (stringEmpty? t)) (stringEmpty? o.cli)) t
+      (let [(s (leftS deadlineNs o.stepS))]
+        (if (<= s 0) ""
+          (let [(_ (fr/runOneLimited (fr/job (list o.cli "--fresh" "version") o.repo env) (fr/limits s 64)))]
+            (toolIdOf! o))))))
+
+fn cacheId tool: String -> String
+  (digest8 (str (toolVersion) "|2|" tool))
+
+; (:m :do "the provenance a cache entry carries: tool version, format, tool content id, base sha and sub-audit; a file whose header differs in any of them is a miss")
 fn cacheHeader ver: String cli: String sha: String sub: String -> String
-  (str "(:mergeCheckBase :v " (q ver) " :fmt 1 :cli " (q cli) " :sha " (q sha) " :sub " (q sub))
+  (str "(:mergeCheckBase :v " (q ver) " :fmt 2 :cli " (q cli) " :sha " (q sha) " :sub " (q sub))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the identity of one head audit, every input its result reads besides the files: tool id, the effective base, the head's tree (the train audits a --no-ff merge commit whose tree can equal the unit head's), the merge base of the head with main (vcsDirect compares the allowlist with it) and the repo's remote names (workspaceIsolation); empty, so nothing is saved or reused, when the tool is unknown or a field cannot be read")
+fn headHeader ver: String tool: String base: String tree: String mainBase: String remotes: String sub: String -> String
+  (str "(:mergeCheckHead :v " (q ver) " :fmt 1 :tool " (q tool) " :base " (q base) " :tree " (q tree) " :mainBase " (q mainBase) " :remotes " (q remotes) " :sub " (q sub))
+
+fn ! headIdent! repo: String tool: String base: String head: String sub: String -> String
+  (let [(t (gitOut! repo (list "rev-parse" "--verify" (str head "^{tree}"))))
+        (mb (gitOut! repo (list "merge-base" head "main")))
+        (rm (gitOut! repo (list "remote")))
+        (tree (stringTrim t.out))]
+    (if (or (stringEmpty? tool) (or (stringEmpty? base) (or (!= t.exit 0) (or (stringEmpty? tree) (or (!= rm.exit 0) (= mb.verdict "timeout"))))))
+      ""
+      (headHeader (toolVersion) tool base tree (str (n mb.exit) ":" (stringTrim mb.out)) (stringJoin (nonEmpty (map stringTrim (stringLines rm.out))) ",") sub)))
+
+fn digest16 s: String -> String
+  (optionOr (stringSlice (bytesSha256 (stringToBytes s)) 0 16) "")
+
+fn headPath dir: String hdr: String -> String
+  (str dir "/head-" (digest16 hdr) ".asn")
 
 fn rowText r: (Pair String String) -> String
   (str "(:check :id " (pairFirst r) " :status :failed :ev " (q (pairSecond r)) ")")
 
-; (:m :do "the base audit of one sha and sub-audit, computed once: the failed rows of an audit that ran, behind a (:mergeCheckBase) header; a missing or cut-off file is no cache")
+fn rowsBody rows: (List (Pair String String)) -> String
+  (stringJoin (map rowText rows) " ")
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "an entry is sealed: its header, then :rows N :sum \"S\" over the rendered rows, then the rows and a closing paren")
+fn sealed hdr: String rows: (List (Pair String String)) -> String
+  (str hdr " :rows " (n (listLength rows)) " :sum " (q (digest16 (rowsBody rows))) " " (rowsBody rows) ")\n")
+
+; (:m :do "the audit rows of one entry, computed once: the failed rows of an audit that ran, behind its header; a missing file, another header, a cut-off file or rows whose count or digest differ from the seal (a torn write could drop a red) is no cache")
 fn ! cacheLoad! path: String hdr: String -> (Option (List (Pair String String)))
   (match (fileReadString path)
     ((err _) (none))
-    ((ok t) (if (and (stringStartsWith? t hdr) (stringEndsWith? (stringTrim t) ")")) (some (failedRows t)) (none))))
+    ((ok t) (let [(pre (str hdr " :rows "))]
+              (if (not (and (stringStartsWith? t pre) (stringEndsWith? (stringTrim t) ")"))) (none)
+                (let [(rest (optionOr (stringSlice t (stringLength pre) (stringLength t)) ""))
+                      (count (optionOr (stringToInt64 (optionOr (listHead (stringSplit rest " ")) "")) -1))
+                      (sum (quotedAfter rest " :sum \""))
+                      (rows (failedRows t))]
+                  (if (and (= count (listLength rows)) (and (not (stringEmpty? sum)) (= sum (digest16 (rowsBody rows))))) (some rows) (none)))))))
 
+; (:m :ref TRAIN-INVARIANT-DEDUP-L3 :do "entries are kept 14 days (adopted): a base or head entry is rewritten by every check that misses it, so one older than that serves no base or tree still in flight")
+fn entryMaxAgeNs -> Int64
+  1209600000000000
+
+; (:m :ref TRAIN-INVARIANT-DEDUP-L3 :do "a file this cache writes, by name: a head entry head-*.asn, a base entry <sha>-consistency|gates-<id>.asn, or a temp file of either; any other name in a caller's --cache dir is not ours")
+fn entryName? f: String -> Bool
+  (let [(own (or (stringStartsWith? f "head-") (or (stringContains? f "-consistency-") (stringContains? f "-gates-"))))]
+    (and own (or (stringEndsWith? f ".asn") (stringEndsWith? f ".tmp"))))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP-L3 :do "on every write the entries of that one directory older than entryMaxAgeNs are removed; nothing outside it, no subdirectory, no name entryName? does not claim; a racing reader that loses an entry reruns its audit")
+fn ! pruneEntries! dir: String nowNs0: Int64 -> Int64
+  (fold (fn [(acc Int64) (f String)] -> Int64
+          (let [(p (str dir "/" f))]
+            (match (fileStat p)
+              ((err _) acc)
+              ((ok st) (if (and (entryName? f) (and (not st.isDir) (> (- nowNs0 st.mtimeNs) (entryMaxAgeNs))))
+                         (if (ok? (pathRemove p)) (+ acc 1) acc)
+                         acc)))))
+        0 (resultOr (dirList dir) (list)))
+
+; (:m :do "written whole to a temp file and renamed, so a reader never sees half an entry; then the directory's expired entries are pruned")
 fn ! cacheSave! path: String hdr: String rows: (List (Pair String String)) -> Bool
-  (let [(_ (dirCreate (parentDir path)))]
-    (ok? (fileWrite path (str hdr " " (stringJoin (map rowText rows) " ") ")\n"))))
+  (let [(_ (dirCreate (parentDir path)))
+        (tmp (str path "." (n (procSelf)) "." (n (monotonicNs)) ".tmp"))
+        (saved (if (ok? (fileWrite tmp (sealed hdr rows)))
+                 (if (ok? (pathRename tmp path)) true (let [(_ (pathRemove tmp))] false))
+                 false))
+        (_ (pruneEntries! (parentDir path) (nowNs)))]
+    saved)
 
 fn ! headIs? dir: String sha: String -> Bool
   (and (not (stringEmpty? dir)) (= (stringTrim (gitOut! dir (list "rev-parse" "HEAD")).out) sha))
@@ -426,13 +532,47 @@ fn ! cleanAt? dir: String sha: String -> Bool
 fn ! cacheDirOf o: Opts -> String
   (if (stringEmpty? o.cache) (str (optionOr (envGet "HOME") "/tmp") "/.asl/run/mergeCheck") o.cache)
 
-; (:m :do "one audit sub of base: from the cache when present, else run in the base checkout and saved when it ran")
-fn ! baseAudit! o: Opts env: (List String) save: Bool hdr: String bd: String sub: String sha: String cached: (Option (List (Pair String String))) deadlineNs: Int64 -> (Result (List (Pair String String)) String)
+; (:m :do "one audit sub of base: from the cache when present, else run in the base checkout and saved when it ran with a known tool id that is still the same after the run (a rebuild in between would have run another tool)")
+fn ! baseAudit! o: Opts env: (List String) save: Bool tool: String hdr: String bd: String sub: String sha: String cached: (Option (List (Pair String String))) deadlineNs: Int64 -> (Result (List (Pair String String)) String)
   (match cached
     ((some r) (ok r))
     ((none) (let [(r (checkSide! bd o.cli sub deadlineNs o.stepS env))
-                  (_ (match r ((ok rows) (if save (cacheSave! (cachePath (cacheDirOf o) sha sub (cacheId o)) hdr rows) false)) ((err _) false)))]
+                  (_ (match r ((ok rows) (if (and save (and (not (stringEmpty? tool)) (= (toolIdOf! o) tool))) (cacheSave! (cachePath (cacheDirOf o) sha sub (cacheId tool)) hdr rows) false)) ((err _) false)))]
               r)))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "the head consistency audit once per merged tree: a reuse run (--reuse-head) takes the sealed rows a run of the same tool saved for the same identity (headIdent!) when present; otherwise the audit runs, and rows of an audit that ran under a known tool id, unchanged after the run, are saved under that identity; a red row stays a red row, nothing else is cached; pair of (rows or why, reused)")
+fn passedWord p: Bool -> String
+  (if p " :passed true" " :passed false")
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "a head receipt: its rows and whether the whole audit passed, the flag sealed in the header so a reader cannot take a failed audit for a passed one")
+fn ! headLoad! path: String ident: String -> (Option (Pair (List (Pair String String)) Bool))
+  (match (cacheLoad! path (str ident (passedWord true)))
+    ((some r) (some (pair r true)))
+    ((none) (match (cacheLoad! path (str ident (passedWord false))) ((some r) (some (pair r false))) ((none) (none)))))
+
+fn ! headAudit! o: Opts env: (List String) tool: String ident: String hd: String deadlineNs: Int64 -> (Pair (Result (List (Pair String String)) String) Bool)
+  (let [(path (headPath (cacheDirOf o) ident))
+        (hit (if (and o.reuseHead (not (stringEmpty? ident))) (headLoad! path ident) (none)))]
+    (match hit
+      ((some rp) (pair (ok (pairFirst rp)) true))
+      ((none) (let [(r (checkSideAll! hd o.cli "consistency" deadlineNs o.stepS env))
+                    (_ (match r ((ok rp) (if (and (not (stringEmpty? ident)) (= (toolIdOf! o) tool)) (cacheSave! path (str ident (passedWord (pairSecond rp))) (pairFirst rp)) false)) ((err _) false)))]
+                (pair (resultMap r (fn [(rp (Pair (List (Pair String String)) Bool))] -> (List (Pair String String)) (pairFirst rp))) false)))))
+
+; (:m :ref MERGECHECK-BASE-ATTRIB :do "the base a check of head against the requested base uses: the effective base when head carries the target brought in, else the requested sha; empty when either does not resolve")
+fn ! baseOf! repo: String baseReq: String headSha: String target: String -> String
+  (if (or (stringEmpty? baseReq) (stringEmpty? headSha)) baseReq
+    (let [(e (effectiveBase! repo baseReq headSha (targetTips! repo target)))] (if (stringEmpty? e) baseReq e)))
+
+; (:m :ref TRAIN-INVARIANT-DEDUP :do "for a caller that runs the same audit outside mergeCheck (the train's audit item): the head consistency rows, and whether that audit passed, a mergeCheck run of this cli saved for exactly this base and head, by the identity a check of head against base would use; none when the base or head does not resolve, the tool is unknown, or the receipt is missing or garbled")
+fn ! headReceipt! repo: String base: String head: String cli: String cache: String nativeCache: String target: String -> (Option (Pair (List (Pair String String)) Bool))
+  (let [(o (Opts :repo repo :base base :head head :cli cli :cache cache :nativeCache nativeCache :target target))
+        (baseReq (stringTrim (gitOut! repo (list "rev-parse" "--verify" base)).out))
+        (headSha (stringTrim (gitOut! repo (list "rev-parse" "--verify" head)).out))
+        (baseSha (baseOf! repo baseReq headSha target))
+        (tool (toolIdOf! o))
+        (ident (if (or (stringEmpty? tool) (or (stringEmpty? baseSha) (stringEmpty? headSha))) "" (headIdent! repo tool baseSha headSha "consistency")))]
+    (if (stringEmpty? ident) (none) (headLoad! (headPath (cacheDirOf o) ident) ident)))
 
 fn ! gateOutcome! o: Opts env: (List String) hd: String deadlineNs: Int64 -> String
   (if (stringEmpty? o.gate) ""
@@ -480,18 +620,20 @@ fn ! run! o: Opts -> (Pair Int64 String)
         (deadlineNs (+ (monotonicNs) (* o.totalS 1000000000)))
         (baseReq (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.base)).out))
         (headSha (stringTrim (gitOut! repo (list "rev-parse" "--verify" o.head)).out))
-        (baseSha (if (or (stringEmpty? baseReq) (stringEmpty? headSha)) baseReq (let [(e (effectiveBase! repo baseReq headSha (targetTips! repo o.target)))] (if (stringEmpty? e) baseReq e))))]
+        (baseSha (baseOf! repo baseReq headSha o.target))]
     (if (or (stringEmpty? baseSha) (stringEmpty? headSha))
       (pair 2 (str "(:mergeCheck :verdict block :error " (q "base or head does not resolve") ")"))
       (let [(problems (structure! repo baseSha headSha))
             (files (lines! repo (list "diff" "--name-only" baseSha headSha)))
             (cdir (cacheDirOf o))
             (env (cleanEnvWith o.extraEnv))
-            (cid (cacheId o))
-            (hC (cacheHeader (toolVersion) (cliIdent o) baseSha "consistency"))
-            (hG (cacheHeader (toolVersion) (cliIdent o) baseSha "gates"))
-            (cC (cacheLoad! (cachePath cdir baseSha "consistency" cid) hC))
-            (cG (cacheLoad! (cachePath cdir baseSha "gates" cid) hG))
+            (tool (freshToolId! o env deadlineNs))
+            (cid (cacheId tool))
+            (hC (cacheHeader (toolVersion) tool baseSha "consistency"))
+            (hG (cacheHeader (toolVersion) tool baseSha "gates"))
+            (cC (if (stringEmpty? tool) (none) (cacheLoad! (cachePath cdir baseSha "consistency" cid) hC)))
+            (cG (if (stringEmpty? tool) (none) (cacheLoad! (cachePath cdir baseSha "gates" cid) hG)))
+            (ident (if (stringEmpty? tool) "" (headIdent! repo tool baseSha headSha "consistency")))
             (headOwn (not (cleanAt? o.headDir headSha)))
             (dirtyRows (listAppend (if (and (not (stringEmpty? o.headDir)) headOwn) (list "headDir:refused") (list)) (if (and (not (stringEmpty? o.baseDir)) (not (cleanAt? o.baseDir baseSha))) (list "baseDir:refused") (list))))
             (needBase (or full (or (not (listOk? cC)) (not (listOk? cG)))))
@@ -507,10 +649,11 @@ fn ! run! o: Opts -> (Pair Int64 String)
                 (_ (if baseOwn (dropSide! repo bd) false))
                 (_ (pathRemove tmp))]
             (pair 2 (str "(:mergeCheck :verdict block :error " (q "cannot check out base and head") ")")))
-          (let [(hc (checkSide! hd o.cli "consistency" deadlineNs o.stepS env))
+          (let [(hcR (headAudit! o env tool ident hd deadlineNs))
+                (hc (pairFirst hcR))
                 (hg (checkSide! hd o.cli "gates" deadlineNs o.stepS env))
-                (bc (if needBase (baseAudit! o env baseOwn hC bd "consistency" baseSha cC deadlineNs) (ok (optionOr cC (list)))))
-                (bg (if needBase (baseAudit! o env baseOwn hG bd "gates" baseSha cG deadlineNs) (ok (optionOr cG (list)))))
+                (bc (if needBase (baseAudit! o env baseOwn tool hC bd "consistency" baseSha cC deadlineNs) (ok (optionOr cC (list)))))
+                (bg (if needBase (baseAudit! o env baseOwn tool hG bd "gates" baseSha cG deadlineNs) (ok (optionOr cG (list)))))
                 (cmp (fn [(h (Result (List (Pair String String)) String)) (b (Result (List (Pair String String)) String)) (nm String)]
                        -> (Pair (Pair (List (Pair String String)) (List (Pair String String))) (List String))
                        (match h
@@ -569,7 +712,7 @@ fn ! run! o: Opts -> (Pair Int64 String)
                               " :base " (q baseSha) (if (= baseSha baseReq) "" (str " :requestedBase " (q baseReq))) " :head " (q headSha)
                               " :complete " (cond ((not (listEmpty? unv)) "false") ((not full) "partial") (else "true")) " :suitesRun " (if full "true" "false")
                               " :headCheckout " (if headOwn "true" "false") " :baseCheckout " (if baseOwn "true" "false")
-                              " :baseCached " (n (+ (if (listOk? cC) 1 0) (if (listOk? cG) 1 0)))
+                              " :baseCached " (n (+ (if (listOk? cC) 1 0) (if (listOk? cG) 1 0))) " :headReused " (if (pairSecond hcR) "1" "0")
                               " :structure (" (stringJoin (map q problems) " ") ")"
                               " :regressions (" (rows2s regs) (if (or (listEmpty? regs) (listEmpty? suiteRegs)) "" " ") (stringJoin (map pairSecond suiteRegs) " ") ")"
                               " :preExisting (" (rows2s preRows) ")"
@@ -589,10 +732,10 @@ fn ! main args: (List String) -> (Result Int64 String)
         (mode (optionOr (flagArg args "--mode") "cheap"))
         (num (fn [(k String) (d Int64)] -> Int64 (optionOr (stringToInt64 (optionOr (flagArg args k) "")) d)))]
     (if (or (stringEmpty? base) (or (stringEmpty? head) (not (or (= mode "cheap") (= mode "full")))))
-      (do (eprintln "usage: mergeCheck --base MERGE-BASE --head REF [--mode cheap|full] [--target REF] [--gate CMD] [--repo DIR] [--ledger FILE] [--cli PATH] [--cache DIR] [--head-dir DIR] [--base-dir DIR] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]") (ok 2))
+      (do (eprintln "usage: mergeCheck --base MERGE-BASE --head REF [--mode cheap|full] [--target REF] [--gate CMD] [--repo DIR] [--ledger FILE] [--cli PATH] [--cache DIR] [--head-dir DIR] [--base-dir DIR] [--reuse-head] [--deadline S] [--step S] [--max-suites N] [--only SUITE,..]") (ok 2))
       (let [(r (run! (Opts :repo (optionOr (flagArg args "--repo") ".") :base base :head head :target (optionOr (flagArg args "--target") "") :ledger (optionOr (flagArg args "--ledger") "")
                            :cli (optionOr (flagArg args "--cli") "") :totalS (num "--deadline" 1500) :stepS (num "--step" 300) :maxSuites (num "--max-suites" 12)
                            :only (nonEmpty (map stringTrim (stringSplit (optionOr (flagArg args "--only") "") ",")))
                            :mode mode :gate (optionOr (flagArg args "--gate") "") :headDir (optionOr (flagArg args "--head-dir") "")
-                           :baseDir (optionOr (flagArg args "--base-dir") "") :cache (optionOr (flagArg args "--cache") ""))))]
+                           :baseDir (optionOr (flagArg args "--base-dir") "") :cache (optionOr (flagArg args "--cache") "") :reuseHead (listContains? args "--reuse-head"))))]
         (do (println (pairSecond r)) (ok (pairFirst r))))))
