@@ -1,7 +1,7 @@
 (module aslAgent/main
   :x [withRemote knownParams acceptedKeys nearestKey! liveTxnTargets tokenizeAsn Invocation paramGet parseInvocation
       ResumeTurn ResumeState RunArgs resumeReport journalResume journalModeHint
-      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn readsIn streakIn readAtOf opRowAt readsTop readsKeyChars receiptFieldsIn receiptFieldNames
+      NeedsConfirm OwnsRejection Usage Batching LoopResult formatReceipt stopCause lastStepIn readsIn unnamedOnly? shapeRow repairedIn streakIn readAtOf opRowAt readsTop readsKeyChars receiptFieldsIn receiptFieldNames
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
       providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! providerWaitSleep! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail redBefore? baselineRan? baselineVerdicts? baselineRanWith? heldRounds rereadEntry? opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
@@ -114,7 +114,8 @@
   (:f servedAlias (Option String))
   (:f servedModel (Option String))
   (:f reads String :default "")
-  (:f streak Int64 :default 0))
+  (:f streak Int64 :default 0)
+  (:f repaired String :default ""))
 
 (schema MainResult
   (:f stdout String)
@@ -918,6 +919,7 @@ fn formatReceipt r: LoopResult -> String
        (match (nonEmpty r.stop) ((some s) (str " :stop " s)) ((none) ""))
        (match (nonEmpty r.lastStep) ((some l) (str " :lastStep " l)) ((none) ""))
        (if (> r.streak 0) (str " :streak " (stringFromInt64 r.streak)) "")
+       r.repaired
        r.reads
        (match (nonEmpty r.servedAlias) ((some a) (str " :servedAlias \"" (c/escapeAsn a) "\"")) ((none) ""))
        (match (nonEmpty r.servedModel) ((some m) (str " :servedModel \"" (c/escapeAsn m) "\"")) ((none) ""))
@@ -1144,6 +1146,46 @@ fn brokenWrapper? text: String -> Bool
 
 fn malformedHint -> String
   "(:malformed :error ERR_NO_STEP :message \"no (:step ...) in that reply; the tool wrapper is not part of the protocol\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
+
+; (:m :ref LEON-WRITE-FAIL-TOP :do "node2 2026-11-17: readStreak stops with 12 turns and 2 reads; a turn whose every step names no op (only ERR_NO_OP receipts) read nothing, so it holds the read streak like a broken wrapper, gets the expected shape back once and the second such turn in a row ends the run as malformedReply")
+fn unnamedStep? op: (List (Pair String c/KvVal)) -> Bool
+  (and (stringEmpty? (liveOpName op))
+    (match (c/dictGet op "type") ((some v) (match v ((c/kvStr t) (= t "step")) (_ false))) ((none) false)))
+
+fn unnamedOnly? ops: (List (List (Pair String c/KvVal))) -> Bool
+  (and (not (listEmpty? ops)) (listAll? unnamedStep? ops))
+
+fn unnamedHint -> String
+  "(:malformed :error ERR_NO_OP :message \"no step in that reply names an op; the op is a double-quoted name right after :op, every argument a :key value pair\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
+
+; (:m :ref LEON-WRITE-FAIL-TOP :do "one (:turn N :shape :repaired (K ...) :left (K ...)) journal row for a reply whose step forms were rewritten or left unrepaired by tc/canonSteps; none when both are empty")
+fn shapeRow turn: Int64 repaired: (List String) left: (List String) -> (Option String)
+  (if (and (listEmpty? repaired) (listEmpty? left))
+    none
+    (some (str "(:turn " (stringFromInt64 turn) " :shape :repaired (" (stringJoin repaired " ") ") :left (" (stringJoin left " ") "))\n")))
+
+fn shapeKinds rows: (List String) key: String -> (List String)
+  (fold (fn [acc l] (match (stringIndexOf l (str key " ("))
+      ((none) acc)
+      ((some k) (let [rest (c/sliceOf l (+ k (stringLength key) 2) (stringLength l))
+                      body (c/sliceOf rest 0 (optionOr (stringIndexOf rest ")") (stringLength rest)))]
+        (listAppend acc (filter (fn [w] (not (stringEmpty? w))) (stringSplit body " ")))))))
+    (list) rows)
+
+fn tallyKinds kinds: (List String) -> String
+  (stringJoin (map (fn [k] (str "(:" k " " (stringFromInt64 (listLength (filter (fn [x] (= x k)) kinds))) ")")) (dedupeStrings kinds (list))) " ")
+
+fn dedupeStrings xs: (List String) acc: (List String) -> (List String)
+  (if (listEmpty? xs) acc
+    (dedupeStrings (c/restOf xs) (if (listContains? acc (c/firstOf xs)) acc (listAppend acc (list (c/firstOf xs))))))
+
+; (:m :ref LEON-WRITE-FAIL-TOP :do "the receipt's :repaired field from the journal's shape rows: :turns that had a rewritten or unrepaired step form, then each kind with its count under :kinds and :left; empty when no row")
+fn repairedIn text: String -> String
+  (let [rows (filter (fn [l] (and (stringStartsWith? l "(:turn ") (stringContains? l " :shape :repaired ("))) (stringSplit text "\n"))
+        rep (shapeKinds rows ":repaired")
+        left (shapeKinds rows ":left")]
+    (if (listEmpty? rows) ""
+      (str " :repaired (:turns " (stringFromInt64 (listLength rows)) " :kinds (" (tallyKinds rep) ") :left (" (tallyKinds left) "))")))
 
 fn malformedStreakOf st: ls/LoopState -> Int64
   st.malformedStreak
@@ -2316,7 +2358,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                     ra.timeout none run.session none) ra.net)
                   parseDefect (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
-                  malformedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw)))
+                  unnamedNow (unnamedOnly? operations)
+                  malformedNow (or unnamedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw))))
+                  _shapeRow (match (shapeRow turn clean.shapeRepaired clean.shapeLeft) ((some row) (ok? (fileAppend path row))) ((none) true))
                   malformedStreak (if malformedNow (+ 1 (malformedStreakOf state)) 0)
                   malformedStop (and malformedNow (>= malformedStreak 2))
                   gateMin (wallSetting (ac/configText! rootDir) ":wallGateMinSec" (defaultWallGateMinSec))
@@ -2359,7 +2403,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   rereadOnly (and (> rereadN 0) (and (not wrote) (and (= rereadN (listLength operations)) (listAll? (fn [o] (= (liveOpName o) "read")) operations))))
                   rereadSeenN (if (> rereadN 0) (+ rereadN (rereadSeen (listReverse wrapped.history))) 0)
                   _rereadRow (if (> rereadN 0) (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :reread :n " (stringFromInt64 rereadN) " :seen " (stringFromInt64 rereadSeenN) ")\n"))) true)
-                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" (pairFirst reread))) (if (ctx/rereadAskDue rereadSeenN rereadN) (str "\n" (ctx/rereadAsk rereadSeenN ra.owns)) "") (if (> (+ droppedOps facts.repeated) 0) (str "\n" (duplicateOpsNote (+ droppedOps facts.repeated))) "") (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (malformedHint)) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
+                  got (str normalized (if (stringEmpty? opReceipts) "" (str "\n" (pairFirst reread))) (if (ctx/rereadAskDue rereadSeenN rereadN) (str "\n" (ctx/rereadAsk rereadSeenN ra.owns)) "") (if (> (+ droppedOps facts.repeated) 0) (str "\n" (duplicateOpsNote (+ droppedOps facts.repeated))) "") (if (stringEmpty? poolAsks) "" (str "\n" poolAsks)) (if (and malformedNow (not malformedStop)) (str "\n" (if unnamedNow (unnamedHint) (malformedHint))) "") (if (= repeats (- (repeatFailureCap) 1)) (str "\n" (repeatHint opReceipts repeats)) ""))
                   gateLeft (wallLeft env.wallBudget (- (env.now) state.runStarted))
                   wantGates (not (or parseDefect (unchangedTurn? (map liveOpName operations) wrote)))
                   wallStop (or gateOpStop (and wantGates (and (not (listEmpty? ra.gates)) (wallTooShort? gateLeft gateMin))))
@@ -2432,17 +2476,22 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                       (and (listAny? (fn [p] (c/checkOwns p (c/effectiveOwns ra.owns) rootDir)) (listAppend executed.state.writtenFiles (rl/writtenPaths executed.written)))
                         (redBefore? ra.gates (baselineRanWith? (some? env.resume) (ac/configText! rootDir) (resultOr (fileReadString path) "") ra.gates) state.baselineGreen state.allGateResults)))))))))
                   terminalModel (or findingsDelivery (and gatesGreen (and (or done gatesTerminal) patchReady)))
-                  heldBefore (if greenCandidate (heldRounds (resultOr (fileReadString path) "")) 0)
+                  heldBefore (if (or greenCandidate terminalModel) (heldRounds (resultOr (fileReadString path) "")) 0)
                   heldCap (gi/gateVacuousRounds (ac/configText! rootDir))
                   heldOpen (and greenCandidate (< heldBefore heldCap))
                   integrityCheck (if (and (or terminalModel heldOpen) (not (listEmpty? ra.gates)))
                     (gi/gateIntegrityWithin! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)))
                     (pair true "not required"))
                   greenClose (and heldOpen (and patchReady (pairFirst integrityCheck)))
-                  heldForm (if (and heldOpen (not greenClose)) (gi/vacuousRetry integrityCheck heldBefore heldCap) none)
+                  ; (:m :ref LEON-WRITE-FAIL-TOP :do "WRITER-GATE-VACUOUS for a finished turn, the main.asl hunk it left open: node2 2026-11-17 had 18 of 136 write stages fail gateIntegrity, three at turn 1 on a tree a lower rung left green; a finished turn whose revert check finds a gate green without the change, or a written fn no gate reaches (gateUnwired, the same retry as UNWIRED-AS-RETRY-ROUND), gets that form back and goes on, under the same gateVacuousRounds cap as a held green close; past the cap, or for any other integrity cause, it fails as before")
+                  doneHeldForm (if (and terminalModel (and (not heldOpen) (and (not findingsDelivery) (and (not (listEmpty? ra.gates)) (not (pairFirst integrityCheck))))))
+                    (gi/vacuousRetry integrityCheck heldBefore heldCap) none)
+                  doneHeld (some? doneHeldForm)
+                  _doneHeldRow (if doneHeld (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :greenDoneHeld :reason \"the finished turn's gates are green but the gate integrity check sends it back (a gate passes with the change reverted, or a written fn no gate reaches): " (c/escapeAsn (pairSecond integrityCheck)) "; the run goes on\")\n"))) true)
+                  heldForm (if doneHeld doneHeldForm (if (and heldOpen (not greenClose)) (gi/vacuousRetry integrityCheck heldBefore heldCap) none))
                   _heldRow (if (and heldOpen (not greenClose)) (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :greenDoneHeld :reason \"every gate is green after a write inside :owns but the gate integrity check fails: " (c/escapeAsn (pairSecond integrityCheck)) "; the run goes on\")\n"))) true)
                   _greenRow (if greenClose (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :greenDone :reason \"every gate is green after a write inside :owns and a gate was red before; the run closes without (:done)\")\n"))) true)
-                  terminal (or terminalModel greenClose)
+                  terminal (or (and terminalModel (not doneHeld)) greenClose)
                   historyEntry (fn [text] (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr text))
                       (pair "ops" (j/jstr turnOpNames)) (pair "files" (j/jstr turnOpFiles)) (pair "gates" (j/jstr turnGateSummary)) (pair "wrote" (j/jstr (if wrote "1" "0"))))))
                   escalateForm (optionOr (modelEscalationReceipt operations) "")
@@ -2506,7 +2555,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   doneStop (and doneOnly (>= doneStreak (ctx/doneNoWriteTurnsFor! rootDir)))
                   doneReason (str "the reply was only done " (stringFromInt64 doneStreak) " turns in a row with nothing written and the run not finished")
                   _ (if doneStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :doneNoWrite :reason \"" doneReason "\")\n"))) true)
-                  malformedReason (str "the reply held no parseable step " (stringFromInt64 malformedStreak) " times in a row, only a broken tool-call wrapper")
+                  malformedReason (if unnamedNow
+                    (str "no step of the reply named an op " (stringFromInt64 malformedStreak) " times in a row")
+                    (str "the reply held no parseable step " (stringFromInt64 malformedStreak) " times in a row, only a broken tool-call wrapper"))
                   _ (if malformedStop (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :signal :malformedReply :alias \"" (c/escapeAsn (optionOr (servedAlias response.meta) "")) "\" :reason \"" malformedReason "\")\n"))) true)
                   repeatStop (and (not terminal) (>= repeats (repeatFailureCap)))
                   repeatReason (str "the same reply failed and changed nothing " (stringFromInt64 repeats) " turns in a row")
@@ -2702,7 +2753,8 @@ fn ! liveResult ls: LiveSession result: ls/RunResult -> MainResult
   (let [base (loopResultOf ls.ra ls.rootDir result (liveJournalUsage! ls.rootDir result.journal) (liveLastStep! ls.rootDir result.journal))
         served (liveServed! ls.rootDir result.journal)
         reads (liveReads! ls.rootDir result.journal)
-        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served) :reads (pairFirst reads) :streak (pairSecond reads))
+        repaired (match result.journal ((some p) (repairedIn (resultOr (fileReadString (pyJoin ls.rootDir p)) ""))) ((none) ""))
+        receipt (with base :servedAlias (pairFirst served) :servedModel (pairSecond served) :reads (pairFirst reads) :streak (pairSecond reads) :repaired repaired)
         exit (liveExitCode receipt)
         _bus (emitBus! ls.ra ls.rootDir receipt exit)]
     (MainResult :stdout (formatReceipt receipt) :exitCode exit))

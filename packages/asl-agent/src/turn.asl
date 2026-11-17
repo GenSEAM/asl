@@ -12,7 +12,9 @@
   (:f missingRaw (List String))
   (:f unfenced Int64)
   (:f facts r/ReplyFacts)
-  (:f repair (Option r/AutoRepair)))
+  (:f repair (Option r/AutoRepair))
+  (:f shapeRepaired (List String))
+  (:f shapeLeft (List String)))
 
 fn fenceCount s: String i: Int64 -> Int64
   (match (stringIndexOf (optionOr (stringSlice s i (stringLength s)) "") "```")
@@ -55,7 +57,9 @@ fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
         bound (r/bindRawBlocks capText)
         unraw bound.text
         fences (/ (fenceCount unraw 0) 2)
-        plain (r/unfence unraw)
+        ; (:m :ref LEON-WRITE-FAIL-TOP :do "step shapes are made canonical after raw blocks are bound and fences dropped, so written content already sits in strings the scan skips")
+        shape (tc/canonSteps (r/unfence unraw))
+        plain shape.text
         facts0 (r/replyFacts plain declared)
         hasOps (not (listEmpty? facts0.ops))
         otherDefect (or (some? facts0.cut) (some? (r/locateParseFailure plain)) (r/hasUnclosedForm plain))
@@ -82,4 +86,5 @@ fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
                :degenerateRepeats (match deg ((some p) (pairSecond p)) ((none) 0))
                :capBytes (pairSecond capped) :rawBlocks bound.count
                :missingRaw (map (fn [p] (str (pairFirst p) " " (pairSecond p))) bound.missing)
-               :unfenced fences :facts facts :repair repaired))
+               :unfenced fences :facts facts :repair repaired
+               :shapeRepaired shape.repaired :shapeLeft shape.left))
