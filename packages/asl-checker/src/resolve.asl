@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [ensureIndex! packagePure! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags bareCaseOwners preludeShadows? preludeUnionForTag modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [ensureIndex! withOverride packagePure! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags bareCaseOwners preludeShadows? preludeUnionForTag modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (Pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -131,7 +131,8 @@ fn modFun m: ModuleSummary name: String -> (Option FunSummary)
 
 (schema IdxPkg (:f name String) (:f base String) (:f dir String) (:f deps (List String)))
 
-(schema ModIndex (:f root String) (:f mods (List IdxMod)) (:f pkgs (List IdxPkg)) (:f skipped Int64) (:f skippedAt String) (:f workspaces (Map String String)) (:f importers (Map String ImporterCtx)))
+; (:m :ref TEST-MUTATE :do "overrides maps the real path of one module to the real path of a stand-in for this load only (asl mutate builds a test against a mutant copy); resolveImport! answers the stand-in wherever the module resolves, so the stand-in path, never the original one, enters every cache key downstream")
+(schema ModIndex (:f root String) (:f mods (List IdxMod)) (:f pkgs (List IdxPkg)) (:f skipped Int64) (:f skippedAt String) (:f workspaces (Map String String)) (:f importers (Map String ImporterCtx)) (:f overrides (Map String String)))
 
 (schema Cand (:f path String) (:f name String))
 
@@ -150,7 +151,7 @@ fn modFun m: ModuleSummary name: String -> (Option FunSummary)
 (schema ImportPass (:f imports (Map String String)) (:f targets (List String)) (:f unresolved (List String)) (:f index ModIndex))
 
 fn emptyModIndex -> ModIndex
-  (ModIndex :root "" :mods (list) :pkgs (list) :skipped 0 :skippedAt "" :workspaces (mapEmpty) :importers (mapEmpty))
+  (ModIndex :root "" :mods (list) :pkgs (list) :skipped 0 :skippedAt "" :workspaces (mapEmpty) :importers (mapEmpty) :overrides (mapEmpty))
 
 fn byteAt s: String i: Int64 -> String
   (if (< i 0) "" (optionOr (stringSlice s i (+ i 1)) ""))
@@ -323,7 +324,7 @@ fn ! walkDir! dir: String depth: Int64 ix: ModIndex -> ModIndex
 fn ! ensureIndex! root: String ix: ModIndex -> ModIndex
   (if (= ix.root root) ix
     (let [(built (walkDir! root 0 (with ix :root root :mods (list) :pkgs (list) :skipped 0 :skippedAt "")))]
-      (ModIndex :root root :mods (listReverse built.mods) :pkgs (listReverse built.pkgs) :skipped built.skipped :skippedAt built.skippedAt :workspaces built.workspaces :importers built.importers)))
+      (ModIndex :root root :mods (listReverse built.mods) :pkgs (listReverse built.pkgs) :skipped built.skipped :skippedAt built.skippedAt :workspaces built.workspaces :importers built.importers :overrides ix.overrides)))
 
 fn addCands c: (List Cand) more: (List Cand) -> (List Cand)
   (fold (fn [(acc (List Cand)) (x Cand)] -> (List Cand) (if (listAny? (fn [(y Cand)] -> Bool (= y.path x.path)) acc) acc (listAppendOne acc x))) c more)
@@ -523,7 +524,17 @@ fn ! importerCtx! importer: String ix: ModIndex -> (Pair ImporterCtx ModIndex)
                     (c (ImporterCtx :ctx ctx :outer (if (stringEmpty? ctx.nearest) "" (optionOr (realPath! ctx.outer) ""))))]
                 (pair c (with ix :importers (mapSet ix.importers raw c)))))))
 
+; (:m :ref TEST-MUTATE :do "a module that resolves to a path the index overrides resolves to its stand-in; only a found module is replaced, so an override never makes a missing import resolve")
 fn ! resolveImport! importer: String imp: String ix0: ModIndex -> Resolution
+  (let [(r (resolveImportPlain! importer imp ix0))]
+    (match r.status
+      ((resOk) (match (mapGet r.index.overrides r.path) ((some p) (with r :path p)) ((none) r)))
+      (_ r)))
+
+fn withOverride ix: ModIndex from: String to: String -> ModIndex
+  (with ix :overrides (mapSet ix.overrides from to))
+
+fn ! resolveImportPlain! importer: String imp: String ix0: ModIndex -> Resolution
   (let [(ups (countUps imp 0)) (q (sliceFrom imp (* 3 ups)))]
     (if (importTooLong? imp) (missingRes (str " is " (stringLength imp) " bytes, at or over the " (importPathMax) "-byte PATH_MAX") ix0)
     (if (listAny? badSegment? (stringSplit q "/")) (missingRes " has an empty, . or .. segment after its leading ../ run" ix0)

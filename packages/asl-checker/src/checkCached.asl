@@ -1,5 +1,5 @@
 (module asl-checker/checkCached
-  :x [Cache emptyCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn! checkSourceCachedIn!]
+  :x [Cache emptyCache overrideCache stampCacheAt stampedCache! stampKeyIn! Verdict countsText checkFileCached! checkFileCachedIn! checkSourceCachedIn!]
   :i [(types :a ty) (resolve :a r) (ast :a a) (check :a chk)])
 
 ; (:m :ref CHECK-IMPORTS-HONEST :do "bodies maps the real path of each module whose body this process checked to its diagnostics, so a sweep checks a shared dependency once and every later importer counts it as summarised")
@@ -12,6 +12,10 @@
 
 fn emptyCache -> Cache
   (Cache :index (r/emptyModIndex) :bodies (mapEmpty) :stampDir "" :checkerId "")
+
+; (:m :ref TEST-MUTATE :do "a check where each key of overrides (a real module path) resolves to its stand-in, with no stamps: a verdict reached through a stand-in is never written where a check of the original would find it")
+fn overrideCache overrides: (Map String String) -> Cache
+  (Cache :index (fold (fn [(ix r/ModIndex) (k String)] -> r/ModIndex (r/withOverride ix k (mapGetOr overrides k k))) (r/emptyModIndex) (mapKeys overrides)) :bodies (mapEmpty) :stampDir "" :checkerId "")
 
 fn stampCacheAt dir: String checkerId: String -> Cache
   (Cache :index (r/emptyModIndex) :bodies (mapEmpty) :stampDir dir :checkerId checkerId)

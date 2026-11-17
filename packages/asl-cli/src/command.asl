@@ -17,6 +17,7 @@ fn helpText -> String
        "  check <file|--all>  Balance, then asl-host check for .asl (names, arity, enums); --all: every tracked file, bare is refused\n"
        "  heal <file>         Repair generated ASL with the named heal rules; a file that already checks is unchanged\n"
        "  test <file|dir|--all> Run suites, --all runs every suite and bare is refused; --changed [BASE] selects impacts (default main), --dry-run lists without execution; FILE takes --only NAME (one test fn), --keep-going (every failure), --wall S, --max-rss MB, --stats (a :testRun receipt)\n"
+       "  mutate <file> --symbol S --test T  Mutants of fn S (comparison, literal, operand, and/or, not, if-condition changes) run against T built over a hidden copy; FILE is never written; --max N (50), --wall S, --ops a,b, --jobs 1|2; exit 1 when one survived\n"
        "  repair <file...>    Repair unbalanced delimiters in place; --check reports without writing; does not re-indent\n"
        "  parse <file>        Count top-level forms on asl-host\n"
        "  eval [--native] <expr> Host evaluates expressions and echoes (:keyword ...) as ASN data; --native evaluates a single Int64 expression only\n"

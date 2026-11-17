@@ -308,6 +308,8 @@
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#linkWith!" :text "Load the closure of the entry file and link it against the given prelude file.")
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#linkEntry!" :text "Load the closure of the entry file and link it against the host prelude at preludePath.")
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#linkEntryWith!" :text "linkEntry! with the closure loaded by loadClosureWith! against the module index ix.")
+(:doc :symbol "asl/packages/asl-ir/src/link.asl#loadClosureOver!" :text "loadClosure! with each key of overrides (a real module path) resolved to its value, the stand-in asl mutate builds against; the stand-in unit keeps its own path.")
+(:doc :symbol "asl/packages/asl-ir/src/link.asl#linkEntryOver!" :text "linkEntry! with the closure loaded by loadClosureOver!.")
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#linkWithBare!" :text "linkUnitsWithBareEntry against the given entry file and prelude file.")
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#linkEntryBare!" :text "Load the closure of the entry file and link it against the host prelude at preludePath, as linkEntry! does, but the entry module's own declarations stay unqualified and its diagnostic positions stay bare (no source path prefix); used by emitLlvmSource (LOWERPQ) so a caller passing a bare source string keeps the entry names and locus format it always has, while the prelude and any real file-based imports it names now resolve through the usual closure instead of being rejected.")
 (:doc :symbol "asl/packages/asl-ir/src/link.asl#preludeUnitOf" :text "The prelude source as a LinkUnit located at preludePath; err when it does not parse or has no module header.")

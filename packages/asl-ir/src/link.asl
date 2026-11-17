@@ -1,4 +1,4 @@
-(module asl-ir/link :x [LinkUnit LinkAcc elaborateUnits loadClosure! loadClosureWith! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r) (asl-checker/check :a chk)])
+(module asl-ir/link :x [LinkUnit LinkAcc elaborateUnits loadClosure! loadClosureWith! loadClosureOver! linkEntryOver! linkEntryWith! linkUnits linkWith! linkEntry! linkWithBare! linkEntryBare! lowerSourceWith lowerSourceLinked! preludePath lowerPrelude importForms firstByName firstRecordByName allFunctions emptyUnit nativeOverlayDir overlayUnit! overlayUnitAt! linkUnitsWith linkUnitsWithBareEntry rewriteModuleBuiltins rewriteModuleBuiltinsAgainst definedNames functionBuiltinRefs] :i [(asl-ir/types :a ty) (asl-ir/lower :a low) (asl-ir/verify :a vfy) (asl-parser/ast :a ast) (asl-checker/resolve :a r) (asl-checker/check :a chk)])
 
 (schema LinkUnit
   (:f path String)
@@ -151,6 +151,16 @@ fn entryDiags units: (List LinkUnit) -> (List ty/IrDiag)
 
 fn ! loadClosure! entryPath: String -> (Result (List LinkUnit) (List ty/IrDiag))
   (loadClosureWith! entryPath (r/emptyModIndex))
+
+; (:m :ref TEST-MUTATE :do "a load and a link where each key of overrides (a real module path) resolves to its value instead, the stand-in asl mutate builds against; the stand-in unit keeps its own path, so nothing downstream can key it as the original")
+fn overrideIndex overrides: (Map String String) -> r/ModIndex
+  (fold (fn [(ix r/ModIndex) (k String)] -> r/ModIndex (r/withOverride ix k (optionOr (mapGet overrides k) k))) (r/emptyModIndex) (mapKeys overrides))
+
+fn ! loadClosureOver! entryPath: String overrides: (Map String String) -> (Result (List LinkUnit) (List ty/IrDiag))
+  (loadClosureWith! entryPath (overrideIndex overrides))
+
+fn ! linkEntryOver! entryPath: String overrides: (Map String String) -> (Result ty/SsaModule (List ty/IrDiag))
+  (linkEntryWith! entryPath (overrideIndex overrides))
 
 fn ! loadClosureWith! entryPath: String ix: r/ModIndex -> (Result (List LinkUnit) (List ty/IrDiag))
   (let [(st (visit! (LoadState :units (list) :seen (mapEmpty) :diags (list) :index ix) entryPath))

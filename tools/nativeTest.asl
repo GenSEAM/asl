@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareTestMutant! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -1097,8 +1097,16 @@ fn ! unitKeyIn root: String fp: String opt: String u: lk/LinkUnit ifaceMap: (Map
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "an ephemeral slot keeps only the objects of transient text (-e, -, eval) and of an entry whose closure holds such text; a script's entry object goes to the shared module cache, content-addressed and swept like any other")
 fn ! slotObject? slot: String u: lk/LinkUnit units: (List lk/LinkUnit) isEntry: Bool -> Bool
   (and (ephemeralSlot? slot)
-       (or (transientSource? u.path)
-           (and isEntry (not (listEmpty? (filter (fn [(x lk/LinkUnit)] -> Bool (transientSource? x.path)) units))))))
+       (or (slotSource? u.path)
+           (and isEntry (not (listEmpty? (filter (fn [(x lk/LinkUnit)] -> Bool (slotSource? x.path)) units))))))
+
+; (:m :ref TEST-MUTATE :do "a mutant copy .STEM.mut.PID.N.asl is transient text too: its object and the entry built over it stay in the ephemeral slot and go with it")
+fn slotSource? path: String -> Bool
+  (or (transientSource? path) (mutantCopy? path))
+
+fn mutantCopy? path: String -> Bool
+  (let [(base (optionOr (listLast (stringSplit path "/")) path))]
+    (and (stringStartsWith? base ".") (and (stringContains? base ".mut.") (stringEndsWith? base ".asl"))))
 
 fn hitResult path: String objPath: String refs: (List String) -> ModCompileResult
   (ModCompileResult :path path :ok true :obj objPath :recompiled false
@@ -1856,6 +1864,20 @@ fn ! freshRejection! actualPath: String logicalPath: String key: (Option String)
                 ((none) ())))]
        (if (listEmpty? diags) (none) (some body)))))
 
+; (:m :ref TEST-MUTATE :do "under an override the check runs uncached and unstamped (ccd/overrideCache) and its verdict is never stored: the verdict key digests the original closure, so a stored mutant verdict would be found by the next plain run")
+fn ! checkerRejectionOver! actualPath: String logicalPath: String fp: String ovr: (Map String String) -> (Option String)
+  (if (= (mapSize ovr) 0)
+    (checkerRejection! actualPath logicalPath fp)
+    (match (pairFirst (ccd/checkFileCached! actualPath (checkRootsForNative) (ccd/overrideCache ovr)))
+      ((err e) (some (str logicalPath ":0:0: ERR_IO " e)))
+      ((ok verdict) (if (listEmpty? verdict.diags) (none) (some (stringReplace (verify/formatDiagsHinted! verdict.diags) actualPath logicalPath))))))
+
+fn ! closureOver! wrapper: String ovr: (Map String String) -> (Result (List lk/LinkUnit) (List irTy/IrDiag))
+  (if (= (mapSize ovr) 0) (lk/loadClosure! wrapper) (lk/loadClosureOver! wrapper ovr))
+
+fn ! linkOver! wrapper: String ovr: (Map String String) -> (Result irTy/SsaModule (List irTy/IrDiag))
+  (if (= (mapSize ovr) 0) (lk/linkEntry! wrapper) (lk/linkEntryOver! wrapper ovr))
+
 fn ! rcRuntime! rc: String -> (Result (Pair String (List String)) String)
   (let [(root (toolRoot))
         (plain (toolPath "asl/host/out/libaslrt.a"))
@@ -1893,7 +1915,7 @@ fn ! linkWhole! slot: String bin: String ll: String deps: (List String) libFlags
            (Built :binary (some bin) :reason "" :cache "miss" :recompiled deps :reused (list)
                   :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 t2)))))))
 
-fn ! compileWhole! cDir: String path: String src: String slot: String key: String mode: String rc: String only: String -> Built
+fn ! compileWhole! cDir: String path: String src: String slot: String key: String mode: String rc: String only: String ovr: (Map String String) -> Built
   (let [(wrapper (str (wrapperDirIn cDir) "/" key ".asl"))
         (bin (str slot "/" mode))
         (ll (str slot "/" mode ".ll"))
@@ -1909,11 +1931,11 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
                                    (wrapperSource (importPathOf path) e (mainTakesArgs src))))
             ((err e2) (unbuilt (str "cannot write " wrapper ": " e2)))
             ((ok _)
-             (match (lk/loadClosure! wrapper)
+             (match (closureOver! wrapper ovr)
                ((err ds) (uncachedFailure (loadFailure ds) (list)))
                ((ok units)
                 (let [(deps (closureDeps units key))]
-                  (match (lk/linkEntry! wrapper)
+                  (match (linkOver! wrapper ovr)
                     ((err ds) (storeFallback slot deps (loadFailure ds) (list)))
                     ((ok m)
                      (match (nat/emitLlvmProgramNativeWith! m (str m.name ".main") rc)
@@ -1928,17 +1950,17 @@ fn ! compileWhole! cDir: String path: String src: String slot: String key: Strin
                                ((ok libFlags) (linkWhole! slot bin ll deps libFlags t0 t1))))))))))))))))))))
 
 fn ! compileIn cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String -> Built
-  (compileInWith 0 cDir path actualPath src slot key fp mode "")
+  (compileInWith 0 cDir path actualPath src slot key fp mode "" (mapEmpty))
 
-fn ! compileInWith cap: Int64 cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String only: String -> Built
-  (match (if (or (= mode "test") (= mode "run")) (checkerRejection! actualPath path fp) (none))
+fn ! compileInWith cap: Int64 cDir: String path: String actualPath: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) -> Built
+  (match (if (or (= mode "test") (= mode "run")) (checkerRejectionOver! actualPath path fp ovr) (none))
     ((some body) (Built :binary (none) :reason body :cache "checker-reject" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((none)
      (if (= mode "eval")
-       (compileSeparate! cap cDir path src slot key fp mode only)
+       (compileSeparate! cap cDir path src slot key fp mode only ovr)
        (match (rcModeFor! path)
          ((err e) (storeFallback slot (list path) e (list)))
-         ((ok rc) (if (= rc "0") (compileSeparate! cap cDir path src slot key fp mode only) (compileWhole! cDir path src slot key mode rc only)))))))
+         ((ok rc) (if (= rc "0") (compileSeparate! cap cDir path src slot key fp mode only ovr) (compileWhole! cDir path src slot key mode rc only ovr)))))))
 
 ; (:m :ref RUN-ENTRY-REBUILD-COST :do "the link of a separate build, shared by the compiling path and the all-cached path: the prelude object, the unit objects in closure order and the runtime archive")
 fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String unitResults: (List ModCompileResult) darwin: Bool facts: (Option libc/TripleFacts) t0: Int64 t1: Int64 t2: Int64 -> Built
@@ -1968,7 +1990,7 @@ fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String 
                 :recompiled recompiled :reused reused
                 :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 tClang0)))))))
 
-fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String -> Built
+fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) -> Built
   (let [(entry (if (not (stringEmpty? only)) (some only) (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src))))
         (wrapper (if (= mode "eval") path (str (wrapperDirIn cDir) "/" key ".asl")))
         (bin (str slot "/" mode))]
@@ -1988,7 +2010,7 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
                ((err err3) (Built :binary (none) :reason (str "cannot create " (modulesDirIn cDir) ": " err3) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
                ((ok _)
                 (let [(tA (monotonicNs))
-                      (uA (lk/loadClosure! wrapper))]
+                      (uA (if (= mode "eval") (lk/loadClosure! wrapper) (closureOver! wrapper ovr)))]
                  (match (cachedLink! cDir fp (optLevelFor mode) slot bin key uA tA)
                   ((some b) b)
                   ((none)
@@ -2218,7 +2240,7 @@ fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String 
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "")))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "" (mapEmpty))))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2235,7 +2257,7 @@ fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String f
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only)))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only (mapEmpty))))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2244,6 +2266,25 @@ fn ! prepareTestSource actualPath: String logicalPath: String fp: String -> Buil
 
 fn ! prepareTestSelected actualPath: String logicalPath: String fp: String only: String -> Built
   (prepareSourceSelectIn (cacheDir!) actualPath logicalPath fp "test" only)
+
+; (:m :ref TEST-MUTATE :do "asl mutate builds the suite at actualPath with the module at real path original resolved to the mutant copy standIn, into an ephemeral slot the caller made with mutantSlot! and removes after the run: no slot of the store is looked up or filled, the check is uncached, workers are off (cap 1, so no process loads the closure without the override), and every object key carries the copy's path, so no artifact of a mutant can be found by a build of the original")
+fn ! prepareTestMutant! actualPath: String logicalPath: String fp: String original: String standIn: String slot: String -> Built
+  (let [(cDir (cacheDir!))]
+    (match (fileReadString actualPath)
+      ((err _) (unbuilt (str "cannot read " actualPath)))
+      ((ok src) (let [(key (slotKey (str "test#mutant:" (importPathOf logicalPath) ":" slot) (fileDigest standIn)))]
+                  (match (dirCreate slot)
+                    ((err e) (unbuilt (str "cannot create " slot ": " e)))
+                    ((ok _) (dropWrapperIn cDir key (compileInWith 1 cDir logicalPath actualPath src slot key fp "test" "" (mapSet (mapEmpty) original standIn)))))))))
+
+fn ! mutantSlot! -> String
+  (ephemeralSlotIn! (cacheDir!))
+
+; (:m :ref TEST-MUTATE :do "whether the module at real path target is in the import closure of entryPath, loaded as a build would load it; asl mutate refuses a FILE outside it, since every mutant of it would survive")
+fn ! closureHolds! entryPath: String target: String -> (Result Bool String)
+  (match (lk/loadClosure! entryPath)
+    ((err ds) (err (loadFailure ds)))
+    ((ok units) (ok (listAny? (fn [(u lk/LinkUnit)] -> Bool (= (resultOr (realPath u.path) u.path) target)) units))))
 
 fn ! prepare path: String fp: String -> Built
   (prepareIn (cacheDir!) path fp "test")

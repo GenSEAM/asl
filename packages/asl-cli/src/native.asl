@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main pruneStaleStaged!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/cacheFallback :a cf) (asl/packages/asl-cli/src/command :a cmd) (asl/packages/asl-remote/src/target :a rt) (asl-tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel) (asl/packages/asl-cli/src/verify :a verify) (asl-checker/checkCached :a cc) (asl-checker/types :a ty) (asl-checker/resolve :a ckr) (asl-tools/agentSurfaceAudit :a tsa) (asl-pack/pkgCli :a pkg) (asl-tools/fleet/jobserver :a js) (asl-cli/mutate :a mu)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -911,6 +911,201 @@ fn ! testRun! ctx: sys/Context args: (List String) dir: String opts: TestOpts ->
                     ((selectionRefused? opts (optionOr (listHead selected) "")) 2)
                     (else (suites! ctx selected opts)))))))))
 
+; (:m :ref TEST-MUTATE :do "the options of asl mutate FILE --symbol S --test T [--max N] [--wall S] [--ops a,b] [--jobs 1|2]; flags keeps the option words for a re-exec at the root")
+(schema MutateOpts (:f file String) (:f symbol String) (:f test String) (:f max Int64) (:f wallS Int64) (:f ops (List String)) (:f jobs Int64) (:f flags (List String)) (:f error String))
+
+fn noMutateOpts -> MutateOpts
+  (MutateOpts :file "" :symbol "" :test "" :max 50 :wallS 0 :ops (list) :jobs 1 :flags (list) :error "")
+
+fn mutateNext o: MutateOpts a: String v: String args: (List String) -> MutateOpts
+  (mutateStep (with o :flags (listAppend o.flags (list a v))) (listDrop args 2))
+
+fn mutateOps acc: MutateOpts a: String v: String args: (List String) -> MutateOpts
+  (let [(ops (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (stringSplit v ",")))
+        (bad (filter (fn [(x String)] -> Bool (not (mu/knownOp? x))) ops))]
+    (if (listEmpty? bad)
+      (mutateNext (with acc :ops ops) a v args)
+      (with acc :error (str "--ops names unknown operators " (stringJoin bad ",") "; known: " (stringJoin (mu/opNames) ",")))))
+
+fn mutateStep acc: MutateOpts args: (List String) -> MutateOpts
+  (match (listHead args)
+    ((none) acc)
+    ((some a)
+      (let [(v (optionOr (listGet args 1) ""))
+            (n (optionOr (stringToInt64 v) 0))]
+        (cond
+          ((not (stringEmpty? acc.error)) acc)
+          ((and (listContains? (list "--symbol" "--test" "--ops" "--max" "--wall" "--jobs") a) (or (stringEmpty? v) (stringStartsWith? v "-"))) (with acc :error (str a " needs a value")))
+          ((= a "--symbol") (mutateNext (with acc :symbol v) a v args))
+          ((= a "--test") (mutateNext (with acc :test v) a v args))
+          ((= a "--ops") (mutateOps acc a v args))
+          ((= a "--max") (if (< n 1) (with acc :error (str "--max needs a whole number above 0, got " v)) (mutateNext (with acc :max n) a v args)))
+          ((= a "--wall") (if (or (< n 1) (> n (nt/maxWallS))) (with acc :error (str "--wall needs a whole number of seconds from 1 to 7200, got " v)) (mutateNext (with acc :wallS n) a v args)))
+          ((= a "--jobs") (if (or (< n 1) (> n 2)) (with acc :error (str "--jobs takes 1 or 2, got " v)) (mutateNext (with acc :jobs n) a v args)))
+          ((stringStartsWith? a "-") (with acc :error (str "unknown option " a)))
+          ((not (stringEmpty? acc.file)) (with acc :error (str "one FILE only, got " acc.file " and " a)))
+          (else (mutateStep (with acc :file a) (listDrop args 1)))))))
+
+fn mutQuote v: String -> String
+  (str "\"" (stringReplace (stringReplace (stringReplace v "\\" "\\\\") "\"" "\\\"") "\n" " ") "\"")
+
+fn ! mutateUsage! message: String -> Int64
+  (do (sys/say! (str "(:mutate :status :failed :error ERR_USAGE :message " (mutQuote (str "asl mutate FILE --symbol S --test T [--max N] [--wall S] [--ops a,b] [--jobs 1|2]: " message)) ")")) 2)
+
+fn ! mutateFail! code: String message: String -> Int64
+  (do (sys/say! (str "(:mutate :status :failed :error " code " :message " (mutQuote message) ")")) 2)
+
+; (:m :ref TEST-MUTATE :do "asl mutate FILE --symbol S --test T: each single-site mutant of fn S (asl-cli/mutate) is written as a hidden copy beside FILE and T is built with FILE's module resolved to that copy (nt/prepareTestMutant!), so FILE itself is only ever read; T must be green on the original first and FILE must be in T's closure; exit 0 when no mutant survived, 1 when one did, 2 on a usage, baseline or closure error")
+fn ! mutate! ctx: sys/Context args: (List String) -> Int64
+  (let [(o (mutateStep (noMutateOpts) args))]
+    (cond
+      ((not (stringEmpty? o.error)) (mutateUsage! o.error))
+      ((or (stringEmpty? o.file) (or (stringEmpty? o.symbol) (stringEmpty? o.test))) (mutateUsage! "FILE, --symbol and --test are required"))
+      ((not (sys/isFile? o.file)) (mutateFail! "ERR_NO_FILE" (str "file not found: " o.file)))
+      ((not (sys/isFile? o.test)) (mutateFail! "ERR_NO_FILE" (str "test file not found: " o.test)))
+      ((and (not (atRoot? ctx)) (and (not (outOfRoot? ctx o.file)) (not (outOfRoot? ctx o.test)))) (reexecMutateAtRoot! ctx o))
+      ((not (sys/isFile? (str ctx.root "/asl/host/out/libaslrt.a"))) (mutateFail! "ERR_BUILD" (str ctx.root "/asl/host/out/libaslrt.a not found; run sh asl/host/build.sh")))
+      (else (mutateStaged! ctx o))))
+
+fn ! rootedFlags ctx: sys/Context flags: (List String) -> (List String)
+  (map (fn [(p (Pair Int64 String))] -> String (if (= (optionOr (listGet flags (- (pairFirst p) 1)) "") "--test") (rootRelativeArg ctx (pairSecond p)) (pairSecond p))) (enumerate flags))
+
+fn ! reexecMutateAtRoot! ctx: sys/Context o: MutateOpts -> Int64
+  (sys/execv! (listAppend (list "/bin/sh" "-c" "cd -- \"$0\" && exec \"$@\"" ctx.root (str ctx.root "/bin/asl") "mutate" (rootRelativeArg ctx o.file)) (rootedFlags ctx o.flags))
+              (list))
+
+fn ! mutateStaged! ctx: sys/Context o: MutateOpts -> Int64
+  (match (suiteRelPath! ctx o.test)
+    ((err e) (mutateFail! "ERR_BUILD" (str "cannot stage " o.test ": " e)))
+    ((ok testRel) (match (suiteRelPath! ctx o.file)
+                    ((err e) (mutateFail! "ERR_BUILD" (str "cannot stage " o.file ": " e)))
+                    ((ok fileRel) (mutateFile! ctx o testRel (resultOr (realPath (str ctx.root "/" fileRel)) (str ctx.root "/" fileRel)) (resultOr (realPath o.file) o.file))))))
+
+fn ! mutateFile! ctx: sys/Context o: MutateOpts testRel: String fileAbs: String origAbs: String -> Int64
+  (let [(src (resultOr (fileReadString fileAbs) ""))]
+    (match (mu/mutantsOf src o.symbol o.ops)
+      ((err e) (mutateFail! "ERR_UNKNOWN_SYMBOL" (str o.file ": " e)))
+      ((ok all)
+        (if (listEmpty? all)
+          (mutateFail! "ERR_NO_SITE" (str "fn " o.symbol " in " o.file " has no mutable site" (if (listEmpty? o.ops) "" (str " for --ops " (stringJoin o.ops ",")))))
+          (match (nt/closureHolds! (str ctx.root "/" testRel) fileAbs)
+            ((err e) (mutateFail! "ERR_BUILD" (str o.test " does not load: " (oneLine e))))
+            ((ok held) (if held
+                         (mutateBaseline! (MutEnv :ctx ctx :o o :testRel testRel :fileAbs fileAbs :origAbs origAbs :digest0 (nt/fileDigest origAbs) :src src :fp (nt/fingerprint) :limitS 0) (listTake all o.max))
+                         (mutateFail! "ERR_NOT_IN_CLOSURE" (str o.file " is not in the import closure of " o.test ", so every mutant would survive")))))))))
+
+(schema MutEnv (:f ctx sys/Context) (:f o MutateOpts) (:f testRel String) (:f fileAbs String) (:f origAbs String) (:f digest0 String) (:f src String) (:f fp String) (:f limitS Int64))
+
+(schema MutRun (:f exit Int64) (:f stderr String) (:f timedOut Bool) (:f ms Int64))
+
+(schema MutPrep (:f n Int64) (:f m mu/Mutant) (:f copy String) (:f slot String) (:f bin String) (:f ms Int64))
+
+(schema MutRow (:f n Int64) (:f m mu/Mutant) (:f status String) (:f ms Int64))
+
+; (:m :ref TEST-MUTATE :do "the suite binaries run as asl test FILE runs one: jobs 1 through nt/runWatched (the runner's own wall kill), jobs 2 through the fleet pool with the same wall, stderr of each in a file of its own slot")
+fn ! runBinaries! ctx: sys/Context testRel: String bins: (List String) wallS: Int64 jobs: Int64 -> (List MutRun)
+  (let [(env (nt/withEnvOverrides! (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))))
+        (cwd (suiteCwd ctx testRel))]
+    (if (<= jobs 1)
+      (map (fn [(bin String)] -> MutRun
+             (let [(w (nt/runWatched (list "nice" "-n" "15" bin) cwd (some env) wallS 0 false))]
+               (MutRun :exit w.out.exitCode :stderr w.out.stderr :timedOut (= w.killedBy "wall") :ms w.wallMs)))
+           bins)
+      (let [(errOf (fn [(bin String)] -> String (str (sys/parentOf bin) "/mutant.err")))
+            (pool (map (fn [(bin String)] -> run/Job (run/job (list "/bin/sh" "-c" "exec nice -n 15 \"$0\" 2>\"$ASL_MUTANT_ERR\"" bin) (optionOr cwd ctx.root) (cons (str "ASL_MUTANT_ERR=" (errOf bin)) env))) bins))
+            (done (run/runPoolLimited pool jobs (run/limits wallS 64)))]
+        (map (fn [(p (Pair String run/Done))] -> MutRun
+               (MutRun :exit (pairSecond p).exit :stderr (resultOr (fileReadString (errOf (pairFirst p))) "") :timedOut (= (pairSecond p).verdict "timeout") :ms (pairSecond p).ms))
+             (zip bins done)))))
+
+fn ! mutateBaseline! env: MutEnv ms: (List mu/Mutant) -> Int64
+  (let [(root env.ctx.root)
+        (testAbs (str root "/" env.testRel))
+        (wallS (if (> env.o.wallS 0) env.o.wallS (nt/suiteWall (resultOr (fileReadString testAbs) ""))))
+        (built (nt/prepareTestSource testAbs env.testRel env.fp))]
+    (match built.binary
+      ((none) (mutateFail! "ERR_BASELINE_RED" (str env.o.test " does not build on the original: " (oneLine built.reason))))
+      ((some binPath)
+        (let [(bin (if (stringStartsWith? binPath "/") binPath (str root "/" binPath)))
+              (r (optionOr (listHead (runBinaries! env.ctx env.testRel (list bin) wallS 1)) (MutRun :exit 127 :stderr "no run" :timedOut false :ms 0)))
+              (v (nt/verdictOf env.o.test r.exit r.stderr))]
+          (if (or r.timedOut (!= v.exit 0))
+            (mutateFail! "ERR_BASELINE_RED" (str env.o.test " is not green on the original" (if r.timedOut (str " (over its " (stringFromInt64 wallS) " s wall)") "") ": " (oneLine v.line) "; a mutation score on a red baseline means nothing"))
+            (mutateAll! (with env :limitS (if (> env.o.wallS 0) env.o.wallS (max 10 (/ (+ (* 3 r.ms) 999) 1000)))) ms r.ms))))))
+
+fn baseName p: String -> String
+  (optionOr (listLast (stringSplit p "/")) p)
+
+fn chunked xs: (List T) k: Int64 -> (List (List T))
+  (if (listEmpty? xs) (list) (cons (listTake xs k) (chunked (listDrop xs k) k)))
+
+; (:m :ref TEST-MUTATE :do "a run killed before it removed its copies leaves .STEM.mut.PID.N.asl beside FILE; the next run removes every copy whose pid is not alive, and the store sweep removes the ephemeral slots of a dead pid")
+fn ! dropStaleMutants! dir: String -> Int64
+  (fold (fn [(n Int64) (name String)] -> Int64
+          (match (mu/mutantCopyPid name)
+            ((some pid) (if (and (!= pid (procSelf)) (not (resultOr (procAlive? pid) true))) (do (pathRemove (str dir "/" name)) (+ n 1)) n))
+            ((none) n)))
+        0 (resultOr (dirList dir) (list)))
+
+fn ! prepareMutant! env: MutEnv n: Int64 m: mu/Mutant -> MutPrep
+  (let [(t0 (monotonicNs))
+        (root env.ctx.root)
+        (copy (str (sys/parentOf env.fileAbs) "/" (mu/mutantCopyName (baseName env.fileAbs) (procSelf) n)))
+        (slot (nt/mutantSlot!))]
+    (match (fileWrite copy (mu/applyMutant env.src m))
+      ((err _) (MutPrep :n n :m m :copy copy :slot slot :bin "" :ms 0))
+      ((ok _) (let [(built (nt/prepareTestMutant! (str root "/" env.testRel) env.testRel env.fp env.fileAbs (resultOr (realPath copy) copy) slot))
+                    (spent (/ (- (monotonicNs) t0) 1000000))]
+                (match built.binary
+                  ((some b) (MutPrep :n n :m m :copy copy :slot slot :bin (if (stringStartsWith? b "/") b (str root "/" b)) :ms spent))
+                  ((none) (MutPrep :n n :m m :copy copy :slot slot :bin "" :ms spent)))))))
+
+fn ! dropMutant! x: MutPrep -> Bool
+  (let [(_ (pathRemove x.copy)) (_ (pathRemove x.slot))] true)
+
+fn ! judged env: MutEnv x: MutPrep r: MutRun -> MutRow
+  (MutRow :n x.n :m x.m :ms r.ms
+          :status (cond (r.timedOut "timeout") ((= (nt/verdictOf env.o.test r.exit r.stderr).exit 0) "survived") (else "killed")))
+
+fn ! mutateBatch! env: MutEnv b: (List (Pair Int64 mu/Mutant)) -> (List MutRow)
+  (let [(prepared (map (fn [(p (Pair Int64 mu/Mutant))] -> MutPrep (prepareMutant! env (pairFirst p) (pairSecond p))) b))
+        (runnable (filter (fn [(x MutPrep)] -> Bool (not (stringEmpty? x.bin))) prepared))
+        (runs (runBinaries! env.ctx env.testRel (map (fn [(x MutPrep)] -> String x.bin) runnable) env.limitS env.o.jobs))
+        (ran (map (fn [(q (Pair MutPrep MutRun))] -> MutRow (judged env (pairFirst q) (pairSecond q))) (zip runnable runs)))
+        (unbuilt (map (fn [(x MutPrep)] -> MutRow (MutRow :n x.n :m x.m :status "unbuildable" :ms x.ms)) (filter (fn [(x MutPrep)] -> Bool (stringEmpty? x.bin)) prepared)))
+        (_ (map dropMutant! prepared))]
+    (listSortBy (fn [(r MutRow)] -> Int64 r.n) (listAppend ran unbuilt)))
+
+fn mutantRow env: MutEnv r: MutRow -> String
+  (str "(:mutant :n " (stringFromInt64 r.n) " :site " (mutQuote (mu/siteOf env.src r.m.start)) " :op " r.m.op " :from " (mutQuote r.m.from) " :to " (mutQuote r.m.to) " :status " r.status " :ms " (stringFromInt64 r.ms) ")")
+
+; (:m :ref TEST-MUTATE :do "mutants run in batches of --jobs; each row is printed when its batch ends, and after each batch FILE must still hold the bytes it had at the start, else the run stops (exit 2), since a changed FILE makes every later verdict meaningless")
+fn ! mutateLoop! env: MutEnv batches: (List (List (Pair Int64 mu/Mutant))) acc: (List MutRow) -> (Result (List MutRow) String)
+  (match (listHead batches)
+    ((none) (ok acc))
+    ((some b) (let [(rows (mutateBatch! env b))
+                    (_ (map (fn [(r MutRow)] -> Bool (sys/say! (mutantRow env r))) rows))]
+                (if (!= (nt/fileDigest env.origAbs) env.digest0)
+                  (err (str env.o.file " changed during the run; its mutants were never written to it, so another writer did, and the verdicts are void"))
+                  (mutateLoop! env (listDrop batches 1) (listAppend acc rows))))))
+
+fn countStatus rows: (List MutRow) s: String -> Int64
+  (listLength (filter (fn [(r MutRow)] -> Bool (= r.status s)) rows))
+
+fn ! mutateAll! env: MutEnv ms: (List mu/Mutant) baselineMs: Int64 -> Int64
+  (let [(_ (dropStaleMutants! (sys/parentOf env.fileAbs)))
+        (numbered (map (fn [(p (Pair Int64 mu/Mutant))] -> (Pair Int64 mu/Mutant) (pair (+ (pairFirst p) 1) (pairSecond p))) (enumerate ms)))]
+    (match (mutateLoop! env (chunked numbered env.o.jobs) (list))
+      ((err e) (mutateFail! "ERR_ORIGINAL_CHANGED" e))
+      ((ok rows)
+        (let [(survived (filter (fn [(r MutRow)] -> Bool (= r.status "survived")) rows))
+              (_ (map (fn [(r MutRow)] -> Bool (sys/say! (str "(:survived :n " (stringFromInt64 r.n) " :site " (mutQuote (mu/siteOf env.src r.m.start)) " :line " (mutQuote (mu/lineAt env.src r.m.start)) ")"))) survived))
+              (_ (sys/say! (str "(:mutate :file " (mutQuote env.o.file) " :symbol " (mutQuote env.o.symbol) " :test " (mutQuote env.o.test)
+                                " :total " (stringFromInt64 (listLength rows)) " :killed " (stringFromInt64 (countStatus rows "killed"))
+                                " :survived " (stringFromInt64 (listLength survived)) " :timeout " (stringFromInt64 (countStatus rows "timeout"))
+                                " :unbuildable " (stringFromInt64 (countStatus rows "unbuildable")) " :baselineMs " (stringFromInt64 baselineMs) " :wallS " (stringFromInt64 env.limitS) ")")))]
+          (if (listEmpty? survived) 0 1)))))
+
 fn readCode msg: String -> String
   (if (or (or (stringStartsWith? msg "unmatched") (stringStartsWith? msg "unclosed")) (or (stringContains? msg "' closes '") (stringContains? msg "unterminated")))
     "ERR_READ_UNBALANCED"
@@ -1031,6 +1226,7 @@ fn ! dispatchRaw! ctx: sys/Context verb: String args: (List String) dir: String 
     ((not (stringEmpty? (intelAlias verb))) (intel! ctx (cons (intelAlias verb) args)))
     ((= verb "run") (run! ctx args))
     ((= verb "test") (test! ctx args dir))
+    ((= verb "mutate") (mutate! ctx args))
     ((= verb "parse") (parse! ctx args))
     ((= verb "eval") (eval! ctx args))
     ((= verb "launch") (launch! ctx args))
