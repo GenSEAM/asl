@@ -1,5 +1,5 @@
 (module asl-tools/coord/egress
-  :x [secretLike? memLike? secretPath? leaks? leaksWith? envLeak? clip unarmored scrubLinesBy scrubLines scrubText allowedPath? minEnvValueLength]
+  :x [secretLike? memLike? secretPath? leaks? leaksWith? envLeak? clip clipMarked unarmored scrubLinesBy scrubLinesByMarked scrubLines scrubText allowedPath? minEnvValueLength]
   :i [])
 
 ; (:m :ref FLOW-EGRESS :do "the one filter for text that may reach an external model: no memory content, no secret-looking text, no env values, no key files; pure, env values come in as data")
@@ -71,6 +71,17 @@ fn unarmored text: String -> (List String)
                   ((pairFirst acc) (pair (not (stringContains? s "-----end")) (pairSecond acc)))
                   (else (pair false (cons l (pairSecond acc)))))))
             (pair false (list)) (stringLines text))))
+
+; (:m :ref REVIEW-CLIP-MARK :do "a cut is never silent: a line over the width keeps its head and ends with a note naming the width and the full length, so a reader cannot take the cut for the author's text")
+fn clipMarked s: String n: Int64 -> String
+  (if (> (stringLength s) n)
+    (str (optionOr (stringSlice s 0 n) s) "…(clipped at " (stringFromInt64 n) " of " (stringFromInt64 (stringLength s)) " chars)")
+    s)
+
+fn scrubLinesByMarked leak: (fn [String] -> Bool) text: String maxLines: Int64 width: Int64 -> (List String)
+  (listTake (map (fn [(l String)] -> String (clipMarked l width))
+                 (filter (fn [(l String)] -> Bool (and (not (stringEmpty? (stringTrim l))) (not (leak l)))) (unarmored text)))
+            maxLines)
 
 fn scrubLinesBy leak: (fn [String] -> Bool) text: String maxLines: Int64 width: Int64 -> (List String)
   (listTake (map (fn [(l String)] -> String (clip l width))

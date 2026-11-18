@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -378,8 +378,129 @@ fn writeKept? stage: String sig: String -> Bool
 fn writeCounts? stage: String sig: String -> Bool
   (and (= stage "write") (not (writeKept? stage sig)))
 
-; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
+; (:m :ref COND-WRITE-REPEAT-STOP :do "the same write stop never repeats without bound: fail!'s fails count resets at every tierHop (fails 0, sig empty), so a write that stops the same way on each rung was claimed again at every hop (node2: stop gateIntegrity at :turn 1, 0 tokens, 8 s, 521 journal rows, about 27 empty runs a day). The stop key is the :stop word and the :lastStep :turn and :op of the signature, without time, model or ids; the run is the consecutive write failure rows of the unit's journal (fail:, tierHop, escalated:) with that key, a row with another key, a requeue or a reload ends it, and a failure without a :stop word is no part of any run. The run reaching n (the (:writeRepeat :n N) row of the store's ladder.asn, default 3 adopted, rule limitCycle) writes one (:witness) journal row and one escalate row and parks the unit blocked with the signature writeRepeat: Nx KEY, never claimed again until an operator requeue or reload")
+fn writeStopKey text: String -> String
+  (let [(t (stringReplace text "\\" ""))
+        (stop (sp/tokAfter t ":stop"))
+        (step (segment t ":lastStep (" ")"))]
+    (if (stringEmpty? stop) "" (str "stop " stop " step " (stringTrim step))))
+
+fn writeRepeatRowOf dir: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? (stringTrim l) "(:writeRepeat ")) (stringLines (readOr (ladderPath dir)))) "")
+
+fn writeRepeatErrors row: String -> (List String)
+  (let [(keys (filter (fn [(t String)] -> Bool (and (stringStartsWith? t ":") (!= t ":writeRepeat"))) (map (fn [(t String)] -> String (stringReplace t "(" "")) (stringSplit (stringTrim row) " "))))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":n" ":returns" ":stops") k))) keys))
+        (stp (if (not (listContains? keys ":stops")) (list)
+               (if (and (stringContains? row ":stops (") (not (listEmpty? (writeRepeatStopWords row)))) (list) (list ":stops needs a non-empty list of stop words"))))
+        (ret (if (not (listContains? keys ":returns")) (list)
+               (match (stringToInt64 (stringReplace (sp/tokAfter row ":returns") ")" ""))
+                 ((none) (list ":returns not a whole number"))
+                 ((some v) (if (or (< v 0) (> v 100)) (list (str ":returns " (n v) " outside 0..100")) (list))))))]
+    (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
+      (listAppend stp
+        (listAppend ret
+          (match (stringToInt64 (stringReplace (sp/tokAfter row ":n") ")" ""))
+            ((none) (list ":n missing or not a whole number"))
+            ((some v) (if (or (< v 1) (> v 1000)) (list (str ":n " (n v) " outside 1..1000")) (list))))))))
+
+fn writeRepeatStopWords row: String -> (List String)
+  (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim (segment row ":stops (" ")")) " "))
+
+; (:m :ref COND-WRITE-REPEAT-STOP :do "only a stop word of the deterministic list blocks (the :stops list of the (:writeRepeat) row, default gateIntegrity gateVacuous) at :turn 1, which costs no tokens and no model; every other stop, readStreak and the rest, keeps the ordinary ladder free, paid, strong, lead, since a key repeated on two rungs does not prove the model had no part; provider, wallBudget and stalled never block here even when listed; a failure without a :stop word ends a run")
+fn writeRepeatNever? stop: String -> Bool
+  (listContains? (list "provider" "wallBudget" "stalled") stop)
+
+fn writeRepeatStopsOf row: String -> (List String)
+  (if (or (stringEmpty? row) (or (not (listEmpty? (writeRepeatErrors row))) (not (stringContains? row ":stops")))) (list "gateIntegrity" "gateVacuous")
+    (writeRepeatStopWords row))
+
+fn writeKeyStop key: String -> String
+  (optionOr (listGet (stringSplit key " ") 1) "")
+
+fn writeRepeatDeterministic? row: String key: String -> Bool
+  (and (listContains? (writeRepeatStopsOf row) (writeKeyStop key)) (stringContains? (str key " ") " step :turn 1 "))
+
+fn writeRepeatBlocks? row: String key: String count: Int64 -> Bool
+  (and (not (writeRepeatNever? (writeKeyStop key)))
+       (and (>= count (writeRepeatMax row)) (writeRepeatDeterministic? row key)))
+
+fn writeRepeatMax row: String -> Int64
+  (if (or (stringEmpty? row) (not (listEmpty? (writeRepeatErrors row)))) 3
+    (optionOr (stringToInt64 (stringReplace (sp/tokAfter row ":n") ")" "")) 3))
+
+fn writeRepeatReturns row: String -> Int64
+  (if (or (stringEmpty? row) (or (not (listEmpty? (writeRepeatErrors row))) (not (stringContains? row ":returns")))) 2
+    (optionOr (stringToInt64 (stringReplace (sp/tokAfter row ":returns") ")" "")) 2))
+
+fn writeFailRow? l: String -> Bool
+  (and (stringContains? l " :stage write ")
+       (or (stringContains? l ":verdict \"fail: ") (or (stringContains? l ":verdict \"tierHop ") (stringContains? l ":verdict \"escalated: "))))
+
+fn writeRepeatRun lines: (List String) id: String key: String -> Int64
+  (let [(t (str "(:t :unit " (st/q id) " "))
+        (zero (pair 0 ""))
+        (last (fold (fn [(acc (Pair Int64 String)) (l String)] -> (Pair Int64 String)
+                      (cond
+                        ((not (stringStartsWith? l t)) acc)
+                        ((or (stringContains? l " :stage requeue ") (stringContains? l " :stage reload ")) zero)
+                        ((writeFailRow? l)
+                          (let [(k (writeStopKey l))]
+                            (cond ((stringEmpty? k) zero)
+                                  ((= k (pairSecond acc)) (pair (+ (pairFirst acc) 1) k))
+                                  (else (pair 1 k)))))
+                        ((stringContains? l ":verdict \"parked: writeRepeat: ") acc)
+                        ((and (stringContains? l " :from writing ") (not (stringContains? l ":verdict \"stalled"))) zero)
+                        (else acc)))
+                    zero lines))]
+    (if (= (pairSecond last) key) (pairFirst last) 0))
+
+fn ! writeRepeatHead! ctx: Ctx -> String
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) "" (let [(g (gitOut repo (list "rev-parse" "HEAD")))] (if (= g.exit 0) (stringTrim g.out) ""))))
+
+; (:m :ref COND-WRITE-REPEAT-STOP :do "a writeRepeat park does not stay for ever: once the head of the conductor repository differs from the :head its witness row recorded (the cause may be fixed), the blocked unit returns to ready once, journalled (:writeRepeatReturn), at most :returns times (the (:writeRepeat :n N :returns R) row, default 2 adopted) since its last requeue or reload; the failure counter is kept, so the same stop on the new head parks it again at once; the same head, a store without a repo, or no returns left leave it blocked")
+fn writeRepeatReturned lines: (List String) id: String -> Int64
+  (let [(t (str "(:t :unit " (st/q id) " "))
+        (r (str "(:writeRepeatReturn :unit " (st/q id) " "))]
+    (fold (fn [(acc Int64) (l String)] -> Int64
+            (cond ((stringStartsWith? l r) (+ acc 1))
+                  ((and (stringStartsWith? l t) (or (stringContains? l " :stage requeue ") (stringContains? l " :stage reload "))) 0)
+                  (else acc)))
+          0 lines))
+
+fn writeRepeatWitnessHead lines: (List String) id: String -> String
+  (let [(w (str "(:witness :unit " (st/q id) " :kind writeRepeat "))]
+    (fold (fn [(acc String) (l String)] -> String (if (stringStartsWith? l w) (quotedAfter l ":head \"") acc)) "" lines))
+
+fn ! writeRepeatReturn! ctx: Ctx c: CUnit jr: (List String) now: String -> Bool
+  (if (not (and (= c.st "blocked") (and (stringEmpty? c.await) (stringStartsWith? c.sig "writeRepeat: ")))) false
+    (let [(was (writeRepeatWitnessHead jr c.id))
+          (done (writeRepeatReturned jr c.id))]
+      (if (or (stringEmpty? was) (or (stringEmpty? now) (or (= was now) (>= done (writeRepeatReturns (writeRepeatRowOf ctx.dir)))))) false
+        (let [(_ (fileAppend (journalPath ctx.dir) (str "(:writeRepeatReturn :unit " (st/q c.id) " :from " (st/q was) " :to " (st/q now) " :n " (n (+ done 1)) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+              (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0) "ready" "retry" "" 0 0 (str "retry writeRepeat: head " (utf8Clip was 12) "->" (utf8Clip now 12)) 0))]
+          true))))
+
+fn ! writeRepeatPark! ctx: Ctx c: CUnit model: String sig: String ms: Int64 run: Int64 key: String -> CUnit
+  (let [(psig (str "writeRepeat: " (n run) "x " (verdictSig sig)))
+        (_ (wipSave! ctx c.id (str "writeFailed " (verdictSig sig))))
+        (_ (dropLease! ctx c))
+        (_ (fileAppend (journalPath ctx.dir) (str "(:witness :unit " (st/q c.id) " :kind writeRepeat :n " (n run) " :key " (st/q key) " :head " (st/q (writeRepeatHead! ctx)) " :at " (n (/ (nowNs) 1000000)) ")\n")))
+        (c1 (escalate! ctx (with c :sig psig :epoch 0 :await "") psig (str "the write stopped the same way " (n run) " times in a row across lanes and tier hops (limitCycle)")))]
+    (move! ctx c1 "blocked" "write" model 0 0 (str "parked: " psig) ms))
+
 fn ! fail! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit
+  (let [(key (if (and (= stage "write") (not (writeKept? stage sig))) (writeStopKey sig) ""))
+        (row (if (stringEmpty? key) "" (writeRepeatRowOf ctx.dir)))
+        (possible (and (not (stringEmpty? key)) (and (not (writeRepeatNever? (writeKeyStop key))) (writeRepeatDeterministic? row key))))
+        (run (if possible (+ (writeRepeatRun (journalLinesOf ctx.dir) c.id key) 1) 0))]
+    (if (and possible (writeRepeatBlocks? row key run))
+      (writeRepeatPark! ctx c model sig ms (min run (writeRepeatMax row)) key)
+      (failStep! ctx c stage model sig ms)))
+
+; (:m :ref CONDUCTOR :do "a stage failure releases the lease and retries from ready; the same failure signature maxSame times in a row writes one escalate row and parks the unit in blocked; WRITEESC: a write failure with a higher tier left hops the unit to that tier instead, resets the count and journals tierHop")
+fn ! failStep! ctx: Ctx c: CUnit stage: String model: String sig: String ms: Int64 -> CUnit
   (let [(climb (listContains? (list "write" "gates" "review") stage))
         (fails (cond ((poolLostSig? sig) c.fails) ((or (= (sigKey sig) (sigKey c.sig)) (writeCounts? stage sig) (and climb (or (= c.lane "paid") (= c.lane "strong")))) (+ c.fails 1)) ((writeKept? stage sig) c.fails) (else 1)))
         (_ (if (= stage "write") (wipSave! ctx c.id (str "writeFailed " (verdictSig sig))) ()))
@@ -1975,7 +2096,7 @@ fn blockedStageIn lines: (List String) id: String -> String
 fn ladderHopSig? sig: String -> Bool
   (not (or (stringEmpty? sig)
         (listAny? (fn [(p String)] -> Bool (stringStartsWith? sig p))
-                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train" "pool unreachable" "pool restarted"))))
+                  (list "waitedOut: " "review" "impossible: " "vacuousGate" "STALE" "LEDGER_FORGED" "ERR_REPO_GIT" "worktree attach" "stage run row lost" "leaseLost" "merge" "train" "pool unreachable" "pool restarted" "writeRepeat: "))))
 
 fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 jr: (List String) -> Bool
   (if (and (and (= c.st "blocked") (stringEmpty? c.await)) (and (= c.esc 1) (and (listContains? (list "free" "paid" "strong") c.lane) (and (ladderHopSig? c.sig) (= (blockedStageIn jr c.id) "write")))))
@@ -1989,11 +2110,11 @@ fn ! ladderHop! ctx: Ctx c: CUnit now: Int64 jr: (List String) -> Bool
     false)
 
 ; (:m :ref COND-RECOVER-C3 :do "the blocked-unit policy, once per tick: a blocked unit with a transient cause (transientWhy!) goes back to ready with a clean count while it has had fewer than :blockedRetryMax retries and the backoff since its last one (:retryBackoffS doubled per retry) has passed, each retry one row in retries.asn; a unit with no transient cause gets ladderHop!; on node2 2026-11-04 129 of 172 units sat blocked with only dep, lead-backlog, strong-offer and stale wakes to leave by")
-fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 max: Int64 backoffMs: Int64 jr: (List String) -> Bool
+fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 max: Int64 backoffMs: Int64 jr: (List String) hd: String -> Bool
   (if (not (and (= c.st "blocked") (stringEmpty? c.await))) false
     (let [(why (transientWhy! ctx u c leases now))]
       (if (impossibleSig? c.sig) (impossibleRecheck! ctx u c)
-      (if (stringEmpty? why) (ladderHop! ctx c (/ now 1000000) jr)
+      (if (stringEmpty? why) (or (ladderHop! ctx c (/ now 1000000) jr) (writeRepeatReturn! ctx c jr hd))
         (let [(r (retryLast! ctx.dir c.id))
               (flag (and (> max 0) (and (infraCause? why) (cdFlag! ctx.dir ":infraFree"))))
               (own (and flag (infraOwn! ctx c jr)))
@@ -2138,10 +2259,11 @@ fn ! retryBlocked! ctx: Ctx units: (List st/Task) -> Int64
             (jr (journalLinesOf ctx.dir))
             (max (blockedRetryMax ctx.dir))
             (backoffMs (* 1000 (retryBackoffS ctx.dir)))
+            (hd (if (listAny? (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (stringStartsWith? c.sig "writeRepeat: "))) (readCUnits! ctx.dir)) (writeRepeatHead! ctx) ""))
             (woken (filter (fn [(u st/Task)] -> Bool
                              (match (cuOf (readCUnits! ctx.dir) u.id)
                                ((none) false)
-                               ((some c) (or (redWake! ctx u c) (or (deadlineWake! ctx c) (retryOne! ctx u c leases now max backoffMs jr))))))
+                               ((some c) (or (redWake! ctx u c) (or (deadlineWake! ctx c) (retryOne! ctx u c leases now max backoffMs jr hd))))))
                            units))]
         (listLength woken))))
 
@@ -2470,10 +2592,11 @@ fn ! ladderProblems dir: String -> (List String)
         (fl (flowRowOf dir))
         (at (attemptsRowOf dir))
         (dw (dwellRowOf dir))
-        (rd (rdRowOf dir))]
-    (listAppend (if (stringEmpty? rd) (list) (map (fn [(p String)] -> String (str "ladder reviewDefer: " p)) (rdErrors rd))) (listAppend (if (stringEmpty? at) (list) (map (fn [(p String)] -> String (str "ladder attempts: " p)) (attemptsErrors at))) (listAppend (if (stringEmpty? dw) (list) (map (fn [(p String)] -> String (str "ladder dwell: " p)) (dwellErrors dw))) (listAppend (if (stringEmpty? fl) (list) (map (fn [(p String)] -> String (str "ladder flow: " p)) (flowErrors fl))) (listAppend (listAppend (if (stringEmpty? bp) (list) (map (fn [(p String)] -> String (str "ladder backpressure: " p)) (bpErrors bp)))
+        (rd (rdRowOf dir))
+        (wr (writeRepeatRowOf dir))]
+    (listAppend (if (stringEmpty? wr) (list) (map (fn [(p String)] -> String (str "ladder writeRepeat: " p)) (writeRepeatErrors wr))) (listAppend (if (stringEmpty? rd) (list) (map (fn [(p String)] -> String (str "ladder reviewDefer: " p)) (rdErrors rd))) (listAppend (if (stringEmpty? at) (list) (map (fn [(p String)] -> String (str "ladder attempts: " p)) (attemptsErrors at))) (listAppend (if (stringEmpty? dw) (list) (map (fn [(p String)] -> String (str "ladder dwell: " p)) (dwellErrors dw))) (listAppend (if (stringEmpty? fl) (list) (map (fn [(p String)] -> String (str "ladder flow: " p)) (flowErrors fl))) (listAppend (listAppend (if (stringEmpty? bp) (list) (map (fn [(p String)] -> String (str "ladder backpressure: " p)) (bpErrors bp)))
                             (if (stringEmpty? tr) (list) (map (fn [(p String)] -> String (str "ladder train: " p)) (trainErrors tr))))
-                (if (stringEmpty? mr) (list) (map (fn [(p String)] -> String (str "ladder mergeRed: " p)) (mergeRedErrors mr)))))))))
+                (if (stringEmpty? mr) (list) (map (fn [(p String)] -> String (str "ladder mergeRed: " p)) (mergeRedErrors mr))))))))))
 
 
 ; (:m :ref FLOW-DRAIN :do "downstream first: a (:flow :order (merge gate review fix new) :newWhen idle|always) row in the store's ladder.asn steps the units class by class in :order, each class with the slots left after the classes before it (pace tokens minus the units in flight, counted again before each class), so merge, gating and review launches and fix rounds take the slots before a first write; a class is merge (merging), gate (gating), review (awaitReview, reviewing), fix (ready or writing with a branch already written or in a merge-red fix round) or new (queued, ready or writing with no branch yet); blocked, merged and failed units step last with no slot. With :newWhen idle a new unit is admitted only while no class before new has runnable work that lacks a slot: a merging unit not launched (its train turn, a hold), a gating unit not launched, an unparked awaitReview unit, or a fix unit ready whose lane has room and that waits on no provider backoff; :newWhen always only orders. :order is a permutation of the five words (default the one shown), :newWhen defaults to always. No row, or a row flowErrors rejects, steps the units in store order with one capacity as before. (:backpressure :maxMerging N) is the special case that holds every ready unit, fix or new, while more than N units are merging, and it keeps holding in either mode")

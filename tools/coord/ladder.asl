@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines reviewBrief reviewWith review]
+  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines clip reviewDiffPart reviewDiffChars banNames doubtfulDefect? vetVerdict identWords diffBuiltins reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -25,7 +25,9 @@
   (:f writerChannel String)
   (:f startRung String)
   (:f fixesUsed Int64)
-  (:f prior (List Verdict)))
+  (:f prior (List Verdict))
+  (:f known String :default "")
+  (:f ctxTokens Int64 :default 0))
 
 (schema Ruling
   (:f action String)
@@ -330,7 +332,7 @@ fn clip s: String n: Int64 -> String
 
 ; (:m :ref COND2 :do "lines that may go to an external model: no memory contents, no secret-looking lines, bounded count and width")
 fn scrubLines text: String maxLines: Int64 width: Int64 -> (List String)
-  (eg/scrubLinesBy (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
+  (eg/scrubLinesByMarked (fn [(l String)] -> Bool (secretLike? l)) text maxLines width)
 
 ; (:m :ref REVIEW-DIFF-INCOMPLETE :do "the brief held only 60 diff lines of 200 chars, so reviewers saw half a test file or none and failed green units for missing tests and bodiless functions; 800 lines of 400 chars fits a 120k-token reviewer, and a longer diff ends with a note naming the cut lines so the reviewer does not judge code it was not shown")
 fn reviewDiffLines -> Int64
@@ -341,23 +343,55 @@ fn withheldLine -> String
 
 ; (:m :ref REVIEW-SCRUB-SILENT :do "node2 2026-11-11: the filter dropped every diff line naming token or secret, so aggRow lost its inTokens and cachedTokens lines and synDs41Flash failed THROUGHPUT-DAILY for indices it was not shown; a withheld line now leaves a marker in its place")
 fn reviewScrub diff: String maxLines: Int64 width: Int64 -> (List String)
-  (eg/scrubLinesBy (fn [(l String)] -> Bool false)
+  (eg/scrubLinesByMarked (fn [(l String)] -> Bool false)
                    (stringJoin (map (fn [(l String)] -> String (if (secretLike? l) (withheldLine) l)) (stringLines diff)) "\n")
                    maxLines width)
 
-fn reviewDiffPart diff: String -> (List String)
-  (let [(shown (reviewScrub diff (reviewDiffLines) 400))
-        (total (listLength (stringLines diff)))]
-    (if (> total (reviewDiffLines))
-      (listAppend shown (list (str "(diff clipped: " (stringFromInt64 (- total (reviewDiffLines))) " more lines not shown; do not fail on code you were not shown)")))
+; (:m :ref REVIEW-CLIP-FALSE-FAIL :do "node2 2026-11-16: every diff line was cut to 400 chars without a word, and reviewers failed green units for truncated expectedRender, missing closing parens and truncated nesting that the brief itself had cut; a line now keeps up to reviewLineWidth chars, the diff is cut by the total reviewDiffChars budget (whole lines, counted in the note), and a line still cut ends with a clipped note the brief tells the reviewer never to fail on; secrets are withheld before any clip")
+fn reviewLineWidth -> Int64
+  4000
+
+; (:m :ref REVIEW-CLIP-FALSE-FAIL :do "the diff budget follows the smaller reviewer context: reviewerContextTokens (adopted 100000, the smallest lane in use; ReviewUnit.ctxTokens overrides it), less reviewAnswerTokens (adopted 16000 for the reply, task, gates and frame), at 3 chars per token")
+fn reviewerContextTokens -> Int64
+  100000
+
+fn reviewAnswerTokens -> Int64
+  16000
+
+fn reviewDiffChars u: ReviewUnit -> Int64
+  (* 3 (- (if (> u.ctxTokens 0) u.ctxTokens (reviewerContextTokens)) (reviewAnswerTokens)))
+
+fn withinBudget lines: (List String) budget: Int64 -> (List String)
+  (match (listHead lines)
+    ((none) (list))
+    ((some l)
+      (if (> (stringLength l) budget) (list)
+        (cons l (withinBudget (listDrop lines 1) (- budget (stringLength l)))))))
+
+fn reviewDiffPart diff: String budget: Int64 -> (List String)
+  (let [(scrubbed (reviewScrub diff (reviewDiffLines) (reviewLineWidth)))
+        (shown (withinBudget scrubbed budget))
+        (total (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines diff))))
+        (hidden (+ (max 0 (- total (reviewDiffLines))) (- (listLength scrubbed) (listLength shown))))]
+    (if (> hidden 0)
+      (listAppend shown (list (str "(diff clipped: " (stringFromInt64 hidden) " more lines not shown; do not fail on code you were not shown)")))
       shown))
+
+; (:m :ref REVIEW-INVENTED-BAN :do "the prelude builtin names the diff uses, in first-seen order, at most 80; a name counts only when it is in u.known (the prelude), never because the diff or brief says it")
+fn diffBuiltins u: ReviewUnit diff: String -> (List String)
+  (let [(known (stringSplit u.known " "))]
+    (listTake (fold (fn [(acc (List String)) (w String)] -> (List String)
+                      (if (and (not (stringEmpty? w)) (and (listContains? known w) (and (not (secretLike? w)) (not (listContains? acc w))))) (listAppend acc (list w)) acc))
+                    (list) (identWords diff))
+              80))
 
 fn reviewBrief u: ReviewUnit diff: String gates: String -> String
   (str "(:review :unit " (fm/asnQuote u.id) " :risk " u.risk
        " :task " (fm/asnQuote (stringJoin (scrubLines u.task 12 240) " "))
-       " :diff " (fm/asnStrings (reviewDiffPart diff))
+       " :diff " (fm/asnStrings (reviewDiffPart diff (reviewDiffChars u)))
+       (let [(bs (diffBuiltins u diff))] (if (listEmpty? bs) "" (str " :builtins " (fm/asnQuote (str "every name below is a prelude builtin and is allowed: " (stringJoin bs " "))))))
        " :gates " (fm/asnStrings (scrubLines gates 20 200))
-       " :reply \"one form only: (:verdict :pass|:fail :defects (\\\"concrete defect with path and symbol\\\") :model name); :fail needs a concrete defect\")")
+       " :note \"a line ending in ...(clipped at N of M chars) was cut by the brief, not by the author: never fail on a cut line, and never read a missing closing paren, truncated text or incomplete nesting at such a line as a defect; a claim that a builtin does not exist or is not allowed is not a defect (the language has no allowed list, a name in :builtins is in the prelude)\" :reply \"one form only: (:verdict :pass|:fail :defects (\\\"concrete defect with path and symbol\\\") :model name); :fail needs a concrete defect\")")
 
 fn finalRungOf u: ReviewUnit -> String
   (if (or u.closureChanged (= u.risk "high")) "R2" "R1")
@@ -443,18 +477,74 @@ fn unavailable? v: Verdict -> Bool
 fn unavailableRow u: ReviewUnit rung: String v: Verdict -> String
   (str "(:laneUnavailable :unit " (atomOf u.id) " :rung " rung " :lane " (atomOf v.model) " :sev warn :why " (fm/asnQuote (optionOr (listHead v.defects) "")) ")")
 
+; (:m :ref REVIEW-INVENTED-BAN :do "node2 2026-11-16: ovhGptOss120b failed STD-TRIE four times with listFind, listDrop, optionOr and some? are not an allowed primitive; the brief names no allowed list and those builtins exist; a fail is never turned into a pass: the brief states which prelude builtins the diff uses are allowed, and a defect that is wholly one strict claim that prelude builtins do not exist or are not allowed (no conjunction, because, arguments, value, second sentence, colon) is doubtful; a verdict whose every defect is doubtful is an abstention, never a fail and never a pass, so the next reviewer is asked; any other defect keeps the fail; words of the diff never count as known, only u.known (the prelude)")
+fn banStops -> (List String)
+  (list "" "is" "are" "and" "or" "the" "this" "these" "that" "it" "use" "uses" "used" "using" "of" "call" "calls" "calling" "builtin" "builtins" "function" "functions" "primitive" "primitives" "symbol" "symbols" "name" "names" "a" "an" "in" "also" "as" "for" "to" "here" "not" "undefined" "disallowed" "permitted" "by" "api" "list" "string" "option" "allowed" "known" "existing" "valid" "defined" "which" "unknown" "operation")
+
+fn identWords text: String -> (List String)
+  (stringSplit (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) text (list "/" "," "`" "'" "\"" "(" ")" "[" "]" "{" "}" ";" ":" "\n" "\t" "+" "=" "<" ">" "." "|" "-")) " ")
+
+fn banMarkers -> (List String)
+  (list "not an allowed" "not a known" "not an existing" "not a valid" "not a defined" "not allowed" "undefined function" "undefined symbol" "disallowed" "not permitted")
+
+fn banKinds -> (List String)
+  (list "function" "symbol" "primitive" "builtin" "operation")
+
+fn banRejects -> (List String)
+  (list " and " " because " " but " "argument" "value" "arity" ";" ":" " with " " takes " "operand" "discard" " while " " when " " since " " so " " for " " than " " instead " ". " " if " " as " " must " " should " " expects " " returns " "type" " cannot " " never " "missing" "wrong")
+
+fn claimText d: String -> String
+  (stringTrim (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) d (list "`" "\"" "'" "(" ")" ",")))
+
+fn banNames d: String -> (List String)
+  (let [(clean (claimText d))
+        (low (stringLower clean))
+        (body (match (stringIndexOf low " uses ")
+                ((some i) (optionOr (stringSlice clean (+ i 6) (stringLength clean)) clean))
+                ((none) clean)))]
+    (filter (fn [(t String)] -> Bool (not (listContains? (banStops) (stringLower t))))
+            (identWords body)))
+
+; (:m :ref REVIEW-INVENTED-BAN :do "doubtful: the defect is one short strict claim, its names all prelude builtins; trailing dots are ignored, case is not")
+fn doubtfulDefect? d: String known: (fn [String] -> Bool) -> Bool
+  (let [(low (stringLower (claimText (stringTrim (if (stringEndsWith? d ".") (optionOr (stringSlice d 0 (- (stringLength d) 1)) d) d)))))
+        (names (banNames d))]
+    (and (<= (stringLength d) 160)
+         (and (listAny? (fn [(m String)] -> Bool (stringContains? low m)) (banMarkers))
+              (and (listAny? (fn [(k String)] -> Bool (stringContains? low k)) (banKinds))
+                   (and (not (listAny? (fn [(r String)] -> Bool (stringContains? (str " " low " ") r)) (banRejects)))
+                        (and (not (listEmpty? names)) (listAll? known names)))))))
+
+; (:m :ref REVIEW-INVENTED-BAN :do "the verdict of a reviewer whose every defect is doubtful becomes an abstention carrying them; the second part is those defects")
+fn vetVerdict v: Verdict known: (fn [String] -> Bool) -> (Pair Verdict (List String))
+  (if (or (!= v.outcome "fail") (listEmpty? v.defects)) (pair v (list))
+    (if (listAll? (fn [(d String)] -> Bool (doubtfulDefect? d known)) v.defects)
+      (pair (abstain v.model v.rung (str "doubtful: " (stringJoin v.defects "; "))) v.defects)
+      (pair v (list))))
+
+fn extraText doubtful: (List String) clipped: Bool -> String
+  (str (if (listEmpty? doubtful) "" (str " :doubtful " (fm/asnStrings (map (fn [(d String)] -> String (clip d 160)) doubtful))))
+       (if clipped " :clipped true" ""))
+
 fn reviewCallRow u: ReviewUnit v: Verdict ms: Int64 empty: Bool -> String
-  (str "(:reviewCall :unit " (atomOf u.id) " :rung " v.rung " :alias " (atomOf v.model) " :verdict " v.outcome " :defects " (stringFromInt64 (if (= v.outcome "abstain") 0 (listLength v.defects))) " :tokens 0 :ms " (stringFromInt64 ms) " :empty " (if empty "true" "false") ")")
+  (reviewCallRowD u v ms empty "")
+
+fn reviewCallRowD u: ReviewUnit v: Verdict ms: Int64 empty: Bool extra: String -> String
+  (str "(:reviewCall :unit " (atomOf u.id) " :rung " v.rung " :alias " (atomOf v.model) " :verdict " v.outcome " :defects " (stringFromInt64 (if (= v.outcome "abstain") 0 (listLength v.defects))) " :tokens 0 :ms " (stringFromInt64 ms) " :empty " (if empty "true" "false") extra ")")
 
 fn ! askLaneRow u: ReviewUnit callModel: (fn ! [String String] -> (Result String String)) prompt: String rung: String lane: Lane -> (Pair Verdict String)
   (let [(t0 (/ (nowNs) 1000000))
         (reply (callModel lane.alias prompt))
         (ms (- (/ (nowNs) 1000000) t0))
         (empty (match reply ((err e) (stringContains? (stringLower e) "empty")) ((ok text) (stringEmpty? (stringTrim text)))))
-        (v (match reply
+        (v0 (match reply
              ((err e) (abstain lane.alias rung (str (if (permanentError? e) "lane unavailable: " "call failed: ") (clip e 160))))
-             ((ok text) (if (stringEmpty? (stringTrim text)) (abstain lane.alias rung "no answer: empty reply") (parseVerdict text lane.alias rung)))))]
-    (pair v (reviewCallRow u v ms empty)))
+             ((ok text) (if (stringEmpty? (stringTrim text)) (abstain lane.alias rung "no answer: empty reply") (parseVerdict text lane.alias rung)))))
+        (known (fn [(n String)] -> Bool (listContains? (stringSplit u.known " ") n)))
+        (vetted (vetVerdict v0 known))
+        (clipped (and (= v0.outcome "pass") (stringContains? prompt "(diff clipped:")))
+        (v (if clipped (abstain lane.alias rung "clipped: the diff was cut, a pass on part of it is no pass") (pairFirst vetted)))]
+    (pair v (reviewCallRowD u v ms empty (extraText (pairSecond vetted) clipped))))
 
 ; (:m :ref LANE-PERMANENT-ERROR :do "rows of an earlier attempt join a ruling after its head rows (grade, await, escalate) and before the review calls of the later attempt, so the head row stays first and calls keep their order")
 fn withEarlier r: Ruling earlier: (List String) -> Ruling

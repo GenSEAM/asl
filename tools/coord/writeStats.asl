@@ -5,7 +5,7 @@
 ; (:m :ref WRITE-OUTCOME-STATS :do "one number for how well the writers do, read from <store>/journal.asn: a row is kept only when it is valid UTF-8 and one whole (:t ...) line ending in :at N), anything else is skipped and counted; write rows classify as written, stalled, the word after :stop in the verdict, or its first word; reviews as pass, fail, other; merges as merged, red, blocked, retry; the window is the last N hours up to now")
 
 (schema Row
-  (:f unit String) (:f to String) (:f stage String) (:f model String) (:f verdict String) (:f at Int64))
+  (:f unit String) (:f to String) (:f stage String) (:f model String) (:f verdict String) (:f at Int64) (:f ms Int64 :default 0))
 
 fn utf8Ok bs: Bytes i: Int64 n: Int64 -> Bool
   (if (>= i n) true
@@ -62,7 +62,8 @@ fn parseRow line: String -> (Option Row)
                 (vq (optionOr (stringSlice l (+ ci 11) (stringLength l)) ""))
                 (vEnd (- (stringLength vq) (stringLength (str "\" :ms " (optionOr (listLast (stringSplit vq "\" :ms ")) "")))))]
             (some (Row :unit (headQuoted head ":unit") :to (headTok head ":to") :stage (headTok head ":stage") :model (headQuoted head ":model")
-                       :verdict (optionOr (stringSlice vq 0 vEnd) "") :at at)))
+                       :verdict (optionOr (stringSlice vq 0 vEnd) "") :at at
+                       :ms (optionOr (stringToInt64 (optionOr (listHead (stringSplit (optionOr (listLast tail) "") " ")) "")) 0))))
           (none)))))
 
 fn mergeClass r: Row -> String
@@ -75,6 +76,7 @@ fn mergeClass r: Row -> String
 fn reviewClass r: Row -> String
   (cond
     ((= r.verdict "pass") "pass")
+    ((= r.verdict "start") "start")
     ((stringStartsWith? r.verdict "fail") "fail")
     (else "other"))
 
@@ -99,18 +101,25 @@ fn countOf keys: (List String) k: String -> Int64
 fn inWindow r: Row from: Int64 to: Int64 -> Bool
   (and (>= r.at from) (<= r.at to))
 
+; (:m :ref REVIEW-CLIP-FALSE-FAIL :do "a review row with verdict start marks entering the stage, not a review, and was counted under other (30 of 62); a written row with :ms 0 is a write stage in which the model wrote nothing because the work was already on the branch (claim, written 0 ms, gates, review fail, again): it is a rewrite, counted apart, outside :written and :pct")
+fn writeClasses writes: (List Row) -> (List String)
+  (map (fn [(r Row)] -> String (let [(c (writeClass r.verdict))] (if (and (= c "written") (= r.ms 0)) "rewrite" c))) writes)
+
 fn statsText rows: (List Row) hours: Int64 from: Int64 to: Int64 skipped: Int64 -> String
   (let [(win (filter (fn [(r Row)] -> Bool (inWindow r from to)) rows))
         (writes (filter (fn [(r Row)] -> Bool (= r.stage "write")) win))
-        (wClass (map (fn [(r Row)] -> String (writeClass r.verdict)) writes))
+        (wClass (writeClasses writes))
         (written (countOf wClass "written"))
-        (stops (filter (fn [(p (Pair String Int64))] -> Bool (!= (pairFirst p) "written")) (tally wClass)))
+        (repeats (countOf wClass "rewrite"))
+        (stops (filter (fn [(p (Pair String Int64))] -> Bool (and (!= (pairFirst p) "written") (!= (pairFirst p) "rewrite"))) (tally wClass)))
+        (writeWith (listFlatMap (fn [(i Int64)] -> (List (Pair Row String)) (match (listGet writes i) ((some r) (list (pair r (optionOr (listGet wClass i) "")))) ((none) (list)))) (range 0 (listLength writes))))
         (models (listSort (distinct (map (fn [(r Row)] -> String (if (stringEmpty? r.model) "unknown" r.model)) writes))))
         (modelRow (fn [(m String)] -> String
-                    (let [(mine (filter (fn [(r Row)] -> Bool (= (if (stringEmpty? r.model) "unknown" r.model) m)) writes))
-                          (ok (listCount (fn [(r Row)] -> Bool (= (writeClass r.verdict) "written")) mine))]
+                    (let [(mine (filter (fn [(r (Pair Row String))] -> Bool (= (if (stringEmpty? (pairFirst r).model) "unknown" (pairFirst r).model) m)) writeWith))
+                          (ok (listCount (fn [(r (Pair Row String))] -> Bool (= (pairSecond r) "written")) mine))]
                       (str "(:m \"" m "\" :ok " (n ok) " :fail " (n (- (listLength mine) ok)) ")"))))
-        (rv (map (fn [(r Row)] -> String (reviewClass r)) (filter (fn [(r Row)] -> Bool (= r.stage "review")) win)))
+        (rv (map (fn [(r Row)] -> String (reviewClass r)) (filter (fn [(r Row)] -> Bool (and (= r.stage "review") (!= r.verdict "start"))) win)))
+        (started (listCount (fn [(r Row)] -> Bool (and (= r.stage "review") (= r.verdict "start"))) win))
         (mg (map mergeClass (filter (fn [(r Row)] -> Bool (= r.stage "merge")) win)))
         (units (listSort (distinct (map (fn [(r Row)] -> String r.unit) (filter (fn [(r Row)] -> Bool (= r.to "merged")) win)))))
         (total (listLength writes))]
@@ -118,6 +127,8 @@ fn statsText rows: (List Row) hours: Int64 from: Int64 to: Int64 skipped: Int64 
          "  (:write :n " (n total) " :written " (n written) " :pct " (n (if (= total 0) 0 (/ (* written 100) total))) " (:stop " (countsText stops) "))\n"
          "  (:byModel " (stringJoin (map modelRow models) " ") ")\n"
          "  (:review :n " (n (listLength rv)) " :pass " (n (countOf rv "pass")) " :fail " (n (countOf rv "fail")) " :other " (n (countOf rv "other")) ")\n"
+         "  (:started :review " (n started) ")\n"
+         "  (:rewrites :n " (n repeats) ")\n"
          "  (:merge :n " (n (listLength mg)) " :merged " (n (countOf mg "merged")) " :red " (n (countOf mg "red")) " :blocked " (n (countOf mg "blocked")) " :retry " (n (countOf mg "retry")) ")\n"
          "  (:units :merged " (n (listLength units)) "))"))
 

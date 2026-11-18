@@ -108,6 +108,25 @@ fn testReport -> Bool
         (cleanup! dir)
         true))
 
+; (:m :ref REVIEW-CLIP-FALSE-FAIL :do "start rows are no reviews; a 0 ms written row within 5 s of an earlier written row of its unit is a repeat, counted apart")
+fn tm unit: String stage: String verdict: String ms: Int64 at: Int64 -> String
+  (str "(:t :unit \"" unit "\" :from a :to b :stage " stage " :model \"m\" :tokens 0 :costUsd 0.000000 :verdict \"" verdict "\" :ms " (stringFromInt64 ms) " :at " (stringFromInt64 at) ")\n")
+
+fn testStartRepeat -> Bool
+  (let [(dir (str (scratch) "S"))
+        (a (- (now) 100000))
+        (rows (str (tm "A" "write" "written" 4000 a) (tm "A" "write" "written" 0 (+ a 1000)) (tm "B" "write" "written" 0 (+ a 50000))
+                   (tm "A" "review" "start" 0 (+ a 10000)) (tm "A" "review" "start" 0 (+ a 11000)) (tm "A" "review" "pass" 700 (+ a 12000))))
+        (_ (dirCreate dir))
+        (_ (fileWrite (str dir "/journal.asn") (stringToBytes rows)))
+        (r (report dir 24))]
+    (do (assert (has r "(:review :n 1 :pass 1 :fail 0 :other 0)") (str "start rows are not reviews: " r))
+        (assert (has r "(:started :review 2)") "starts counted apart")
+        (assert (has r "(:rewrites :n 2)") (str "every written 0 ms row is a rewrite, near or far: " r))
+        (assert (has r "(:write :n 3 :written 1 :pct 33") (str "rewrites are not written: " r))
+        (cleanup! dir)
+        true))
+
 fn testEmptyAndMissing -> Bool
   (let [(dir (str (scratch) "E"))
         (_ (dirCreate dir))
@@ -130,5 +149,6 @@ fn testEmptyAndMissing -> Bool
 fn ! runTests -> Bool
   (do (assert (testClassifiers) "classifiers and row parsing")
       (assert (testReport) "end to end on the fixture journal")
+      (assert (testStartRepeat) "start rows and repeat writes")
       (assert (testEmptyAndMissing) "empty journal and missing store")
       true)

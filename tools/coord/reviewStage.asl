@@ -1,5 +1,5 @@
 (module asl-tools/coord/reviewStage
-  :x [LaneRow RevOut tableFor writerAliasFor profileChain modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes]
+  :x [sigOf blockedSig builtinNames LaneRow RevOut tableFor writerAliasFor profileChain modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes]
   :i [(asl-tools/coord/ladder :a l) (asl-tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (aslAgent/providers :a prov) (asl-json/json :a j)])
 
 ; (:m :ref COND3 :do "the conductor's real review stage over the COND2 ladder: lanes come from the lane table (alias, tier, quality, default allowance) with the allowance of subscription-backed aliases taken from subPace, the model call is the in-process gateway call Leon's provider uses, and the verdict goes back as a plain RevOut so the conductor owns the state machine")
@@ -240,13 +240,26 @@ fn reviewTableFor lanesText: String writer: String -> String
     (if (or (stringEmpty? run) (not (listContains? (unknownOf lanesText) writer))) base
       (str (optionOr (stringSlice base 0 (- (stringLength base) 1)) base) " (:f :match \"" run "\" :family \"unknown:" writer "\"))")))
 
+; (:m :ref REVIEW-INVENTED-BAN :do "the builtin names of the language, one space-joined string read from asl/prelude/prelude.asn under the repo root (every (:name \"X\" row); unreadable gives the empty string and then only words of the brief count as known)")
+fn builtinNames root: String -> String
+  (stringJoin (map (fn [(piece String)] -> String (optionOr (listHead (stringSplit piece "\"")) ""))
+                   (listDrop (stringSplit (resultOr (fileReadString (str root "/asl/prelude/prelude.asn")) "") "(:name \"") 1))
+              " ")
+
+; (:m :ref REVIEW-BLOCK-WHY :do "a block carries its reason and the defects behind it, clipped to 300 chars, so the journal row of the move says what was wrong (the conductor writes the move verdict as block: plus this sig)")
+fn blockedSig why: String defects: (List String) -> String
+  (if (listEmpty? defects) why (str why " | defects: " (l/clip (stringJoin defects "; ") 300)))
+
+fn sigOf r: l/Ruling -> String
+  (cond ((= r.action "fix") (stringJoin r.defects "; ")) ((= r.action "await") r.awaitLane) ((= r.action "blocked") (blockedSig r.why r.defects)) (else ""))
+
 fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) root: String usagePath: String ru: l/ReviewUnit diff: String receipt: String call: (fn ! [String String] -> (Result String String)) -> (Result RevOut String)
-  (match (l/reviewWith (reviewTableFor lanesText ru.writerAlias) ru diff receipt (lanesFor gatewayText lanesText paces) call)
+  (match (l/reviewWith (reviewTableFor lanesText ru.writerAlias) (with ru :known (builtinNames root)) diff receipt (lanesFor gatewayText lanesText paces) call)
     ((err e) (err e))
     ((ok r)
       (ok (RevOut :action r.action
                   :models (stringJoin (map (fn [(v l/Verdict)] -> String v.model) r.verdicts) "+")
                   :tokens (usageSum (resultOr (fileReadString usagePath) ""))
                   :costMicro (usageCost (resultOr (fileReadString usagePath) ""))
-                  :sig (cond ((= r.action "fix") (stringJoin r.defects "; ")) ((= r.action "await") r.awaitLane) ((= r.action "blocked") r.why) (else ""))
+                  :sig (sigOf r)
                   :rows (tokensFilled r.rows (resultOr (fileReadString usagePath) ""))))))
