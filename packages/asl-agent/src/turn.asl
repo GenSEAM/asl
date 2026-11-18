@@ -47,6 +47,9 @@ fn dropThink text: String -> String
           ((none) text)
           ((some b) (dropThink (str (optionOr (stringSlice text 0 a) "") (optionOr (stringSlice rest (+ b 8) (stringLength rest)) ""))))))))
 
+fn layoutForm op: String file: String -> String
+  (str "(:step :op \"" (if (= op "edit") "edit" "write") "\" :file \"" (c/escapeAsn file) "\" " (if (= op "edit") ":old :raw :new :raw" ":content :raw") ")")
+
 fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
   (let [reply (dropThink (pairFirst (tc/untagToolCalls reply0)))
         deg (r/degenerateCut reply)
@@ -59,7 +62,8 @@ fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
         fences (/ (fenceCount unraw 0) 2)
         ; (:m :ref LEON-WRITE-FAIL-TOP :do "step shapes are made canonical after raw blocks are bound and fences dropped, so written content already sits in strings the scan skips")
         shape (tc/canonSteps (r/unfence unraw))
-        plain shape.text
+        ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a reply whose raw blocks do not bind whole runs none of its steps: it is read as the first unbound write or edit alone, still with its :raw field, so exec answers one ERR_RAW_MISSING with the canonical layout and nothing else in the reply is executed (grader 2026-11-18: a step beside one whose block was refused ran with a neighbour's content)")
+        plain (match (listHead bound.missing) ((some m) (layoutForm (pairFirst m) (pairSecond m))) ((none) shape.text))
         facts0 (r/replyFacts plain declared)
         hasOps (not (listEmpty? facts0.ops))
         otherDefect (or (some? facts0.cut) (some? (r/locateParseFailure plain)) (r/hasUnclosedForm plain))

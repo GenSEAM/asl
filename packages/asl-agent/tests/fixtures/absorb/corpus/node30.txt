@@ -1,0 +1,34 @@
+(:step<arg_key>form</arg_key><arg_value>(:step :op "write" :file "tools/releaseNotes.asl" :content "(module tools/tests/releaseNotesTest\n  :x [runTests]\n  :i [(tools/releaseNotes :notesOf notesOf)])\n\nfn runTests -> Bool\n  (and\n    (assert (= (notesOf []) \"\") \"empty input\")\n    (and\n      (assert (= (notesOf [\"(:c :a core :do add thing)\"\n                           \"(:c :a docs :do write docs)\"\n                           \"not a commit\"\n                           \"(:c :a core :do fix bug)\"])\n                 \"## core\\n- add thing\\n- fix bug\\n## docs\\n- write docs\\n\")\n              \"areas first-seen, commits in input order, junk skipped\")\n      (assert (= (notesOf [\"(:c :a x :do \\\"quoted text\\\" :extra 1)\"])\n                 \"## x\\n- quoted text\\n\")\n              \"quoted text and extra fields\"))))\n")
+```
+(module tools/releaseNotes
+  :x [notesOf]
+  :i [])
+
+(schema TokState (:f toks (List String)) (:f buf String) (:f inStr Bool) (:f esc Bool))
+(schema Commit (:f area String) (:f text String))
+(schema Acc (:f areas (List String)) (:f texts (Map String (List String))))
+
+fn flushBuf st: TokState -> TokState
+  (if (stringEmpty? st.buf)
+    st
+    (with st :toks (cons st.buf st.toks) :buf ""))
+
+fn stepTok st: TokState ch: String -> TokState
+  (if st.inStr
+    (if st.esc
+      (with st :buf (stringConcat st.buf ch) :esc false)
+      (if (stringContains? "\"" ch)
+        (with (flushBuf st) :inStr false)
+        (if (stringContains? "\\" ch)
+          (with st :esc true)
+          (with st :buf (stringConcat st.buf ch)))))
+    (if (stringContains? "\"" ch)
+      (with (flushBuf st) :inStr true)
+      (if (stringContains? "()" ch)
+        (let [f (flushBuf st)]
+          (with f :toks (cons ch f.toks)))
+        (if (stringContains? " \t" ch)
+          (flushBuf st)
+          (with st :buf (stringConcat st.buf ch)))))) :rawFields "content")
+(:step :op "write" :file "tools/tests/releaseNotesTest.asl" :content "(module tools/releaseNotes\n  :x [notesOf]\n  :i [])\n\n(schema TokState (:f toks (List String)) (:f buf String) (:f inStr Bool) (:f esc Bool))\n(schema Commit (:f area String) (:f text String))\n(schema Acc (:f areas (List String)) (:f texts (Map String (List String))))\n\nfn flushBuf st: TokState -> TokState\n  (if (stringEmpty? st.buf)\n    st\n    (with st :toks (cons st.buf st.toks) :buf \"\"))\n\nfn stepTok st: TokState ch: String -> TokState\n  (if st.inStr\n    (if st.esc\n      (with st :buf (stringConcat st.buf ch) :esc false)\n      (if (stringContains? \"\\\"\" ch)\n        (with (flushBuf st) :inStr false)\n        (if (stringContains? \"\\\\\" ch)\n          (with st :esc true)\n          (with st :buf (stringConcat st.buf ch)))))\n    (if (stringContains? \"\\\"\" ch)\n      (with (flushBuf st) :inStr true)\n      (if (stringContains? \"()\" ch)\n        (let [f (flushBuf st)]\n          (with f :toks (cons ch f.toks)))\n        (if (stringContains? \" \\t\" ch)\n          (flushBuf st)\n          (with st :buf (stringConcat st.buf ch)))))))\n\nfn tokenize line: String -> (List String)\n  (let [st (fold stepTok (TokState :toks [] :buf \"\" :inStr false :esc false) (stringChars line))\n        f (flushBuf st)]\n    (listReverse f.toks)))\n\nfn fieldOf toks: (List String) key: String -> (Option String)\n  (if (listEmpty? toks)\n    (none)\n    (if (= (optionOr (listHead toks) \"\") key)\n      (let [v (optionOr (listGet toks 1) \"\")]\n        (if (or (= v \")\") (stringStartsWith? v \":\"))\n          (none)\n          (some v)))\n      (fieldOf (listDrop toks 1) key))))\n\nfn commitOf line: String -> (Option Commit)\n  (let [toks (tokenize line)]\n    (if (and (not (listEmpty? toks))\n             (= (optionOr (listGet toks 0) \"\") \"(\")\n             (= (optionOr (listGet toks 1) \"\") \":c\"))\n      (match (fieldOf toks \":a\")\n        ((some a)\n          (match (fieldOf toks \":do\")\n            ((some t) (some (Commit :area a :text t)))\n            ((none) (none))))\n        ((none) (none)))\n      (none))))\n\nfn collect acc: (List Commit) line: String -> (List Commit)\n  (match (commitOf line)\n    ((some c) (listAppend acc (cons c [])))\n    ((none) acc)))\n\nfn addCommit acc: Acc c: Commit -> Acc\n  (let [existing (optionOr (mapGet acc.texts c.area) [])\n        texts (mapSet acc.texts c.area (listAppend existing (cons c.text [])))]\n    (if (mapHas? acc.texts c.area)\n      (with acc :texts texts)\n      (with acc :areas (listAppend acc.areas (cons c.area [])) :texts texts))))\n\nfn renderArea acc: Acc a: String -> String\n  (stringConcat\n    (stringConcat \"## \" (stringConcat a \"\\n\"))\n    (fold (fn [s t] (stringConcat s (stringConcat \"- \" (stringConcat t \"\\n\"))))\n          \"\"\n          (optionOr (mapGet acc.texts a) []))))\n\nfn notesOf lines: (List String) -> String\n  (let [acc (fold addCommit (Acc :areas [] :texts (mapEmpty ())) (fold collect [] lines))]\n    (fold (fn [s a] (stringConcat s (renderArea acc a))) \"\" acc.areas)))\n" :rawFields "content")
+(:step :op "gate")

@@ -768,7 +768,7 @@ fn ownsRec rid: String opName: String path: String owns: (List String) -> (List 
 fn rawShape opName: String target: String -> String
   (if (= opName "edit")
     (str "(:step :op \"edit\" :file \"" (c/escapeAsn target) "\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```")
-    (str "(:step :op \"write\" :file \"" (c/escapeAsn target) "\" :content :raw)\n```\n<file text>\n```"))
+    (str "(:step :op \"write\" :file \"" (c/escapeAsn target) "\" :content :raw)\n```\n<file text>\n```\n(each block right after its own step; a text that holds ``` lines goes in a longer fence: ````)"))
 
 ; (:m :ref LEON-OWNS-ONE-RULE-20261018 :do "no :owns on the session means the session may write anywhere inside :root; c/effectiveOwns is the one place that normalization happens, shared with main.asl's liveExecOps! instead of each keeping its own if-empty-then-** copy")
 fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (Option (List (Pair String Val)))

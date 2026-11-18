@@ -97,8 +97,16 @@ fn stepToolSpec -> j/Json
         (pair "properties" (j/jobj (list (pair "form" (j/jobj (list (pair "type" (j/jstr "string"))))))))
         (pair "required" (j/jarr (list (j/jstr "form"))))))))))))
 
-fn rawNeeded? s: String -> Bool
-  (or (stringContains? s "\n") (or (stringContains? s "\"") (stringContains? s "\\")))
+; (:m :ref LEON-STEP-BODY-LOST :do "a block body is every byte between its fence lines, so only a value that ends in a newline can go out as a block unchanged; its fence is one backtick longer than the longest backtick run inside, so a fence in the value never closes the block (grader 2026-11-18: a content with a fenced (:step ...) ran as its own step)")
+fn blockable? s: String -> Bool
+  (and (stringContains? s "\n") (stringEndsWith? s "\n"))
+
+fn tickRun cs: (List String) run: Int64 best: Int64 -> Int64
+  (if (listEmpty? cs) (max run best)
+    (if (= (c/firstOf cs) "`") (tickRun (c/restOf cs) (+ run 1) best) (tickRun (c/restOf cs) 0 (max run best))))
+
+fn fenceFor s: String -> String
+  (stringRepeat "`" (max 3 (+ 1 (tickRun (stringChars s) 0 0))))
 
 fn valueText v: j/Json -> String
   (match v
@@ -112,7 +120,7 @@ fn valueText v: j/Json -> String
 fn intValue? v: j/Json -> Bool
   (match v ((j/jint _) true) (_ false))
 
-; (:m :do "multi-line or quoted strings go out as :raw keys with fenced blocks after the form, in key order, which is how bindRawBlocks reads a text reply; everything else is an inline quoted or integer value")
+; (:m :do "a multi-line string that ends in a newline goes out as a :raw key with a fenced block after the form, in key order, which is how bindRawBlocks reads a text reply; every other string is an inline escaped quoted value, so each value reaches the step byte for byte")
 fn argPieces kvs: (List (Pair String j/Json)) inline: (List String) blocks: (List String) -> (Pair (List String) (List String))
   (if (listEmpty? kvs) (pair inline blocks)
     (let [kv (c/firstOf kvs)
@@ -122,21 +130,28 @@ fn argPieces kvs: (List (Pair String j/Json)) inline: (List String) blocks: (Lis
       (cond
         ((= k "op") (argPieces (c/restOf kvs) inline blocks))
         ((intValue? v) (argPieces (c/restOf kvs) (listAppend inline (list (str ":" k " " s))) blocks))
-        ((rawNeeded? s) (argPieces (c/restOf kvs) (listAppend inline (list (str ":" k " :raw"))) (listAppend blocks (list (str "```\n" s (if (stringEndsWith? s "\n") "" "\n") "```")))))
+        ((blockable? s) (let [fence (fenceFor s)] (argPieces (c/restOf kvs) (listAppend inline (list (str ":" k " :raw"))) (listAppend blocks (list (str fence "\n" s fence))))))
         (else (argPieces (c/restOf kvs) (listAppend inline (list (str ":" k " \"" (c/escapeAsn s) "\""))) blocks)))))
 
+; (:m :ref LEON-STEP-BODY-LOST :do "arguments sent as a JSON string that itself holds the JSON object (double-encoded) are decoded one more level; anything that is not an object after that has no arguments")
 fn argsObject args: String -> (List (Pair String j/Json))
   (match (j/jsonParse (if (stringEmpty? (stringTrim args)) "{}" args))
     ((ok (j/jobj kvs)) kvs)
+    ((ok (j/jstr inner)) (match (j/jsonParse inner) ((ok (j/jobj kvs)) kvs) (_ (list))))
     (_ (list)))
 
-; (:m :do "a step(form) call carries the form text itself; an op call names a step op or a terminal head (done, escalate); an unknown name still becomes a step so the loop rejects it with its usual unknown-op receipt")
+fn opArg kvs: (List (Pair String j/Json)) -> String
+  (match (listFind (fn [kv] (= (pairFirst kv) "op")) kvs)
+    ((some kv) (match (pairSecond kv) ((j/jstr s) s) (_ "")))
+    ((none) ""))
+
+; (:m :do "a step(form) call carries the form text itself; a step call without form that names a string op (node2 2026-11-17, step with op and file keys) is the op call it names; an op call names a step op or a terminal head (done, escalate); an unknown name still becomes a step so the loop rejects it with its usual unknown-op receipt")
 fn callForm name: String args: String -> String
   (let [kvs (argsObject args)]
     (if (= name "step")
       (match (c/dictGet (map (fn [kv] (pair (pairFirst kv) (c/kvStr (valueText (pairSecond kv))))) kvs) "form")
         ((some (c/kvStr f)) f)
-        (_ ""))
+        (_ (let [op (opArg kvs)] (if (or (stringEmpty? op) (= op "step")) "" (callForm op args)))))
       (let [pieces (argPieces kvs (list) (list))
             terminal (listContains? (list "done" "escalate") name)
             head (if terminal (str "(:" name) (str "(:step :op \"" (c/escapeAsn name) "\""))

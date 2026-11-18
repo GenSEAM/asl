@@ -1,0 +1,106 @@
+(:txn :owns ("asl/packages/asl-text/src/base64.asl" "asl/packages/asl-text/tests/base64Test.asl")
+(:step :op "write" :file "asl/packages/asl-text/src/base64.asl" :content "(module asl-text/tests/base64Test\n  :x [runTests]\n  :i [(asl-text/base64 :a b64)])\n\nfn checkVector plain: Str padded: Str unpadded: Str -> Bool\n  (let [(input (stringToBytes plain))]\n    (do\n      (assert (= (b64/encode input) padded) (str \"standard encoding of \" plain))\n      (assert (= (b64/encodeNoPad input) unpadded) (str \"unpadded encoding of \" plain))\n      (assert (= (b64/decode padded) (ok input)) (str \"decode padded \" padded))\n      (assert (= (b64/decode unpadded) (ok input)) (str \"decode unpadded \" unpadded))\n      true)))\n\nfn testRfc4648Vectors -> Bool\n  (do\n    (assert (checkVector \"\" \"\" \"\") \"RFC vector: empty\")\n    (assert (checkVector \"f\" \"Zg==\" \"Zg\") \"RFC vector: f\")\n    (assert (checkVector \"fo\" \"Zm8=\" \"Zm8\") \"RFC vector: fo\")\n    (assert (checkVector \"foo\" \"Zm9v\" \"Zm9v\") \"RFC vector: foo\")\n    (assert (checkVector \"foob\" \"Zm9vYg==\" \"Zm9vYg\") \"RFC vector: foob\")\n    (assert (checkVector \"fooba\" \"Zm9vYmE=\" \"Zm9vYmE\") \"RFC vector: fooba\")\n    (assert (checkVector \"foobar\" \"Zm9vYmFy\" \"Zm9vYmFy\") \"RFC vector: foobar\")\n    true))\n\nfn testUrlSafe -> Bool\n  (let [(input (bytesAlloc 3))]\n    (do\n      (bytesSet input 0 251)\n      (bytesSet input 1 255)\n      (bytesSet input 2 191)\n      (assert (= (b64/encode input) \"+/+/\") \"standard alphabet uses plus and slash\")\n      (assert (= (b64/encodeUrlSafe input) \"-_-_\") \"URL-safe encoding without padding\")\n      (assert (= (b64/encodeUrlSafePad input) \"-_-_\") \"URL-safe full quantum needs no padding\")\n      (assert (= (b64/decodeUrlSafe \"-_-_\") (ok input)) \"URL-safe decode\")\n      (assert (err? (b64/decode \"-_-_\")) \"standard decode rejects URL-safe characters\")\n      (assert (err? (b64/decodeUrlSafe \"+/+/\")) \"URL-safe decode rejects standard punctuation\")\n      true)))\n\nfn testUrlSafePadding -> Bool\n  (let [(input (stringToBytes \"f\"))]\n    (do\n      (assert (= (b64/encodeUrlSafe input) \"Zg\") \"URL-safe unpadded f\")\n      (assert (= (b64/encodeUrlSafePad input) \"Zg==\") \"URL-safe padded f\")\n      (assert (= (b64/decodeUrlSafe \"Zg==\") (ok input)) \"URL-safe decoder accepts padding\")\n      (assert (= (b64/decodeUrlSafe \"Zg\") (ok input)) \"URL-safe decoder accepts omitted padding\")\n      true)))\n\nfn testMalformed -> Bool\n  (do\n    (assert (err? (b64/decode \"A\")) \"one-character quantum is invalid\")\n    (assert (err? (b64/decode \"Zm$v\")) \"invalid character is an err\")\n    (assert (err? (b64/decode \"Zg==\\n\")) \"trailing whitespace is rejected\")\n    (assert (err? (b64/decode \"Zg=\")) \"padding must complete a four-character quantum\")\n    (assert (err? (b64/decode \"Zg===\")) \"excess padding is rejected\")\n    (assert (err? (b64/decode \"Z=g=\")) \"padding in the middle is rejected\")\n    (assert (err? (b64/decode \"Zh==\")) \"non-zero trailing bits in a two-character tail are rejected\")\n    (assert (err? (b64/decode \"Zm9=\")) \"non-zero trailing bits in a three-character tail are rejected\")\n    (assert (err? (b64/decodeUrlSafe \"A\")) \"URL-safe decoder validates length\")\n    (assert (err? (b64/decodeUrlSafe \"Zg=\")) \"URL-safe decoder validates padding\")\n    true))\n\nfn runTests -> Bool\n  (and (testRfc4648Vectors)\n    (and (testUrlSafe)\n      (and (testUrlSafePadding) (testMalformed))))\n")
+```
+(module asl-text/base64
+  :x [encode encodeNoPad encodeUrlSafe encodeUrlSafePad decode decodeUrlSafe]
+  :i [])
+
+fn stdAlpha -> Str
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+fn urlAlpha -> Str
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+fn b64Char alpha: Str v: Int64 -> Str
+  (optionOr (stringSlice alpha v (+ v 1)) "")
+
+fn addPadding s: Str -> Str
+  (let [(r (mod (stringLength s) 4))]
+    (if (= r 2)
+      (str s "==")
+      (if (= r 3) (str s "=") s)))
+
+fn encLoop bytes: Bytes alpha: Str i: Int64 n: Int64 acc: Str -> Str
+  (if (>= i n)
+    acc
+    (let [(rem (- n i))
+          (b0 (bytesGet bytes i))
+          (b1 (if (< (+ i 1) n) (bytesGet bytes (+ i 1)) 0))
+          (b2 (if (< (+ i 2) n) (bytesGet bytes (+ i 2)) 0))
+          (v0 (/ b0 4))
+          (v1 (+ (* (mod b0 4) 16) (/ b1 16)))
+          (v2 (+ (* (mod b1 16) 4) (/ b2 64)))
+          (v3 (mod b2 64))]
+      (encLoop bytes alpha (+ i 3) n
+        (str acc
+          (b64Char alpha v0)
+          (b64Char alpha v1)
+          (if (> rem 1) (b64Char alpha v2) "")
+          (if (> rem 2) (b64Char alpha v3) "")))))
+
+fn encodeRaw bytes: Bytes alpha: Str -> Str
+  (encLoop bytes alpha 0 (bytesLength bytes) "")
+
+fn encode bytes: Bytes -> Str
+  (addPadding (encodeRaw bytes (stdAlpha)))
+
+fn encodeNoPad bytes: Bytes -> Str
+  (encodeRaw bytes (stdAlpha))
+
+fn encodeUrlSafe bytes: Bytes -> Str
+  (encodeRaw bytes (urlAlpha))
+
+fn encodeUrlSafePad bytes: Bytes -> Str
+  (addPadding (encodeRaw bytes (urlAlpha)))
+
+fn stripPadLen bytes: Bytes n: Int64 -> Int64
+  (if (and (> n 0) (= (bytesGet bytes (- n 1)) 61))
+    (stripPadLen bytes (- n 1))
+    n)
+
+fn validPadding rawLen: Int64 n: Int64 -> Bool
+  (let [(pad (- rawLen n))]
+    (if (= pad 0)
+      true
+      (and (= (mod rawLen 4) 0)
+        (or (and (= pad 1) (= (mod n 4) 3))
+            (and (= pad 2) (= (mod n 4) 2))))))
+
+fn decOutLen n: Int64 -> Int64
+  (let [(full (* 3 (/ n 4)))
+        (r (mod n 4))]
+    (if (= r 2)
+      (+ full 1)
+      (if (= r 3) (+ full 2) full)))
+
+fn charVal alphaBytes: Bytes c: Int64 i: Int64 -> Int64
+  (if (>= i 64)
+    -1
+    (if (= (bytesGet alphaBytes i) c)
+      i
+      (charVal alphaBytes c (+ i 1))))
+
+fn decLoop src: Bytes alphaBytes: Bytes i: Int64 n: Int64 out: Bytes -> (Result Bytes String)
+  (if (>= i n)
+    (ok out)
+    (let [(rem (min 4 (- n i)))
+          (v0 (charVal alphaBytes (bytesGet src i) 0))
+          (v1 (if (> rem 1) (charVal alphaBytes (bytesGet src (+ i 1)) 0) 0))
+          (v2 (if (> rem 2) (charVal alphaBytes (bytesGet src (+ i 2)) 0) 0))
+          (v3 (if (> rem 3) (charVal alphaBytes (bytesGet src (+ i 3)) 0) 0))
+          (o0 (* 3 (/ i 4)))]
+      (if (or (< v0 0) (or (< v1 0) (or (< v2 0) (< v3 0))))
+        (err "base64: invalid character")
+        (if (or (and (= rem 2) (not (= (mod v1 16) 0)))
+                (and (= rem 3) (not (= (mod v2 4) 0))))
+          (err "base64: non-zero trailing bits")
+          (do
+            (bytesSet out o0 (+ (* v0 4) (/ v1 16)))
+            (if (> rem 2)
+              (bytesSet out (+ o0 1) (+ (* (mod v1 16) 16) (/ v2 4)))
+              ())
+            (if (> rem 3)
+              (bytesSet out (+ o0 2) (+ (* (mod v2 4) 64) v3))
+              ())
+            (decLoop src alphaBytes (+ i 4) n out)))))) :rawFields "content")
+(:step :op "write" :file "asl/packages/asl-text/tests/base64Test.asl" :content "(module asl-text/base64\n  :x [encode encodeNoPad encodeUrlSafe encodeUrlSafePad decode decodeUrlSafe]\n  :i [])\n\nfn stdAlpha -> Str\n  \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"\n\nfn urlAlpha -> Str\n  \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\"\n\nfn b64Char alpha: Str v: Int64 -> Str\n  (optionOr (stringSlice alpha v (+ v 1)) \"\")\n\nfn addPadding s: Str -> Str\n  (let [(r (mod (stringLength s) 4))]\n    (if (= r 2)\n      (str s \"==\")\n      (if (= r 3) (str s \"=\") s)))\n\nfn encLoop bytes: Bytes alpha: Str i: Int64 n: Int64 acc: Str -> Str\n  (if (>= i n)\n    acc\n    (let [(rem (- n i))\n          (b0 (bytesGet bytes i))\n          (b1 (if (< (+ i 1) n) (bytesGet bytes (+ i 1)) 0))\n          (b2 (if (< (+ i 2) n) (bytesGet bytes (+ i 2)) 0))\n          (v0 (/ b0 4))\n          (v1 (+ (* (mod b0 4) 16) (/ b1 16)))\n          (v2 (+ (* (mod b1 16) 4) (/ b2 64)))\n          (v3 (mod b2 64))]\n      (encLoop bytes alpha (+ i 3) n\n        (str acc\n          (b64Char alpha v0)\n          (b64Char alpha v1)\n          (if (> rem 1) (b64Char alpha v2) \"\")\n          (if (> rem 2) (b64Char alpha v3) \"\")))))\n\nfn encodeRaw bytes: Bytes alpha: Str -> Str\n  (encLoop bytes alpha 0 (bytesLength bytes) \"\")\n\nfn encode bytes: Bytes -> Str\n  (addPadding (encodeRaw bytes (stdAlpha)))\n\nfn encodeNoPad bytes: Bytes -> Str\n  (encodeRaw bytes (stdAlpha))\n\nfn encodeUrlSafe bytes: Bytes -> Str\n  (encodeRaw bytes (urlAlpha))\n\nfn encodeUrlSafePad bytes: Bytes -> Str\n  (addPadding (encodeRaw bytes (urlAlpha)))\n\nfn stripPadLen bytes: Bytes n: Int64 -> Int64\n  (if (and (> n 0) (= (bytesGet bytes (- n 1)) 61))\n    (stripPadLen bytes (- n 1))\n    n)\n\nfn validPadding rawLen: Int64 n: Int64 -> Bool\n  (let [(pad (- rawLen n))]\n    (if (= pad 0)\n      true\n      (and (= (mod rawLen 4) 0)\n        (or (and (= pad 1) (= (mod n 4) 3))\n            (and (= pad 2) (= (mod n 4) 2))))))\n\nfn decOutLen n: Int64 -> Int64\n  (let [(full (* 3 (/ n 4)))\n        (r (mod n 4))]\n    (if (= r 2)\n      (+ full 1)\n      (if (= r 3) (+ full 2) full)))\n\nfn charVal alphaBytes: Bytes c: Int64 i: Int64 -> Int64\n  (if (>= i 64)\n    -1\n    (if (= (bytesGet alphaBytes i) c)\n      i\n      (charVal alphaBytes c (+ i 1))))\n\nfn decLoop src: Bytes alphaBytes: Bytes i: Int64 n: Int64 out: Bytes -> (Result Bytes String)\n  (if (>= i n)\n    (ok out)\n    (let [(rem (min 4 (- n i)))\n          (v0 (charVal alphaBytes (bytesGet src i) 0))\n          (v1 (if (> rem 1) (charVal alphaBytes (bytesGet src (+ i 1)) 0) 0))\n          (v2 (if (> rem 2) (charVal alphaBytes (bytesGet src (+ i 2)) 0) 0))\n          (v3 (if (> rem 3) (charVal alphaBytes (bytesGet src (+ i 3)) 0) 0))\n          (o0 (* 3 (/ i 4)))]\n      (if (or (< v0 0) (or (< v1 0) (or (< v2 0) (< v3 0))))\n        (err \"base64: invalid character\")\n        (if (or (and (= rem 2) (not (= (mod v1 16) 0)))\n                (and (= rem 3) (not (= (mod v2 4) 0))))\n          (err \"base64: non-zero trailing bits\")\n          (do\n            (bytesSet out o0 (+ (* v0 4) (/ v1 16)))\n            (if (> rem 2)\n              (bytesSet out (+ o0 1) (+ (* (mod v1 16) 16) (/ v2 4)))\n              ())\n            (if (> rem 3)\n              (bytesSet out (+ o0 2) (+ (* (mod v2 4) 64) v3))\n              ())\n            (decLoop src alphaBytes (+ i 4) n out)))))))\n\nfn decodeWith s: Str alpha: Str -> (Result Bytes String)\n  (let [(src (stringToBytes s))\n        (rawLen (bytesLength src))\n        (n (stripPadLen src rawLen))]\n    (if (not (validPadding rawLen n))\n      (err \"base64: invalid padding\")\n      (if (= (mod n 4) 1)\n        (err \"base64: invalid length\")\n        (decLoop src (stringToBytes alpha) 0 n (bytesAlloc (decOutLen n)))))))\n\nfn decode s: Str -> (Result Bytes String)\n  (decodeWith s (stdAlpha))\n\nfn decodeUrlSafe s: Str -> (Result Bytes String)\n  (decodeWith s (urlAlpha))\n" :rawFields "content")

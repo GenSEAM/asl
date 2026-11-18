@@ -100,7 +100,8 @@ fn testJournal -> Bool
   (let [root (rk/freshRecorderRoot! "attractorJournal")
         root2 (rk/freshRecorderRoot! "attractorJournalOff")
         ready (and (initRepo! root) (initRepo! root2))
-        on (drive! root "attrOn" "asn" " :op \"note\" :text \"x\")\n(:done)")
+        ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the prefill is sent only without the step tool, so the continuation case runs with nativeTools off")
+        on (drive! root "attrOn" "asn :nativeTools \"off\"" " :op \"note\" :text \"x\")\n(:done)")
         off (drive! root2 "attrOff" "" "I will note first.\n(:step :op \"note\" :text \"x\")\n(:done)")
         cleaned (and (ok? (pathRemove root)) (ok? (pathRemove root2)))]
     (do (assert ready "the repo is tracked")

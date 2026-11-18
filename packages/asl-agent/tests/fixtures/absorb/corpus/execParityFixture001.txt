@@ -1,0 +1,4 @@
+(r (id "x1") (op "write") (status "rejected") (error "ERR_RAW_MISSING") (file "keep/r.txt") (hint "(:step :op \"write\" :file \"keep/r.txt\" :content :raw)\n```\n<file text>\n```\n(a text that holds ``` lines goes in a longer fence: ````)"))
+(:receipt :id "x1" :op "write" :status :rejected :file "keep/r.txt" :error :ERR_RAW_MISSING :hint "(:step :op \"write\" :file \"keep/r.txt\" :content :raw)\n```\n<file text>\n```\n(a text that holds ``` lines goes in a longer fence: ````)")
+()
+()

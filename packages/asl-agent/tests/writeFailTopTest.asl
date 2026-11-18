@@ -146,7 +146,7 @@ fn ! scriptAsserts -> Bool
         streak (optionOr (listGet runs 3) (Run :journal "" :receipt "" :subject ""))
         capped (optionOr (listGet runs 4) (Run :journal "" :receipt "" :subject ""))]
     (do
-      (assert (stringContains? (receiptLine argKey.receipt) "(:agentReceipt :status :ok") (str "the arg_key write lands and the run ends ok: " (receiptLine argKey.receipt)))
+      (assert (stringContains? (receiptLine argKey.receipt) "(:agentReceipt :status :ok") (str "the arg_key write lands and the run ends ok: " (receiptLine argKey.receipt) " gates " (stringJoin (map (fn [l] (c/sliceOf l 0 (min (stringLength l) 400))) (filter (fn [l] (or (stringContains? l "(:gate ") (stringContains? l ":observation"))) (stringSplit argKey.journal "\n"))) " | ")))
       (assert (= argKey.subject "done") (str "the owned file holds the written content, got " argKey.subject))
       (assert (stringContains? (receiptLine argKey.receipt) ":repaired (:turns 1 :kinds ((:argKey 1)) :left ())") (str "the receipt counts the repair: " (receiptLine argKey.receipt)))
       (assert (stringContains? argKey.journal "(:turn 1 :shape :repaired (argKey) :left ())") "the journal row names the repaired turn")

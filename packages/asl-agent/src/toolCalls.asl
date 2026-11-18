@@ -1,6 +1,6 @@
 (module aslAgent/toolCalls
   :x [untagToolCalls ShapeFix canonSteps]
-  :i [(aslAgent/core :a c) (aslAgent/context :a cx)])
+  :i [(aslAgent/core :a c) (aslAgent/context :a cx) (aslAgent/nativeTools :a nt) (aslAgent/reply :a r) (asl-json/json :a j)])
 
 enum Evt
   (evt end: Int64 open: Bool)
@@ -161,7 +161,7 @@ fn dedupeKeys xs: (List String) acc: (List String) -> (List String)
   (if (listEmpty? xs) acc (dedupeKeys (c/restOf xs) (if (listContains? acc (c/firstOf xs)) acc (cons (c/firstOf xs) acc))))
 
 ; (:m :ref LEON-WRITE-FAIL-TOP :do "an arg_key chain maps only when it names op once and no key twice; a repeated key is left (grade of dc02ed63e)")
-fn argKeyStep form: String -> (Option String)
+fn argOpStep form: String -> (Option String)
   (let [n (stringLength form)]
     (match (argChain form n 6 (list))
       ((none) none)
@@ -173,10 +173,99 @@ fn argKeyStep form: String -> (Option String)
               none
               (some (str "(:step " (stringJoin (map argField (cons op rest)) " ") ")")))))))))
 
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "closing tags that carry no data: DeepSeek's DSML parameter close stands for </arg_value>, and </tool_call>, </function> or an invoke close right before the form's last paren is dropped (node2 2026-11-17: (:step<arg_key>op</arg_key><arg_value>run</arg_value></tool_call>), <arg_value>(:step ...)</｜DSML｜ parameter>\\n</invoke>)")
+fn tailTags -> (List String)
+  (list "</tool_call>" "</function>" "</invoke>" "</｜DSML｜invoke>" "</｜DSML｜ invoke>")
+
+fn dropTail t: String -> String
+  (match (listFind (fn [tag] (stringEndsWith? t tag)) (tailTags))
+    ((some tag) (dropTail (stringTrim (c/sliceOf t 0 (- (stringLength t) (stringLength tag))))))
+    ((none) t))
+
+fn argTagsOff form: String -> String
+  (let [f (stringReplace (stringReplace form "</｜DSML｜ parameter>" "</arg_value>") "</｜DSML｜parameter>" "</arg_value>")
+        body (stringTrim (c/sliceOf f 0 (- (stringLength f) 1)))]
+    (str (dropTail body) ")"))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a step(form) call written as one arg_key pair: the value is used only when it is exactly one (:step ...), (:done ...) or (:escalate ...) form and nothing else")
+fn formValue v: String -> (Option String)
+  (let [t (stringTrim v)
+        n (stringLength t)
+        spans (topForms t n 0 (list))]
+    (if (and (= (listLength spans) 1) (and (= (pairFirst (c/firstOf spans)) 0) (= (pairSecond (c/firstOf spans)) n)))
+      (if (listAny? (fn [h] (stringStartsWith? t h)) (list "(:step " "(:done" "(:escalate")) (some t) none)
+      none))
+
+fn argKeyStep form: String -> (Option String)
+  (let [f (argTagsOff form)]
+    (match (argChain f (stringLength f) 6 (list))
+      ((none) none)
+      ((some kvs) (if (and (= (listLength kvs) 1) (= (pairFirst (c/firstOf kvs)) "form"))
+        (formValue (pairSecond (c/firstOf kvs)))
+        (argOpStep f)))))
+
 ; (:m :ref LEON-WRITE-FAIL-TOP :do "a (:step...) form with no key at all, such as (:step@@) or (:step): nothing in it names an op")
 fn emptyStep? form: String -> Bool
   (let [inner (c/sliceOf form 6 (- (stringLength form) 1))]
     (and (stringStartsWith? form "(:step") (and (not (stringContains? inner ":")) (and (not (stringContains? inner "\"")) (not (stringContains? inner "("))))))
+
+; (:m :ref LEON-STEP-BODY-LOST :do "the JSON object a (...) form carries when a model wrote its tool call as text (node2 2026-11-17: <tool_call>{\"form\": ...}</tool_call>, which untagToolCalls wraps in parens): the text after the open paren, after an optional :step or step head and an optional inner paren, when it is one {...} object and nothing else; none otherwise")
+fn jsonBody form: String -> (Option String)
+  (let [inner (stringTrim (c/sliceOf form 1 (- (stringLength form) 1)))
+        headless (cond ((stringStartsWith? inner ":step") (stringTrim (c/sliceOf inner 5 (stringLength inner))))
+                       ((stringStartsWith? inner "step") (stringTrim (c/sliceOf inner 4 (stringLength inner))))
+                       (else inner))
+        bare (if (and (stringStartsWith? headless "(") (stringEndsWith? headless ")")) (stringTrim (c/sliceOf headless 1 (- (stringLength headless) 1))) headless)]
+    (if (stringStartsWith? bare "{") (some bare) none))
+
+; (:m :ref LEON-STEP-BODY-LOST :do "the arguments of a text tool call as key-value pairs: an object, a JSON string holding one, or an empty string for none; anything else (prose, null, an array, a number) is none, so the call is left unexecuted")
+fn callArgs v: j/Json -> (Option (List (Pair String j/Json)))
+  (match v
+    ((j/jobj kvs) (some kvs))
+    ((j/jstr s) (if (stringEmpty? (stringTrim s)) (some (list))
+                  (match (j/jsonParse s) ((ok (j/jobj kvs)) (some kvs)) (_ none))))
+    (_ none))
+
+fn uniqueKeys? kvs: (List (Pair String j/Json)) -> Bool
+  (let [keys (map pairFirst kvs)] (listAll? (fn [k] (= (listLength (filter (fn [x] (= x k)) keys)) 1)) keys))
+
+fn scalarJson? v: j/Json -> Bool
+  (match v ((j/jarr _) false) ((j/jobj _) false) ((j/jnull) false) (_ true))
+
+; (:m :ref LEON-STEP-BODY-LOST :do "step tool arguments map one to one only when keys are unique and either form is the one key, or op names the step with scalar values beside it and no form; another key next to form, a repeated key or a nested value leaves the call unexecuted (grader 2026-11-18: {form read, op run, cmd ...} ran the read and dropped the run silently)")
+fn stepArgs? kvs: (List (Pair String j/Json)) -> Bool
+  (let [keys (map pairFirst kvs)]
+    (and (uniqueKeys? kvs)
+      (or (and (= (listLength keys) 1) (= (c/firstOf keys) "form"))
+          (and (listContains? keys "op") (and (not (listContains? keys "form")) (listAll? scalarJson? (map pairSecond kvs)))))))
+
+fn opArgs? kvs: (List (Pair String j/Json)) -> Bool
+  (and (uniqueKeys? kvs) (listAll? scalarJson? (map pairSecond kvs)))
+
+; (:m :ref LEON-STEP-BODY-LOST :do "a JSON tool call written as text becomes the step it names only when it maps one to one: {name, arguments} (arguments an object or a JSON string of one) goes through nt/callForm like a native call, {form ...} or {op ...} is the step tool's own arguments; the form must open with (:, its raw blocks are bound as turnReply binds them; any other key, a parse error or an empty result is none, so the form is left as sent")
+fn jsonForm form: String -> (Option String)
+  (match (jsonBody form)
+    ((none) none)
+    ((some body)
+      (match (j/jsonParse body)
+        ((ok (j/jobj kvs))
+          (let [keys (map pairFirst kvs)
+                obj (j/jobj kvs)
+                callName (match (j/jsonGet obj "name") ((some (j/jstr s)) s) (_ ""))
+                call (and (not (stringEmpty? callName)) (and (listContains? keys "arguments") (listAll? (fn [k] (listContains? (list "name" "arguments" "id" "type") k)) keys)))
+                args (if call (callArgs (optionOr (j/jsonGet obj "arguments") (j/jnull))) none)
+                text (cond ((not (uniqueKeys? kvs)) "")
+                           (call (match args
+                                   ((some a) (if (if (= callName "step") (stepArgs? a) (opArgs? a)) (nt/callForm callName (j/jsonEmit (j/jobj a))) ""))
+                                   ((none) "")))
+                           ((stepArgs? kvs) (nt/callForm "step" body))
+                           (else ""))
+                t (stringTrim text)]
+            (if (stringStartsWith? t "(:") (some (r/bindRawBlocks t).text) none)))
+        (_ none))))
+
+fn jsonLike? form: String -> Bool
+  (some? (jsonBody form))
 
 fn simpleTok? t: String -> Bool
   (and (not (stringEmpty? t)) (not (listAny? (fn [x] (stringContains? t x)) (list " " "\t" "\n" "\"" "'" "\\" "(" ")"))))
@@ -240,7 +329,11 @@ fn named? form: String -> Bool
   (and (stringStartsWith? form "(:step") (not (emptyStep? form)))
 
 fn fixForm form: String others: Bool -> (Pair (Option String) (Pair (List String) (List String)))
-  (cond ((not (stringStartsWith? form "(:step")) (pair none (pair (list) (list))))
+  (cond ((jsonLike? form)
+      (match (jsonForm form)
+        ((some f) (pair (some f) (pair (list "jsonCall") (list))))
+        ((none) (pair none (pair (list) (list "jsonCall"))))))
+    ((not (stringStartsWith? form "(:step")) (pair none (pair (list) (list))))
     ((stringStartsWith? form "(:step<arg_key>")
       (match (argKeyStep form)
         ((some f) (pair (some f) (pair (list "argKey") (list))))
@@ -261,9 +354,18 @@ fn applyFixes s: String spans: (List (Pair Int64 Int64)) others: Bool cur: Int64
         ((none) (applyFixes s rest others cur out rep2 left2)))))
 
 ; (:m :ref LEON-WRITE-FAIL-TOP :do "canonical step forms for a reply: every top-level (:step ...) form in an alternate wire shape that maps unambiguously is rewritten, an empty (:step@@) beside a named step is dropped; :repaired and :left name each kind once per form, the text is unchanged when nothing was repaired")
-fn canonSteps input: String -> ShapeFix
+fn canonSpans input: String -> ShapeFix
   (let [n (stringLength input)
         spans (topForms input n 0 (list))
         others (listAny? (fn [sp] (let [f (c/sliceOf input (pairFirst sp) (pairSecond sp))]
-                 (or (and (named? f) (not (stringStartsWith? f "(:step<arg_key>"))) (some? (argKeyStep f))))) spans)]
+                 (or (and (named? f) (not (stringStartsWith? f "(:step<arg_key>"))) (or (some? (argKeyStep f)) (some? (jsonForm f)))))) spans)]
     (applyFixes input spans others 0 (list) (list) (list)))
+
+; (:m :ref LEON-STEP-BODY-LOST :do "a reply that is one bare JSON object is read as that object in parens, so a tool call the model wrote as plain JSON maps like a tagged one; it is kept only when it maps, else the reply is scanned as sent and the object is named under :left")
+fn canonSteps input: String -> ShapeFix
+  (let [t (stringTrim input)
+        whole (and (stringStartsWith? t "{") (stringEndsWith? t "}"))
+        wrapped (if whole (canonSpans (str "(" t ")")) (canonSpans input))]
+    (cond ((not whole) wrapped)
+          ((listContains? wrapped.repaired "jsonCall") wrapped)
+          (else (let [plain (canonSpans input)] (ShapeFix :text plain.text :repaired plain.repaired :left (listAppend plain.left (list "jsonCall")))))))

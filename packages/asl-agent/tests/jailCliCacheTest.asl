@@ -256,7 +256,7 @@ fn ! jailedGates! base: String -> Bool
       (assert (or (stringEmpty? tool) (= done.exit 0)) (str "the jailed bin/asl check ran, exit " (stringFromInt64 done.exit) " verdict " done.verdict ": " done.out))
       (assert (or (stringEmpty? tool) (stringContains? done.out "ok a.asl")) (str "the jailed check printed its result: " done.out))
       (assert (= after (str cli "/" key "\n")) (str "after the deploy the next jailed call follows the shared pointer to the new entry: " after))
-      (assert (and (stringContains? report ":how \"cliEntry\")\n(:seed :cache \"ASL_NATIVE_CLI_CACHE\" :how \"resync\")") (= (listLength (stringSplit report ":how \"resync\"")) 4)) (str "the seed report keeps the first seed and appends the re-seed of the later call: " report))
+      (assert (and (stringContains? report ":how \"cliEntry\")\n(:seed :cache \"ASL_NATIVE_CLI_CACHE\" :how \"resync\")") (= (listLength (stringSplit report ":how \"resync\"")) 2)) (str "the seed report keeps the first seed and appends the one re-seed of the later call, which moved the tool root head (the task root head, which the jailed bin/asl of the tool root never reads, no longer copies the tool entry), pieces " (stringFromInt64 (listLength (stringSplit report ":how \"resync\""))) ": " (stringReplace report "\n" "|")))
       (assert (ok? cleaned) "this part's fixture directory was removed")
       true))
 

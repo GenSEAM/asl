@@ -43,7 +43,7 @@ fn testCalls -> Bool
     (do (assert (= read "(:step :op \"read\" :file \"src/a.asl\" :symbol \"f\" :start 3)") "a read call is the read step")
         (assert (= gate "(:step :op \"gate\")") "empty arguments give the bare step")
         (assert (= done "(:done)") "done is the terminal form, not a step")
-        (assert (stringStartsWith? edit "(:step :op \"edit\" :file \"a.asl\" :old :raw :new \"z\")\n```\nx \"y\"\n```") "a quoted string goes out as a raw block")
+        (assert (= edit "(:step :op \"edit\" :file \"a.asl\" :old \"x \\\"y\\\"\" :new \"z\")") (str "a one-line string with quotes goes out inline and escaped, so it reaches the step byte for byte, got " edit))
         (assert (= step "(:step :op \"gate\")") "the step tool carries the form text itself")
         (assert (= both "(:step :op \"read\" :file \"a.asl\")\n(:step :op \"gate\")") "calls keep their order, one form per line")
         (assert (= none "(:done)") "no calls leaves the text content as the reply")

@@ -1,0 +1,7 @@
+(:step :op "edit" :file "a" :new :raw :old :raw)
+```
+NEW
+```
+```
+OLD
+```

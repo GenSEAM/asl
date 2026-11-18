@@ -1,0 +1,8 @@
+(:step :op "write" :file "a" :content :raw)
+(:step :op "write" :file "b" :content :raw)
+```
+A
+```
+```
+B
+```

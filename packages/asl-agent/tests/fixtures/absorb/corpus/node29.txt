@@ -1,0 +1,37 @@
+(:txn :owns ("asl/tools/coord/cacheTurns.asl" "asl/tools/coord/tests/cacheStickyTest.asl")
+(:step :op "write" :file "asl/tools/coord/cacheTurns.asl" :content "(module asl-tools/coord/tests/cacheStickyTest\n  :x [runTests]\n  :i [(asl-tools/coord/cacheTurns)])\n\nfn absF x: Float64 -> Float64\n  (max x (- 0.0 x))\n\nfn runTests -> Bool\n  (let [(s1 (list (Turn :session \"s-sticky\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-sticky\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-sticky\" :provider \"p\" :alias \"a\")))\n        (s2 (list (Turn :session \"s-switch\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-switch\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-switch\" :provider \"q\" :alias \"b\")))\n        (s3 (list (Turn :session \"s-alt\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-alt\" :provider \"q\" :alias \"b\")\n                  (Turn :session \"s-alt\" :provider \"p\" :alias \"a\")\n                  (Turn :session \"s-alt\" :provider \"q\" :alias \"b\")))\n        (sessions (list s1 s2 s3))\n        (row (stickyShare sessions))\n        (switches (perSessionSwitches sessions))\n        (expectedShare (/ 4.0 7.0))\n        (tol 0.000000001)\n        (diff (absF (- row.share expectedShare)))]\n    (assert (= row.sessions 3) \"sessions total\")\n    (assert (= row.turnsAfterFirst 7) \"turnsAfterFirst total 2+2+3\")\n    (assert (= row.sameProvider 4) \"sameProvider total 2+1+1\")\n    (assert (< diff tol) \"share 4/7 within 1e-9\")\n    (assert (= (listLength switches) 2) \"two sessions with >=1 switch\")\n    true))\n")
+```
+(module asl-tools/coord/cacheTurns
+  :x [Turn StickyRow SwitchRow stickyShare perSessionSwitches]
+  :i [])
+
+(schema Turn
+  (:f session String)
+  (:f provider String)
+  (:f alias String))
+
+(schema StickyRow
+  (:f sessions Int64)
+  (:f turnsAfterFirst Int64)
+  (:f sameProvider Int64)
+  (:f share Float64))
+
+(schema SwitchRow
+  (:f session String)
+  (:f switches Int64))
+
+fn sameAs first: Turn t: Turn -> Bool
+  (and (= first.provider t.provider) (= first.alias t.alias))
+
+fn isSwitch a: Turn b: Turn -> Bool
+  (not (and (= a.provider b.provider) (= a.alias b.alias)))
+
+fn countSame session: (List Turn) -> Int64
+  (match (listHead session)
+    ((none) 0)
+    ((some first)
+     (fold (fn [acc t] (+ acc (if (sameAs first t) 1 0)))
+           0
+           (optionOr (listTail session) (list))))) :rawFields "content")
+(:step :op "write" :file "asl/tools/coord/tests/cacheStickyTest.asl" :content "(module asl-tools/coord/cacheTurns\n  :x [Turn StickyRow SwitchRow stickyShare perSessionSwitches]\n  :i [])\n\n(schema Turn\n  (:f session String)\n  (:f provider String)\n  (:f alias String))\n\n(schema StickyRow\n  (:f sessions Int64)\n  (:f turnsAfterFirst Int64)\n  (:f sameProvider Int64)\n  (:f share Float64))\n\n(schema SwitchRow\n  (:f session String)\n  (:f switches Int64))\n\nfn sameAs first: Turn t: Turn -> Bool\n  (and (= first.provider t.provider) (= first.alias t.alias))\n\nfn isSwitch a: Turn b: Turn -> Bool\n  (not (and (= a.provider b.provider) (= a.alias b.alias)))\n\nfn countSame session: (List Turn) -> Int64\n  (match (listHead session)\n    ((none) 0)\n    ((some first)\n     (fold (fn [acc t] (+ acc (if (sameAs first t) 1 0)))\n           0\n           (optionOr (listTail session) (list))))))\n\nfn countSwitches prev: Turn ts: (List Turn) -> Int64\n  (match (listHead ts)\n    ((none) 0)\n    ((some t)\n     (+ (if (isSwitch prev t) 1 0)\n        (countSwitches t (optionOr (listTail ts) (list)))))))\n\nfn switchesIn session: (List Turn) -> Int64\n  (match (listHead session)\n    ((none) 0)\n    ((some first)\n     (countSwitches first (optionOr (listTail session) (list))))))\n\nfn sessionName session: (List Turn) -> String\n  (match (listHead session)\n    ((none) \"\")\n    ((some t) t.session)))\n\nfn turnsAfterFirst session: (List Turn) -> Int64\n  (max 0 (- (listLength session) 1))\n\nfn stickyShare sessions: (List (List Turn)) -> StickyRow\n  (let [(taf (fold (fn [acc s] (+ acc (turnsAfterFirst s))) 0 sessions))\n        (same (fold (fn [acc s] (+ acc (countSame s))) 0 sessions))\n        (share (if (> taf 0)\n                   (/ (int64ToFloat64 same) (int64ToFloat64 taf))\n                   0.0))]\n    (StickyRow :sessions (listLength sessions)\n               :turnsAfterFirst taf\n               :sameProvider same\n               :share share))\n\nfn perSessionSwitches sessions: (List (List Turn)) -> (List SwitchRow)\n  (filter (fn [r] (> r.switches 0))\n          (map (fn [s] (SwitchRow :session (sessionName s)\n                                  :switches (switchesIn s)))\n               sessions))\n" :rawFields "content")
+(:step :op "gate")

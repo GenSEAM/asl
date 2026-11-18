@@ -270,10 +270,13 @@ fn ! pointHead! dst: String head: String dir: String stamp: Int64 -> Bool
         (and (ok? (fileUtime part stamp)) (ok? (pathRename part (str dst "/" head)))))))
 
 ; (:m :ref LEON-JAIL-CLI-CACHE :do "one private head: the shared pointers it may follow are its own and, for the first head (the unit's own root, currentHeads), the tool root's; the private entry counts only when it is a plain cli directory inside the private cache. Returns resync when it moved the head, failed: <why>, or empty when nothing changed or the private entry was only restamped")
+; (:m :ref LEON-STEP-BODY-LOST :do "root may name several roots, one per line: each head is checked against the root it is named after (head_X against the sources of X) and may borrow any other head's fitting entry, so a jail seeds both the tool root's head, which the jailed tool bin/asl reads, and a task root's own head where it has a bin/asl, which its gates and runs read (grader 2026-11-18 on 9424129aa: a worktree without its own shared head went to a cold build). A head no root is named after keeps the old rule: the first head is checked against the first root")
 fn ! resyncHead! src: String dst: String heads: (List String) head: String root: String -> String
-  (let [first (= (optionOr (listHead heads) "") head)
+  (let [roots (filter (fn [r] (not (stringEmpty? r))) (stringSplit root "\n"))
+        lead (= (optionOr (listHead heads) "") head)
+        here (match (listFind (fn [r] (= (cliHeadName r) head)) roots) ((some r) r) ((none) (if lead (optionOr (listHead roots) "") "")))
+        first (or lead (not (stringEmpty? here)))
         cands (filter (fn [(c CliSource)] -> Bool (not (stringEmpty? c.dir))) (cons (sourceOf! src head true) (if first (map (fn [o] (sourceOf! src o false)) (filter (fn [o] (!= o head)) heads)) (list))))
-        here (if first root "")
         priv (str dst "/" head)
         link (match (fileLstat priv) ((ok st) st.isSymlink) ((err _) false))
         privStamp (stampOf! priv)
@@ -414,13 +417,21 @@ fn ! seedCaches! home: String sources: (List (Pair String String)) heads: (List 
     (seedCachesWith! "none" home sources heads root))
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the child env is an allowlist, not the parent env minus a few names: of the inherited rows only the names passName? knows pass, so provider keys and ASL_ settings never reach a unit child; the rows the harness sets (PWD, HOME, TMPDIR, the private cache directories) are added after, and the names the run hides are dropped last. seed true clones the shared caches into the private ones first; they hold tens of thousands of files inside the root, so <jail home>/.asl then carries a .gitignore of * and the run snapshot (git ls-files of untracked files) never walks them. JAIL-SEED-SYMLINK: where a symlink lies on the jail home's path inside the root, the harness creates, seeds and writes nothing there and says so on stderr; the rows are the same, and jailPlan! grants no home outside the root")
+; (:m :ref LEON-STEP-BODY-LOST :do "the root a jail's CLI head is checked against is the tool root the harness runs (the inherited ASL_CLI_ROOT row), not the task root: a task with its own repository (a test fixture, a consumer project such as vtbot) runs the tool root's bin/asl, and checking that head against the task root, which has none of the CLI's sources, left its private pointer at the shared mtime, so bin/asl saw sources newer than it and rebuilt the CLI in the jail (grader 2026-11-18, 263 s, ERR_NATIVE_STALE); with no ASL_CLI_ROOT the task root is the tool root, as before")
+fn ! seedRoot! absRoot: String inherited: (List String) -> String
+  (let [tool (rowValue inherited "ASL_CLI_ROOT")]
+    (realOr! (if (stringEmpty? tool) absRoot tool)))
+
 fn ! childEnvIn! absRoot: String inherited: (List String) hidden: (List String) realHome: String seed: Bool -> (List String)
   (let [home (jailHome absRoot)
         free (listAll? (fn [p] (linkFree! absRoot (str home p))) (list "/tmp" "/.asl/seedReport.asn" "/.asl/.gitignore"))
         said (if free true (do (eprintln "(:leon :seed :failed \"a symlink lies on the jail home path; nothing was created or seeded there\")") false))
         made (and free (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp")))))
         kept (filter (fn [r] (passName? (envKey r))) inherited)
-        seeded (if (and seed free) (seedCaches! home (cacheSources! inherited realHome) (currentHeads (realOr! absRoot) inherited) (realOr! absRoot)) (list))
+        toolRoot (seedRoot! absRoot inherited)
+        taskRoot (realOr! absRoot)
+        roots (if (and (!= taskRoot toolRoot) (file? (str taskRoot "/bin/asl"))) (str toolRoot "\n" taskRoot) toolRoot)
+        seeded (if (and seed free) (seedCaches! home (cacheSources! inherited realHome) (dedupe (cons (cliHeadName toolRoot) (currentHeads taskRoot inherited)) (list)) roots) (list))
         reported (seedReport! home seeded)
         ignore (str home "/.asl/.gitignore")
         ignored (if (and (and seed free) (not (file? ignore))) (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite ignore "*\n"))) true)

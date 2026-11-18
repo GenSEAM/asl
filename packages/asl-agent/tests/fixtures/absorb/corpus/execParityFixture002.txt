@@ -1,0 +1,4 @@
+(r (id "x1") (op "edit") (status "rejected") (error "ERR_RAW_MISSING") (file "keep/k.txt") (hint "(:step :op \"edit\" :file \"keep/k.txt\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```") (echoed true))
+(:receipt :id "x1" :op "edit" :status :rejected :file "keep/k.txt" :error :ERR_RAW_MISSING :hint "(:step :op \"edit\" :file \"keep/k.txt\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```" :echoed true)
+()
+()

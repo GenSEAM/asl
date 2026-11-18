@@ -1,0 +1,103 @@
+(:txn :owns ("asl/packages/asl-text/src/dotenv.asl" "asl/packages/asl-text/tests/dotenvTest.asl")
+  (:step :op "write" :file "asl/packages/asl-text/src/dotenv.asl" :content "(module asl-text/tests/dotenvTest :x [runTests] :i [(asl-text/dotenv :a d)])\n\nfn firstRow text: String -> (Pair String String)\n  (optionOr (listHead (d/parseDotenv text)) (pair \"\" \"\"))\n\nfn testParseSimple -> Bool\n  (let [(rows (d/parseDotenv \"FOO=bar\\nBAZ=qux\\n\"))]\n    (do (assert (= (listLength rows) 2) \"two rows are parsed\")\n        (assert (= (firstRow \"FOO=bar\\n\") (pair \"FOO\" \"bar\")) \"simple key and value\")\n        (assert (= (firstRow \"  SPACED  =  value  \\n\") (pair \"SPACED\" \"value\")) \"surrounding whitespace is trimmed\")\n        true))\n\nfn testParseQuoted -> Bool\n  (do (assert (= (pairSecond (firstRow \"NAME=\\\" John Doe \\\"\\n\")) \" John Doe \") \"double quotes preserve spaces\")\n      (assert (= (pairSecond (firstRow \"NAME='Jane Doe'\\n\")) \"Jane Doe\") \"single quotes are stripped\")\n      (assert (= (pairSecond (firstRow \"HASH='a#b' # comment\\n\")) \"a#b\") \"hash in single quotes is literal\")\n      (assert (= (pairSecond (firstRow \"ESC=\\\"a\\\\nb\\\\t\\\\\\\"c\\\\\\\"\\\\\\\\\\\"\\n\")) \"a\\nb\\t\\\"c\\\"\\\\\") \"double quoted escapes are decoded\")\n      true))\n\nfn testExportAndComments -> Bool\n  (do (assert (= (listLength (d/parseDotenv \"# comment\\n\\nexport FOO=bar\\n\")) 1) \"comments blanks and export\")\n      (assert (= (firstRow \"export FOO=bar\\n\") (pair \"FOO\" \"bar\")) \"export prefix is removed\")\n      (assert (= (firstRow \"FOO=bar # comment\\n\") (pair \"FOO\" \"bar\")) \"inline comment is removed\")\n      (assert (= (firstRow \"FOO=bar#comment\\n\") (pair \"FOO\" \"bar\")) \"unquoted hash starts a comment\")\n      true))\n\nfn testNoExpansion -> Bool\n  (do (assert (= (pairSecond (firstRow \"PATH=$HOME/bin\\n\")) \"$HOME/bin\") \"unquoted dollars are literal\")\n      (assert (= (pairSecond (firstRow \"OTHER=\\\"${USER}\\\"\\n\")) \"${USER}\") \"quoted dollars are literal\")\n      true))\n\nfn testMalformedLines -> Bool\n  (let [(rows (d/parseDotenv \"NO_EQUALS\\n=missing-key\\nGOOD=yes\\n\"))]\n    (do (assert (= rows (list (pair \"GOOD\" \"yes\"))) \"malformed rows are skipped\")\n        true))\n\nfn testRender -> Bool\n  (do (assert (= (d/renderDotenv (list (pair \"FOO\" \"bar\") (pair \"BAZ\" \"qux\"))) \"FOO=bar\\nBAZ=qux\\n\") \"plain values render without quotes\")\n      (assert (= (d/renderDotenv (list (pair \"SPACED\" \" value \"))) \"SPACED=\\\" value \\\"\\n\") \"significant spaces are quoted\")\n      true))\n\nfn testRenderRoundTrip -> Bool\n  (let [(rows (list\n                (pair \"PLAIN\" \"foo\")\n                (pair \"EMPTY\" \"\")\n                (pair \"SPACED\" \" value \")\n                (pair \"HASH\" \"a#b\")\n                (pair \"QUOTE\" \"say \\\"hi\\\"\")\n                (pair \"NEWLINE\" \"a\\nb\")\n                (pair \"TAB\" \"a\\tb\")\n                (pair \"BACKSLASH\" \"a\\\\b\")\n                (pair \"SINGLE\" \"'raw'\")))\n        (rendered (d/renderDotenv rows))]\n    (do (assert (= (d/parseDotenv rendered) rows) \"special values round trip\")\n        true))\n\nfn runTests -> Bool\n  (and (testParseSimple)\n    (and (testParseQuoted)\n      (and (testExportAndComments)\n        (and (testNoExpansion)\n          (and (testMalformedLines)\n            (and (testRender) (testRenderRoundTrip)))))))\n")
+```
+(module asl-text/dotenv :x [parseDotenv renderDotenv] :i [])
+
+fn tailOrEmpty xs: (List String) -> (List String)
+  (optionOr (listTail xs) (list))
+
+fn stripExport s: String -> String
+  (if (stringStartsWith? s "export ")
+    (stringTrim (optionOr (stringSlice s 7 (stringLength s)) ""))
+    s)
+
+fn takeUnquoted chars: (List String) acc: String -> String
+  (match (listHead chars)
+    ((some c)
+      (if (= c "#")
+        acc
+        (takeUnquoted (tailOrEmpty chars) (str acc c))))
+    ((none) acc))
+
+fn doubleEscape c: String -> (Option String)
+  (if (= c "n")
+    (some "\n")
+    (if (= c "r")
+      (some "\r")
+      (if (= c "t")
+        (some "\t")
+        (if (= c "\"")
+          (some "\"")
+          (if (= c "\\")
+            (some "\\")
+            (none))))))
+
+fn takeDoubleQuoted chars: (List String) acc: String -> String
+  (match (listHead chars)
+    ((some c)
+      (if (= c "\"")
+        acc
+        (if (= c "\\")
+          (let [(rest (tailOrEmpty chars))]
+            (match (listHead rest)
+              ((some escaped)
+                (match (doubleEscape escaped)
+                  ((some decoded)
+                    (takeDoubleQuoted (tailOrEmpty rest) (str acc decoded)))
+                  ((none)
+                    (takeDoubleQuoted (tailOrEmpty rest) (str acc "\\" escaped)))))
+              ((none) (str acc "\\"))))
+          (takeDoubleQuoted (tailOrEmpty chars) (str acc c)))))
+    ((none) acc))
+
+fn takeSingleQuoted chars: (List String) acc: String -> String
+  (match (listHead chars)
+    ((some c)
+      (if (= c "'")
+        acc
+        (takeSingleQuoted (tailOrEmpty chars) (str acc c))))
+    ((none) acc))
+
+fn parseValue raw: String -> String
+  (match (listHead (stringChars raw))
+    ((some first)
+      (if (= first "\"")
+        (takeDoubleQuoted (tailOrEmpty (stringChars raw)) "")
+        (if (= first "'")
+          (takeSingleQuoted (tailOrEmpty (stringChars raw)) "")
+          (stringTrim (takeUnquoted (stringChars raw) "")))))
+    ((none) ""))
+
+fn parseLine line: String -> (Option (Pair String String))
+  (let [(trimmed (stringTrim line))]
+    (if (or (= trimmed "") (stringStartsWith? trimmed "#"))
+      (none)
+      (let [(s (stripExport trimmed))]
+        (match (stringIndexOf s "=")
+          ((some eqIdx)
+            (let [(key (stringTrim (optionOr (stringSlice s 0 eqIdx) "")))
+                  (rawValue (stringTrim (optionOr (stringSlice s (+ eqIdx 1) (stringLength s)) "")))]
+              (if (= key "")
+                (none)
+                (some (pair key (parseValue rawValue))))))
+          ((none) (none))))))
+
+fn parseDotenv s: String -> (List (Pair String String))
+  (listReverse
+    (fold
+      (fn [(rows (List (Pair String String))) (line String)] -> (List (Pair String String))
+        (match (parseLine line)
+          ((some row) (cons row rows))
+          ((none) rows)))
+      (list)
+      (stringSplit s "\n")))
+
+fn needsQuotes value: String -> Bool
+  (or (not (= value (stringTrim value)))
+    (or (stringContains? value "#")
+      (or (stringContains? value "\"")
+        (or (stringStartsWith? value "'")
+          (or (stringContains? value "\n")
+            (stringContains? value "\r")))))) :rawFields "content")
+(:step :op "write" :file "asl/packages/asl-text/tests/dotenvTest.asl" :content "(module asl-text/dotenv :x [parseDotenv renderDotenv] :i [])\n\nfn tailOrEmpty xs: (List String) -> (List String)\n  (optionOr (listTail xs) (list))\n\nfn stripExport s: String -> String\n  (if (stringStartsWith? s \"export \")\n    (stringTrim (optionOr (stringSlice s 7 (stringLength s)) \"\"))\n    s)\n\nfn takeUnquoted chars: (List String) acc: String -> String\n  (match (listHead chars)\n    ((some c)\n      (if (= c \"#\")\n        acc\n        (takeUnquoted (tailOrEmpty chars) (str acc c))))\n    ((none) acc))\n\nfn doubleEscape c: String -> (Option String)\n  (if (= c \"n\")\n    (some \"\\n\")\n    (if (= c \"r\")\n      (some \"\\r\")\n      (if (= c \"t\")\n        (some \"\\t\")\n        (if (= c \"\\\"\")\n          (some \"\\\"\")\n          (if (= c \"\\\\\")\n            (some \"\\\\\")\n            (none))))))\n\nfn takeDoubleQuoted chars: (List String) acc: String -> String\n  (match (listHead chars)\n    ((some c)\n      (if (= c \"\\\"\")\n        acc\n        (if (= c \"\\\\\")\n          (let [(rest (tailOrEmpty chars))]\n            (match (listHead rest)\n              ((some escaped)\n                (match (doubleEscape escaped)\n                  ((some decoded)\n                    (takeDoubleQuoted (tailOrEmpty rest) (str acc decoded)))\n                  ((none)\n                    (takeDoubleQuoted (tailOrEmpty rest) (str acc \"\\\\\" escaped)))))\n              ((none) (str acc \"\\\\\"))))\n          (takeDoubleQuoted (tailOrEmpty chars) (str acc c)))))\n    ((none) acc))\n\nfn takeSingleQuoted chars: (List String) acc: String -> String\n  (match (listHead chars)\n    ((some c)\n      (if (= c \"'\")\n        acc\n        (takeSingleQuoted (tailOrEmpty chars) (str acc c))))\n    ((none) acc))\n\nfn parseValue raw: String -> String\n  (match (listHead (stringChars raw))\n    ((some first)\n      (if (= first \"\\\"\")\n        (takeDoubleQuoted (tailOrEmpty (stringChars raw)) \"\")\n        (if (= first \"'\")\n          (takeSingleQuoted (tailOrEmpty (stringChars raw)) \"\")\n          (stringTrim (takeUnquoted (stringChars raw) \"\")))))\n    ((none) \"\"))\n\nfn parseLine line: String -> (Option (Pair String String))\n  (let [(trimmed (stringTrim line))]\n    (if (or (= trimmed \"\") (stringStartsWith? trimmed \"#\"))\n      (none)\n      (let [(s (stripExport trimmed))]\n        (match (stringIndexOf s \"=\")\n          ((some eqIdx)\n            (let [(key (stringTrim (optionOr (stringSlice s 0 eqIdx) \"\")))\n                  (rawValue (stringTrim (optionOr (stringSlice s (+ eqIdx 1) (stringLength s)) \"\")))]\n              (if (= key \"\")\n                (none)\n                (some (pair key (parseValue rawValue))))))\n          ((none) (none))))))\n\nfn parseDotenv s: String -> (List (Pair String String))\n  (listReverse\n    (fold\n      (fn [(rows (List (Pair String String))) (line String)] -> (List (Pair String String))\n        (match (parseLine line)\n          ((some row) (cons row rows))\n          ((none) rows)))\n      (list)\n      (stringSplit s \"\\n\")))\n\nfn needsQuotes value: String -> Bool\n  (or (not (= value (stringTrim value)))\n    (or (stringContains? value \"#\")\n      (or (stringContains? value \"\\\"\")\n        (or (stringStartsWith? value \"'\")\n          (or (stringContains? value \"\\n\")\n            (stringContains? value \"\\r\")))))))\n\nfn escapeValue chars: (List String) acc: String -> String\n  (match (listHead chars)\n    ((some c)\n      (if (= c \"\\\\\")\n        (escapeValue (tailOrEmpty chars) (str acc \"\\\\\\\\\"))\n        (if (= c \"\\\"\")\n          (escapeValue (tailOrEmpty chars) (str acc \"\\\\\\\"\"))\n          (if (= c \"\\n\")\n            (escapeValue (tailOrEmpty chars) (str acc \"\\\\n\"))\n            (if (= c \"\\r\")\n              (escapeValue (tailOrEmpty chars) (str acc \"\\\\r\"))\n              (if (= c \"\\t\")\n                (escapeValue (tailOrEmpty chars) (str acc \"\\\\t\"))\n                (escapeValue (tailOrEmpty chars) (str acc c))))))))\n    ((none) acc))\n\nfn renderValue value: String -> String\n  (if (needsQuotes value)\n    (str \"\\\"\" (escapeValue (stringChars value) \"\") \"\\\"\")\n    value)\n\nfn renderDotenv rows: (List (Pair String String)) -> String\n  (fold\n    (fn [(acc String) (row (Pair String String))] -> String\n      (str acc (pairFirst row) \"=\" (renderValue (pairSecond row)) \"\\n\"))\n    \"\"\n    rows)\n" :rawFields "content")
+(:step :op "gate")

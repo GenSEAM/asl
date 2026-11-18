@@ -1212,6 +1212,22 @@ fn skipFence fences: (List Fence) i: Int64 -> (Pair Int64 (List Fence))
 fn dropFences fences: (List Fence) i: Int64 -> (List Fence)
   (if (and (not (listEmpty? fences)) (<= (fEnd (c/firstOf fences)) i)) (dropFences (c/restOf fences) i) fences)
 
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the close of a form whose fenced blocks sit inside its parens: a fence met outside a string is skipped whole, so parens in the block's code do not close the form early (node2 2026-11-17 STD-BASE64 turn 1: a txn of two writes, each followed by its block before the txn's closing paren, closed inside the first block and the blocks crossed)")
+fn fencedClose bs: Bytes n: Int64 j: Int64 depth: Int64 inStr: Bool esc: Bool fences: (List Fence) -> (Pair Int64 Int64)
+  (if (or (>= j n) (<= depth 0))
+    (pair j depth)
+    (let [fs (dropFences fences j)
+          b (bytesGet bs j)]
+      (cond
+        ((and (not inStr) (and (not (listEmpty? fs)) (= (fStart (c/firstOf fs)) j))) (fencedClose bs n (fEnd (c/firstOf fs)) depth false false fs))
+        (esc (fencedClose bs n (+ j 1) depth inStr false fs))
+        ((and (= b 92) inStr) (fencedClose bs n (+ j 1) depth inStr true fs))
+        ((= b 34) (fencedClose bs n (+ j 1) depth (not inStr) false fs))
+        (inStr (fencedClose bs n (+ j 1) depth inStr false fs))
+        ((= b 40) (fencedClose bs n (+ j 1) (+ depth 1) inStr false fs))
+        ((= b 41) (fencedClose bs n (+ j 1) (- depth 1) inStr false fs))
+        (else (fencedClose bs n (+ j 1) depth inStr false fs)))))
+
 fn brForms s: String bs: Bytes n: Int64 i: Int64 fences: (List Fence) acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
   (if (>= i n)
     (listReverse acc)
@@ -1225,7 +1241,7 @@ fn brForms s: String bs: Bytes n: Int64 i: Int64 fences: (List Fence) acc: (List
               ((= b 59) (brForms s bs n (skipComment bs n i) fs acc))
               ((!= b 40) (brForms s bs n (+ i 1) fs acc))
               (else
-                (match (formClose bs n (+ i 1) 1 false false)
+                (match (fencedClose bs n (+ i 1) 1 false false fs)
                   ((pair j depth) (brForms s bs n j fs (if (= depth 0) (cons (pair i j) acc) acc)))))))))))
 
 fn tokT t: FormTok -> String
@@ -1275,7 +1291,7 @@ fn insertBeforeLast s: String extra: String -> String
     (if (< p 0) (str s extra) (str (sl s 0 p) extra ")" (sl s (+ p 1) (stringLength s)))))
 
 enum BrState
-  (brState consumed: (List Int64) count: Int64 missing: (List (Pair String String)) repls: (List Repl))
+  (brState consumed: (List Int64) count: Int64 bad: Bool steps: (List (Pair String String)) repls: (List Repl))
 
 fn indexed xs: (List Fence) i: Int64 -> (List (Pair Int64 Fence))
   (if (listEmpty? xs) (list) (cons (pair i (c/firstOf xs)) (indexed (c/restOf xs) (+ i 1))))
@@ -1284,35 +1300,127 @@ fn applyTok s: String reps: (List Repl) -> String
   (fold (fn [acc r] (match r ((repl a b t) (str (sl acc 0 a) t (sl acc b (stringLength acc)))))) s
     (listReverse (listSortBy rStart reps)))
 
-; (:m :ref LEON-RAW-PROTOCOL :do "a :raw field binds the next free fenced blocks after its step; when too few follow it and the reply's free blocks are exactly as many as the step needs, those bind wherever they stand; a step left unbound keeps its text as the model sent it, with no :error marker the model would copy back (node2 2026-10-31: 2130 journalled replies in 337 journals carried it, c925fd5ad8167351 sent it back bare)")
-fn brForm reply: String fences: (List (Pair Int64 Fence)) st: BrState span: (Pair Int64 Int64) -> BrState
+fn ftokStart t: FormTok -> Int64
+  (match t ((formTok _ a _) a))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the step regions of a form, relative to its text: for a txn each (:step ...) child runs from its open paren to the next one's, the last to the form's end; any other form is one region")
+fn stepRegions toks: (List FormTok) txn: Bool len: Int64 -> (List (Pair Int64 Int64))
+  (let [starts (if txn (stepStarts toks (list)) (list))]
+    (if (listEmpty? starts) (list (pair 0 len))
+      (zip starts (listAppend (c/restOf starts) (list len)))))
+
+fn stepStarts toks: (List FormTok) acc: (List Int64) -> (List Int64)
+  (if (or (listEmpty? toks) (listEmpty? (c/restOf toks))) (listReverse acc)
+    (let [t (c/firstOf toks) nx (c/firstOf (c/restOf toks))]
+      (stepStarts (c/restOf toks) (if (and (= (tokT t) "(") (= (tokT nx) ":step")) (cons (ftokStart t) acc) acc))))
+
+enum RawStep
+  (rawStep op: String file: String from: Int64 to: Int64 raws: (List RawField))
+
+fn rsRaws s: RawStep -> (List RawField)
+  (match s ((rawStep _ _ _ _ rs) rs))
+
+fn rsMissing s: RawStep -> (Pair String String)
+  (match s ((rawStep op file _ _ _) (pair op file)))
+
+fn rfStart r: RawField -> Int64
+  (match r ((rawField _ a _) a))
+
+fn rawStepOf toks: (List FormTok) region: (Pair Int64 Int64) -> (Option RawStep)
+  (let [a (pairFirst region) b (pairSecond region)
+        rt (filter (fn [t] (and (>= (ftokStart t) a) (< (ftokStart t) b))) toks)
+        head (if (> (listLength rt) 1) (lstripColons (tokT (c/firstOf (c/restOf rt)))) "")
+        op0 (if (member head (list "write" "edit")) (some head) none)
+        scanned (scanFields rt op0 none (list))
+        op (optionOr (pairFirst (pairFirst scanned)) "")
+        file (optionOr (pairSecond (pairFirst scanned)) "")
+        raws0 (pairSecond scanned)
+        raws (if (= op "edit") (listAppend (filter (fn [r] (= (rfName r) "old")) raws0) (filter (fn [r] (!= (rfName r) "old")) raws0)) raws0)]
+    (if (and (member op (list "write" "edit")) (not (listEmpty? raws))) (some (rawStep op file a b raws)) none))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the blocks inside a step's region bind to its :raw fields by place: a block inside the step's parens takes the nearest unbound field before it, a block after the step's close and before the next step takes the step's unbound fields in order (an edit's old first); a block no field takes, or a field left without a block once the region has any, makes the step unbindable; none when the region has no block, so the step waits for the blocks after its form")
+fn bindRegion step: RawStep inner: (List (Pair Int64 Fence)) fs: Int64 close: Int64 -> (Option (Option (List (Pair RawField (Pair Int64 Fence)))))
+  (match step ((rawStep _ _ a b raws)
+    (let [mine (filter (fn [p] (and (>= (- (fStart (pairSecond p)) fs) a) (< (- (fStart (pairSecond p)) fs) b))) inner)]
+      (if (listEmpty? mine) (some none)
+        (let [st (fold (fn [acc p]
+                         (match acc ((pair ok bound)
+                           (let [at (- (fStart (pairSecond p)) fs)
+                                 unbound (filter (fn [r] (not (listAny? (fn [x] (= (rfStart (pairFirst x)) (rfStart r))) bound))) raws)
+                                 before (filter (fn [r] (< (rfStart r) at)) unbound)
+                                 pick (if (< at close)
+                                        (listHead (listReverse (listSortBy rfStart before)))
+                                        (listHead before))]
+                             (match pick
+                               ((some r) (if ok (pair true (listAppend bound (list (pair r p)))) (pair false bound)))
+                               ((none) (pair false bound)))))))
+                       (pair true (list)) mine)]
+          (if (and (pairFirst st) (= (listLength (pairSecond st)) (listLength raws))) (some (some (pairSecond st))) none))))))
+
+fn fenceTicks reply: String f: Fence -> Int64
+  (let [bs (stringToBytes reply) n (bytesLength bs)
+        q (skipWhile bs n (fStart f) isSpTab)]
+    (- (skipWhile bs n q (fn [b] (= b 96))) q))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a block whose text holds an opening fence line of its own length (```asl inside ```) was closed by the inner fence, so it is only the head of the text the model meant; such a block is never written")
+fn nestedFence? reply: String f: Fence -> Bool
+  (let [k (fenceTicks reply f)
+        ticks (stringRepeat "`" k)]
+    (listAny? (fn [l] (let [t (stringTrim l)]
+                        (and (stringStartsWith? t ticks)
+                          (and (> (stringLength t) k) (isFenceTag (bytesGet (stringToBytes t) k))))))
+      (stringSplit (match f ((fence _ _ content) content)) "\n")))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the raw marker is a value only of content, old and new; a form that gives it to any other key, such as why, has a layout the binder cannot read by place (grader 2026-11-18 c16)")
+fn rawKeyBad? toks: (List FormTok) -> Bool
+  (if (or (listEmpty? toks) (listEmpty? (c/restOf toks))) false
+    (let [k (tokT (c/firstOf toks)) v (tokT (c/firstOf (c/restOf toks)))]
+      (if (and (= v ":raw") (and (stringStartsWith? k ":") (not (member k (list ":content" ":old" ":new")))))
+        true
+        (rawKeyBad? (c/restOf toks)))))
+
+fn stepClose bs: Bytes n: Int64 fs: Int64 fe: Int64 txn: Bool fl: (List Fence) s: RawStep -> Int64
+  (match s ((rawStep _ _ a _ _)
+    (if txn (- (pairFirst (fencedClose bs n (+ fs (+ a 1)) 1 false false fl)) fs) (- fe fs))))
+
+; (:m :ref LEON-RAW-PROTOCOL :do "a :raw field binds only by place in the text as sent, nothing is moved first: a block inside its step's region (bindRegion), else, for the steps whose regions hold none, the blocks between the form's end and the next form's start, exactly as many as those fields and in their order; a form that breaks this, gives :raw to another key or binds a block cut at a nested fence of its own length is marked bad, and bindRawBlocks then binds nothing in the whole reply (grader 2026-11-18 c02 c04 c04c c04d c05b c09 c09b c09c c15 c16 c19 c20 H1)")
+fn brForm reply: String bs: Bytes n: Int64 fl: (List Fence) fences: (List (Pair Int64 Fence)) spans: (List (Pair Int64 Int64)) st: BrState span: (Pair Int64 Int64) -> BrState
   (match span ((pair fs fe)
     (let [ftext (sl reply fs fe)
-          toks (tokenizeForm ftext)
-          head (if (> (listLength toks) 1) (lstripColons (tokT (c/firstOf (c/restOf toks)))) "")
-          op0 (if (member head (list "write" "edit")) (some head) none)
-          scanned (scanFields toks op0 none (list))
-          op (optionOr (pairFirst (pairFirst scanned)) "")
-          file (optionOr (pairSecond (pairFirst scanned)) "")
-          raws0 (pairSecond scanned)
-          raws (if (= op "edit") (listAppend (filter (fn [r] (= (rfName r) "old")) raws0) (filter (fn [r] (!= (rfName r) "old")) raws0)) raws0)]
-      (match st ((brState consumed count missing repls)
-        (if (or (not (member op (list "write" "edit"))) (listEmpty? raws))
+          inner (filter (fn [p] (and (> (fStart (pairSecond p)) fs) (<= (fEnd (pairSecond p)) fe))) fences)
+          toks (tokenizeForm (blankFences ftext fs (map pairSecond inner)))
+          txn (and (> (listLength toks) 1) (= (tokT (c/firstOf (c/restOf toks))) ":txn"))
+          steps (filter some? (map (fn [rg] (rawStepOf toks rg)) (stepRegions toks txn (- fe fs))))
+          rsteps (map (fn [o] (optionOr o (rawStep "" "" 0 0 (list)))) steps)]
+      (match st ((brState consumed count bad allSteps repls)
+        (if (listEmpty? rsteps)
           st
-          (let [free (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed))
-                                          (or (>= (fStart (pairSecond p)) fe) (<= (fEnd (pairSecond p)) fs)))) fences)
-                after (filter (fn [p] (>= (fStart (pairSecond p)) fe)) free)
-                avail (if (and (< (listLength after) (listLength raws)) (= (listLength free) (listLength raws))) free after)]
-            (if (< (listLength avail) (listLength raws))
-              (brState consumed count (cons (pair op file) missing) repls)
-              (let [used (listTake avail (listLength raws))
-                    pairs (zip raws used)
-                    tokReps (map (fn [pr] (match pr ((pair r fp) (match r ((rawField _ ns ne) (match (pairSecond fp) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))))) pairs)
-                    fenceReps (map (fn [fp] (repl (fStart (pairSecond fp)) (fEnd (pairSecond fp)) "")) used)
-                    bound (applyTok ftext tokReps)
-                    tagged (insertBeforeLast bound (str " :rawFields \"" (joinWith (map rfName raws) " ") "\""))]
-                (brState (listAppend consumed (map pairFirst used)) (+ count (listLength raws)) missing
+          (let [plans (map (fn [s] (bindRegion s inner fs (stepClose bs n fs fe txn fl s))) rsteps)
+                deferred (listFlatMap (fn [x] x) (map (fn [pr] (match (pairFirst pr) ((some (none)) (rsRaws (pairSecond pr))) (_ (list)))) (zip plans rsteps)))
+                inBound (listFlatMap (fn [x] x) (map (fn [p] (match p ((some (some b)) b) (_ (list)))) plans))
+                strayInner (listAny? (fn [p] (not (listAny? (fn [b] (= (pairFirst (pairSecond b)) (pairFirst p))) inBound))) inner)
+                nextStart (optionOr (listHead (filter (fn [x] (> x fs)) (map pairFirst spans))) n)
+                outer (filter (fn [p] (and (not (listAny? (fn [c] (= c (pairFirst p))) consumed)) (and (>= (fStart (pairSecond p)) fe) (< (fStart (pairSecond p)) nextStart)))) fences)
+                need (listLength deferred)
+                tailOk (or (= need 0) (= (listLength outer) need))
+                outBound (if (and tailOk (> need 0)) (zip deferred outer) (list))
+                bound (listAppend inBound outBound)
+                nested (listAny? (fn [b] (nestedFence? reply (pairSecond (pairSecond b)))) bound)
+                steps2 (listAppend allSteps (map rsMissing rsteps))]
+            (if (or (rawKeyBad? toks) (or strayInner (or (not tailOk) nested)))
+              (brState consumed count true steps2 repls)
+              (let [tokReps (map (fn [b] (match (pairFirst b) ((rawField _ ns ne) (match (pairSecond (pairSecond b)) ((fence _ _ content) (repl ns ne (str "\"" (c/escapeAsn content) "\""))))))) bound)
+                    innerReps (map (fn [b] (repl (- (fStart (pairSecond (pairSecond b))) fs) (- (fEnd (pairSecond (pairSecond b))) fs) "")) inBound)
+                    fenceReps (map (fn [b] (repl (fStart (pairSecond (pairSecond b))) (fEnd (pairSecond (pairSecond b))) "")) outBound)
+                    names (map rfName (listFlatMap rsRaws rsteps))
+                    bodyText (applyTok ftext (listAppend tokReps innerReps))
+                    tagged (insertBeforeLast bodyText (str " :rawFields \"" (joinWith names " ") "\""))]
+                (brState (listAppend consumed (map (fn [b] (pairFirst (pairSecond b))) bound)) (+ count (listLength bound)) bad steps2
                   (cons (repl fs fe tagged) (fold (fn [acc r] (cons r acc)) repls fenceReps))))))))))))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a form's text with the fenced blocks inside it blanked to spaces, so its tokens keep their offsets and no :raw or :content in a block's code counts as a field")
+fn blankFences ftext: String fs: Int64 inner: (List Fence) -> String
+  (fold (fn [acc f] (let [a (- (fStart f) fs) b (- (fEnd f) fs)] (str (sl acc 0 a) (stringRepeat " " (- b a)) (sl acc b (stringLength acc))))) ftext inner)
 
 fn assemble reply: String reps: (List Repl) last: Int64 acc: (List String) -> String
   (if (listEmpty? reps)
@@ -1377,16 +1485,21 @@ fn bareRaw text: String -> String
         reps (fold (fn [acc sp] (listAppend acc (bareRawRepls text fences sp))) (list) forms)]
     (if (listEmpty? reps) text (assemble text (listSortBy rStart reps) 0 (list))))
 
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the reply binds whole or not at all: when any form is bad or any block stays unbound while the reply has a :raw field, no field binds, the text stays as sent and every write or edit with a :raw field is named under missing, so turnReply runs none of the reply's steps")
 fn bindRawBlocks reply: String -> RawBind
   (if (= reply "")
     (RawBind :text reply :count 0 :missing (list))
-    (let [text (bareRaw (hoistInlineRaw reply))
+    (let [text (bareRaw reply)
           bs (stringToBytes text)
-          fences (rawFences text)
-          forms (brForms text bs (bytesLength bs) 0 fences (list))
-          st (fold (fn [acc sp] (brForm text (indexed fences 0) acc sp)) (brState (list) 0 (list) (list)) forms)]
-      (match st ((brState _ count missing repls)
-        (RawBind :text (assemble text (listSortBy rStart repls) 0 (list)) :count count :missing (listReverse missing))))))
+          n (bytesLength bs)
+          fl (rawFences text)
+          fences (indexed fl 0)
+          forms (brForms text bs n 0 fl (list))
+          st (fold (fn [acc sp] (brForm text bs n fl fences forms acc sp)) (brState (list) 0 false (list) (list)) forms)]
+      (match st ((brState consumed count bad steps repls)
+        (if (and (not (listEmpty? steps)) (or bad (listAny? (fn [p] (not (listAny? (fn [c] (= c (pairFirst p))) consumed))) fences)))
+          (RawBind :text text :count 0 :missing steps)
+          (RawBind :text (assemble text (listSortBy rStart repls) 0 (list)) :count count :missing (list)))))))
 
 fn tagEnd bs: Bytes n: Int64 i: Int64 -> Int64
   (skipWhile bs n i (fn [b] (or (isAsciiAlpha b) (or (isDigitB b) (or (= b 95) (= b 45))))))

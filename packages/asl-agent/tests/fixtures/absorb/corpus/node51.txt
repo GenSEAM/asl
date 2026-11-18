@@ -1,0 +1,73 @@
+(:txn :owns ("asl/packages/asl-text/src/roman.asl" "asl/packages/asl-text/tests/romanTest.asl")
+  (:step :op "write" :file "asl/packages/asl-text/src/roman.asl" :content "(module asl-text/tests/romanTest :x [runTests] :i [(asl-text/roman :a r)])\n\nfn testToRoman -> Bool\n  (do (assert (= (r/toRoman 1) (ok \"I\")) \"1 is I\")\n      (assert (= (r/toRoman 4) (ok \"IV\")) \"4 is IV\")\n      (assert (= (r/toRoman 9) (ok \"IX\")) \"9 is IX\")\n      (assert (= (r/toRoman 14) (ok \"XIV\")) \"14 is XIV\")\n      (assert (= (r/toRoman 40) (ok \"XL\")) \"40 is XL\")\n      (assert (= (r/toRoman 58) (ok \"LVIII\")) \"58 is LVIII\")\n      (assert (= (r/toRoman 90) (ok \"XC\")) \"90 is XC\")\n      (assert (= (r/toRoman 400) (ok \"CD\")) \"400 is CD\")\n      (assert (= (r/toRoman 900) (ok \"CM\")) \"900 is CM\")\n      (assert (= (r/toRoman 1994) (ok \"MCMXCIV\")) \"1994 is MCMXCIV\")\n      (assert (= (r/toRoman 3999) (ok \"MMMCMXCIX\")) \"3999 is MMMCMXCIX\")\n      (assert (err? (r/toRoman 0)) \"0 is err\")\n      (assert (err? (r/toRoman 4000)) \"4000 is err\")\n      (assert (err? (r/toRoman -5)) \"negative is err\")\n      true))\n\nfn testFromRoman -> Bool\n  (do (assert (= (r/fromRoman \"I\") (ok 1)) \"I is 1\")\n      (assert (= (r/fromRoman \"IV\") (ok 4)) \"IV is 4\")\n      (assert (= (r/fromRoman \"IX\") (ok 9)) \"IX is 9\")\n      (assert (= (r/fromRoman \"LVIII\") (ok 58)) \"LVIII is 58\")\n      (assert (= (r/fromRoman \"MCMXCIV\") (ok 1994)) \"MCMXCIV is 1994\")\n      (assert (= (r/fromRoman \"MMMCMXCIX\") (ok 3999)) \"MMMCMXCIX is 3999\")\n      (assert (err? (r/fromRoman \"\")) \"empty is err\")\n      (assert (err? (r/fromRoman \"IIII\")) \"IIII is non-canonical\")\n      (assert (err? (r/fromRoman \"VV\")) \"VV is non-canonical\")\n      (assert (err? (r/fromRoman \"IC\")) \"IC is non-canonical\")\n      (assert (err? (r/fromRoman \"IL\")) \"IL is non-canonical\")\n      (assert (err? (r/fromRoman \"ABC\")) \"invalid chars are err\")\n      (assert (err? (r/fromRoman \"iv\")) \"lowercase is err\")\n      (assert (err? (r/fromRoman \"MMMM\")) \"MMMM is out of range\")\n      true))\n\nfn roundTripFrom n: Int64 end: Int64 -> Bool\n  (if (> n end)\n    true\n    (match (r/toRoman n)\n      ((ok s) (match (r/fromRoman s)\n                ((ok v) (if (= v n) (roundTripFrom (+ n 1) end) false))\n                ((err e) false)))\n      ((err e) false))))\n\nfn testRoundTrip -> Bool\n  (do (assert (roundTripFrom 1 500) \"round trip 1..500\")\n      (assert (roundTripFrom 501 1000) \"round trip 501..1000\")\n      (assert (roundTripFrom 1001 1500) \"round trip 1001..1500\")\n      (assert (roundTripFrom 1501 2000) \"round trip 1501..2000\")\n      (assert (roundTripFrom 2001 2500) \"round trip 2001..2500\")\n      (assert (roundTripFrom 2501 3000) \"round trip 2501..3000\")\n      (assert (roundTripFrom 3001 3500) \"round trip 3001..3500\")\n      (assert (roundTripFrom 3501 3999) \"round trip 3501..3999\")\n      true))\n\nfn runTests -> Bool\n  (and (testToRoman) (testFromRoman) (testRoundTrip))\n")
+```
+(module asl-text/roman :x [toRoman fromRoman] :i [])
+
+fn thousands d: Int64 -> String
+  (if (= d 3) "MMM"
+    (if (= d 2) "MM"
+      (if (= d 1) "M" "")))
+
+fn hundreds d: Int64 -> String
+  (if (= d 9) "CM"
+    (if (= d 8) "DCCC"
+      (if (= d 7) "DCC"
+        (if (= d 6) "DC"
+          (if (= d 5) "D"
+            (if (= d 4) "CD"
+              (if (= d 3) "CCC"
+                (if (= d 2) "CC"
+                  (if (= d 1) "C" "")))))))))
+
+fn tens d: Int64 -> String
+  (if (= d 9) "XC"
+    (if (= d 8) "LXXX"
+      (if (= d 7) "LXX"
+        (if (= d 6) "LX"
+          (if (= d 5) "L"
+            (if (= d 4) "XL"
+              (if (= d 3) "XXX"
+                (if (= d 2) "XX"
+                  (if (= d 1) "X" "")))))))))
+
+fn ones d: Int64 -> String
+  (if (= d 9) "IX"
+    (if (= d 8) "VIII"
+      (if (= d 7) "VII"
+        (if (= d 6) "VI"
+          (if (= d 5) "V"
+            (if (= d 4) "IV"
+              (if (= d 3) "III"
+                (if (= d 2) "II"
+                  (if (= d 1) "I" "")))))))))
+
+fn romanVal c: String -> Int64
+  (if (= c "I") 1
+    (if (= c "V") 5
+      (if (= c "X") 10
+        (if (= c "L") 50
+          (if (= c "C") 100
+            (if (= c "D") 500
+              (if (= c "M") 1000 -1)))))))
+
+fn sumRoman vals: (List Int64) i: Int64 acc: Int64 -> Int64
+  (if (>= i (listLength vals))
+    acc
+    (let [(v (optionOr (listGet vals i) 0))
+          (next (optionOr (listGet vals (+ i 1)) 0))]
+      (if (< v next)
+        (sumRoman vals (+ i 2) (+ acc (- next v)))
+        (sumRoman vals (+ i 1) (+ acc v)))))
+
+fn toRoman n: Int64 -> (Result String String)
+  (if (or (< n 1) (> n 3999))
+    (err "toRoman: out of range 1..3999")
+    (let [(tho (/ n 1000))
+          (r1 (- n (* 1000 tho)))
+          (hun (/ r1 100))
+          (r2 (- r1 (* 100 hun)))
+          (ten (/ r2 10))
+          (one (- r2 (* 10 ten)))]
+      (ok (str (thousands tho) (hundreds hun) (tens ten) (ones one))))) :rawFields "content")
+(:step :op "write" :file "asl/packages/asl-text/tests/romanTest.asl" :content "(module asl-text/roman :x [toRoman fromRoman] :i [])\n\nfn thousands d: Int64 -> String\n  (if (= d 3) \"MMM\"\n    (if (= d 2) \"MM\"\n      (if (= d 1) \"M\" \"\")))\n\nfn hundreds d: Int64 -> String\n  (if (= d 9) \"CM\"\n    (if (= d 8) \"DCCC\"\n      (if (= d 7) \"DCC\"\n        (if (= d 6) \"DC\"\n          (if (= d 5) \"D\"\n            (if (= d 4) \"CD\"\n              (if (= d 3) \"CCC\"\n                (if (= d 2) \"CC\"\n                  (if (= d 1) \"C\" \"\")))))))))\n\nfn tens d: Int64 -> String\n  (if (= d 9) \"XC\"\n    (if (= d 8) \"LXXX\"\n      (if (= d 7) \"LXX\"\n        (if (= d 6) \"LX\"\n          (if (= d 5) \"L\"\n            (if (= d 4) \"XL\"\n              (if (= d 3) \"XXX\"\n                (if (= d 2) \"XX\"\n                  (if (= d 1) \"X\" \"\")))))))))\n\nfn ones d: Int64 -> String\n  (if (= d 9) \"IX\"\n    (if (= d 8) \"VIII\"\n      (if (= d 7) \"VII\"\n        (if (= d 6) \"VI\"\n          (if (= d 5) \"V\"\n            (if (= d 4) \"IV\"\n              (if (= d 3) \"III\"\n                (if (= d 2) \"II\"\n                  (if (= d 1) \"I\" \"\")))))))))\n\nfn romanVal c: String -> Int64\n  (if (= c \"I\") 1\n    (if (= c \"V\") 5\n      (if (= c \"X\") 10\n        (if (= c \"L\") 50\n          (if (= c \"C\") 100\n            (if (= c \"D\") 500\n              (if (= c \"M\") 1000 -1)))))))\n\nfn sumRoman vals: (List Int64) i: Int64 acc: Int64 -> Int64\n  (if (>= i (listLength vals))\n    acc\n    (let [(v (optionOr (listGet vals i) 0))\n          (next (optionOr (listGet vals (+ i 1)) 0))]\n      (if (< v next)\n        (sumRoman vals (+ i 2) (+ acc (- next v)))\n        (sumRoman vals (+ i 1) (+ acc v)))))\n\nfn toRoman n: Int64 -> (Result String String)\n  (if (or (< n 1) (> n 3999))\n    (err \"toRoman: out of range 1..3999\")\n    (let [(tho (/ n 1000))\n          (r1 (- n (* 1000 tho)))\n          (hun (/ r1 100))\n          (r2 (- r1 (* 100 hun)))\n          (ten (/ r2 10))\n          (one (- r2 (* 10 ten)))]\n      (ok (str (thousands tho) (hundreds hun) (tens ten) (ones one))))))\n\nfn fromRoman s: String -> (Result Int64 String)\n  (let [(vals (map romanVal (stringChars s)))]\n    (if (listAny? (fn [(v Int64)] -> Bool (= v -1)) vals)\n      (err \"fromRoman: invalid char\")\n      (let [(total (sumRoman vals 0 0))]\n        (match (toRoman total)\n          ((ok canon) (if (= canon s) (ok total) (err \"fromRoman: non-canonical\")))\n          ((err e) (err \"fromRoman: out of range\"))))))\n" :rawFields "content")
+(:step :op "gate")

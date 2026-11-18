@@ -1,0 +1,5 @@
+(:step :op "write" :file "a" :content "A\n" :rawFields "content")
+(:step :op "edit" :file "b" :old :raw :new :raw)
+```
+B
+```

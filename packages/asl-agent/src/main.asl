@@ -1158,6 +1158,18 @@ fn unnamedOnly? ops: (List (List (Pair String c/KvVal))) -> Bool
 fn unnamedHint -> String
   "(:malformed :error ERR_NO_OP :message \"no step in that reply names an op; the op is a double-quoted name right after :op, every argument a :key value pair\" :expect \"(:step :op \\\"read\\\" :file \\\"path\\\")\")"
 
+; (:m :ref LEON-STEP-BODY-LOST :do "the reply as the provider path handed it over, before prefill, untagging, raw binding and repair, for a turn that named no op or whose step shapes were rewritten or left: node2 kept only the repaired text, so a lost call could not be traced; at most rawReplyCap chars, with :chars the full length")
+fn rawReplyCap -> Int64
+  2000
+
+; (:m :ref LEON-STEP-BODY-LOST :do "the cut point moved back off UTF-8 continuation bytes, so a capped raw row never splits a character")
+fn charCut bs: Bytes k: Int64 -> Int64
+  (if (and (> k 0) (and (< k (bytesLength bs)) (let [b (bytesGet bs k)] (and (>= b 128) (< b 192))))) (charCut bs (- k 1)) k)
+
+fn rawReplyRow turn: Int64 raw: String due: Bool -> (Option String)
+  (if (not due) none
+    (some (str "(:turn " (stringFromInt64 turn) " :rawReply \"" (c/escapeAsn (c/sliceOf raw 0 (charCut (stringToBytes raw) (min (stringLength raw) (rawReplyCap))))) "\" :chars " (stringFromInt64 (stringLength raw)) ")\n")))
+
 ; (:m :ref LEON-WRITE-FAIL-TOP :do "one (:turn N :shape :repaired (K ...) :left (K ...)) journal row for a reply whose step forms were rewritten or left unrepaired by tc/canonSteps; none when both are empty")
 fn shapeRow turn: Int64 repaired: (List String) left: (List String) -> (Option String)
   (if (and (listEmpty? repaired) (listEmpty? left))
@@ -2253,7 +2265,8 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
         prefetched (rl/firstTurnPrefetch state)
         shapes (map pairSecond (ex/opShapes))
         sysA (at/attractorSystem ra.attractor shapes system)
-        prefill (at/attractorPrefill ra.attractor)
+        ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "no (:step prefill when the turn offers the step tool, unless the prior reply had no step, which is how a route whose gateway row strips tools (:nativeTools false) shows up, so the model is never left without both tool and prefill; the model took the open (:step for the tool and wrote its parameters as markup after it (node2 2026-11-17, synDs41Flash: (:step<arg_key>form</arg_key><arg_value>(:step ...)</arg_value>), about 490 turns a day); the prefill stays for a session with nativeTools off")
+        prefill (if (or (listEmpty? (sessionTools ra.nativeTools)) run.lastDefect) (at/attractorPrefill ra.attractor) "")
         cards (at/attractorCards ra.attractor (gr/lastGot wrapped.history) run.lastDefect state.writesPersisted turnsSoFar)
         tail (at/attractorTail cards)
         expects (gr/rejectHints (gr/lastGot wrapped.history) (ex/opShapes))
@@ -2361,6 +2374,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   unnamedNow (unnamedOnly? operations)
                   malformedNow (or unnamedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw))))
                   _shapeRow (match (shapeRow turn clean.shapeRepaired clean.shapeLeft) ((some row) (ok? (fileAppend path row))) ((none) true))
+                  _rawRow (match (rawReplyRow turn replyRaw (or unnamedNow (not (and (listEmpty? clean.shapeRepaired) (listEmpty? clean.shapeLeft))))) ((some row) (ok? (fileAppend path row))) ((none) true))
                   malformedStreak (if malformedNow (+ 1 (malformedStreakOf state)) 0)
                   malformedStop (and malformedNow (>= malformedStreak 2))
                   gateMin (wallSetting (ac/configText! rootDir) ":wallGateMinSec" (defaultWallGateMinSec))

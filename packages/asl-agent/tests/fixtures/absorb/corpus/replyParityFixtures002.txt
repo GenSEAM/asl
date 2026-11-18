@@ -1,0 +1,4 @@
+(:step :op "write" :file "a" :content :raw)
+```
+hi
+```
