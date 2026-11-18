@@ -214,6 +214,8 @@ fn ! testWip root: String -> Bool
       (assert (and (= (sh "." (list "mkdir" "-p" (str (wt "w6") "/own"))).exit 0) (and (put (str (wt "w6") "/own/in.txt") "i\n") (put (str (wt "w6") "/out.txt") "o\n"))) "w6 holds an owned and an unowned untracked file")
       (assert (= (w/outsideUntracked! (wt "w6") (list "own")) (list "out.txt")) "the outside list names the unowned file")
       (assert (= (w/outsideUntracked! (wt "w6") (list)) (list)) "empty owns: nothing is outside")
+      (assert (and (= (sh "." (list "mkdir" "-p" (str (wt "w6") "/.asl"))).exit 0) (put (str (wt "w6") "/.asl/gatewayProfilePin.asn") "(:pin)\n")) "w6 holds the gateway profile pin")
+      (assert (= (w/outsideUntracked! (wt "w6") (list "own")) (list "out.txt")) "the gateway profile pin is not left outside owns")
       (let [(sha (resText (w/wipCommitOwned! cfg "w6" (wt "w6") "stopped" (list "own"))))
             (shown (gitOut repo (list "show" "--stat" "--format=" "sh/w6")))]
         (do (assert (not (stringEmpty? sha)) "the owned file is committed")

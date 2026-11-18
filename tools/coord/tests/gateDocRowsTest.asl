@@ -1,6 +1,6 @@
 (module asl-tools/coord/tests/gateDocRowsTest
   :x [runTests]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/docRows :a dr) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/docRows :a dr) (asl-tools/coord/docRowsGate :a dg) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
 
 ; (:m :ref GATE-DOC-ROWS :do "the gate stage's early doc-row check on fixture repos in a temp dir: the worktree's bin/asl is a fake that logs every call to .fakeLog and prints the rows of .fakeRows (exit 7 when .fakeFail exists); a unit that exports a new symbol without a doc row is red with the symbol, the file and the literal row; a diff without package source never starts the tool (asserted on the log); a miss the base already had is not charged; a tool that fails never blocks and the note says infra")
 fn fakeTool -> String
@@ -88,6 +88,15 @@ fn ! runTests -> Bool
         (_ (fileWrite (str cE.wt "/.fakeFail") "1"))
         (rE (cd/gatesResN 60 60 "" (unitOf "E") cE))
         (lA (logOf cA.wt)) (lB (logOf cB.wt)) (lC (logOf cC.wt)) (lD (logOf cD.wt)) (lE (logOf cE.wt))
+        (gA (dg/main (list cA.wt "main")))
+        (gB (dg/main (list cB.wt "main")))
+        (gC (dg/main (list cC.wt "main")))
+        (gE (dg/main (list cE.wt "main")))
+        (rcW (cd/realCfg (list "--repo" repo "--home" (str root "/home") "--worktrees" (str root "/wts")) (str root "/store")))
+        (gatesPlain (cd/writerGates rcW cA.wt (unitOf "A") ""))
+        (gatesDoc (cd/writerGates rcW cA.wt (unitOf "A") "fail: docRows: 2 new exported symbols"))
+        (gatesHop (cd/writerGates rcW cA.wt (unitOf "A") "tierHop free->paid: docRows: 2 new exported symbols"))
+        (absBin (str (resultOr (realPath repo) repo) "/bin/asl run "))
         (_ (pf/cleanup root))]
     (do (assert (not (stringEmpty? repo)) "fixture repo exists")
         (assert (and (not (stringEmpty? cA.wt)) (and (not (stringEmpty? cB.wt)) (and (not (stringEmpty? cC.wt)) (and (not (stringEmpty? cD.wt)) (not (stringEmpty? cE.wt)))))) "five unit worktrees exist")
@@ -109,4 +118,10 @@ fn ! runTests -> Bool
         (assert (= (pairFirst rE).exit 0) (str "E: a failing tool does not block: " (pairFirst rE).sig))
         (assert (and (stringContains? (pairSecond rE) ":why infra") (stringContains? (pairSecond rE) "exit 7")) (str "E: the note says infra: " (pairSecond rE)))
         (assert (= (toolRuns lE) 1) "E: the tool was started")
+        (assert (= gA (ok 1)) (str "docRowsGate: a worktree whose new export has no doc.asn row exits 1: " (match gA ((ok k) (stringFromInt64 k)) ((err e) e))))
+        (assert (= gB (ok 0)) "docRowsGate: with the row it exits 0")
+        (assert (= gC (ok 0)) "docRowsGate: a tree with no package code in the diff exits 0")
+        (assert (= gE (ok 2)) "docRowsGate: a tool that cannot run is gateInfra exit 2, never a green assert")
+        (assert (and (= (listLength gatesPlain) 1) (= (listLength gatesDoc) 2) (= (listLength gatesHop) 2)) (str "the docRows gate is added after the fail: form and after a tierHop form: " (stringFromInt64 (listLength gatesHop))))
+        (assert (let [(cmd (optionOr (listLast gatesDoc) ""))] (and (stringStartsWith? cmd absBin) (stringContains? cmd "/asl/tools/coord/docRowsGate.asl ") (stringEndsWith? cmd " main"))) (str "the added command runs the dev repo's bin/asl by its absolute path: " (optionOr (listLast gatesDoc) "")))
         true))

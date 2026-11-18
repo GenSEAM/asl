@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [ensureIndex! withOverride packagePure! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags bareCaseOwners preludeShadows? preludeUnionForTag modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [loadModuleDepsAliased! importPairs ensureIndex! withOverride packagePure! IdxMod installedModule FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsIx! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags bareCaseOwners preludeShadows? preludeUnionForTag modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports unexportedCaseModule letrecDiags isEffectfulBuiltin? refineEffects] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (Pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool) (:f calls (List String)) (:f witness String))
 
@@ -358,10 +358,11 @@ fn relToRoot ix: ModIndex path: String -> String
 fn describe ix: ModIndex c: (List Cand) status: ResStatus -> String
   (let [(n (listLength c))
         (prefix (match status ((resAmbiguous) " ambiguous: ") (_ (if (> n 0) " not declared; candidates: " " not declared"))))
+        (ready (match status ((resAmbiguous) "") (_ (if (= n 1) (match (listHead c) ((some x) (str "; write " x.name ": add (" x.name " :a <alias|" (lastSegOf x.name) ">) to :i")) ((none) "")) ""))))
         (shown (stringJoin (map (fn [(x Cand)] -> String (str x.name " at " (relToRoot ix x.path))) (listTake c 8)) ", "))
         (more (if (> n 8) (str ", and " (stringFromInt64 (- n 8)) " more") ""))
         (gap (if (> ix.skipped 0) (str "; the index skipped " (stringFromInt64 ix.skipped) " unreadable path(s), first " ix.skippedAt) ""))]
-    (str prefix shown more gap))
+    (str prefix shown more ready gap))
 
 fn settled ix: ModIndex c: (List Cand) -> Resolution
   (let [(st (settleStatus c))]
@@ -549,8 +550,24 @@ fn ! resolveImportPlain! importer: String imp: String ix0: ModIndex -> Resolutio
               (missingRes " is a relative import, which is retired: import the module by the name its header declares" ix)
               (resolveNamed! imp ctx.nearest outer pkg ix)))))))))
 
-fn unresolvedLine importer: String imp: String r: Resolution -> String
-  (str importer (if (importTooLong? imp) ": ERR_PATH_TOO_LONG " ": ERR_UNRESOLVED_IMPORT ") imp r.note)
+fn pathFix imp: String alias: String r: Resolution -> String
+  (if (not (stringEndsWith? imp ".asl")) ""
+    (let [(hits (filter (fn [(m IdxMod)] -> Bool (or (= (relToRoot r.index m.path) imp) (stringEndsWith? m.path (str "/" imp)))) r.index.mods))]
+      (if (= (listLength hits) 1)
+        (match (listHead hits) ((some m) (str "; write " m.name ": add (" m.name " :a " (if (stringEmpty? alias) (lastSegOf m.name) alias) ") to :i")) ((none) ""))
+        "")))
+
+fn fillAlias note: String alias: String -> String
+  (match (stringIndexOf note "<alias|")
+    ((none) note)
+    ((some i) (let [(after (sliceFrom note (+ i 7)))
+                    (j (optionOr (stringIndexOf after ">") 0))
+                    (dflt (optionOr (stringSlice after 0 j) ""))]
+      (str (optionOr (stringSlice note 0 i) "") (if (stringEmpty? alias) dflt alias) (sliceFrom after (+ j 1))))))
+
+; (:m :ref ABSORB-CHECKER-MSGS :do "alias is the importer's own :a name, empty when only an import path is known: the ready import line then uses the last segment of the module name, the default alias, never a path segment and never a placeholder")
+fn unresolvedLine importer: String imp: String alias: String r: Resolution -> String
+  (str importer (if (importTooLong? imp) ": ERR_PATH_TOO_LONG " ": ERR_UNRESOLVED_IMPORT ") imp (fillAlias r.note alias) (pathFix imp alias r))
 
 fn importAlias kids: (List AsnItem) q: Int64 alias: String -> String
   (if (>= (+ q 1) (listLength kids)) alias
@@ -592,7 +609,7 @@ fn ! resolveImports! importer: String entries: (List (Pair String String)) pass:
                     (found (match r.status ((resOk) true) (_ false)))
                     (next (if found
                       (ImportPass :imports (mapSet pass.imports alias r.path) :targets (if (= r.path "sys") pass.targets (cons r.path pass.targets)) :unresolved pass.unresolved :index r.index)
-                      (ImportPass :imports (mapSet pass.imports alias imp) :targets pass.targets :unresolved (cons (unresolvedLine importer imp r) pass.unresolved) :index r.index)))]
+                      (ImportPass :imports (mapSet pass.imports alias imp) :targets pass.targets :unresolved (cons (unresolvedLine importer imp alias r) pass.unresolved) :index r.index)))]
       (resolveImports! importer (safeTail entries) next))))
 
 fn markedFn? d: a/DefunNode -> Bool
@@ -814,7 +831,7 @@ fn ! loadTop! importers: (List String) entries: (List (Pair String String)) pars
                     (found (match r.status ((resOk) true) (_ false)))]
       (if found
         (loadTop! importers (safeTail entries) parseBodies cl2 (if (= imp "sys") keys (listAppendOne keys (pair imp r.path))))
-        (loadTop! importers (safeTail entries) parseBodies (closureFailed cl2 (unresolvedLine (optionOr (listHead importers) "") imp r)) keys)))))
+        (loadTop! importers (safeTail entries) parseBodies (closureFailed cl2 (unresolvedLine (optionOr (listHead importers) "") imp (pairFirst e) r)) keys)))))
 
 fn ! loadModuleClosure! entry: String parseBodies: Bool -> ModuleClosure
   (let [(empty (ModuleClosure :deps (mapEmpty) :paths (list) :unresolved (list) :errors (list) :index (emptyModIndex)))]
@@ -833,7 +850,7 @@ fn ! loadModuleDeps! roots: (List String) imports: (List String) -> (Result (Map
 ; (:m :ref PERF-REALPATH-CACHE :do "the module index the dependency load built (one walk of the tree under the outer config: a list, an lstat per entry and a header read per module) is handed back, so a later load in the same compile, the link, resolves against it instead of walking the tree again")
 fn ! loadModuleDepsIx! roots: (List String) imports: (List String) ix: ModIndex -> (Pair (Result (Map String ModuleSummary) String) ModIndex)
   (let [(importers (fold (fn [(acc (List String)) (r String)] -> (List String) (match (realPath! r) ((some d) (listAppendOne acc (str d "/_"))) ((none) acc))) (list) roots))
-        (cl (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair (lastSegOf p) p)) imports) true (ModuleClosure :deps (mapEmpty) :paths (list) :unresolved (list) :errors (list) :index ix) (list)))]
+        (cl (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair "" p)) imports) true (ModuleClosure :deps (mapEmpty) :paths (list) :unresolved (list) :errors (list) :index ix) (list)))]
     (do (printLines! cl.unresolved)
         (printLines! cl.errors)
         (pair (cond ((not (listEmpty? cl.unresolved)) (err "notFound"))
@@ -841,9 +858,16 @@ fn ! loadModuleDepsIx! roots: (List String) imports: (List String) ix: ModIndex 
                     (else (ok cl.deps)))
               cl.index)))
 
+fn importPairs imports: (Map String String) -> (List (Pair String String))
+  (map (fn [(k String)] -> (Pair String String) (pair k (optionOr (mapGet imports k) ""))) (mapKeys imports))
+
 fn ! loadModuleDepsFrom! roots: (List String) imports: (List String) seedDeps: (Map String ModuleSummary) seedIndex: ModIndex -> ModuleClosure
+  (loadModuleDepsAliased! roots (map (fn [(p String)] -> (Pair String String) (pair "" p)) imports) seedDeps seedIndex)
+
+; (:m :ref ABSORB-CHECKER-MSGS :do "loadModuleDepsFrom! with the importer's (alias path) pairs, so an unresolved import names the alias the importer wrote")
+fn ! loadModuleDepsAliased! roots: (List String) imports: (List (Pair String String)) seedDeps: (Map String ModuleSummary) seedIndex: ModIndex -> ModuleClosure
   (let [(importers (fold (fn [(acc (List String)) (r String)] -> (List String) (match (realPath! r) ((some d) (listAppendOne acc (str d "/_"))) ((none) acc))) (list) roots))]
-    (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair (lastSegOf p) p)) imports) true (ModuleClosure :deps seedDeps :paths (list) :unresolved (list) :errors (list) :index seedIndex) (list)))
+    (loadTop! importers imports true (ModuleClosure :deps seedDeps :paths (list) :unresolved (list) :errors (list) :index seedIndex) (list)))
 
 fn mapKeysSet m: (Map String ModuleSummary) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (k String)] -> (Map String Bool) (mapSet acc k true)) (mapEmpty) (mapKeys m))
@@ -1341,8 +1365,20 @@ fn curlyMapValueExprs args: (List rd/SExpr) -> (List rd/SExpr)
 fn exportedFn? target: ModuleSummary member: String -> Bool
   (or (listContains? target.exports member) (and (listContains? target.exportedTypes member) (some? (modFun target member))))
 
+; (:m :ref ABSORB-CHECKER-MSGS :do "the closure holds a module under its path and under its name, so exporters are counted by distinct path; a module already imported here under another alias names that alias instead of a second import")
+fn exporterNote alias: String member: String mod: ModuleSummary deps: DepIndex -> String
+  (let [(hits (filter (fn [(m ModuleSummary)] -> Bool (and (not (= m.path mod.path)) (exportedFn? m member))) (mapValues deps.deps)))
+        (paths (mapKeys (listToSet (map (fn [(m ModuleSummary)] -> String m.path) hits))))]
+    (if (!= (listLength paths) 1) ""
+      (match (listHead hits)
+        ((none) "")
+        ((some m)
+          (match (listFind (fn [(k String)] -> Bool (match (resolveDepIn (optionOr (mapGet mod.imports k) "") deps) ((ok t) (= t.path m.path)) ((err _) false))) (mapKeys mod.imports))
+            ((some other) (str "; " m.name " is already imported as " other ": call " other "/" member))
+            ((none) (str "; only " m.name " exports " member ": add (" m.name " :a " alias ") to :i")))))))
+
 fn checkQualifiedMember v: String alias: String member: String mod: ModuleSummary deps: DepIndex path: String -> (Option ty/Diagnostic)
-  (match (modImport mod alias) ((none) (some (makeDiag "rule-9" (str v ": alias " alias " is not imported") path))) ((some mpath) (match (resolveDepIn mpath deps) ((err _) (none)) ((ok target) (if (and (not (exportedFn? target member)) (not (mapHas? target.exportedCases member))) (some (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " member " is not exported by " target.name) path)) (none))))))
+  (match (modImport mod alias) ((none) (some (makeDiag "rule-9" (str v ": alias " alias " is not imported" (exporterNote alias member mod deps)) path))) ((some mpath) (match (resolveDepIn mpath deps) ((err _) (none)) ((ok target) (if (and (not (exportedFn? target member)) (not (mapHas? target.exportedCases member))) (some (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " member " is not exported by " target.name) path)) (none))))))
 
 fn isReservedIdent? s: String -> Bool
   (or (stringStartsWith? s "agentslang-") (stringContains? s "/agentslang-"))

@@ -1,4 +1,4 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript elaborateMatches needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk) (lowLevelSigs :a ll)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor elaborateScript elaborateMatches needsElaboration?] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd) (tailPos :a tp) (constAssert :a ca) (foreign :a ff) (numKinds :a nk) (lowLevelSigs :a ll) (hints :a hn)])
 
 (schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (Pair String Int64))) (:f mapSites (List (Pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
@@ -48,7 +48,7 @@ fn typeText t: ty/Type -> String
   (match t ((ty/tyCon name args _ _) (if (listEmpty? args) name (str "(" name " " (stringJoin (map typeText args) " ") ")"))) ((ty/tyVar _ _) "_") ((ty/tyFun _ _) "fn"))
 
 fn expectType st: InferState have: ty/Type want: ty/Type where: String path: String modName: String -> InferState
-  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg (mixedWidthHint (u/applySubst st1.subst want) (u/applySubst st1.subst have))) path)))))
+  (let [(st1 (noteMapType (noteMapType st have where) want where))] (match (u/unify want have st1.subst modName) ((u/uOk nextSubst) (setSubst st1 nextSubst)) ((u/uErr msg isNum) (let [(code (if isNum "rule-6" "type"))] (addDiag st1 code (str where ": " msg (mixedWidthHint (u/applySubst st1.subst want) (u/applySubst st1.subst have)) (shapeHint where (u/applySubst st1.subst want) (u/applySubst st1.subst have))) path)))))
 
 fn qualifyTypeWithMod t: ty/Type mod: r/ModuleSummary deps: r/DepIndex -> ty/Type
   (match t
@@ -222,7 +222,15 @@ fn builtinNearHint v: String mod: r/ModuleSummary -> String
   (if (or (not (stringHelperName? v)) (not (stringEmpty? (ty/renamedHint v))))
     ""
     (let [(names (nearNames v mod))]
-      (if (listEmpty? names) "" (str "; did you mean " (stringJoin names ", ") " (prelude builtins)"))))
+      (if (listEmpty? names) (priorNameHint v) (str "; did you mean " (stringJoin names ", ") " (prelude builtins)"))))
+
+; (:m :ref ABSORB-CHECKER-MSGS :do "no builtin is within edit distance of a foreign helper name, so the canonical asl form from the foreign priors table names the fix, e.g. stringEqual? becomes (= a b); empty when the name is no known prior")
+fn priorNameHint v: String -> String
+  (match (hn/priorFor v)
+    ((some p) (let [(strNames (filter (fn [(n String)] -> Bool (stringStartsWith? n "string")) p.to))
+                    (shown (if (and (stringStartsWith? v "str") (not (listEmpty? strNames))) strNames p.to))]
+      (if (listEmpty? shown) "" (str "; did you mean " (stringJoin shown " or ") " (canonical asl name)"))))
+    ((none) ""))
 
 fn inferAtom v: String env: (Map String ty/Type) mod: r/ModuleSummary deps: r/DepIndex scope: String path: String st: InferState -> (Pair ty/Type InferState)
   (cond ((stringStartsWith? v "\"") (pair (ty/tyCon "String" (list) (none) (none)) st)) ((or (= v "true") (= v "false")) (pair (ty/tyCon "Bool" (list) (none) (none)) st)) ((and (= v "none") (not (mapHas? env v))) (let [(fRes (freshVar st "any"))] (pair (ty/tyCon "Option" (list (pairFirst fRes)) (none) (none)) (pairSecond fRes)))) ((or (= v "()") (= v "nil")) (pair (unitType) st)) ((= (nk/intLitShape v) "bad") (pair (ty/tyCon "Int64" (list) (none) (none)) (addDiag st "ERR_BAD_NUMBER" (str "malformed number: " v) path))) ((isFloatLit? v) (pair (ty/tyCon "Float64" (list) (none) (none)) st)) ((isIntLit? v) (let [(vid st.nextVar) (fRes (freshVar st "int")) (vty (pairFirst fRes)) (st1 (pairSecond fRes)) (st2 (noteIntLiteral st1 v vid))] (pair vty st2))) ((and (stringStartsWith? v ":") (not (mapHas? env v))) (pair (ty/tyCon "Keyword" (list) (none) (none)) st)) (else (match (lookupSymbolType v env mod deps st) ((some found) (nullaryCaseValue v found env mod deps)) ((none) (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v (ty/renamedHint v) (builtinNearHint v mod)) path))] (freshVar st1 "any"))))))
@@ -838,6 +846,21 @@ fn u64LitBad? tokStr: String -> Bool
 ; (:m :ref LL-SIZED-CHECK :do "two different sized integral types never convert implicitly: the mismatch names the explicit conversion, (U32 x) for a U32 wanted and an argument of another sized type")
 fn conversionName name: String -> String
   (cond ((= name "Int64") "I64") ((= name "Int32") "I32") (else name))
+
+fn conName t: ty/Type -> String
+  (match t ((ty/tyCon n _ _ _) n) (_ ""))
+
+; (:m :ref ABSORB-CHECKER-MSGS :do "a mismatch the log shows models repeating gets its fix in the message: a List where an Option pattern is expected, and a Unit body where a value is declared (runTests must end with true)")
+fn shapeHint where: String want: ty/Type have: ty/Type -> String
+  (cond
+    ((and (= (conName want) "Option") (= (conName have) "List"))
+      "; hint: the value is a List, not an Option: (listHead xs) or (listGet xs i) give an Option to match with (some v)/(none), or match the list by shape ((list) ...) or fold over it")
+    ((and (stringStartsWith? where "return of ") (and (= (conName have) "Unit") (!= (conName want) "Unit")))
+      (str "; hint: the body ends in a Unit expression; "
+           (cond ((= where "return of runTests") "a runTests body ends with true after its asserts")
+                 ((= (conName want) "Bool") "make its last expression the Bool value")
+                 (else (str "make its last expression a " (conName want) " value")))))
+    (else ""))
 
 fn mixedWidthHint want: ty/Type have: ty/Type -> String
   (match want

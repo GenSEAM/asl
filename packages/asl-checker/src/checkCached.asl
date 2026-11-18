@@ -89,7 +89,7 @@ fn ! bodyDiags! dep: String roots: (List String) known: (Map String r/ModuleSumm
         ((err pe) (pair (parseErrDiag pe dep) ix))
         ((ok forms)
           (let [(summary (r/collectSummary forms dep))
-                (cl (r/loadModuleDepsFrom! (cons (r/parentDirOf dep) roots) (r/mapValuesList summary.imports) known ix))]
+                (cl (r/loadModuleDepsAliased! (cons (r/parentDirOf dep) roots) (r/importPairs summary.imports) known ix))]
             (match (classify cl)
               ((err _) (pair (closureDiags dep cl) cl.index))
               ((ok deps) (pair (chk/checkModuleSource forms deps dep src) cl.index))))))))
@@ -256,7 +256,7 @@ fn ! checkSourceCachedIn! base: String path: String src: String roots: (List Str
       (let [(summary (r/collectSummary forms path))
             (importPaths (r/mapValuesList summary.imports))
             (allRoots (cons (r/parentDirOf path) roots))
-            (cl (r/loadModuleDepsFrom! allRoots importPaths (mapEmpty) cache.index))
+            (cl (r/loadModuleDepsAliased! allRoots (r/importPairs summary.imports) (mapEmpty) cache.index))
             (nextCache (with cache :index cl.index))]
         (match (classify cl)
           ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))
@@ -272,7 +272,7 @@ fn ! checkFileCachedIn! base: String path: String roots: (List String) cache: Ca
           (let [(summary (r/collectSummary forms path))
                 (importPaths (r/mapValuesList summary.imports))
                 (allRoots (cons (r/parentDirOf path) roots))
-                (cl (r/loadModuleDepsFrom! allRoots importPaths (mapEmpty) cache.index))
+                (cl (r/loadModuleDepsAliased! allRoots (r/importPairs summary.imports) (mapEmpty) cache.index))
                 (nextCache (with cache :index cl.index))]
             (match (classify cl)
               ((err _) (pair (ok (Verdict :diags (closureDiags path cl) :checked 1 :summarised 0)) nextCache))

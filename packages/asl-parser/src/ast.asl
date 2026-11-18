@@ -424,7 +424,7 @@ fn rejectBareLiteralTopExpr forms: (List TopForm) -> (Result (List TopForm) Pars
 fn retiredProse src: String -> (Option ParseError)
   (let [(bs (stringToBytes src)) (n (bytesLength bs))]
     (match (freeCommentAt bs n 0)
-      ((some at) (some (ParseError :msg "ERR_READ_COMMENT free ; comments and (:m :why ...) are retired: move the text to the package doc.asn (asl doc); a comment is one ; (:m ...) meta form" :line (lineOfByte bs at) :col 1)))
+      ((some at) (some (ParseError :msg "ERR_READ_COMMENT this ; line is prose, a :why meta form or a trailing comment, all rejected. The only comment is a whole line that starts with ; and holds one (:m ...) form without :why, for example: ; (:m :do \"what and why\"). A (:m ...) form without the leading ; is not a top-level form, never write it bare. Longer text goes to the package doc.asn (asl doc)" :line (lineOfByte bs at) :col 1)))
       ((none)
         (if (not (docKeywordAt? bs n 0))
           (none)

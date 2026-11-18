@@ -1,17 +1,17 @@
 (module asl-tools/coord/stall
-  :x [Cfg Probe Signal Act Hooks stRowOf cfgOf cfgErrors parkAfterOf replyRows sameTrail emptyTrail servedCount opText signalFrom verdictOf stallCount actOf stallRow statMs newestWrite! newestJournal! signalOf! sweep! stallsPath atPath]
+  :x [Cfg Probe Signal Act Hooks stRowOf cfgOf cfgErrors parkAfterOf replyRows sameTrail emptyTrail servedCount opText signalFrom verdictOf stallCount actOf stallRow statMs newestWrite! newestJournal! newestBuild! signalWithBuild signalOf! sweep! stallsPath atPath]
   :i [(asl-text/string :a ts)])
 
 ; (:m :ref COND-STALL-AUTO :do "automatic stall handling for writing units: per unit a Signal (newest journal mtime, newest file write outside .asl, trailing identical-reply streak, trailing empty-reply streak, pid alive), a verdict ok|stalled|looping|dead from the (:stall ...) row of <store>/ladder.asn, and an Act (kill the run record's tree, requeue with an ASN note, escalate to the strong lane after :escalateAfter stalls); no valid row means no sweep, today's behaviour. The conductor owns the hooks, this module owns the decision and the rows")
 
 (schema Cfg
-  (:f on Bool) (:f stalledMin Int64) (:f sameOp Int64) (:f emptyReplies Int64) (:f escalateAfter Int64) (:f everyS Int64))
+  (:f on Bool) (:f stalledMin Int64) (:f sameOp Int64) (:f emptyReplies Int64) (:f escalateAfter Int64) (:f everyS Int64) (:f buildMaxMin Int64))
 
 (schema Probe
   (:f id String) (:f lane String) (:f wt String) (:f alive Bool) (:f sinceMs Int64))
 
 (schema Signal
-  (:f served Int64) (:f sameOp Int64) (:f emptyRun Int64) (:f lastOp String) (:f turnAgeMs Int64) (:f writeAgeMs Int64) (:f alive Bool))
+  (:f served Int64) (:f sameOp Int64) (:f emptyRun Int64) (:f lastOp String) (:f turnAgeMs Int64) (:f writeAgeMs Int64) (:f buildAgeMs Int64) (:f alive Bool))
 
 (schema Act
   (:f class String) (:f lane String) (:f note String))
@@ -40,22 +40,22 @@ fn intAfter row: String key: String dflt: Int64 -> Int64
 ; (:m :ref COND-STALL-AUTO :do "ranges, all adopted defaults: stalledMin 20 (1..1440; a served turn took 48 s at p50, 396 s at p99, 534 s max over 662 node2 sessions), sameOp 10 (3..1000; 34 of 708 journals repeated one reply 10 or more times in a row, most legitimate repeats of gate and read stop at 5), emptyReplies 4 (1..100), escalateAfter 2 (1..20), everyS 60 (5..3600)")
 fn cfgErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":stalledMin" ":sameOp" ":emptyReplies" ":escalateAfter" ":everyS" ":parkAfter") k))) keys))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":stalledMin" ":sameOp" ":emptyReplies" ":escalateAfter" ":everyS" ":parkAfter" ":buildMaxMin") k))) keys))
         (ranged (fn [(key String) (dflt Int64) (lo Int64) (hi Int64)] -> (List String)
                   (let [(v (intAfter row key dflt))]
                     (if (or (< v lo) (> v hi)) (list (str key " " (stringFromInt64 v) " outside " (stringFromInt64 lo) ".." (stringFromInt64 hi))) (list)))))]
     (flatten (list (map (fn [(k String)] -> String (str "unknown key " k)) bad)
                       (ranged ":stalledMin" 20 1 1440) (ranged ":sameOp" 10 3 1000) (ranged ":emptyReplies" 4 1 100)
-                      (ranged ":escalateAfter" 2 1 20) (ranged ":everyS" 60 5 3600) (ranged ":parkAfter" 3 1 100))))
+                      (ranged ":escalateAfter" 2 1 20) (ranged ":everyS" 60 5 3600) (ranged ":parkAfter" 3 1 100) (ranged ":buildMaxMin" 45 1 1440))))
 
 fn flatten xss: (List (List String)) -> (List String)
   (fold (fn [(acc (List String)) (xs (List String))] -> (List String) (listAppend acc xs)) (list) xss)
 
 fn cfgOf row: String -> Cfg
   (if (or (stringEmpty? row) (not (listEmpty? (cfgErrors row))))
-    (Cfg :on false :stalledMin 20 :sameOp 10 :emptyReplies 4 :escalateAfter 2 :everyS 60)
+    (Cfg :on false :stalledMin 20 :sameOp 10 :emptyReplies 4 :escalateAfter 2 :everyS 60 :buildMaxMin 45)
     (Cfg :on true :stalledMin (intAfter row ":stalledMin" 20) :sameOp (intAfter row ":sameOp" 10) :emptyReplies (intAfter row ":emptyReplies" 4)
-         :escalateAfter (intAfter row ":escalateAfter" 2) :everyS (intAfter row ":everyS" 60)))
+         :escalateAfter (intAfter row ":escalateAfter" 2) :everyS (intAfter row ":everyS" 60) :buildMaxMin (intAfter row ":buildMaxMin" 45)))
 
 ; (:m :ref WRITE-STAGE-YIELD :do "stalls of one unit on one write profile before the conductor parks it blocked instead of requeueing it to the same profile: :parkAfter of the (:stall ...) row, adopted default 3 (1..100); node2 2026-11-16: 163 of 225 stalls in 48 h ran the strong profile, and CHECKER-REJECT-PREFIX, CHILDENV-STRIP-MORE stalled 3 times each on it, 20 min per stall, with the fail count reset every time")
 fn parkAfterOf row: String -> Int64
@@ -101,15 +101,21 @@ fn opText reply: String -> String
 fn signalFrom journal: String turnAgeMs: Int64 writeAgeMs: Int64 alive: Bool -> Signal
   (let [(rs (replyRows journal))]
     (Signal :served (servedCount journal) :sameOp (sameTrail rs) :emptyRun (emptyTrail rs) :lastOp (opText (optionOr (listLast rs) ""))
-            :turnAgeMs turnAgeMs :writeAgeMs writeAgeMs :alive alive))
+            :turnAgeMs turnAgeMs :writeAgeMs writeAgeMs :buildAgeMs 1000000000000000 :alive alive))
 
+; (:m :ref STALL-BUILD-WAIT :do "the same signal with the age of the newest native build write in the agent's isolated HOME; 1000000000000000 means no build write since the admit")
+fn signalWithBuild s: Signal buildAgeMs: Int64 -> Signal
+  (Signal :served s.served :sameOp s.sameOp :emptyRun s.emptyRun :lastOp s.lastOp :turnAgeMs s.turnAgeMs :writeAgeMs s.writeAgeMs :buildAgeMs buildAgeMs :alive s.alive)
+
+; (:m :ref STALL-BUILD-WAIT :do "a cold native CLI build writes only under the agent's isolated HOME, which the file walk skips: a fresh build write (newer than stalledMin) keeps the unit ok, but only while the newest turn is younger than buildMaxMin (adopted 45, 1..1440; the investigation saw 7 of 7 stalls of a window on a live build), so a build cannot cover a session forever")
 ; (:m :ref COND-STALL-AUTO :do "dead beats looping beats stalled: a gone pid ends the unit at once, a loop is judged on the reply trail whatever the clock says, and a unit is stalled only when both the newest turn and the newest file write are older than stalledMin")
 fn verdictOf cfg: Cfg s: Signal -> String
   (cond
     ((not s.alive) "dead")
     ((>= s.sameOp cfg.sameOp) "looping")
     ((>= s.emptyRun cfg.emptyReplies) "looping")
-    ((and (> s.turnAgeMs (* cfg.stalledMin 60000)) (> s.writeAgeMs (* cfg.stalledMin 60000))) "stalled")
+    ((and (> s.turnAgeMs (* cfg.stalledMin 60000)) (> s.writeAgeMs (* cfg.stalledMin 60000)))
+     (if (and (<= s.buildAgeMs (* cfg.stalledMin 60000)) (<= s.turnAgeMs (* cfg.buildMaxMin 60000))) "ok" "stalled"))
     (else "ok"))
 
 fn stallCount rows: String id: String -> Int64
@@ -157,12 +163,40 @@ fn ! newestJournal! wt: String since: Int64 -> (Pair Int64 String)
                     (pair 0 "") names))]
     (if (stringEmpty? (pairSecond best)) (pair 0 "") (pair (pairFirst best) (readOr (str jd "/" (pairSecond best))))))
 
+; (:m :ref STALL-BUILD-WAIT :do "newest mtime (files and directories) at or after since under the agent HOME's run/nativeCli, run/hosts and run/jobserver, 0 when none; the walk is bounded to depth 8 and 4000 entries per tick and skips nothing by name, since a build dir may be called out")
+fn ! newestBuild! wt: String since: Int64 -> Int64
+  (let [(base (str wt "/.asl/run/agentLoop/home/.asl/run"))
+        (best (fold (fn [(acc (Pair Int64 Int64)) (d String)] -> (Pair Int64 Int64)
+                      (let [(r (walkBuild! (str base "/" d) 0 (pairSecond acc) since))]
+                        (pair (max (pairFirst acc) (pairFirst r)) (pairSecond r))))
+                    (pair 0 4000) (list "nativeCli" "hosts" "jobserver")))]
+    (pairFirst best))
+
+fn ! walkBuild! path: String depth: Int64 budget: Int64 since: Int64 -> (Pair Int64 Int64)
+  (if (or (> depth 8) (<= budget 0)) (pair 0 budget)
+    (match (fileStat path)
+      ((err _) (pair 0 (- budget 1)))
+      ((ok st)
+        (let [(own (let [(m (/ st.mtimeNs 1000000))] (if (>= m since) m 0)))]
+          (if (not st.isDir) (pair own (- budget 1))
+            (match (dirList path)
+              ((err _) (pair own (- budget 1)))
+              ((ok names)
+                (fold (fn [(acc (Pair Int64 Int64)) (nm String)] -> (Pair Int64 Int64)
+                        (let [(r (walkBuild! (str path "/" nm) (+ depth 1) (pairSecond acc) since))]
+                          (pair (max (pairFirst acc) (pairFirst r)) (pairSecond r))))
+                      (pair own (- budget 1)) names))))))))
+
 fn ! signalOf! cfg: Cfg p: Probe now: Int64 -> Signal
   (let [(j (newestJournal! p.wt p.sinceMs))
         (turnAt (max (pairFirst j) p.sinceMs))
         (turnAge (- now turnAt))
         (writeAge (if (> turnAge (* cfg.stalledMin 60000)) (- now (max (newestWrite! p.wt) p.sinceMs)) 0))]
-    (signalFrom (pairSecond j) turnAge writeAge p.alive))
+    (let [(s0 (signalFrom (pairSecond j) turnAge writeAge p.alive))]
+      (if (and (> turnAge (* cfg.stalledMin 60000)) (> writeAge (* cfg.stalledMin 60000)))
+        (let [(b (newestBuild! p.wt p.sinceMs))]
+          (if (= b 0) s0 (signalWithBuild s0 (- now b))))
+        s0)))
 
 ; (:m :ref COND-STALL-AUTO :do "one pass over the writing units: at most once per :everyS, each non-ok unit gets one (:stall :unit :class :op :escalate :at) row in <store>/stalls.asn, its tree killed through the hook (the conductor kills only from the run record) and the unit requeued with the note; the Nth stall of one unit (:escalateAfter) sends it to the strong lane")
 fn ! sweep! dir: String now: Int64 probes: (List Probe) hooks: Hooks -> (List String)
