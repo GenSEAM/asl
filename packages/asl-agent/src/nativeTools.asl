@@ -146,9 +146,17 @@ fn opArg kvs: (List (Pair String j/Json)) -> String
     ((none) ""))
 
 ; (:m :do "a step(form) call carries the form text itself; a step call without form that names a string op (node2 2026-11-17, step with op and file keys) is the op call it names; an op call names a step op or a terminal head (done, escalate); an unknown name still becomes a step so the loop rejects it with its usual unknown-op receipt")
+; (:m :ref LEON-STEP-BODY-LOST :do "a native call the text protocol would not run one to one goes on as the same text tool call, so it is left exactly as the text path leaves it: arguments that are not an object (a done with prose arguments is not a bare done) and a step whose form has other keys beside it (grader 2026-11-18)")
+fn looseCall? name: String args: String kvs: (List (Pair String j/Json)) -> Bool
+  (or (and (listEmpty? kvs) (not (or (stringEmpty? (stringTrim args)) (match (j/jsonParse args) ((ok (j/jobj _)) true) (_ false)))))
+    (and (= name "step") (and (listAny? (fn [kv] (= (pairFirst kv) "form")) kvs) (> (listLength kvs) 1))))
+
+fn textCall name: String args: String -> String
+  (str "<tool_call>" (j/jsonEmit (j/jobj (list (pair "name" (j/jstr name)) (pair "arguments" (match (j/jsonParse args) ((ok v) v) (_ (j/jstr args))))))) "</tool_call>")
+
 fn callForm name: String args: String -> String
   (let [kvs (argsObject args)]
-    (if (= name "step")
+    (if (looseCall? name args kvs) (textCall name args) (if (= name "step")
       (match (c/dictGet (map (fn [kv] (pair (pairFirst kv) (c/kvStr (valueText (pairSecond kv))))) kvs) "form")
         ((some (c/kvStr f)) f)
         (_ (let [op (opArg kvs)] (if (or (stringEmpty? op) (= op "step")) "" (callForm op args)))))
@@ -158,7 +166,7 @@ fn callForm name: String args: String -> String
             inline (pairFirst pieces)
             form (str head (if (listEmpty? inline) "" (str " " (c/joinSep inline " "))) ")")
             blocks (pairSecond pieces)]
-        (if (listEmpty? blocks) form (str form "\n" (c/joinSep blocks "\n"))))))
+        (if (listEmpty? blocks) form (str form "\n" (c/joinSep blocks "\n")))))))
 
 fn callOf call: j/Json -> String
   (let [fnObj (optionOr (j/jsonGet call "function") (j/jobj (list)))

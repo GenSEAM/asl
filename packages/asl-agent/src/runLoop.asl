@@ -775,6 +775,7 @@ fn specTargets written: (List String) dirty: (List String) -> (List String)
 fn specCheckWanted? specCheck: Bool status: String targets: (List String) -> Bool
   (and specCheck (and (= status "ok") (not (listEmpty? targets))))
 
+; (:m :ref SPECCHECK-GRADER-SAME-MODEL :do "a met verdict from a grader of the writer's own model family is no independent verdict, not a fail: it is verdict unavailable like a reviewer the gateway cannot serve, so a green gated run exits 0 as needsReview and goes on to an independent review")
 ; (:m :ref LEON-CAPS :do "the diff is graded against the task by the env.grade channel, a gateway role other than the writer's; a reviewer error, an unreadable reply, a grader that reports no model, a grader that is the writer's own model, an unknown writer model, and a not-met verdict are all fail; a provider with no grader channel is skipped, which still ends needsReview, never a silent pass")
 fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List String) -> s/SpecVerdict
   (let [state run.state
@@ -798,7 +799,7 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
               ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
               ((stringEmpty? grader) (specFail grader (list "the grader reported no model, so it cannot be shown to differ from the writer")))
               ((stringEmpty? writer) (specFail grader (list "the writer model is unknown, so the grader cannot be shown to differ")))
-              ((= (modelFamily grader) (modelFamily writer)) (specFail grader (list (str "the grader model " grader " is the writer's model"))))
+              ((= (modelFamily grader) (modelFamily writer)) (s/SpecVerdict :verdict "unavailable" :model grader :reasons (list (str "no independent grader: the grader model " grader " is the writer's model family; the gateway served no other model"))))
               (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
 
 ; (:m :ref LEON-OK-UNCOMMITTED :do "gates green before any edit are listed as vacuous; a run that ends ok, wrote a test file of its own and whose integrity check ran a revert and saw failsOnRevert changed the gate; the check reverted the sources and saw the gate go red, so they are not listed")

@@ -732,7 +732,8 @@ fn ownsGroup s: String n: Int64 p: Int64 -> (Option String)
 fn txnOwnsOf form: String owns: (List String) -> (List String)
   (match (ownsGroup form (stringLength form) 0)
     ((some g)
-      (let [q (quotedAll g (stringLength g) 0 (list))]
+      ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "an :owns element that holds two paths joined by an escaped quote pair (node2 2026-11-17 STD-SHELLWORDS turn 8: (\"a.asl\\\" \\\"b.asl\")) is those two paths")
+      (let [q (listFlatMap (fn [x] (let [parts (map stringTrim (stringSplit x "\\\" \\\""))] (if (listAny? stringEmpty? parts) (list x) parts))) (quotedAll g (stringLength g) 0 (list)))]
         (if (listEmpty? q)
           (map (fn [w] (trimChar (trimChar (pyStrip w) "\"") "'")) (spaceWords g))
           q)))
@@ -895,7 +896,7 @@ fn ! mapSub kv: (List (Pair String c/KvVal)) owns: (List String) txnOwns: (List 
       ((= op "diff") (subGo (listAppend forms (list "(:diff)")) targets))
       (else
         (match (checkEffect effects op)
-          ((effectUndeclared) (subStop (simpleReject rid (rStr op) "ERR_EFFECT_UNDECLARED" (str "Operation '" op "' not declared in effects registry"))))
+          ((effectUndeclared) (subStop (simpleReject rid (rStr op) "ERR_EFFECT_UNDECLARED" (if (and (not isStep) (listContains? (list "m" "f" "doc" "decl" "yields" "receipt") op)) (str "(:" op " ...) is text from a source file, not a step; to put it in a file send (:step :op \"write\" :file \"PATH\" :content :raw) and the whole file in a ``` block after it") (str "Operation '" op "' not declared in effects registry")))))
           ((effectConfirm) (subStop (confirmReceipt (newId) op)))
           ((effectAllowed) (subGo forms targets))))))
 

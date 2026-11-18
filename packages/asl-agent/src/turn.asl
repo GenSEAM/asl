@@ -1,5 +1,5 @@
 (module aslAgent/turn
-  :x [TurnReply turnReply vendorRetryPause cutRestored]
+  :x [TurnReply turnReply vendorRetryPause cutRestored moduleWrite]
   :i [(aslAgent/reply :a r) (aslAgent/core :a c) (aslAgent/retry :a rt) (aslAgent/toolCalls :a tc)])
 
 (schema TurnReply
@@ -92,3 +92,35 @@ fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
                :missingRaw (map (fn [p] (str (pairFirst p) " " (pairSecond p))) bound.missing)
                :unfenced fences :facts facts :repair repaired
                :shapeRepaired shape.repaired :shapeLeft shape.left))
+
+fn baseName path: String -> String
+  (let [last (optionOr (listLast (stringSplit path "/")) path)]
+    (if (stringEndsWith? last ".asl") (c/sliceOf last 0 (- (stringLength last) 4)) last))
+
+fn testsPath? s: String -> Bool
+  (listContains? (stringSplit s "/") "tests")
+
+fn plainPath? p: String -> Bool
+  (not (listAny? (fn [x] (stringContains? p x)) (list "*" "?" "[" "{")))
+
+fn unwrapFence t: String -> String
+  (let [lines (stringSplit t "\n") n (listLength lines)]
+    (if (and (>= n 3) (and (stringStartsWith? (optionOr (listHead lines) "") "```") (= (stringTrim (optionOr (listLast lines) "")) "```")))
+      (stringJoin (optionOr (listSlice lines 1 (- n 1)) (list)) "\n")
+      t))
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a reply that is only the text of an .asl file, (module NAME ...) with no step around it, is the write of the one plain .asl file the session owns when NAME maps to that path without doubt: its last segment is the file's base name and both or neither are tests; otherwise none and the reply is answered as before (node2 2026-11-17, whole files sent bare)")
+fn moduleWrite reply: String owns: (List String) -> (Option (List (Pair String c/KvVal)))
+  (let [text (stringTrim (unwrapFence (stringTrim reply)))
+        files (filter (fn [p] (and (plainPath? p) (stringEndsWith? p ".asl"))) owns)
+        head (optionOr (listHead (stringSplit text "\n")) "")
+        name (optionOr (listGet (stringSplit (stringTrim head) " ") 1) "")
+        file (optionOr (listHead files) "")]
+    (if (and (stringStartsWith? text "(module ")
+          (and (= (listLength files) 1)
+            (and (= (listLength owns) 1)
+              (and (not (stringEmpty? name))
+                (and (= (optionOr (listLast (stringSplit name "/")) "") (baseName file))
+                  (= (testsPath? name) (testsPath? file)))))))
+      (some (list (pair "type" (c/kvStr "step")) (pair "op" (c/kvStr "write")) (pair "file" (c/kvStr file)) (pair "content" (c/kvStr (str text "\n")))))
+      none))

@@ -4,7 +4,7 @@
       engineRequest runAslSocket
       nearestLines placeholderAssert? runBounded runAsl
       memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
-      runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor]
+      runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor toolRootRows!]
   :i [(aslAgent/core :a c)
       (aslAgent/agentConfig :a ac)
       (aslAgent/jail :a jl)
@@ -351,12 +351,17 @@ fn explicitRow? row: String -> Bool
   (let [name (jl/envKey row)]
     (and (not (jl/secretName? name)) (and (stringStartsWith? name "ASL_") (not (listContains? (jl/cacheNames) name)))))
 
+; (:m :ref LEON-STEP-BODY-LOST :do "the tool root whose CLI head the jail seeds is the one this call runs: for an aslBin of ROOT/bin/asl the rows carry ASL_CLI_ROOT=ROOT (real path) in place of any inherited one, which may name another tree (grader 2026-11-18 low); any other aslBin leaves the rows as given")
+fn ! toolRootRows! aslBin: String given: (List String) -> (List String)
+  (if (stringEndsWith? aslBin "/bin/asl")
+    (let [tool (c/sliceOf aslBin 0 (- (stringLength aslBin) 8))]
+      (cons (str "ASL_CLI_ROOT=" (resultOr (realPath tool) tool)) (filter (fn [r] (!= (jl/envKey r) "ASL_CLI_ROOT")) given)))
+    given)
+
 fn ! jailedAsl! aslBin: String form: String rootDir: String env: (Option (List String)) -> (Pair (List String) (List String))
   (let [absRoot (resultOr (realPath rootDir) rootDir)
         toolRoot (if (stringEndsWith? aslBin "/bin/asl") (c/sliceOf aslBin 0 (- (stringLength aslBin) 8)) absRoot)
-        given (match env ((some rows) rows) ((none) (envList)))
-        ; (:m :ref LEON-STEP-BODY-LOST :do "the tool root whose CLI head the jail seeds is the one this call runs, named here, not an inherited ASL_CLI_ROOT that may name another tree (grader 2026-11-18 low)")
-        base (if (stringEndsWith? aslBin "/bin/asl") (cons (str "ASL_CLI_ROOT=" (resultOr (realPath toolRoot) toolRoot)) (filter (fn [r] (!= (jl/envKey r) "ASL_CLI_ROOT")) given)) given)
+        base (toolRootRows! aslBin (match env ((some rows) rows) ((none) (envList))))
         extra (cons (str "ASL_ROOT=" (t/normPath rootDir))
                 (match env ((some rows) (filter (fn [r] (and (explicitRow? r) (not (stringStartsWith? r "ASL_ROOT=")))) rows)) ((none) (list))))
         extraKeys (map jl/envKey extra)

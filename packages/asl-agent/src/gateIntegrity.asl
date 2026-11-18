@@ -1,5 +1,5 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout revertTimeoutWithin gateIntegrityWithin!]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout revertTimeoutWithin gateIntegrityWithin! gateIntegrityWithChanged! cutExports]
   :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
 
 enum Claim
@@ -305,6 +305,80 @@ fn wallOut? left: (Option Int64) -> Bool
 fn wallUnfinished left: (Option Int64) impl: (List String) -> (Pair Bool String)
   (pair false (str "revertCheck unfinished :revertKind wall: " (stringFromInt64 (max 0 (optionOr left 0))) " s of wall left, under the " (stringFromInt64 (revertMinSec)) " s a revert run needs; the gates were not run with " (c/joinSep impl ", ") " reverted"))
 
+; (:m :ref GATEINTEGRITY-NEW-MODULE :do "the default a return type can be cut to and still compile: 0, 0.0, false, an empty string, an empty list or none; empty when the type has no such value here")
+; (:m :ref GATEINTEGRITY-NEW-MODULE :do "the space-separated type arguments of a parenthesised type, nested parens kept whole: (Pair A (List B)) gives A and (List B)")
+fn typeArgs t: String -> (List String)
+  (let [inner (c/sliceOf t 1 (- (stringLength t) 1))
+        st (fold (fn [acc ch]
+                   (match acc ((pair depth parts)
+                     (let [cur (optionOr (listLast parts) "")
+                           init (listTake parts (- (listLength parts) 1))]
+                       (cond
+                         ((and (= ch " ") (= depth 0)) (pair depth (if (stringEmpty? cur) parts (listAppend parts (list "")))))
+                         ((= ch "(") (pair (+ depth 1) (listAppend init (list (str cur ch)))))
+                         ((= ch ")") (pair (- depth 1) (listAppend init (list (str cur ch)))))
+                         (else (pair depth (listAppend init (list (str cur ch))))))))))
+             (pair 0 (list "")) (stringChars inner))]
+    (filter (fn [p] (not (stringEmpty? p))) (optionOr (listTail (pairSecond st)) (list))))
+
+fn typeDefault t: String -> String
+  (let [s (stringTrim t)
+        args (if (stringStartsWith? s "(") (typeArgs s) (list))]
+    (cond
+      ((listContains? (list "Int64" "Int32" "UInt64" "UInt8" "I64" "I32" "U64" "U8" "Int") s) "0")
+      ((listContains? (list "Float64" "F64" "Float") s) "0.0")
+      ((= s "Bool") "false")
+      ((listContains? (list "String" "Str") s) "\"\"")
+      ((stringStartsWith? s "(List ") "(list)")
+      ((stringStartsWith? s "(Option ") "none")
+      ((and (stringStartsWith? s "(Result ") (and (= (listLength args) 2) (listContains? (list "String" "Str") (optionOr (listGet args 1) "")))) "(err \"\")")
+      ((and (stringStartsWith? s "(Pair ") (= (listLength args) 2))
+        (let [a (typeDefault (optionOr (listGet args 0) ""))
+              b (typeDefault (optionOr (listGet args 1) ""))]
+          (if (or (stringEmpty? a) (stringEmpty? b)) "" (str "(pair " a " " b ")"))))
+      (else "")))
+
+fn retType line: String -> String
+  (optionOr (listLast (stringSplit line " -> ")) "")
+
+; (:m :ref GATEINTEGRITY-NEW-MODULE :do "true when every exported fn of the text has a return type cutExports can cut, so a mutant green on the gates shows the test checks none of them; false when any exported fn keeps its body")
+fn allExportsCut? text: String -> Bool
+  (let [names (exportedNames text)
+        defs (filter (fn [line] (and (stringStartsWith? line "fn ") (listContains? names (fnName line)))) (stringLines text))]
+    (and (not (listEmpty? defs)) (listAll? (fn [line] (not (stringEmpty? (typeDefault (retType line))))) defs)))
+
+; (:m :ref GATEINTEGRITY-NEW-MODULE :do "a new module's text with the body of every exported fn whose return type has a default cut to that default, so the module still compiles and only its behaviour is gone; the text unchanged when no exported fn can be cut")
+fn cutExports text: String -> String
+  (let [names (exportedNames text)
+        st (fold (fn [acc line]
+                   (match acc ((pair skipping out)
+                     (let [def (and (stringStartsWith? line "fn ") (listContains? names (fnName line)))
+                           dflt (if def (typeDefault (retType line)) "")]
+                       (cond
+                         ((not (stringEmpty? dflt)) (pair true (listAppend out (list line (str "  " dflt)))))
+                         ((and skipping (or (stringEmpty? (stringTrim line)) (or (stringStartsWith? line " ") (stringStartsWith? line "\t")))) (pair true out))
+                         (else (pair false (listAppend out (list line)))))))))
+             (pair false (list)) (stringLines text))]
+    (stringJoin (pairSecond st) "\n"))
+
+; (:m :ref GATEINTEGRITY-NEW-MODULE :do "when every implementation file is new, a revert can only stop the test compiling (node2 2026-11-18: 5 of 17 writes, all STD-* units, ended needsReview on revertKind compile); the proof is then behaviour: the gates run with the exported fns cut to type defaults and must fail by assertion. Red is a passed check marked revertKind mutant, green is the vacuous answer as for a revert, and a mutant that does not compile (revertVerdict answers compile for it) or cannot be cut, or no wall left, keeps the compile answer")
+fn ! mutantCheck! gates: (List String) root: String timeout: Int64 env: (Option (List String)) watch: (Option Int64) deadline: (Option Int64) impl: (List String) newTexts: (List (Pair String String)) answer: (Pair Bool String) -> (Pair Bool String)
+  (let [cut (map (fn [p] (pair (pairFirst p) (cutExports (pairSecond p)))) newTexts)
+        changedAny (listAny? (fn [p] (!= (pairSecond p) (optionOr (listHead (map pairSecond (filter (fn [q] (= (pairFirst q) (pairFirst p))) newTexts))) ""))) cut)
+        left (secondsLeft! deadline)]
+    (if (or (not changedAny) (wallOut? left))
+      answer
+      (let [wrote (writeTexts! root (map (fn [p] (pair (pairFirst p) (some (pairSecond p)))) cut))
+            bumped (and wrote (bumpTexts! root (map (fn [p] (pair (pairFirst p) (some (pairSecond p)))) cut)))
+            run (if bumped (runIntegrityGates! gates root (revertTimeoutWithin timeout left) env watch) (list))
+            verdicts (g/gateVerdicts run true)
+            decision (revertVerdict run verdicts impl (list))]
+        (cond
+          ((not bumped) answer)
+          ((listContains? verdicts "failsOnRevert") (pair true (str "revertCheck :revertKind mutant (every implementation file is new; the gates fail with the exported fns of " (c/joinSep (map pairFirst cut) ", ") " cut to type defaults): " (pairSecond decision))))
+          ((not (listAll? (fn [p] (allExportsCut? (pairSecond p))) newTexts)) answer)
+          (else decision)))))
+
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String deadline: (Option Int64) -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
@@ -334,8 +408,10 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
                   (if secondOut (wallUnfinished secondLeft impl) (revertVerdict secondRun (g/gateVerdicts secondRun true) impl (list)))))
               implNow (map (fn [p] (pair (pairFirst p) (match (pairSecond p) ((some b) (bt/bytesToString b)) ((none) "")))) saved)
               implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
-              unwired (if (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile")) (unwiredFns implNow implHead) (list))
-              finalAnswer (if (listEmpty? unwired) answer (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish" "\n(:gateUnwired :fns (" (stringJoin (map (fn [n] (str "\"" n "\"")) unwired) " ") ") :do \"call each from the code path the task changes, then finish\")")))
+              newOnly (and (listEmpty? existing) (not (listEmpty? newFiles)))
+              proved (if (and newOnly (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile"))) (mutantCheck! gates root timeout env watch deadline impl implNow answer) answer)
+              unwired (if (and (pairFirst proved) (stringContains? (pairSecond proved) ":revertKind compile")) (unwiredFns implNow implHead) (list))
+              finalAnswer (if (listEmpty? unwired) proved (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish" "\n(:gateUnwired :fns (" (stringJoin (map (fn [n] (str "\"" n "\"")) unwired) " ") ") :do \"call each from the code path the task changes, then finish\")")))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]

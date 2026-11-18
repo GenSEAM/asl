@@ -42,10 +42,10 @@ fn attractorPrefill v: String -> String
 
 ; (:m :ref LEONATTR :do "a prefilled reply may arrive as only the continuation (it starts mid-form, never with an open paren) or, when the transport ignores the prefill, as the whole reply; only the first needs the prefill put back before parsing")
 ; (:m :ref LEON-STEP-BODY-LOST :do "a reply that opens with a text tool call tag or a JSON object is a whole reply too: the step prefill in front of it (node2 2026-11-17) left an unclosed (:step that swallowed the call")
-; (:m :ref LEON-STEP-BODY-LOST :do "a reply whose first <tool_call> comes after text with no key or paren in it (prose or reasoning before the call) is a tool call, not a continuation of the prefill")
+; (:m :ref LEON-STEP-BODY-LOST :do "a reply whose first <tool_call> comes after text with no key at its start (prose or reasoning before the call, also prose such as Plan: with a colon in it) is a tool call, not a continuation of the prefill, which goes on with the step's first key")
 fn toolCallAfterProse? reply: String -> Bool
   (match (stringIndexOf reply "<tool_call>")
-    ((some i) (let [before (c/sliceOf reply 0 i)] (and (not (stringContains? before ":")) (not (stringContains? before "(")))))
+    ((some i) (let [before (c/sliceOf reply 0 i)] (not (stringStartsWith? (stringTrim before) ":"))))
     ((none) false))
 
 fn continueReply prefill: String reply: String -> String

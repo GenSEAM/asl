@@ -2358,7 +2358,9 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   normalized clean.text
                   facts clean.facts
                   opsDeduped (dedupeReadOps facts.ops (list) (list) 0)
-                  operations (pairFirst opsDeduped)
+                  ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a reply with no step that is the bare text of the one owned .asl file runs as its write (tr/moduleWrite)")
+                  moduleOps (if (listEmpty? facts.ops) (match (tr/moduleWrite reply ra.owns) ((some op) (list op)) ((none) (list))) (list))
+                  operations (if (listEmpty? moduleOps) (pairFirst opsDeduped) moduleOps)
                   droppedOps (pairSecond opsDeduped)
                   findingForms facts.dataFindings
                   priorFindings (map ctx/pyStr state.findingsList)
@@ -2369,8 +2371,8 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   execEnv (ex/withNet (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
                     ra.gates effects "" (list) (ctx/readPayloadChars (optionOr servedCtx 24000))
                     ra.timeout none run.session none) ra.net)
-                  parseDefect (or (listEmpty? operations)
-                    (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized))))
+                  parseDefect (and (listEmpty? moduleOps) (or (listEmpty? operations)
+                    (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized)))))
                   unnamedNow (unnamedOnly? operations)
                   malformedNow (or unnamedNow (and parseDefect (and (listEmpty? facts.forms) (brokenWrapper? replyRaw))))
                   _shapeRow (match (shapeRow turn clean.shapeRepaired clean.shapeLeft) ((some row) (ok? (fileAppend path row))) ((none) true))

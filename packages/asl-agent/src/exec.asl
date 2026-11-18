@@ -3,7 +3,7 @@
       vStr vInt vBool vStrs vPair vNone vRecs
       makeExecEnv withNet execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
-      opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings
+      opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings moduleMismatch!
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
   :i [(aslAgent/core :a c)
       (aslAgent/aslOps :a o)
@@ -770,6 +770,28 @@ fn rawShape opName: String target: String -> String
     (str "(:step :op \"edit\" :file \"" (c/escapeAsn target) "\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```")
     (str "(:step :op \"write\" :file \"" (c/escapeAsn target) "\" :content :raw)\n```\n<file text>\n```\n(each block right after its own step; a text that holds ``` lines goes in a longer fence: ````)"))
 
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a whole .asl write whose module header and path disagree about tests is refused before anything is written: a src file with a tests module or a tests file with a src module (node2 2026-11-17, 3 of 109 writes, the model swapped the test and the source). Empty when the write fits or is not an .asl write with a header")
+fn testsSeg? s: String -> Bool
+  (listContains? (stringSplit s "/") "tests")
+
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "fix round on 91785f92b: a tests/ file may carry a module without tests (fixtures, cases, package tests named pkg/xTest: 739 of 4012 tracked files), so that side is refused only for a plain swap, a header naming the module of the existing src file of the same package, the src file this text came from")
+fn ! swappedSrc! root: String target: String m: String -> String
+  (let [cut (if (stringStartsWith? target "tests/") (some 0) (match (stringIndexOf target "/tests/") ((some i) (some (+ i 1))) ((none) none)))]
+    (match cut
+      ((none) "")
+      ((some i) (let [src (str (c/sliceOf target 0 i) "src/" (optionOr (listLast (stringSplit m "/")) "") ".asl")
+                      full (if (stringStartsWith? src "/") src (str root "/" src))]
+                  (if (= (t/moduleOf (resultOr (fileReadString full) "")) m) src "")))))
+
+fn ! moduleMismatch! root: String opName: String target: String content: String -> String
+  (let [m (t/moduleOf content)
+        swapped (if (or (stringEmpty? m) (or (testsSeg? m) (not (testsSeg? target)))) "" (swappedSrc! root target m))]
+    (cond
+      ((or (!= opName "write") (or (not (stringEndsWith? target ".asl")) (stringEmpty? m))) "")
+      ((and (testsSeg? m) (not (testsSeg? target))) (str "module '" m "' is a test module but " target " is not under tests/; nothing was written: a test goes in a tests/ file, and this file keeps a module without tests"))
+      ((not (stringEmpty? swapped)) (str "module '" m "' is the module of " swapped " but " target " is its test; nothing was written: this text goes in " swapped ", and the test keeps its own module"))
+      (else "")))
+
 ; (:m :ref LEON-OWNS-ONE-RULE-20261018 :do "no :owns on the session means the session may write anywhere inside :root; c/effectiveOwns is the one place that normalization happens, shared with main.asl's liveExecOps! instead of each keeping its own if-empty-then-** copy")
 fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (Option (List (Pair String Val)))
   (let [target (opStr op "file" "")
@@ -784,7 +806,8 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         effOwns (c/effectiveOwns owns)
         full (if (stringStartsWith? target "/") target (str (absRoot! env.root) "/" target))
         existing (resultOr (fileSize full) 0)
-        wholeFile (and (= opName "write") (> existing 4096))]
+        wholeFile (and (= opName "write") (> existing 4096))
+        modWhy (moduleMismatch! (absRoot! env.root) opName target (opStr op "content" ""))]
     (cond
       (unbound
         (some (listAppend (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target)
@@ -797,7 +820,9 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
       (wholeFile
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_WRITE_WHOLE_FILE")
           (vs "file" target) (pair "bytes" (vInt existing))
-          (vs "hint" "use (:edit :file F :old ... :new ...) on the fn that changes, or (:read :file F :symbol S) first"))))
+          (vs "hint" "(:step :op \"edit\" :file \"F\" :old \"...\" :new \"...\") on the fn that changes, or (:step :op \"read\" :file \"F\" :symbol \"S\") first"))))
+      ((not (stringEmpty? modWhy))
+        (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MODULE_PATH") (vs "file" target) (vs "message" modWhy))))
       (else (none))))
 
 fn ! aslRunner! repoRoot: String transport: String env: (Option (List String)) runTimeout: Int64 deadlineAt: (Option Float64) -> (fn [String String] -> t/AslRun)
@@ -840,6 +865,16 @@ fn blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String
 fn blockedBump procs: r/Procs key: String -> r/Procs
   (if (listContains? procs.blocked key) procs (with procs :blocked (cons key procs.blocked)))
 
+; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a form whose head is one a source file carries, (:m ...), (:f ...), (:doc ...), (:decl ...), (:yields ...) or (:receipt ...), sent as its own form is file text the model pasted, not an op; the answer says so and gives the write step (node2 2026-11-17, 54 turns answered with the effects registry)")
+fn fileFormHeads -> (List String)
+  (list "m" "f" "doc" "decl" "yields" "receipt")
+
+fn fileFormHead? op: (List (Pair String c/KvVal)) opName: String -> Bool
+  (and (listContains? (fileFormHeads) opName) (not (stringStartsWith? (opStr op "form" "") "(:step")))
+
+fn fileFormMessage opName: String -> String
+  (str "(:" opName " ...) is text from a source file, not a step; to put it in a file send (:step :op \"write\" :file \"PATH\" :content :raw) and the whole file in a ``` block after it")
+
 fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
   (let [opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
@@ -854,7 +889,7 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
       ((and step (= opName "intent")) (eo (intentReceipt op (newId)) procs))
       ((match effect ((t/effectUndeclared) true) (_ false))
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_EFFECT_UNDECLARED")
-              (vs "message" (str "Operation '" opName "' not declared in effects registry")))
+              (vs "message" (if (fileFormHead? op opName) (fileFormMessage opName) (str "Operation '" opName "' not declared in effects registry"))))
           procs))
       ((match effect ((t/effectConfirm) true) (_ false)) (eo (needsConfirmRec (newId) opName) procs))
       ((and step (and (listContains? (rr/remoteOpNames) opName) (not (stringEmpty? (rr/remoteUnit op)))))
