@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/coord/turnPath :a tp)])
 
-; (:m :ref TURN-PATH-EFFICIENCY :do "fixtures/turnPath holds seven small journals in the agent loop's row format, one per situation: the short path, rereads and turns after green, one refused write per refusal class, the losses that are not reads or writes, the ways a read repeats or does not, a batched read and txn, and a journal cut in mid row with a foreign line in it. Every loss cause has a session that shows it, with its class and its token sum, and the summary's rows add up to the turns")
+; (:m :ref TURN-PATH-EFFICIENCY :do "fixtures/turnPath holds eleven small journals in the agent loop's row format, one per situation: the short path, rereads and turns after green, one refused write per refusal class, the losses that are not reads or writes, the ways a read repeats or does not, a batched read and txn, a write turn that also carried a refused edit after a grep run, shell runs that are and are not reads, a run the provider never answered, a journal without a turn, and a journal cut in mid row with a foreign line in it. Every loss cause has a session that shows it, with its class and its token sum, and the summary's rows add up to the turns")
 fn fixtureDir -> String
   "asl/tools/coord/tests/fixtures/turnPath"
 
@@ -22,7 +22,7 @@ fn turnsIn line: String -> Int64
 
 fn rowTurns text: String -> Int64
   (fold (fn [(acc Int64) (l String)] -> Int64
-          (if (or (stringStartsWith? l "(:waste ") (stringStartsWith? l "(:progress ")) (+ acc (turnsIn l)) acc))
+          (if (and (or (stringStartsWith? l "(:waste ") (stringStartsWith? l "(:progress ")) (not (stringContains? l ":countedIn progress"))) (+ acc (turnsIn l)) acc))
         0 (stringLines text))
 
 fn ! testShort -> Bool
@@ -90,20 +90,47 @@ fn ! testReadKinds -> Bool
       (assert (= (outOf p "gate") 111) (str "a red gate after a change is still the first look at it: " (stringFromInt64 (outOf p "gate"))))
       (assert (= (outOf p "gateSame") 112) (str "the same gate with nothing changed: " (stringFromInt64 (outOf p "gateSame"))))
       (assert (= (outOf p "toolErr:ERR_SYMBOL_NOT_FOUND") 113) "a read the tool refused keeps its code")
+      (assert (and (= p.ideal 4) (= p.excess 9)) (str "four used-read turns count as two in the ideal path: " (stringFromInt64 p.ideal) " " (stringFromInt64 p.excess)))
+      true))
+
+fn ! testMixed -> Bool
+  (let [(p (pathOf "i9mixed"))
+        (last (optionOr (listLast p.steps) (tp/Step :turn 0 :letter "" :cause "" :inT 0 :outT 0 :cached 0 :rejectedOps 0 :preview "")))]
+    (do
+      (assert (= (causesOf p) "read,inspect,write") (str "a grep of a file edited later is a read, a cat of a file nobody touches is inspect: " (causesOf p)))
+      (assert (and (= last.cause "write") (= last.rejectedOps 1)) (str "the accepted edit keeps the turn, the refused one is counted on it: " (tp/stepLine last)))
+      (assert (and (= p.ideal 2) (= p.excess 1)) (str "the loop gated the write itself, so no gate turn in the ideal path: " (stringFromInt64 p.ideal) " " (stringFromInt64 p.excess)))
+      true))
+
+fn ! testRuns -> Bool
+  (let [(p (pathOf "j0runs"))
+        (w (pathOf "k1wait"))]
+    (do
+      (assert (= (causesOf p) "scout,gateFirst,scout,inspect,read,inspect,toolErr:ERR_HARNESS_PATH,inspect,write")
+              (str "a grep of a file read later is a read, an asl test run is a gate, echo and a cat of an untouched file are inspect, a cat cut by a pipe reads the file before the pipe, a refused run is a tool error: " (causesOf p)))
+      (assert (= p.outcome "failed:wallBudget") (str "written files with a stop that is not ok is still a failed run: " p.outcome))
+      (assert (and p.wrote (and (= p.ideal 3) (= p.excess 6))) (str "one used read, one file, and a gate turn because the loop did not gate: " (tp/pathLine p)))
+      (assert (= w.outcome "failed:noWrite") (str "an ok stop that wrote nothing: " w.outcome))
+      (assert (= w.model "unknown") (str "no served row, no model name: " w.model))
+      (assert (= (causesOf w) "wait") (str "the turn nobody answered: " (causesOf w)))
+      (assert (not (stringContains? (tp/summaryText (list p) 0) "mixedRejected")) "no mixedRejected row when no write turn carried a refusal")
       true))
 
 fn ! testOther -> Bool
   (let [(p (pathOf "d4mixed"))]
     (do
-      (assert (= (causesOf p) "gateSame,noOp,toolErr:ERR_HARNESS_PATH,doneRefused,inspect,unknown,toolErr:unknown,inspect,gateSame,gateSame,scout,toolErr:ERR_NOTE_STUB,inspect,toolErr:rejected,gateSame,wait,close") (str "causes by turn: " (causesOf p)))
-      (assert (= (outOf p "gateSame") 75) (str "gates, an asl test run and a check with nothing changed since the baseline: " (stringFromInt64 (outOf p "gateSame"))))
+      (assert (= (causesOf p) "gateFirst,noOp,toolErr:ERR_HARNESS_PATH,doneRefused,inspect,unknown,toolErr:unknown,inspect,gateSame,gateSame,readNoWrite,toolErr:ERR_NOTE_STUB,inspect,toolErr:rejected,gateSame,wait,close") (str "causes by turn: " (causesOf p)))
+      (assert (= (outOf p "gateFirst") 11) (str "the first gate the model asked for, nothing changed yet: " (stringFromInt64 (outOf p "gateFirst"))))
+      (assert (= (outOf p "readNoWrite") 25) (str "a search in a session that lands nothing is readNoWrite, not scout: " (stringFromInt64 (outOf p "readNoWrite"))))
+      (assert (= (outOf p "gateSame") 64) (str "an asl test run, a check and a gate after the first gate with nothing changed: " (stringFromInt64 (outOf p "gateSame"))))
       (assert (= (outOf p "inspect") 64) (str "git log and shell runs that are not gates: " (stringFromInt64 (outOf p "inspect"))))
       (assert (= (+ (outOf p "toolErr:ERR_HARNESS_PATH") (+ (outOf p "toolErr:unknown") (+ (outOf p "toolErr:ERR_NOTE_STUB") (outOf p "toolErr:rejected")))) 88)
               "tool errors keep the code of the op that failed, unknown when the row names none")
-      (assert (= (+ (outOf p "noOp") (+ (outOf p "doneRefused") (+ (outOf p "unknown") (+ (outOf p "scout") (outOf p "close"))))) 86)
-              "tokens of the no-op, refused done, unknown op, unused search and close turns")
+      (assert (= (+ (outOf p "noOp") (+ (outOf p "doneRefused") (+ (outOf p "unknown") (outOf p "close")))) 61)
+              "tokens of the no-op, refused done, unknown op and close turns")
       (assert (= (outOf p "wait") 0) "the unanswered turn spent no tokens")
-      (assert (= p.excess 16) (str "seventeen turns against a lone gate: " (stringFromInt64 p.excess)))
+      (assert (= (+ p.ideal p.excess) 0) "without an accepted write ideal and excess stay 0")
+      (assert (and (not p.wrote) (not (stringContains? (tp/pathLine p) ":ideal "))) (str "a session without an accepted write has no ideal path: " (tp/pathLine p)))
       true))
 
 fn ! testCut -> Bool
@@ -123,14 +150,18 @@ fn ! testDir -> Bool
         (gone (tp/reportDir (str (fixtureDir) "/absent") 0 0 "" 0))]
     (do
       (assert (= (pairFirst all) 0) "the fixture directory reports with code 0")
-      (assert (stringContains? text "(:turnPath :sessions 7 :turns 54 :skipped 2 ") (str "sessions, turns and skipped rows: " (optionOr (listHead (stringLines text)) "")))
-      (assert (= (rowTurns text) 54) (str "progress and waste rows add up to the turns: " (stringFromInt64 (rowTurns text))))
-      (assert (stringContains? text "(:waste :cause rejected:wholeFile :turns 1 :sharePct 1.9 :out 4000 :in 1000)") "the costliest loss row, with its share and tokens")
+      (assert (stringContains? text "(:turnPath :sessions 10 :turns 67 :skipped 3 ") (str "sessions, turns and skipped rows: " (optionOr (listHead (stringLines text)) "")))
+      (assert (= (rowTurns text) 67) (str "progress and waste rows add up to the turns: " (stringFromInt64 (rowTurns text))))
+      (assert (stringContains? text "(:waste :cause rejected:wholeFile :turns 1 :sharePct 1.5 :out 4000 :in 1000)") "the costliest loss row, with its share and tokens")
       (assert (stringStartsWith? (optionOr (listGet (stringLines text) 2) "") "(:waste :cause rejected:wholeFile ") "waste rows are ordered by lost output tokens")
-      (assert (stringContains? text "(:shortPath :sessions 2 :written 4 :all 7 :shareOfWrittenPct 50.0 :shareOfAllPct 28.6)") "two of four written sessions stayed within one turn of ideal")
-      (assert (stringContains? text "(:excess :sessions 7 :median 4 :p90 16 :writtenMedian 0 :writtenP90 10)") "median and p90 of excess")
-      (assert (stringContains? text "(:firstWriteTurn :sessions 5 :median 2 :p90 9)") "first write turn over the five sessions that wrote")
-      (assert (stringContains? text "(:batchable :readTurns 3 :writeTurns 0)") "used-read turns beyond one per session")
+      (assert (stringContains? text "(:shortPath :sessions 4 :wrote 7 :all 10 :shareOfWrotePct 57.1 :shareOfAllPct 40.0)") "four of the seven sessions that landed a write stayed within one turn of ideal")
+      (assert (stringContains? text "(:excess :sessions 7 :median 1 :p90 9)") "median and p90 of excess over the sessions that landed a write")
+      (assert (stringContains? text "(:firstWriteTurn :sessions 7 :median 3 :p90 9)") "first write turn over the seven sessions that wrote")
+      (assert (stringContains? text "(:batchable :readTurns 2 :writeTurns 0)") "used-read turns beyond two per session")
+      (assert (stringContains? text "(:noWrite :sessions 3 :turns 27 :out 11113 :byStop ((noWrite 1) (provider 1) (wallBudget 1)))") "sessions without an accepted write are counted apart by stop")
+      (assert (stringContains? text "(:waste :cause mixedRejected :turns 1 :rejectedOps 1 :countedIn progress)") "the refused op on a write turn has its own row and adds no turn")
+      (assert (stringContains? text "(:files :read 10 :unreadable 0 :empty 1)") "the journal without a turn is counted as empty, not as a session")
+      (assert (= (pairFirst (tp/reportDir (fixtureDir) 0 0 "h8" 0)) 1) "asking for the empty journal as a session is an error")
       (assert (= (listCount (fn [(l String)] -> Bool (stringStartsWith? l "(:path ")) (stringLines text)) 2) "--top 2 prints two paths")
       (assert (stringContains? (pairSecond one) "(:step :turn 2 :class waste :letter r :cause reread :in 1000 :out 110 :cached 500 :op \"(:step :op 'read' :file 'stub/src/alpha.asl' :start 3 :end 9)\")")
               (str "--session prints one row per turn: " (pairSecond one)))
@@ -147,6 +178,8 @@ fn ! runTests -> Bool
     (assert (testRejects) "one class per refused write")
     (assert (testRejectTable) "refusal wordings map to their classes")
     (assert (testReadKinds) "what makes a read a reread, a scout or progress")
+    (assert (testMixed) "grep as a read, a mixed write turn, the loop's own gate")
+    (assert (testRuns) "shell runs as reads, gates or inspect; outcome and model edge cases")
     (assert (testOther) "gateSame, noOp, toolErr, doneRefused, inspect, unknown, wait, close")
     (assert (testCut) "a cut journal is read and its broken rows counted")
     (assert (testDir) "directory report: summary sums, top, session view, empty and missing directories")
