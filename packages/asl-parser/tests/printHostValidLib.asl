@@ -1,9 +1,10 @@
 (module asl-parser/tests/printHostValidLib
-  :x [runShard! knownHostInvalidReason hostBinary!]
+  :x [runShard! knownHostInvalidReason knownHostInvalidError hostBinary!]
   :i [(ast :a a)
       (astPrinter :a ap)
       (asl-parser/tests/printReparseLib :a prl)
       (asl-parser/tests/printHostValidScope :a scope)
+      (asl-syntax/tests/asl/layoutCorpusLib :a lcl)
       (asl-tools/fleet/run :a fr)])
 
 fn knownHostInvalidReason path: String -> (Option String)
@@ -20,7 +21,22 @@ fn knownHostInvalidReason path: String -> (Option String)
      (some "compile.c's D152 constant-assert exemption keys off a ; (:m :tags (hostSubject)) line comment textually adjacent to the fn; DefunNode carries no field for it, so astPrinter cannot reproduce the comment and the printed form's otherwise-constant assert is rejected: ERR_CONSTANT_ASSERT"))
     ((= path "asl/packages/asl-target-llvm/tests/nativeStringTest.asl")
      (some "astPrinter gap, confirmed on base 010f3a1bc (file and astPrinter.asl both byte-identical to base, matching printReparseLib.asl's knownMisparseReason entry for this file): one top form embeds a raw \\x00/\\xNN byte-escape string literal (a generated-fixture-text payload for native string/byte builtins), and the printed form's re-serialized escapes land in a field-name position the host rejects as ERR_BAD_CONSTRUCTOR"))
+    ((= path "asl/prelude/prelude.asl")
+     (some "asl-checker frees the signature type variables N, I, J and X of the prelude's own numeric definitions only for a file named as the prelude (check.asl checkDefunDiags, preludeFile?); the printed copy sits beside it under another name, loses that exemption and is rejected: ERR_TYPE_MISMATCH type variable"))
     (else (none)))
+
+; (:m :ref PRINT-SHARD-BASE-RED :do "an entry that names its error is held to it: the printed copy must fail with that very diagnosis, so a printer defect that breaks the same file in another way is still red")
+fn knownHostInvalidError path: String -> (Option String)
+  (if (= path "asl/prelude/prelude.asl")
+    (some "ERR_TYPE_MISMATCH type variable")
+    (none))
+
+fn listedFailure? path: String o: CheckOutcome -> Bool
+  (and (inScope? o)
+       (and (not o.printed.valid)
+            (match (knownHostInvalidError path)
+              ((some want) (stringContains? o.printed.detail want))
+              ((none) true))))
 
 fn parentDir path: String -> String
   (let [(parts (stringSplit path "/"))]
@@ -187,7 +203,7 @@ fn fileFails? r: FileResult -> Bool
     ((ok o)
      (or (not o.removed)
          (match (knownHostInvalidReason r.path)
-           ((some _) (or (not (inScope? o)) o.printed.valid))
+           ((some _) (not (listedFailure? r.path o)))
            ((none) (if (inScope? o) (not o.printed.valid) (not (scope/knownSourceInvalid? r.path))))))))
 
 fn assertFile r: FileResult -> Bool
@@ -200,7 +216,7 @@ fn assertFile r: FileResult -> Bool
          (match (knownHostInvalidReason path)
            ((some why)
             (do
-              (assert (and (inScope? o) (not o.printed.valid)) (str path " is listed host-invalid (" why "): its source must pass and its printed output fail asl-host check, source " o.source.detail ", printed " o.printed.detail))
+              (assert (listedFailure? path o) (str path " is listed host-invalid (" why "): its source must pass and its printed output fail asl-host check" (match (knownHostInvalidError path) ((some want) (str " with " want)) ((none) "")) ", source " o.source.detail ", printed " o.printed.detail))
               true))
            ((none)
             (if (inScope? o)
@@ -225,18 +241,22 @@ fn runShard! label: String n: Int64 k: Int64 -> Bool
           ((err _) (do (assert false "cannot canonicalize the repo root") false))
           ((ok root)
            (let [(swept (sweepStrays! root allFiles))
-                 (shard (prl/shardFiles allFiles n k))
-                 (expected (prl/expectedShardCount (listLength allFiles) n k))
+                 (shard (lcl/shardFilesByPath allFiles n k))
+                 (sizes (lcl/shardSizesByPath allFiles n))
+                 (expected (optionOr (listGet sizes (- k 1)) -1))
                  (results (fold (fn [(acc (List FileResult)) (c (List String))] -> (List FileResult) (listAppend acc (checkChunk! host root c))) (list) (chunked shard 48)))
                  (failing (filter fileFails? results))
                  (sourceValid (filter sourceValid? results))
                  (excluded (filter (fn [(r FileResult)] -> Bool (some? (knownHostInvalidReason r.path))) results))]
              (do
                (print (str "(:printHostValid :suite " label " :checked " (stringFromInt64 (listLength results))
+                           " :corpus " (stringFromInt64 (listLength allFiles))
+                           " :shardSizes (" (stringJoin (map stringFromInt64 sizes) " ") ")"
                            " :sourceValid " (stringFromInt64 (listLength sourceValid))
                            " :failed " (stringFromInt64 (listLength failing))
                            " :excluded " (stringFromInt64 (listLength excluded))
                            " :failing (" (stringJoin (map (fn [(r FileResult)] -> String r.path) failing) " ") "))\n"))
-               (assert (= (listLength shard) expected) (str label " holds its exact share " (stringFromInt64 expected)))
+               (assert (= (listSum sizes) (listLength allFiles)) (str label " shards hold every corpus file exactly once: " (stringFromInt64 (listSum sizes)) " of " (stringFromInt64 (listLength allFiles))))
+               (assert (= (listLength results) expected) (str label " checked its whole share " (stringFromInt64 expected) ", got " (stringFromInt64 (listLength results))))
                (map assertFile results)
                (listEmpty? failing)))))))))

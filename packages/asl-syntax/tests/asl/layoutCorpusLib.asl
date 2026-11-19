@@ -4,6 +4,9 @@
       allCorpusFiles!
       shardFiles
       expectedShardCount
+      pathShard
+      shardFilesByPath
+      shardSizesByPath
       emptyCorpusStats!
       emptyCorpusStatsWith
       verifyCorpusFile!
@@ -78,6 +81,20 @@ fn countRemLoop total: Int64 n: Int64 targetRem: Int64 idx: Int64 acc: Int64 -> 
 
 fn expectedShardCount total: Int64 n: Int64 k: Int64 -> Int64
   (countRemLoop total n (- k 1) 0 0)
+
+; (:m :ref PRINT-SHARD-BASE-RED :do "index sharding moves every later file to another shard whenever one tracked .asl file is added or removed, so a known-bad file walks between shard numbers and a merge node with another file count goes red on other shards; a shard chosen from the path alone keeps each file where it was")
+fn pathShardStep h: Int64 c: String -> Int64
+  (mod (+ (* h 131) (charCode c)) 1000000007)
+
+fn pathShard path: String n: Int64 -> Int64
+  (mod (fold pathShardStep 7 (stringChars path)) n)
+
+fn shardFilesByPath files: (List String) n: Int64 k: Int64 -> (List String)
+  (filter (fn [(p String)] -> Bool (= (pathShard p n) (- k 1))) files)
+
+fn shardSizesByPath files: (List String) n: Int64 -> (List Int64)
+  (let [(slots (map (fn [(p String)] -> Int64 (pathShard p n)) files))]
+    (map (fn [(r Int64)] -> Int64 (listLength (filter (fn [(x Int64)] -> Bool (= x r)) slots))) (range 0 n)))
 
 (schema CorpusStats
   (:f checked Int64)

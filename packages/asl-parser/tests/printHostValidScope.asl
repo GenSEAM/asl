@@ -198,6 +198,8 @@ fn knownSourceInvalidPaths -> (List String)
     "asl/tools/fleet/run.asl"
     "tools/orch/main.asl"
     "tools/tests/aslRepoSyncTest.asl"
+    ; (:m :ref PRINT-SHARD-BASE-RED :do "found by the full sixteen-shard run on cff6e502f: the source names the imported type Mt19937 without its mt19937/ alias and fails asl check alone, 12 errors ERR_UNKNOWN_TYPE; the row goes when the file is fixed")
+    "tests/acceptance/r1Host/gen/genFloat.asl"
     )
 
 fn knownSourceInvalid? path: String -> Bool
@@ -207,7 +209,11 @@ fn intentionallyRejectedPaths -> (List String)
   (list
     "tests/acceptance/r1Host/check/letrecLaterTest.asl"
     "tests/acceptance/r1Host/check/letrecSelfTest.asl"
-    "tests/acceptance/r1Host/check/letrecValueTest.asl")
+    "tests/acceptance/r1Host/check/letrecValueTest.asl"
+    "tests/conformance/evaluator/fixtures/refusal/constantAssert.asl"
+    "tests/conformance/evaluator/fixtures/refusal/integerCondition.asl"
+    "tests/conformance/evaluator/fixtures/refusal/unknownSymbol.asl"
+    "tests/conformance/evaluator/fixtures/refusal/unresolvedImport.asl")
 
 fn intentionallyRejected? path: String -> Bool
   (listContains? (intentionallyRejectedPaths) path)
