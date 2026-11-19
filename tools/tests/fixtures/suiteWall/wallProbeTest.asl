@@ -12,10 +12,11 @@ fn ! leaseText! pid: Int64 tries: Int64 -> String
   (let [(text (resultOr (fileReadString (fr/leasePath pid)) ""))]
     (if (or (not (stringEmpty? text)) (<= tries 0)) text (do (sleepMs 50) (leaseText! pid (- tries 1)))))
 
-; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the runner leases this binary's process group with its deadline; the lease shows the wall nativeTest ran it under")
+; (:m :ref NATIVETEST-PER-SUITE-WALL :do "the runner leases this binary's process group; since TEST-RUNNER-SELECT (a55bb308c) the runner itself kills at the wall and the lease is the backstop 60 s after it, so the lease deadline is the declared wall under nativeTest's own runner (fr/runGuarded kills at the lease deadline) and the wall plus that margin under bin/asl test; the fixture prints which one it saw and the parent test pins each path")
 fn ! runTests -> Bool
   (let [(lease (leaseText! (procSelf) 200))
         (wallS (/ (- (field lease ":deadlineNs") (field lease ":startNs")) 1000000000))]
-    (do (assert (not (stringEmpty? lease)) "the runner wrote a lease for this binary")
-        (assert (= wallS 2400) (str "the lease deadline is the declared 2400 s wall: " (stringFromInt64 wallS)))
+    (do (println (str "wallProbe leaseWallS " (stringFromInt64 wallS)))
+        (assert (not (stringEmpty? lease)) "the runner wrote a lease for this binary")
+        (assert (or (= wallS 2400) (= wallS 2460)) (str "the lease deadline is the declared 2400 s wall, or that wall plus the 60 s backstop margin: " (stringFromInt64 wallS)))
         true))
