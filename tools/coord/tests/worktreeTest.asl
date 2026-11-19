@@ -221,6 +221,8 @@ fn ! testWip root: String -> Bool
         (do (assert (not (stringEmpty? sha)) "the owned file is committed")
             (assert (and (stringContains? shown "own/in.txt") (not (stringContains? shown "out.txt"))) (str "only the owned file: " shown))
             (assert (fileExists? (str (wt "w6") "/out.txt")) "the unowned file stays in the tree")
+            (assert (not (stringContains? shown "gatewayProfilePin")) (str "the gateway profile pin is not in the wip commit: " shown))
+            (assert (and (fileExists? (str (wt "w6") "/.asl/gatewayProfilePin.asn")) (stringEmpty? (gitOut (wt "w6") (list "ls-files" "--" ".asl/gatewayProfilePin.asn")))) "it stays in the tree, untracked")
             true))
       (assert (mkUnit cfg "w4") "w4 added")
       (assert (put (str (wt "w4") "/.env") "KEY=2\n") "w4 holds only a .env")

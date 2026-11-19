@@ -1,5 +1,5 @@
 (module asl-tools/coord/worktree
-  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! isWorktreeOf! secretUntracked! outsideUntracked! wipCommitOwned! wipCommitAt! wipCommit! removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
+  :x [Cfg Wt Entry Act safeUnit? wtPath parseWorktrees listWt! addWt! rescueBranch! isWorktreeOf! secretUntracked! outsideUntracked! wipCommitOwned! wipCommitAt! wipCommit! pinFile removeWt! protectedUnit? ageSec! gcWt! auditWt! main]
   :i [(asl-tools/fleet/run :a fr) (asl-tools/coord/egress :a eg)])
 
 (schema Cfg
@@ -164,7 +164,7 @@ fn ! outsideUntracked! path: String owns: (List String) -> (List String)
           (inside (git! path (listAppend (list "ls-files" "-o" "--exclude-standard" "--") owns)))
           (in (map stringTrim (stringLines inside.out)))]
       (if (or (!= all.exit 0) (!= inside.exit 0)) (list)
-        (filter (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (and (not (listContains? in f)) (and (!= f ".asl/gatewayProfilePin.asn") (not (eg/secretPath? f)))))) (map stringTrim (stringLines all.out))))))
+        (filter (fn [(f String)] -> Bool (and (not (stringEmpty? f)) (and (not (listContains? in f)) (and (!= f (pinFile)) (not (eg/secretPath? f)))))) (map stringTrim (stringLines all.out))))))
 
 ; (:m :ref COORD-WIP-RESCUE :do "a unit whose writer stopped without landing keeps its edits: a dirty worktree at path (non-ignored paths) is committed as one wip commit on its own branch, ASN message naming the unit and the stop reason, and a detached head is then given a rescue branch; untracked files the egress filter flags as secret by path and the grades ledger .asl/mem/grades.asn (only the conductor commits that) are left uncommitted; returns the new short sha, or empty when there was nothing to commit; a path that is not a worktree of the repo (or is its own checkout) is an error and nothing is touched; never discards, never touches ignored build output")
 fn ! wipCommitAt! cfg: Cfg unit: String path: String reason: String -> (Result String String)
@@ -179,7 +179,8 @@ fn ! wipCommitOwned! cfg: Cfg unit: String path: String reason: String owns: (Li
         (let [(left (listAppend (secretUntracked! path) (outsideUntracked! path owns)))
               (a (git! path (list "add" "-A")))
               (_ (if (listEmpty? left) () (let [(_ (git! path (listAppend (list "reset" "-q" "--") left)))] ())))
-              (_ (git! path (list "reset" "-q" "--" ".asl/mem/grades.asn")))
+              ; (:m :ref COND-TRAIN-PIN-WEAK :do "the gateway profile pin is this worktree's run state, not the unit's work: it stays out of the wip commit, added or changed (node2 2026-11-19: the pin of one merged branch is tracked in dev and the trains of other branches end at the merge on an add/add conflict in it)")
+              (_ (git! path (list "reset" "-q" "--" ".asl/mem/grades.asn" (pinFile))))
               (nothing (= (git! path (list "diff" "--cached" "--quiet")).exit 0))
               (msg (str "(:c :a wip :do " (q (str "unit " unit " stopped: " reason)) " :g none :ev (" unit "))"))
               (c (if (!= a.exit 0) a
@@ -195,6 +196,9 @@ fn ! wipCommitOwned! cfg: Cfg unit: String path: String reason: String owns: (Li
                           (rescueBranch! cfg (Wt :unit unit :path path :head head :branch "" :detached true :dirty 0 :ignored 0 :merged false :lease ""))
                           (ok "")))]
                 (match rb ((err e) (err e)) ((ok _) (ok (optionOr (stringSlice head 0 9) head)))))))))))
+
+fn pinFile -> String
+  ".asl/gatewayProfilePin.asn"
 
 ; (:m :ref COORD-WIP-RESCUE :do "wipCommit! is wipCommitAt! on the unit's own path base/prefixUNIT; an absent path commits nothing")
 fn ! wipCommit! cfg: Cfg unit: String reason: String -> (Result String String)

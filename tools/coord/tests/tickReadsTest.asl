@@ -58,6 +58,41 @@ fn ! listErrorCase root: String -> ListCase
         (q (fileExists? (cd/quarantineDir dir)))]
     (ListCase :rowsSame (and (not (stringEmpty? before)) (= before after)) :quarantined q :note (str "q=" (if q "yes" "no") " same=" (if (= before after) "yes" "no"))))
 
+; (:m :ref COND-TICK-READS :do "40 quarantines of one id in a row, each row with its own bytes, inside the same milliseconds of one process: every row must be kept, in quarantine and after the release, and a second burst released into the same dir must not replace the first; the result is the bytes found, sorted")
+fn ! burst! dir: String tag: String -> Bool
+  (listAll? (fn [(i Int64)] -> Bool (and (ok? (fileWrite (cd/cuPath dir "B1") (str "(:cu :id \"B1\" :st merged :lane " tag (stringFromInt64 i) "\n"))) (cd/quarantineRow! dir "B1"))) (range 0 40))
+
+fn ! bytesIn d: String -> (List String)
+  (listSort (map (fn [(nm String)] -> String (stringTrim (resultOr (fileReadString (str d "/" nm)) "unreadable"))) (filter (fn [(x String)] -> Bool (!= x "released")) (resultOr (dirList d) (list)))))
+
+fn wantBytes tags: (List String) -> (List String)
+  (listSort (fold (fn [(acc (List String)) (tag String)] -> (List String) (listAppend acc (map (fn [(i Int64)] -> String (str "(:cu :id \"B1\" :st merged :lane " tag (stringFromInt64 i))) (range 0 40)))) (list) tags))
+
+fn ! burstCase root: String -> (List String)
+  (let [(dir (str root "/burst"))
+        (q (cd/quarantineDir dir))
+        (_ (cd/writeCUnit! dir (pf/cuIn "B1" "queued" "" "")))
+        (a (burst! dir "a"))
+        (inQ (bytesIn q))
+        (_ (cd/writeCUnit! dir (pf/cuIn "B1" "queued" "" "")))
+        (relA (cd/releaseQuarantined! dir))
+        (inRelA (bytesIn (str q "/released")))
+        (b (burst! dir "b"))
+        (_ (cd/writeCUnit! dir (pf/cuIn "B1" "queued" "" "")))
+        (relB (cd/releaseQuarantined! dir))
+        (inRelB (bytesIn (str q "/released")))
+        (left (bytesIn q))
+        (_ (fileWrite (str q "/B1.5-1") "incoming\n"))
+        (_ (fileWrite (str q "/released/B1.5-1") "resident\n"))
+        (relC (cd/releaseQuarantined! dir))
+        (both (filter (fn [(x String)] -> Bool (or (= x "incoming") (= x "resident"))) (bytesIn (str q "/released"))))]
+    (list (if (and a b) "renamesOk" "renameFailed")
+          (if (= inQ (wantBytes (list "a"))) "quarantine40" (str "quarantine " (stringFromInt64 (listLength inQ))))
+          (if (and (= relA 40) (= inRelA (wantBytes (list "a")))) "released40" (str "released " (stringFromInt64 relA) " files " (stringFromInt64 (listLength inRelA))))
+          (if (and (= relB 40) (= inRelB (wantBytes (list "a" "b")))) "released80" (str "released " (stringFromInt64 relB) " files " (stringFromInt64 (listLength inRelB))))
+          (if (listEmpty? left) "none left" (str "left " (stringFromInt64 (listLength left))))
+          (if (and (= relC 1) (= both (list "incoming" "resident"))) "sameNameKept" (str "same name in released: " (stringJoin both " ")))))
+
 fn ! runTests -> Bool
   (let [(root (pf/scratch "tickReads" "t"))
         (_ (pf/cleanup root))
@@ -96,6 +131,7 @@ fn ! runTests -> Bool
         (freshRaised (cd/surfaceReads! fresh))
         (rel (releaseCase root))
         (lst (listErrorCase root))
+        (burst (burstCase root))
         (_ (pf/cleanup root))]
     (do (assert (and (= clean 0) (stringEmpty? leadClean)) (str "control: healthy rows raise nothing: " (stringFromInt64 clean) " " leadClean))
         (assert (and (= (countIn leadOne "cuUnreadable") 1) (stringContains? leadOne "\"U2\"")) (str "one tick over a corrupt state row raises one cuUnreadable lead row for its unit: " leadOne))
@@ -110,6 +146,7 @@ fn ! runTests -> Bool
         (assert (and (>= storeRaised 1) (stringContains? leadStore "storeUnreadable")) (str "the tick raises storeUnreadable: " leadStore))
         (assert rel.released (str "a good row back at cond/ID.asn releases the quarantine: " rel.top " / " rel.rel))
         (assert rel.unique (str "a second quarantine of the same id does not collide: " rel.top2))
+        (assert (= burst (list "renamesOk" "quarantine40" "released40" "released80" "none left" "sameNameKept")) (str "40 quarantines of one id in a row keep 40 rows, a release keeps them, a second burst released beside them replaces none, and a file released under a name already there keeps both: " (stringJoin burst ", ")))
         (assert rel.rowKept "the released unit proceeds (queued to ready) instead of staying frozen")
         (assert (and lst.rowsSame (not lst.quarantined)) (str "a row whose read fails (transient) is neither quarantined nor overwritten: " lst.note))
         (assert (and freshSettled (= freshRaised 0)) "a store directory that does not exist yet is an empty settled store, not an error")
