@@ -67,15 +67,27 @@ fn ! touchUsed! path: String -> Bool
 fn ! pruneStage! dir: String prefix: String current: String -> Int64
   (nc/pruneEntries! dir prefix (stageKeep) (stageMinAgeNs) (list current))
 
+; (:m :ref MAIN-RED-SWEEP :do "a lone outside file whose nearest manifest.asn says :pure true is staged in its own directory beside a manifest that says the same: the single-file stage of CHECK-FOREIGN-ASL-PKGS dropped the manifest, so asl check never raised ERR_EFFECT_UNMARKED for such a file (effectMarks --probes reported nothing)")
+fn ! outsidePureRel -> String
+  ".asl/cache/nativeTest/outsidePure"
+
+fn ! pureStageManifest -> String
+  "(:package outsidePure :pure true)\n"
+
+fn ! pureManifestReady! dir: String -> (Result Unit String)
+  (if (= (resultOr (fileReadString (str dir "/manifest.asn")) "") (pureStageManifest)) (ok ()) (writeAtomic! (str dir "/manifest.asn") (stringToBytes (pureStageManifest))))
+
 fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String String)
   (match (fileReadString absFile)
     ((err e) (err (str "cannot read " absFile ": " e)))
     ((ok src)
       (let [(digest (bytesSha256 (stringToBytes src)))
-            (rel (outsideRelPath digest))
+            (pure (ckr/packagePure! absFile))
+            (rel (if pure (str (outsidePureRel) "/" digest ".asl") (outsideRelPath digest)))
+            (stageDir (if pure (str ctx.root "/" (outsidePureRel)) (outsideStageDir ctx)))
             (dest (str ctx.root "/" rel))]
-        (match (ensureDir! (outsideStageDir ctx))
-          ((err e2) (err (str "cannot create " (outsideStageDir ctx) ": " e2)))
+        (match (match (ensureDir! stageDir) ((err e2) (err e2)) ((ok _) (if pure (pureManifestReady! stageDir) (ok ()))))
+          ((err e2) (err (str "cannot create " stageDir ": " e2)))
           ((ok _)
             (match (if (sys/isFile? dest)
                       (match (fileReadString dest)
@@ -83,7 +95,7 @@ fn ! stageOutsideSingle! ctx: sys/Context absFile: String -> (Result String Stri
                         ((err _) (writeAtomic! dest (stringToBytes src))))
                       (writeAtomic! dest (stringToBytes src)))
               ((err e3) (err (str "cannot write " dest ": " e3)))
-              ((ok _) (do (touchUsed! dest) (pruneStage! (outsideStageDir ctx) "" (str digest ".asl")) (ok rel)))))))))
+              ((ok _) (do (touchUsed! dest) (nc/pruneEntries! stageDir "" (stageKeep) (stageMinAgeNs) (list (str digest ".asl") "manifest.asn")) (ok rel)))))))))
 
 ; (:m :ref NATIVETEST-OUTSIDE-CLOSURE-20261020 :do "an externally-rooted file with its own .asl.config.asn (a vendored project, not a loose script) declares a package with sibling-module imports that a single-file content-hash copy can never resolve, since every import inside it names a sibling by the package's own workspace-qualified path; find that package's root the same way asl check does (climb to the nearest .asl.config.asn) and mirror the whole package's .asl files under ctx.root so resolveImport!'s own scanUp!, unmodified, finds a config at the mirror's root instead of climbing past it into ctx.root's")
 fn ! findPackageRoot! dir: String depth: Int64 -> (Option String)
