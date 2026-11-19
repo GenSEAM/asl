@@ -6,7 +6,7 @@
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
       main]
-  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp)
+  :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp) (asl-tools/vcs/vcs :a vcs)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-tools/coord/docRows :a dr) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
 
 ; (:m :ref CONDUCTOR :do "deterministic scheduler, no model in the loop: units are store rows (:after = deps, :owns, :gate, :channel = lane), the conductor keeps one state row per unit under <dir>/cond and appends one journal row per transition; the store lease is held from writing to merging so owns stay disjoint, and the store row turns done only when the unit is merged")
@@ -520,6 +520,13 @@ fn ! failDebt! dir: String id: String wt: String -> (Pair String String)
     (if (and (>= (listLength parts) 3) (and (not (stringEmpty? head)) (= (optionOr (listHead parts) "") head)))
       (pair (optionOr (listGet parts 1) "") (stringJoin (optionOr (listTail (optionOr (listTail parts) (list))) (list)) "\t"))
       (pair "" "")))
+
+; (:m :ref COND-AUDIT-FIX :do "a commit the conductor makes itself (the regenerated know cards) is no fix: when the debt was recorded at the head the commit was made on, it moves to the new head with its stage and signature, so the next round still owes the fix; a debt recorded at any other head is left alone")
+fn ! failHeadCarry! dir: String id: String from: String wt: String -> Bool
+  (let [(parts (stringSplit (stringTrim (readOr (failHeadPath dir id))) "\t"))
+        (head (if (stringEmpty? wt) "" (headOf! wt)))]
+    (if (or (< (listLength parts) 3) (or (stringEmpty? from) (or (stringEmpty? head) (or (= head from) (!= (optionOr (listHead parts) "") from))))) false
+      (ok? (fileWrite (failHeadPath dir id) (str head "\t" (stringJoin (optionOr (listTail parts) (list)) "\t") "\n")))))
 
 fn infraGateSig? stage: String sig: String -> Bool
   (and (= stage "gates") (stringStartsWith? sig "gateInfra:"))
@@ -3491,6 +3498,10 @@ fn ! gatesResN gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit -
 fn ! gatesRes gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit -> Res
   (pairFirst (gatesResN gateSec checkSec task u c))
 
+; (:m :ref COND-AUDIT-FIX :do "every unit branch carries doc.asn rows (merge=asnRows), so a rebase of a unit branch gets the row driver of the conductor's own tree exactly as the train's merges do (trn/rowDriverArgs, never the repo config): two branches that appended different rows rebase with both rows instead of a conflict that renames the branch stale")
+fn ! rowDriver repo: String -> (List String)
+  (trn/rowDriverArgs repo (resultOr (realPath repo) repo))
+
 ; (:m :ref COND3 :do "a retried write finds its branch sh/UNIT left by an earlier attempt without a worktree and checks it out again instead of failing on the existing branch")
 ; (:m :ref COND3 :do "a leftover sh/UNIT re-attached for a re-run unit keeps its old base; when the unit's base is not an ancestor of it the branch is rebased onto the base, and when the rebase conflicts it is renamed sh/UNIT-stale-<s> (nothing is lost) and recreated from the base")
 fn ! freshBase! rc: RealCfg u: st/Task path: String -> (Result String String)
@@ -3499,7 +3510,7 @@ fn ! freshBase! rc: RealCfg u: st/Task path: String -> (Result String String)
         (branch (str "sh/" u.id))]
     (if (or (!= base.exit 0) (stringEmpty? sha)) (ok path)
       (if (= (gitOut path (list "merge-base" "--is-ancestor" sha "HEAD")).exit 0) (ok path)
-        (let [(rb (gitOut path (list "rebase" sha)))]
+        (let [(rb (gitOut path (listAppend (rowDriver rc.repo) (list "rebase" sha))))]
           (if (= rb.exit 0) (ok path)
             (let [(_ (gitOut path (list "rebase" "--abort")))
                   (mv (gitOut path (list "branch" "-m" branch (str branch "-stale-" (stringFromInt64 (/ (nowMs) 1000))))))
@@ -4113,7 +4124,7 @@ fn ! leonGuard! repo: String wt: String -> (Option Res)
       ((or (!= d.exit 0) (stringEmpty? sha)) none)
       ((= (gitOut wt (list "merge-base" "--is-ancestor" sha "HEAD")).exit 0) none)
       ((not (stringEmpty? (stringTrim (gitOut wt (list "status" "--porcelain" "--untracked-files=no")).out))) (some (staleRes short main)))
-      ((and (= (gitOut wt (list "fetch" "-q" repo "HEAD")).exit 0) (= (gitOut wt (list "rebase" "-q" "FETCH_HEAD")).exit 0)) none)
+      ((and (= (gitOut wt (list "fetch" "-q" repo "HEAD")).exit 0) (= (gitOut wt (listAppend (rowDriver repo) (list "rebase" "-q" "FETCH_HEAD"))).exit 0)) none)
       (else (let [(_ (gitOut wt (list "rebase" "--abort")))] (some (staleRes short main))))))
 
 fn ! writeGuard! home: String repo: String wt: String dir: String id: String -> (Option Res)
@@ -4208,7 +4219,7 @@ fn ! docOwnsNote p: String u: st/Task -> String
            (stringJoin (map (fn [(r String)] -> String (st/q (str r "/doc.asn"))) pkgs) " ")
            ") :example " (st/q (utf8Clip (stringJoin (map example pkgs) " ") 400)) " :cards \"the asl-know card is regenerated by the conductor, do not edit it\")")))
 
-; (:m :ref COND-OWNS-DOC :do "the asl-know card of a package whose src the unit owns is regenerated by the conductor after the write (know.asl gen in the worktree) and committed as its own harness commit when it changed: one deterministic command, no model run and no instruction to follow, where telling the writer to run it would depend on Leon being allowed to; a failing gen leaves the tree as it was and the docRows gate speaks")
+; (:m :ref COND-OWNS-DOC :do "the asl-know card of a package whose src the unit owns is regenerated by the conductor after the write (know.asl gen in the worktree) and committed as its own harness commit when it changed: one deterministic command, no model run and no instruction to follow, where telling the writer to run it would depend on Leon being allowed to; a failing gen or a refused commit is one cardsInfra row, leaves the tree as it was and the docRows gate speaks")
 fn ! cardsRegen! dir: String p: String u: st/Task model: String toolRoot: String -> Bool
   (if (or (listEmpty? (ownsPackages u.owns)) (not (commitsPast? p (baseRef u)))) false
     (let [(env (fr/childEnv (list (str "ASL_ROOT=" p) "ASL_PRELUDE=" "ASL_CLI_USER_PRELUDE=")))
@@ -4221,9 +4232,26 @@ fn ! cardsRegen! dir: String p: String u: st/Task model: String toolRoot: String
           (r (if shrink (know (list "ratchet" p)) m))
           (_ (if (and shrink (!= r.exit 0)) (cardsInfra! dir u.id (str "ratchet exit " (n r.exit))) true))
           (_ (if genOk true (cardsInfra! dir u.id (if (= g.verdict "timeout") (str "gen timeout " (n (cardsGenSec)) " s") (str "gen exit " (n g.exit))))))
-          (changed (if genOk (ownedChanges! p (list (cardsDir) (missingFile))) (list)))]
-      (if (listEmpty? changed) false
-        (fp/driverCommitRow! p changed u.id "cards" toolRoot))))
+          (changed (if genOk (ownedChanges! p (list (cardsDir) (missingFile))) (list)))
+          (before (headOf! p))]
+      (cond
+        ((not genOk) (let [(_ (cardsRestore! p))] false))
+        ((listEmpty? changed) false)
+        (else (let [(c (vcs/commitWith! p p toolRoot changed (cardsMessage u.id) "commit"))]
+                (if (= c.code 0)
+                  (let [(_ (failHeadCarry! dir u.id before p))] true)
+                  (let [(_ (cardsInfra! dir u.id (str "commit refused: " (utf8Clip c.text 400))))
+                        (_ (cardsRestore! p))]
+                    false)))))))
+
+; (:m :ref COND-AUDIT-FIX :do "the harness commit says what it is: the know cards and missing.asn regenerated from the unit's sources, not a writer's work a gate passed")
+fn cardsMessage id: String -> String
+  (str "(:c :a coord :do \"regenerated know cards and missing.asn for unit " id " on its branch\" :g \"know gen exit 0\" :ev (" id "))")
+
+; (:m :ref COND-AUDIT-FIX :do "a generator that failed or a commit the guard refused leaves no half-written card behind: every changed file under the cards dir and missing.asn goes back to HEAD through the vcs layer, and one HEAD does not hold (a card the generator added) is removed, as the train does for a derived conflict")
+fn ! cardsRestore! p: String -> Bool
+  (listAll? (fn [(f String)] -> Bool (or (= (vcs/restore! p "HEAD" (list f)).code 0) (ok? (pathRemove (str p "/" f)))))
+            (ownedChanges! p (list (cardsDir) (missingFile))))
 
 ; (:m :ref COND-OWNS-DOC :do "the generator's wall budget: 900 s, a grader measured 302 s for a cold rebuild of the CLI under load, which the old 300 s limit killed")
 fn cardsGenSec -> Int64

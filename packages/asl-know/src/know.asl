@@ -72,13 +72,26 @@ fn ! writeCards! root: String -> (Result Int64 String)
         (let [(bad (filter (fn [(p (Pair String String))] -> Bool (err? (fileWrite (str dir "/" (pairFirst p)) (pairSecond p)))) files))]
           (if (listEmpty? bad) (dropStaleIndexes! dir files) (err (str "cannot write " (pairFirst (optionOr (listHead bad) (pair "" ""))))))))))
 
+; (:m :ref COND-AUDIT-FIX :do "missing.asn is a head line and one quoted row per line; the head carries no row count, which nobody read and which made every two branches that shrank the list conflict on line 1")
+fn ratchetText rows: (List String) -> String
+  (str "(:knowMissing :rule \"an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks\")\n"
+       (stringJoin (map r/q rows) "\n") "\n")
+
 fn ! writeRatchet! root: String -> (Result Int64 String)
   (let [(rows (r/missingOf (r/allCards! root)))]
-    (match (fileWrite (str root "/asl/packages/asl-know/missing.asn")
-                   (str "(:knowMissing :rule \"an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks\" :count " (listLength rows) ")\n"
-                        (stringJoin (map r/q rows) "\n") "\n"))
+    (match (fileWrite (str root "/asl/packages/asl-know/missing.asn") (ratchetText rows))
       ((err e) (err e))
       ((ok _) (ok (listLength rows)))))
+
+; (:m :ref COND-AUDIT-FIX :do "gen --shrink, the train's derived step: the listed rows the merged source no longer computes are dropped and nothing is ever added, so two merged branches that each fixed a row, or a branch whose generator never ran, leave a list knowCardsTest accepts while a new undocumented export still fails there; no file or nothing to drop writes nothing")
+fn ! shrinkRatchet! root: String -> (Result Int64 String)
+  (let [(listed (ratchetRows! root))
+        (computed (fold (fn [(m (Map String Bool)) (x String)] -> (Map String Bool) (mapSet m x true)) (mapEmpty) (r/missingOf (r/allCards! root))))
+        (kept (filter (fn [(x String)] -> Bool (mapHas? computed x)) listed))]
+    (if (= (listLength kept) (listLength listed)) (ok 0)
+      (match (fileWrite (str root "/asl/packages/asl-know/missing.asn") (ratchetText kept))
+        ((err e) (err e))
+        ((ok _) (ok (- (listLength listed) (listLength kept)))))))
 
 fn ! know! root: String query: String budget: Int64 -> String
   (qy/answer (qy/loadEntries! (cardsDir root)) query budget)
@@ -97,7 +110,12 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listGet args 0) "help"))
         (root (resultOr (realPath (optionOr (listGet args 1) ".")) "."))]
     (cond
-      ((= cmd "gen") (match (writeCards! root) ((err e) (err e)) ((ok n) (do (println (genLine! root n)) (ok 0)))))
+      ((= cmd "gen")
+        (match (writeCards! root)
+          ((err e) (err e))
+          ((ok n) (do (println (genLine! root n))
+                      (if (not (listContains? args "--shrink")) (ok 0)
+                        (match (shrinkRatchet! root) ((err e) (err e)) ((ok k) (do (println (str "(:know :shrink :dropped " k ")")) (ok 0)))))))))
       ((= cmd "missing")
         (let [(d (ratchetDiff (ratchetRows! root) (r/missingOf (r/allCards! root))))]
           (do (println (str "(:know :missing :new " (listLength (pairFirst d)) ")"))
@@ -111,4 +129,4 @@ fn ! main args: (List String) -> (Result Int64 String)
             (do (println (str "(:know :check :status stale :files (" (stringJoin (map r/q stale) " ") "))")) (ok 1)))))
       ((= cmd "q") (do (println (know! root (stringJoin (listTake (listDrop args 2) (optionOr (optionMap (fn [(i Int64)] -> Int64 (- i 2)) (listIndexOf args "--budget")) (listLength args))) " ") (budgetArg args))) (ok 0)))
       ((= cmd "index") (do (println (resultOr (fileReadString (str (cardsDir root) "/" (indexFileOf (listGet args 2)))) "(:know :error \"no such index; run gen, groups are listed in index.asn\")")) (ok 0)))
-      (else (do (println "(:know :usage \"gen ROOT | check ROOT | missing ROOT | ratchet ROOT | index ROOT [GROUP] | q ROOT words... [--budget N]\")") (ok 2)))))
+      (else (do (println "(:know :usage \"gen ROOT [--shrink] | check ROOT | missing ROOT | ratchet ROOT | index ROOT [GROUP] | q ROOT words... [--budget N]\")") (ok 2)))))
