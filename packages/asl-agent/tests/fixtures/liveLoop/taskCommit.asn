@@ -1,6 +1,6 @@
 (:script :id "liveLoopTaskCommit" :mode :implement
   :turns (
-    (:turn :num 1 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\n\")")
-    (:turn :num 2 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\n\") (:done :commit \"(:c :a agentLoop :do \\\"live commit\\\" :g \\\"liveLoopTest 15 assertions\\\")\")")
+    (:turn :num 1 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\nkept\\n\")")
+    (:turn :num 2 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\nkept\\n\") (:done :commit \"(:c :a agentLoop :do \\\"live commit\\\" :g \\\"liveLoopTest 15 assertions\\\")\")")
   )
 )
