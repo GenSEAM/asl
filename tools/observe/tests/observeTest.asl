@@ -228,6 +228,30 @@ fn ! build! fx: Fx cs: A base: String k: Int64 -> (Result Built String)
 fn norm s: String b: Built -> String
   (replaceAll (replaceAll s b.root "{root}") b.home "{home}")
 
+fn normSyntaxWarnLine line: String -> String
+  (let [(marker "SyntaxWarning: \"")
+        (tailMark "\" is an invalid escape sequence.")]
+    (match (stringIndexOf line marker)
+      ((none) line)
+      ((some i)
+        (let [(prefix (optionOr (stringSlice line 0 i) ""))
+              (rest (optionOr (stringSlice line (+ i (stringLength marker)) (stringLength line)) ""))]
+          (match (stringIndexOf rest tailMark)
+            ((none) line)
+            ((some j) (str prefix "SyntaxWarning: invalid escape sequence '" (optionOr (stringSlice rest 0 j) "") "'")))))))
+
+fn normSyntaxWarn s: String -> String
+  (stringJoin (map normSyntaxWarnLine (stringSplit s "\n")) "\n")
+
+fn okPythonVersion? ver: (Result String String) -> Bool
+  (match ver
+    ((err _) false)
+    ((ok v)
+      (let [(parts (stringSplit v "."))
+            (maj (optionOr (stringToInt64 (optionOr (listHead parts) "")) 0))
+            (min (optionOr (stringToInt64 (optionOr (listGet parts 1) "")) -1))]
+        (or (> maj 3) (and (= maj 3) (>= min 12))))))
+
 (schema Tools (:f py String) (:f noPy String))
 
 fn withPath env: (List (Pair String String)) path: String -> (List (Pair String String))
@@ -287,11 +311,11 @@ fn ! checkCase fx: Fx tools: Tools base: String k: Int64 cs: A -> Bool
               (crash (text (fget cs "crash")))
               (wantErr (if (stringEmpty? crash) (text (fget cs "err")) (str crash "\n")))
               (okOut (= (norm got.out b) (text (fget cs "out"))))
-              (okErr (= (norm got.err b) wantErr))
+              (okErr (= (normSyntaxWarn (norm got.err b)) wantErr))
               (okExit (= got.code (num (fget cs "exit"))))]
           (do
             (assert okOut (str cid ": stdout\n got  " (norm got.out b) "\n want " (text (fget cs "out"))))
-            (assert okErr (str cid ": stderr\n got  " (norm got.err b) "\n want " wantErr))
+            (assert okErr (str cid ": stderr\n got  " (normSyntaxWarn (norm got.err b)) "\n want " wantErr))
             (assert okExit (str cid ": exit got " (stringFromInt64 got.code) " want " (stringFromInt64 (num (fget cs "exit")))))
             (assert okTime (str cid ": took " (stringFromInt64 ms) " ms, bound " (stringFromInt64 maxMs) " ms"))
             (and okOut okErr okExit okTime))))))
@@ -319,10 +343,10 @@ fn ! runTests -> Bool
               ((err e) (do (assert (= e "") (str "tools: " e)) (pathRemove base) false))
               ((ok tools)
                 (let [(ver (pythonVersion! tools base))
-                      (okVer (= ver (ok fx.python)))
+                      (okVer (okPythonVersion? ver))
                       (results (map (fn [(p (Pair Int64 A))] -> Bool (checkCase fx tools base (pairFirst p) (pairSecond p))) (enumerate fx.cases)))
                       (cleaned (pathRemove base))]
                   (do
-                    (assert okVer (str "python3 on PATH is " (match ver ((ok v) v) ((err e) e)) "; the fixture was recorded with " fx.python))
+                    (assert okVer (str "python3 on PATH is " (match ver ((ok v) v) ((err e) e)) "; need Python >= 3.12 (fixture recorded with " fx.python ")"))
                     (assert (= (listLength fx.cases) (fixtureCases)) (str "fixture holds " (stringFromInt64 (listLength fx.cases)) " cases, want " (stringFromInt64 (fixtureCases))))
                     (and truncOk okVer (= (listLength fx.cases) (fixtureCases)) (listAll? (fn [(r Bool)] -> Bool r) results))))))))))))))

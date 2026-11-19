@@ -22,11 +22,11 @@ fn ! buildFixtureRepo! root: String -> Bool
               (and (ok? (gf/gitWrite! root (list "add" "-A") (none)))
                 (ok? (gf/gitWrite! root (list "commit" "-q" "-m" "seed") (none))))))))))
 
-fn envFor home: String -> (List String)
-  (list "PATH=/usr/bin:/bin" (str "HOME=" home) "TMPDIR=/tmp" (str "ASL_ROOT=" home) (str "ASL_CLI_ROOT=" (resultOr (realPath ".") ".")))
+fn ! envFor! home: String -> (List String)
+  (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" home) "TMPDIR=/tmp" (str "ASL_ROOT=" home) (str "ASL_CLI_ROOT=" (resultOr (realPath ".") "."))) (run/cacheEnv!))
 
 fn ! checkIn binary: String dir: String arg: String -> run/Done
-  (run/runOneLimited (run/job (list binary "check" arg) dir (envFor dir)) (run/limits 60 16))
+  (run/runOneLimited (run/job (list binary "check" arg) dir (envFor! dir)) (run/limits 60 16))
 
 fn ! verdictsIn binary: String dir: String label: String -> (Pair Int64 Int64)
   (let [(sub (checkIn binary dir "sub"))

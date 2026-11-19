@@ -366,7 +366,10 @@ fn ! jailedAsl! aslBin: String form: String rootDir: String env: (Option (List S
                 (match env ((some rows) (filter (fn [r] (and (explicitRow? r) (not (stringStartsWith? r "ASL_ROOT=")))) rows)) ((none) (list))))
         extraKeys (map jl/envKey extra)
         rows (listAppend (filter (fn [r] (not (listContains? extraKeys (jl/envKey r)))) (jl/childEnvIn! absRoot base (list) (optionOr (envGet "HOME") "") true)) extra)
-        jail (jl/jailOf! absRoot (jl/jailHome absRoot) rows (list toolRoot) (list) false)]
+        envCliRaw (optionOr (envGet "ASL_CLI_ROOT") "")
+        envCli (if (stringEmpty? envCliRaw) "" (resultOr (realPath envCliRaw) envCliRaw))
+        reads (if (or (stringEmpty? envCli) (= envCli (resultOr (realPath toolRoot) toolRoot))) (list toolRoot) (list toolRoot envCli))
+        jail (jl/jailOf! absRoot (jl/jailHome absRoot) rows reads (list) false)]
     (pair (jl/jailWrap! jail (list aslBin form)) rows))
 
 fn ! isDirAt! p: String -> Bool
@@ -798,6 +801,33 @@ fn ! memoPut! dir: String key: String rid: String res: t/AslRun -> Bool
       ((err _) false)
       ((ok _) (ok? (pathRename tmp path)))))
 
+; (:m :ref K9-MISSING-ARG :do "the first owned path that names one file (no glob): the ready target a read without :file is pointed at")
+fn firstOwnedFile owns: (List String) -> String
+  (optionOr (listHead (filter (fn [o] (and (not (stringEmpty? o)) (not (stringContains? o "*")))) owns)) "")
+
+fn missingFileRec rid: String owns: (List String) -> (List (Pair String RVal))
+  (let [first (firstOwnedFile owns)]
+    (listAppend
+      (list (pair "id" (rStr rid)) (pair "op" (rStr "read")) (pair "file" (rStr "")) (pair "span" (rNone)) (pair "content" (rNone))
+        (pair "status" (rStr "rejected")) (pair "error" (rStr "ERR_MISSING_ARG")) (pair "message" (rStr "read needs :file")))
+      (if (stringEmpty? first) (list) (list (pair "next" (rStr (str "(:step :op \"read\" :file \"" (c/escapeAsn first) "\")")))))))
+
+fn parentDir path: String -> String
+  (let [parts (stringSplit path "/")]
+    (if (< (listLength parts) 2) "" (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
+
+; (:m :ref K9-MISSING-ARG :do "a read of a path that does not exist and is not owned is read at the one existing path within two edits of it, among the owned files and the files of its directory; none or several such paths leave the read as sent")
+fn ! nearestPath! root: String asked: String owns: (List String) -> (Option String)
+  (if (or (stringEmpty? asked) (or (stringStartsWith? asked "/") (>= (resultOr (fileSize (str root "/" asked)) -1) 0)))
+    none
+    (let [dir (parentDir asked)
+          names (resultOr (dirList (if (stringEmpty? dir) root (str root "/" dir))) (list))
+          inDir (map (fn [n] (if (stringEmpty? dir) n (str dir "/" n))) names)
+          owned (filter (fn [o] (and (not (stringEmpty? o)) (not (stringContains? o "*")))) owns)
+          cands (listAppend owned (filter (fn [p] (not (listContains? owned p))) inDir))
+          close (filter (fn [p] (and (!= p asked) (and (<= (c/editDistance p asked) 2) (>= (resultOr (fileSize (str root "/" p)) -1) 0)))) cands)]
+      (if (= (listLength close) 1) (listHead close) none)))
+
 fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: String session: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
   (let [opHead (getKvStr op "_head")
         rawOpName (let [o (getKvStr op "op")] (if (!= o "") o opHead))
@@ -930,6 +960,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
                       (if (and (= code 0) (placeholderAssert? new))
                         (list (pair "warning" (rStr "placeholder assert: red-first needs a real assertion on the missing behaviour")))
                         (list))))))))))
+      ((and (= opName "read") (= (getKvStr op "file") "")) (missingFileRec rid owns))
       ((= opName "read")
         (match (readOutlineBytesFor! root)
           ((err cfgMsg)
@@ -938,7 +969,9 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               (pair "error" (rStr "ERR_CONFIG")) (pair "message" (rStr cfgMsg))
               (pair "cmd" (rStr (str "asl read " (getKvStr op "file")))) (pair "exit" (rInt 2)) (pair "stdout" (rStr ""))))
           ((ok outlineLimit)
-        (let [filePath (getKvStr op "file")
+        (let [asked (getKvStr op "file")
+              repairedTo (nearestPath! root asked owns)
+              filePath (optionOr repairedTo asked)
               symbolVal (getKvStr op "symbol")
               anchorVal (getKvStr op "anchor")
               startVal (getKvStr op "start")
@@ -962,7 +995,8 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               code (aslRunCode res)
               out (aslRunOut res)
               errText (aslRunErr res)
-              st (if (= code 0) "ok" "rejected")
+              ownedNew (and (!= code 0) (and (< (resultOr (fileSize (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))) -1) 0) (c/checkOwns filePath owns root)))
+              st (if (or (= code 0) ownedNew) "ok" "rejected")
               contentRaw (if (= code 0) (findReadContent out) "")
               fullPath (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
               fileBytes (resultOr (fileSize fullPath) 0)
@@ -986,10 +1020,10 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               last0 (- (+ firstLine (countLns body (stringLength body) 0 0)) (if partial 1 0))
               lastLine (match mMore ((some mr) (min last0 (- (pairFirst mr) 1))) ((none) last0))
               span (if (and (!= body "") (and (= code 0) (not useOutline))) (some (pair firstLine lastLine)) (none))
-              errVal (if (!= code 0) (some (findReadError out "ERR_READ_FAILED")) (none))
+              errVal (if (and (!= code 0) (not ownedNew)) (some (findReadError out "ERR_READ_FAILED")) (none))
               ownedMissing (and (!= code 0) (and (< (resultOr (fileSize fullPath) -1) 0) (c/checkOwns filePath owns root)))
               msgVal (cond
-                       (ownedMissing (some "owned file missing: create it with one write"))
+                       (ownedMissing (some (str "owned file does not exist yet: the task creates it; write it whole with (:step :op \"write\" :file \"" (c/escapeAsn filePath) "\" :content :raw) and its text in a fenced block")))
                        ((!= code 0) (some (findReadMsg out errText)))
                        (useOutline (some (if overBytes (oversizeBytesHint fileBytes outlineLimit) (oversizeWholeHint))))
                        ((some? widened)
@@ -1005,7 +1039,11 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
             (pair "cmd" (rStr (str "asl read " filePath)))
             (pair "exit" (rInt code))
             (pair "stdout" (rStr (if ownedMissing "" out))))
-          (if (some? memoHit) (list (pair "memo" (rStr "hit"))) (if putOk (list) (list (pair "memo" (rStr "skipped"))))))))))
+          (listAppend
+            (listAppend
+              (if ownedNew (list (pair "new" (rBool true))) (list))
+              (match repairedTo ((some p) (list (pair "repaired" (rStr (str "(:path \"" (c/escapeAsn asked) "\" \"" (c/escapeAsn p) "\")"))))) ((none) (list))))
+          (if (some? memoHit) (list (pair "memo" (rStr "hit"))) (if putOk (list) (list (pair "memo" (rStr "skipped")))))))))))
       ((or (= opName "query") (= opName "q"))
         (let [queryText (let [q (getKvStr op "query")] (if (!= q "") q (getKvStr op "text")))
               inMode (getKvStr op "in")

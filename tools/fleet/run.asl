@@ -1151,16 +1151,31 @@ fn ! stubHost! -> String
 fn ! stubRemove! -> Bool
   (listAll? (fn [(d String)] -> Bool (and (privateDir? d) (= (runOne (job (list "rm" "-rf" d) "." (childEnv (list)))).exit 0))) (stubDirsOwnedBy (procSelf)))
 
-fn gateFiles cmd: String host: String -> (List String)
-  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim cmd) " ")))
+fn gateSubValid? sub: String host: String -> Bool
+  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim sub) " ")))
         (bad (list ";" "&" "|" "<" ">" "$" "`" "\"" "'" "(" ")" "*" "?" "{" "}" "\\" "~" "!" "#"))
-        (files (listDrop toks 2))]
-    (if (and (>= (listLength toks) 3)
-             (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
-                 (and (not (stringEmpty? host)) (= (optionOr (listHead toks) "") host)))
-             (= (optionOr (listGet toks 1) "") "test")
-             (not (listAny? (fn [(f String)] -> Bool (or (not (stringEndsWith? f ".asl")) (listAny? (fn [(c String)] -> Bool (stringContains? f c)) bad))) files)))
-      files
+        (files (listDrop toks 2))
+        (verb (optionOr (listGet toks 1) ""))]
+    (and (>= (listLength toks) 3)
+         (or (listAny? (fn [(h String)] -> Bool (= h (optionOr (listHead toks) ""))) (list "./bin/asl" "bin/asl" "asl"))
+             (and (not (stringEmpty? host)) (= (optionOr (listHead toks) "") host)))
+         (or (= verb "test") (= verb "check"))
+         (not (listAny? (fn [(t String)] -> Bool (listAny? (fn [(c String)] -> Bool (stringContains? t c)) bad)) toks))
+         (not (listAny? (fn [(f String)] -> Bool (not (stringEndsWith? f ".asl"))) files))))
+
+fn gateSubTestFiles sub: String -> (List String)
+  (let [(toks (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim sub) " ")))]
+    (if (= (optionOr (listGet toks 1) "") "test")
+      (listDrop toks 2)
+      (list)))
+
+fn gateFiles cmd: String host: String -> (List String)
+  (let [(subs (stringSplit (stringTrim cmd) " && "))]
+    (if (and (not (listEmpty? subs))
+             (listAll? (fn [(sub String)] -> Bool (gateSubValid? sub host)) subs))
+      (fold (fn [(acc (List String)) (sub String)] -> (List String)
+              (listAppend acc (gateSubTestFiles sub)))
+            (list) subs)
       (list)))
 
 fn verdictFor line: String file: String -> Bool

@@ -18,22 +18,22 @@ fn ! startSleeper! secs: String -> Int64
 
 fn psText -> String
   (stringJoin (list
-                "  101     1   501   03:10:00 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
-                "  102     1   501   01:00:00 /Users/u/.asl/run/nativeTest/ab12/entries/youngTest"
-                "  103   777   501   05:00:00 /Users/u/.asl/run/nativeTest/ab12/entries/parentedTest"
-                "  104     1   502   05:00:00 /Users/v/.asl/run/nativeTest/ab12/entries/otherUserTest"
+                "  101     1   501   03:10:00 /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  102     1   501   01:00:00 /h/u/.asl/run/nativeTest/ab12/entries/youngTest"
+                "  103   777   501   05:00:00 /h/u/.asl/run/nativeTest/ab12/entries/parentedTest"
+                "  104     1   502   05:00:00 /h/v/.asl/run/nativeTest/ab12/entries/otherUserTest"
                 "  105     1   501 1-00:00:00 /usr/lib/systemd/systemd --user"
                 "  106     1   501   02:00:00 /work/repo/.asl/cache/nativeTest/entries/cacheTest --flag"
                 "  107     1   501   04:00:00 /work/repo/.asl/cache/other/notATest"
-                "  108     1   501   03:00:00 /Users/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x"
-                "  109     1   501   03:00:00 /bin/rm -rf /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  108     1   501   03:00:00 /h/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x"
+                "  109     1   501   03:00:00 /bin/rm -rf /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
                 "    1     0     0 9-00:00:00 /sbin/launchd") "\n")
 
 ; (:m :ref REAPALL-LOWS :do "the executables of the fixture that exist; any other prefix of an args column is not a file")
 fn exes -> (List String)
-  (list "/Users/u/.asl/run/nativeTest/ab12/entries/fooTest" "/Users/u/.asl/run/nativeTest/ab12/entries/youngTest"
-        "/Users/u/.asl/run/nativeTest/ab12/entries/parentedTest" "/Users/v/.asl/run/nativeTest/ab12/entries/otherUserTest"
-        "/work/repo/.asl/cache/nativeTest/entries/cacheTest" "/Users/a b/.asl/run/nativeTest/ab12/entries/spacedTest")
+  (list "/h/u/.asl/run/nativeTest/ab12/entries/fooTest" "/h/u/.asl/run/nativeTest/ab12/entries/youngTest"
+        "/h/u/.asl/run/nativeTest/ab12/entries/parentedTest" "/h/v/.asl/run/nativeTest/ab12/entries/otherUserTest"
+        "/work/repo/.asl/cache/nativeTest/entries/cacheTest" "/h/a b/.asl/run/nativeTest/ab12/entries/spacedTest")
 
 fn fixtureFile? p: String -> Bool
   (listContains? (exes) p)
@@ -44,11 +44,11 @@ fn picks text: String uid: Int64 minAge: Int64 -> (List Int64)
 ; (:m :ref REAPALL-LOWS :do "etime as real ps prints it, right-aligned: procps and BSD both print [[dd-]hh:]mm:ss; each row is picked at exactly its age in seconds and not one second above")
 fn etimeText -> String
   (stringJoin (list
-                "  201     1   501 1-02:03:04 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
-                "  202     1   501 12-01:02:03 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
-                "  203     1   501   01:02:03 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
-                "  204     1   501      08:09 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest"
-                "  205     1   501   1:02:03 /Users/u/.asl/run/nativeTest/ab12/entries/fooTest") "\n")
+                "  201     1   501 1-02:03:04 /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  202     1   501 12-01:02:03 /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  203     1   501   01:02:03 /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  204     1   501      08:09 /h/u/.asl/run/nativeTest/ab12/entries/fooTest"
+                "  205     1   501   1:02:03 /h/u/.asl/run/nativeTest/ab12/entries/fooTest") "\n")
 
 fn pickedAt pid: Int64 minAge: Int64 -> Bool
   (listContains? (picks (etimeText) 501 minAge) pid)
@@ -87,13 +87,13 @@ fn ! runTests -> Bool
       (refute leaseAfter "the reaped lease row is removed")
       (assert (= picked (list 101 106 108)) (str "the sweep picks only this user's ppid-1 test binaries older than 2 h under a native test cache, a path with a space included: " (stringJoin (map stringFromInt64 picked) " ")))
       (refute (listContains? picked 109) "an argument that names a cache binary does not make its command a test binary")
-      (assert (= (fr/argsExe "/Users/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x" fixtureFile?) "/Users/a b/.asl/run/nativeTest/ab12/entries/spacedTest") "argv0 with a space is read whole")
-      (assert (= (fr/argsExe "/Users/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x" (fn [(p String)] -> Bool false)) "") "no prefix that is a file gives no executable")
-      (assert (= (fr/argsExe "/Users/a  b/.asl/run/nativeTest/ab12/entries/spacedTest --x" (fn [(p String)] -> Bool (= p "/Users/a  b/.asl/run/nativeTest/ab12/entries/spacedTest"))) "/Users/a  b/.asl/run/nativeTest/ab12/entries/spacedTest") "a path with two spaces is read whole, the column is not rejoined into one space")
+      (assert (= (fr/argsExe "/h/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x" fixtureFile?) "/h/a b/.asl/run/nativeTest/ab12/entries/spacedTest") "argv0 with a space is read whole")
+      (assert (= (fr/argsExe "/h/a b/.asl/run/nativeTest/ab12/entries/spacedTest --x" (fn [(p String)] -> Bool false)) "") "no prefix that is a file gives no executable")
+      (assert (= (fr/argsExe "/h/a  b/.asl/run/nativeTest/ab12/entries/spacedTest --x" (fn [(p String)] -> Bool (= p "/h/a  b/.asl/run/nativeTest/ab12/entries/spacedTest"))) "/h/a  b/.asl/run/nativeTest/ab12/entries/spacedTest") "a path with two spaces is read whole, the column is not rejoined into one space")
       (assert (= (fr/argsExe "/U/a   b /.asl/run/nativeTest/e/t" (fn [(p String)] -> Bool (= p "/U/a   b /.asl/run/nativeTest/e/t"))) "/U/a   b /.asl/run/nativeTest/e/t") "three spaces and a space before a slash are read whole")
       (assert (= (fr/argsExe "/U/a  b/.asl/run/nativeTest/e/t --x" (fn [(p String)] -> Bool (= p "/U/a b/.asl/run/nativeTest/e/t"))) "") "a path with one space where the column has two is not the same file")
-      (assert (= (picks "  301     1   501   03:00:00 /Users/a  b/.asl/run/nativeTest/ab12/entries/dspTest --x" 501 7200) (list)) "a double-space path whose file does not exist is not picked")
-      (assert (= (fr/orphanTestPidsWith "  302     1   501   03:00:00 /Users/a  b/.asl/run/nativeTest/ab12/entries/dspTest --x" 501 7200 (fn [(p String)] -> Bool (= p "/Users/a  b/.asl/run/nativeTest/ab12/entries/dspTest"))) (list 302)) "a double-space path whose file exists is picked")
+      (assert (= (picks "  301     1   501   03:00:00 /h/a  b/.asl/run/nativeTest/ab12/entries/dspTest --x" 501 7200) (list)) "a double-space path whose file does not exist is not picked")
+      (assert (= (fr/orphanTestPidsWith "  302     1   501   03:00:00 /h/a  b/.asl/run/nativeTest/ab12/entries/dspTest --x" 501 7200 (fn [(p String)] -> Bool (= p "/h/a  b/.asl/run/nativeTest/ab12/entries/dspTest"))) (list 302)) "a double-space path whose file exists is picked")
       (assert (= (fr/argsExe "/h/.asl/run/nativeTest/x/foo bar/t --a" (fn [(p String)] -> Bool (or (= p "/h/.asl/run/nativeTest/x/foo") (= p "/h/.asl/run/nativeTest/x/foo bar/t")))) "/h/.asl/run/nativeTest/x/foo") "pinned: the shortest prefix that is a file wins, even when a longer one is the real executable")
       (assert (= (fr/orphanTestPidsWith "  303     1   501   03:00:00 /h/.asl/run/nativeTest/x/foo bar/t --a" 501 7200 (fn [(p String)] -> Bool (= p "/h/.asl/run/nativeTest/x/foo bar/t"))) (list 303)) "the real executable alone is enough for the pick")
       (assert (= (fr/orphanTestPids (psText) 501 7200) (list)) "on disk none of the fixture binaries exist, so the real check picks nothing")

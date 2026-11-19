@@ -18,10 +18,10 @@ fn ! envFor cache: (Option String) extra: (List String) -> (List String)
     (filter (fn [(row String)] -> Bool (not (or (stringStartsWith? row "ASL_HOST=") (or (stringStartsWith? row "SERVED_STOP_PID=") (or (stringStartsWith? row "ASL_NATIVE_CLI_WAIT=") (and (some? cache) (stringStartsWith? row "ASL_NATIVE_CLI_CACHE="))))))) (run/childEnv (list))))
 
 fn ! binAsl! root: String args: (List String) env: (List String) -> run/Done
-  (run/runOneLimited (run/job (cons (str root "/bin/asl") args) root env) (run/limits 1500 64))
+  (run/runOneLimited (run/job (cons (str root "/bin/asl") args) root env) (run/limits 3600 64))
 
 fn ! binAslAt! path: String root: String args: (List String) env: (List String) -> run/Done
-  (run/runOneLimited (run/job (cons (str path "/bin/asl") args) root env) (run/limits 1500 64))
+  (run/runOneLimited (run/job (cons (str path "/bin/asl") args) root env) (run/limits 3600 64))
 
 fn ! sh! root: String argv: (List String) -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits 120 8))

@@ -77,7 +77,9 @@ fn testPure -> Bool
       (assert (not (mc/oneAsnLine? "(:c :a x)\n\nbody text")) "a body makes it more than one line")
       (assert (not (mc/oneAsnLine? "")) "empty is not an ASN line")
       (assert (= (mc/cachePath "/c" "abc" "gates" "id1") "/c/abc-gates-id1.asn") "the cache is keyed by base sha, sub and provenance id")
-      (assert (not (stringContains? (str (mc/cleanEnvWith (list "ASL_ROOT=/x" "PROBE_API_KEY=s" "HOME=/h"))) "ASL_ROOT")) "the child env carries no ASL_ROOT")
+      (let [(cleaned (str (mc/cleanEnvWith (list "ASL_ROOT=/x" "PROBE_API_KEY=s" "HOME=/h" "ASL_NATIVE_CLI_CACHE=/c"))))]
+        (do (assert (not (stringContains? cleaned "ASL_ROOT")) "the child env carries no ASL_ROOT")
+            (assert (stringContains? cleaned "ASL_NATIVE_CLI_CACHE=/c") "the child env keeps ASL_NATIVE_CLI_CACHE")))
       (assert (not (stringContains? (str (mc/cleanEnvWith (list "GH_PAT=x" "DB_PASSWORD=y" "AWS_KEY=z"))) "GH_PAT")) "credential-looking names are dropped")
       (assert (and (mc/secretLike? "GH_PAT") (mc/secretLike? "db_password") (mc/secretLike? "X_KEY") (not (mc/secretLike? "PATH")) (not (mc/secretLike? "KEYBOARD"))) "the secret names are widened without catching PATH")
       (let [(r (mc/redactWhy "FAIL x GH_PAT=abc123 DB_PASSWORD=p1 ok=1 FOO_API_KEY=k9"))]

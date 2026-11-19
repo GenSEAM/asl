@@ -16,7 +16,7 @@ fn ! buildFixtureRepo! root: String -> Bool
     (and (ok? d1) (and (ok? f1) (and (ok? f3) (gk/initGitRepoWith! root "bareSweepTest" "bareSweepTest@example.invalid" (list "onlyFile.asl"))))))
 
 fn ! cli! binary: String root: String args: (List String) -> run/Done
-  (run/runOneLimited (run/job (cons binary args) root (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root))) (run/limits 30 16))
+  (run/runOneLimited (run/job (cons binary args) root (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root)) (run/cacheEnv!))) (run/limits 30 16))
 
 fn ! refused binary: String root: String verb: String args: (List String) label: String want: String -> Bool
   (let [(d (cli! binary root (cons verb args)))]

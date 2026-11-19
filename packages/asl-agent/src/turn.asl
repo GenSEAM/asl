@@ -47,8 +47,14 @@ fn dropThink text: String -> String
           ((none) text)
           ((some b) (dropThink (str (optionOr (stringSlice text 0 a) "") (optionOr (stringSlice rest (+ b 8) (stringLength rest)) ""))))))))
 
-fn layoutForm op: String file: String -> String
-  (str "(:step :op \"" (if (= op "edit") "edit" "write") "\" :file \"" (c/escapeAsn file) "\" " (if (= op "edit") ":old :raw :new :raw" ":content :raw") ")")
+; (:m :ref ABSORB-AGENT-LOWS :do "the layout form keeps an ERR_ code the model copied into its reply as :error, so exec still marks the refusal :echoed and the copied code is not counted as a new attempt")
+fn echoedError reply: String -> String
+  (match (stringIndexOf reply ":error \"ERR_")
+    ((some at) (let [rest (c/sliceOf reply (+ at 8) (stringLength reply))] (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) ""))))
+    ((none) ""))
+
+fn layoutForm op: String file: String echo: String -> String
+  (str "(:step :op \"" (if (= op "edit") "edit" "write") "\" :file \"" (c/escapeAsn file) "\" " (if (= op "edit") ":old :raw :new :raw" ":content :raw") (if (stringEmpty? echo) "" (str " :error \"" echo "\"")) ")")
 
 fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
   (let [reply (dropThink (pairFirst (tc/untagToolCalls reply0)))
@@ -63,7 +69,7 @@ fn turnReply reply0: String declared: (Option (List String)) -> TurnReply
         ; (:m :ref LEON-WRITE-FAIL-TOP :do "step shapes are made canonical after raw blocks are bound and fences dropped, so written content already sits in strings the scan skips")
         shape (tc/canonSteps (r/unfence unraw))
         ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "a reply whose raw blocks do not bind whole runs none of its steps: it is read as the first unbound write or edit alone, still with its :raw field, so exec answers one ERR_RAW_MISSING with the canonical layout and nothing else in the reply is executed (grader 2026-11-18: a step beside one whose block was refused ran with a neighbour's content)")
-        plain (match (listHead bound.missing) ((some m) (layoutForm (pairFirst m) (pairSecond m))) ((none) shape.text))
+        plain (match (listHead bound.missing) ((some m) (layoutForm (pairFirst m) (pairSecond m) (echoedError capText))) ((none) shape.text))
         facts0 (r/replyFacts plain declared)
         hasOps (not (listEmpty? facts0.ops))
         otherDefect (or (some? facts0.cut) (some? (r/locateParseFailure plain)) (r/hasUnclosedForm plain))

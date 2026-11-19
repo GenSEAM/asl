@@ -46,7 +46,7 @@ fn ! runTests -> Bool
       (assert (some? built.binary) (str "asl/packages/asl-cli/src/native.asl builds natively: " built.reason))
       (assert (ok? madeBase) "scratch base directory is created")
       (let [(binary (optionOr built.binary ""))
-            (env (list "PATH=/usr/bin:/bin" (str "HOME=" base)))
+            (env (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" base)) (run/cacheEnv!)))
             (wroteFix (ok? (fileWrite fix seed)))
             (wroteChk (ok? (fileWrite chk seed)))
             (wroteBad (ok? (fileWrite bad broken)))]

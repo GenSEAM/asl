@@ -325,6 +325,28 @@ fn opWordStep form: String -> (Pair (Option String) (List String))
       (pair (some (str "(:step " (stringJoin (pairFirst r) " ") ")")) (pairSecond r))))
     ((none) (if (stringContains? form ":op \"") (pair none (list)) (pair none (list "opShape")))))
 
+fn gluedOps -> (List String)
+  (list "read" "write" "edit" "run" "tree" "outline" "check" "test" "gate" "note" "done" "delete")
+
+; (:m :ref LEON-STEP-BODY-LOST :do "a step head glued to its op, as models send it: (:stepnop\"read\" ...), (:stepop\"read\" ...), (:step:op\"read\" ...) or (:stepread ...), is the step (:step :op \"read\" ...); only a known op word glued to (:step is read so, anything else stays as sent")
+fn gluedStep form: String -> (Option String)
+  (let [n (stringLength form)
+        rest (c/sliceOf form 6 n)
+        prefix (optionOr (listHead (filter (fn [p] (stringStartsWith? rest p)) (list "nop\"" "op\"" ":op\""))) "")]
+    (cond
+      ((or (< n 7) (not (stringStartsWith? form "(:step"))) none)
+      ((not (stringEmpty? prefix))
+        (let [vstart (stringLength prefix)
+              tail (c/sliceOf rest vstart (stringLength rest))]
+          (match (stringIndexOf tail "\"")
+            ((some e) (let [v (c/sliceOf tail 0 e)]
+                        (if (listContains? (gluedOps) v) (some (str "(:step :op \"" v "\"" (c/sliceOf tail (+ e 1) (stringLength tail)))) none)))
+            ((none) none))))
+      (else
+        (match (listHead (filter (fn [w] (and (stringStartsWith? rest w) (let [after (c/sliceOf rest (stringLength w) (min (+ (stringLength w) 1) (stringLength rest)))] (or (= after " ") (= after ")"))))) (gluedOps)))
+          ((some w) (some (str "(:step :op \"" w "\"" (c/sliceOf rest (stringLength w) (stringLength rest)))))
+          ((none) none)))))
+
 fn named? form: String -> Bool
   (and (stringStartsWith? form "(:step") (not (emptyStep? form)))
 
@@ -338,6 +360,7 @@ fn fixForm form: String others: Bool -> (Pair (Option String) (Pair (List String
       (match (argKeyStep form)
         ((some f) (pair (some f) (pair (list "argKey") (list))))
         ((none) (pair none (pair (list) (list "argKey"))))))
+    ((some? (gluedStep form)) (pair (gluedStep form) (pair (list "gluedHead") (list))))
     ((emptyStep? form) (if others (pair (some "") (pair (list "emptyStep") (list))) (pair none (pair (list) (list "emptyStep")))))
     (else (let [r (opWordStep form)]
       (match (pairFirst r)

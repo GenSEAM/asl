@@ -765,6 +765,10 @@ fn modelFamily name: String -> String
       (optionOr (stringSlice noKimi 0 (- (stringLength noKimi) 9)) noKimi)
       noKimi))
 
+; (:m :ref SPECCHECK-GRADER-SAME-MODEL :do "a grader of the writer's own model family is trusted in neither direction: met or unmet, its verdict is unavailable; empty names never match")
+fn sameFamily? grader: String writer: String -> Bool
+  (and (not (stringEmpty? grader)) (and (not (stringEmpty? writer)) (= (modelFamily grader) (modelFamily writer))))
+
 fn specFail model: String reasons: (List String) -> s/SpecVerdict
   (s/SpecVerdict :verdict "fail" :model model :reasons reasons)
 
@@ -796,10 +800,10 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
               (else (specFail grader (list m)))))
           ((ctx/reviewVerdict met missing)
             (cond
+              ((sameFamily? grader writer) (s/SpecVerdict :verdict "unavailable" :model grader :reasons (list (str "no independent grader: the grader model " grader " is the writer's model family; the gateway served no other model"))))
               ((not met) (specFail grader (if (listEmpty? missing) (list "the grader found the task unmet") missing)))
               ((stringEmpty? grader) (specFail grader (list "the grader reported no model, so it cannot be shown to differ from the writer")))
               ((stringEmpty? writer) (specFail grader (list "the writer model is unknown, so the grader cannot be shown to differ")))
-              ((= (modelFamily grader) (modelFamily writer)) (s/SpecVerdict :verdict "unavailable" :model grader :reasons (list (str "no independent grader: the grader model " grader " is the writer's model family; the gateway served no other model"))))
               (else (s/SpecVerdict :verdict "pass" :model grader :reasons (list)))))))))
 
 ; (:m :ref LEON-OK-UNCOMMITTED :do "gates green before any edit are listed as vacuous; a run that ends ok, wrote a test file of its own and whose integrity check ran a revert and saw failsOnRevert changed the gate; the check reverted the sources and saw the gate go red, so they are not listed")

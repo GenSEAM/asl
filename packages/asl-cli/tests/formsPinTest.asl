@@ -2,6 +2,9 @@
   :x [runTests]
   :i [(asl-tools/fleet/run :a fr) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/tests/nativeColdFixture :a nf)])
 
+fn suiteWallS -> Int64
+  5400
+
 ; (:m :ref FORMS-PINNED-CLI :do "part one asserts formsOnly? on argv shapes (every element only forms of the edit family, parens and escaped quotes inside strings do not count, anything else is false); part two makes a scratch checkout with a private native CLI cache and a stub aslNativeBuild that logs its arguments, marks a CLI dependency so the CLI is stale, and shows a forms-only argv answering with no builder call while a check argv calls the refresh builder and ends in ERR_NATIVE_STALE; no assert reads a duration")
 fn ! sh! cmd: String cwd: String secs: Int64 cache: String -> fr/Done
   (fr/runOneLimited (fr/job (list "/bin/sh" "-c" cmd) cwd (envRows cache)) (fr/limits secs 400))

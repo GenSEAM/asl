@@ -9,8 +9,13 @@ fn ! here -> String
 fn ! scratch tag: String name: String -> String
   (str (here) "/.asl/cache/" tag "-" (stringFromInt64 (procSelf)) "-" name)
 
+fn hubSock root: String -> String
+  (let [(s (str root "/hub.sock"))]
+    (if (<= (stringLength s) 96) s (str "/tmp/aslHub-" (optionOr (stringSlice (bytesSha256 (stringToBytes root)) 0 12) "0") ".sock")))
+
 fn ! cleanup dir: String -> Unit
-  (let [(_ (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 60 4)))] ())
+  (let [(_ (pathRemove (hubSock dir)))
+        (_ (fr/runOneLimited (fr/job (list "rm" "-rf" dir) "." (fr/childEnv (list))) (fr/limits 60 4)))] ())
 
 fn ! sh c: String -> String
   (resultOr (fr/shellOut c 60000) "")
@@ -67,7 +72,7 @@ fn ! listenWait! path: String attempts: Int64 -> Bool
 ; (:m :do "stand-in hub (fixtures/hubVerdictStub.asl) started through fleet/run.asl guardStart! in its own process group with a lease; the stub also exits on its own after sec seconds or its request cap (hubDeadlineTest); returns the pid, 0 when it did not come up")
 fn ! startHubFor! root: String sec: Int64 -> Int64
   (let [(h (here))
-        (sock (str root "/hub.sock"))
+        (sock (hubSock root))
         (g (fr/guardStart! (list (str h "/bin/asl") "run" (str h "/asl/tools/coord/tests/fixtures/hubVerdictStub.asl") sock (str root "/hubSeen.txt") (str root "/hubReply.txt") (stringFromInt64 sec) "50") h (fr/childEnv (list)) (fr/limits (+ sec 60) 50)))]
     (match g
       ((err _) 0)
@@ -100,9 +105,10 @@ fn ! envFor root: String -> (List String)
 fn ! prepare! root: String -> Bool
   (let [(_ (dirCreate (str root "/home/.asl")))
         (_ (dirCreate (str root "/store/runs")))
+        (_ (dirCreate (str root "/checkCache")))
         (a (fileWrite (str root "/home/.asl/gateway.asn") (str (gatewayText) "\n")))
         (b (fileWrite (str root "/home/lanes.asn") (str (lanesText) "\n")))
-        (c (fileWrite (str root "/home/.asl/hub.asn") (str "(:hub :sock \"" root "/hub.sock\" :class \"lead\")\n")))
+        (c (fileWrite (str root "/home/.asl/hub.asn") (str "(:hub :sock \"" (hubSock root) "\" :class \"lead\")\n")))
         (d (fileWrite (str root "/hubReply.txt") "(:verdict :pass :defects () :model m)"))]
     (and (ok? a) (and (ok? b) (and (ok? c) (ok? d)))))
 
@@ -133,7 +139,9 @@ fn ! scriptLeon! root: String replies: (List String) -> Bool
         (fixture (str root "/leonFixture.asn"))
         (turns (stringJoin (map (fn [(pr (Pair Int64 String))] -> String (str "    (:turn :num " (stringFromInt64 (+ (pairFirst pr) 1)) " :reply \"" (escTurn (pairSecond pr)) "\")\n")) (enumerate replies)) ""))
         (_ (fileWrite fixture (str "(:script :id \"e2e\" :mode :scout\n  :turns (\n" turns "  )\n)\n")))
-        (exports (stringJoin (map (fn [(r String)] -> String (str "  export " r "\n")) (fr/cacheEnv!)) ""))
+        (_ (dirCreate (str root "/checkCache")))
+        (cacheRows (listAppend (filter (fn [(r String)] -> Bool (not (stringStartsWith? r "ASL_CHECK_CACHE="))) (fr/cacheEnv!)) (list (str "ASL_CHECK_CACHE=" root "/checkCache"))))
+        (exports (stringJoin (map (fn [(r String)] -> String (str "  export " r "\n")) cacheRows) ""))
         (body (str "#!/bin/sh\ncase \"$1\" in\n\"(:agent\"*)\n  printf '%s' \"$1\" > " root "/agentForm.txt\n  mkdir -p \"$PWD/tests/fixtures/agentLoop/mvp\" && cp " fixture " \"$PWD/tests/fixtures/agentLoop/mvp/e2e.asn\"\n"
                    exports "  F=\"${1%)}\"\n  " h "/bin/asl \"$F :backend \\\"script/e2e\\\")\"\n  C=$?\n  echo '(:servedBy :model \"kmK31Pro\")'\n  exit $C ;;\n*) exec " h "/bin/asl \"$@\" ;;\nesac\n"))
         (_ (dirCreate (str root "/repo/bin")))
@@ -152,7 +160,8 @@ fn ! devCloneFor! root: String -> String
 fn e2eLaunch root: String -> (fn [String st/Task cd/CUnit] -> (List String))
   (let [(h (here))]
     (fn [(stage String) (u st/Task) (c cd/CUnit)] -> (List String)
-      (listAppend (listAppend (list "/usr/bin/env" (str "HOME=" root "/home")) (fr/cacheEnv!))
+      (listAppend (listAppend (list "/usr/bin/env" (str "HOME=" root "/home"))
+                              (listAppend (filter (fn [(r String)] -> Bool (not (stringStartsWith? r "ASL_CHECK_CACHE="))) (fr/cacheEnv!)) (list (str "ASL_CHECK_CACHE=" root "/checkCache"))))
         (list "ASL_GATEWAY_URL=http://127.0.0.1:1/v1/chat/completions" (str "ASL_GATEWAY_CONFIG=" root "/home/.asl/gateway.asn")
               (str h "/bin/asl") "run" (str h "/asl/tools/coord/conductor.asl") "stage" stage u.id "--store" (str root "/store") "--repo" (str root "/repo")
               "--dev-repo" (str root "/dev") "--dev" "dev" "--worktrees" (str root "/wts") "--home" (str root "/home") "--lanes" (str root "/home/lanes.asn")))))

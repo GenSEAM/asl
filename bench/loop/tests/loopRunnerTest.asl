@@ -38,7 +38,7 @@ fn ! testPure -> Bool
     (assert (= (lc/loadOf "21:30  up 2 days, 10:13, 4 users, load averages: 45.52 39.59 36.48") 45) "the one-minute load is read from uptime on macOS")
     (assert (= (lc/loadOf " 21:30:01 up 2 days,  1 user,  load average: 3.10, 2.50, 2.00") 3) "and on Linux")
     (assert (= (lc/cleanOut (lc/Sandbox :lang "asl" :trial "/w/t-1" :pkg "/w/t-1/asl/packages/asl-stats" :pristine "")
-                            "FAIL x: ERR_NATIVE_UNSUPPORTED: /home/u/.asl/cache/nativeTest/outsidePkg/abc/aslLoopBenchSandbox/src/interval.asl:60:3: ERR_ARITY\n/w/t-1/asl/packages/asl-stats/tests/a.asl:1:1: ERR_ASSERT")
+                            "FAIL x: ERR_NATIVE_UNSUPPORTED: /h/u/.asl/cache/nativeTest/outsidePkg/abc/aslLoopBenchSandbox/src/interval.asl:60:3: ERR_ARITY\n/w/t-1/asl/packages/asl-stats/tests/a.asl:1:1: ERR_ASSERT")
                "FAIL x: ERR_NATIVE_UNSUPPORTED: src/interval.asl:60:3: ERR_ARITY\ntests/a.asl:1:1: ERR_ASSERT")
             "tool output names files relative to the package, without sandbox or cache prefixes")
     (assert (lc/solvedOf true true true) "solved needs the suite, the hidden tests and the absent check")

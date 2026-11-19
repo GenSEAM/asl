@@ -10,7 +10,7 @@ fn ! scratchDir! -> String
 fn ! checkFile! binary: String root: String dir: String name: String text: String -> run/Done
   (let [(path (str dir "/" name))
         (_ (fileWrite path text))]
-    (run/runOneLimited (run/job (list binary "check" path) root (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp")) (run/limits 120 16)))
+    (run/runOneLimited (run/job (list binary "check" path) root (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp") (run/cacheEnv!))) (run/limits 120 16)))
 
 fn expectFix d: run/Done header: String -> Bool
   (do (assert (= d.verdict "exit") (str "check ended on its own: " d.out))

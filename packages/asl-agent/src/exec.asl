@@ -765,6 +765,10 @@ fn ownsRec rid: String opName: String path: String owns: (List String) -> (List 
     (pair "owns" (vStrs owns)) (vs "message" (str "'" path "' is outside :owns; nothing in this step was written; the run goes on")))
 
 ; (:m :ref LEON-RAW-PROTOCOL :do "a plain :content string is written as sent whatever its size and escapes; a :raw field no fenced block bound, or a step that carries an :error code the model copied from a receipt, is answered with the exact accepted shape for its target as :hint, and an echoed code also gets :echoed true, which the loop does not count as a repeated attempt")
+; (:m :ref ABSORB-AGENT-LOWS :do "a raw step left unbound refuses its whole reply, so the model is told that nothing ran and every step goes again")
+fn rawMissingMessage -> String
+  "no step of this reply was run: its raw blocks did not bind by place; send every step again, each block right after its own step"
+
 fn rawShape opName: String target: String -> String
   (if (= opName "edit")
     (str "(:step :op \"edit\" :file \"" (c/escapeAsn target) "\" :old :raw :new :raw)\n```\n<old text>\n```\n```\n<new text>\n```")
@@ -811,7 +815,7 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
     (cond
       (unbound
         (some (listAppend (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_RAW_MISSING") (vs "file" target)
-                (vs "hint" (rawShape opName target)))
+                (vs "hint" (rawShape opName target)) (vs "message" (rawMissingMessage)))
                 (if echoed (list (pair "echoed" (vBool true))) (list)))))
       ((not (opTruthy op "file"))
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MISSING_ARG") (vs "message" (str opName " needs :file")))))

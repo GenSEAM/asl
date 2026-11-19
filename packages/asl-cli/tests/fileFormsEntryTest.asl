@@ -7,7 +7,7 @@ fn ! scratchBase! -> String
   (str (optionOr (envGet "TMPDIR") "/tmp") "/fileFormsEntryTest-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs)))
 
 fn ! cli! binary: String root: String args: (List String) -> run/Done
-  (run/runOneLimited (run/job (cons binary args) root (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root))) (run/limits 40 16))
+  (run/runOneLimited (run/job (cons binary args) root (listAppend (list "PATH=/usr/bin:/bin" (str "HOME=" root) "TMPDIR=/tmp" (str "ASL_ROOT=" root) (str "ASL_CLI_ROOT=" root)) (run/cacheEnv!))) (run/limits 40 16))
 
 fn probeSource -> String
   "(module probe/esc :x [runTests] :i [])\n\nfn runTests -> Bool\n  (stringContains? \"card\" \"x\\\"y\\\"z\")\n"

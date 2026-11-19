@@ -139,9 +139,37 @@ fn ! testStaleOwns -> Bool
         (assert (listEmpty? none) "an empty ledger has nothing stale")
         true))
 
+fn ! testDocOwns -> Bool
+  (let [(root (scratchStore "docOwns"))
+        (store (str root "/store"))
+        (_ (dirCreate (str root "/asl/packages/pkgA/src")))
+        (_ (dirCreate (str root "/asl/packages/pkgB/src")))
+        (_ (dirCreate store))
+        (_ (fileWrite (str store "/repo.path") (str root "\n")))
+        (_ (fileWrite (str root "/asl/packages/pkgA/doc.asn") "(:doc :symbol \"x\" :text \"t\")\n"))
+        (_ (fileWrite (str root "/asl/packages/pkgA/src/a.asl") "x"))
+        (_ (fileWrite (str root "/asl/packages/pkgA/src/b.asl") "y"))
+        (_ (fileWrite (str root "/asl/packages/pkgB/src/c.asl") "z"))
+        (ledger (str "(:u :id D1 :queue conductor :do \"one\" :owns (\"asl/packages/pkgA/src/a.asl\" \"asl/packages/pkgA/src/b.asl\") :gate \"true\")\n"
+                   "(:u :id D2 :queue conductor :do \"dup\" :owns (\"asl/packages/pkgA/src/a.asl\" \"asl/packages/pkgA/doc.asn\") :gate \"true\")\n"
+                   "(:u :id D3 :queue conductor :do \"nodoc\" :owns (\"asl/packages/pkgB/src/c.asl\") :gate \"true\")\n"))
+        (_ (pi/plan! ledger store "main" false))
+        (u1 (unitOf store "D1"))
+        (u2 (unitOf store "D2"))
+        (u3 (unitOf store "D3"))
+        (_ (pathRemove root))]
+    (do (assert (= (pi/docPathFor "asl/packages/pkgA/src/a.asl") "asl/packages/pkgA/doc.asn") "docPathFor maps package src asl to doc.asn")
+        (assert (= (pi/docPathFor "asl/packages/pkgA/tests/aTest.asl") "") "docPathFor ignores package tests")
+        (assert (= (pi/docPathFor "tools/x.asl") "") "docPathFor ignores non-package paths")
+        (assert (= u1.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/src/b.asl" "asl/packages/pkgA/doc.asn")) (str "pkgA doc.asn appended once: " (stringJoin u1.owns ",")))
+        (assert (= u2.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/doc.asn")) (str "existing doc.asn is not duplicated: " (stringJoin u2.owns ",")))
+        (assert (= u3.owns (list "asl/packages/pkgB/src/c.asl")) (str "missing doc.asn is not appended: " (stringJoin u3.owns ",")))
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testImport) "plan import on a fixture ledger")
       (assert (testRefresh) "a changed row refreshes an idle unit")
       (assert (testStaleOwns) "rows owning paths absent from the tree are reported")
       (assert (testSideLedgerKeepsParked) "side-ledger import keeps parked rows")
+      (assert (testDocOwns) "package src owns auto-include existing doc.asn once")
       true)

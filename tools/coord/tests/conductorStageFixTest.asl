@@ -134,9 +134,40 @@ fn ! testInfraRun -> Bool
         (assert (and (stringContains? res.sig "FAIL one") (not (stringContains? res.sig "ERR_NATIVE_UNSUPPORTED"))) (str "a real FAIL beside the cache text is the signature: " res.sig))
         true))
 
+; (:m :ref COND-OWNS-DOC :do "pure parts: the package of a src path, the owns the writer gets, the needsReview receipt judged by its gates and spec check")
+fn rcpt gates: String spec: String -> String
+  (str "(:agent :status :failed :receipt (:agentReceipt :status :needsReview :stop needsReview :lastStep (:turn 3 :op \"gate\") :gates " gates " " spec " :usage (:input 1)))")
+
+fn ! testOwnsPure -> Bool
+  (let [(own (list "asl/packages/asl-text/src/wildcard.asl" "asl/packages/asl-text/tests/wildcardTest.asl"))
+        (w (cd/docOwns own))
+        (dirOwn (cd/docOwns (list "asl/packages/asl-utils/src/" "asl/packages/asl-text/src")))
+        (none (cd/docOwns (list "asl/tools/coord/conductor.asl" "asl/packages/asl-text/tests/x.asl")))
+        (twice (cd/docOwns (list "asl/packages/asl-text/src/a.asl" "asl/packages/asl-text/src/b.asl" "asl/packages/asl-text/doc.asn")))
+        (ok0 "((:cmd \"sh g\" :exit 0) (:cmd \"sh h\" :exit 0))")
+        (unav "(:specCheck (:verdict unavailable :reviewer unavailable :reasons (\"no grader\")))")
+        (self "(:specCheck (:verdict fail :model \"m\" :reasons (\"the grader model m is the writer's model\")))")
+        (real "(:specCheck (:verdict fail :model \"m\" :reasons (\"the diff drops a required export\")))")
+        (mixed "(:specCheck (:verdict fail :model \"m\" :reasons (\"the grader model m is the writer's model\" \"the test asserts nothing\")))")]
+    (do (assert (and (listContains? w "asl/packages/asl-text/doc.asn") (listContains? w "asl/packages/asl-know/cards/asl-text.asn") (listContains? w "asl/packages/asl-text/src/wildcard.asl")) (str "src ownership adds doc.asn and its card file: " (stringJoin w " ")))
+        (assert (and (listContains? dirOwn "asl/packages/asl-utils/doc.asn") (listContains? dirOwn "asl/packages/asl-text/doc.asn")) "a src dir entry, with or without a slash, counts")
+        (assert (and (= (cd/pkgRootOf "asl/packages/asl-text/") "asl/packages/asl-text") (= (cd/pkgRootOf "asl/packages/asl-text") "asl/packages/asl-text") (stringEmpty? (cd/pkgRootOf "asl/packages/")) (stringEmpty? (cd/pkgRootOf "asl/tools/x/src/a.asl")) (stringEmpty? (cd/pkgRootOf "asl/packages/asl-text/tests/t.asl"))) "a whole-package owns names the package, tests and tools do not")
+        (assert (and (listContains? w "asl/packages/asl-know/cards/asl-text.asn") (not (listContains? w "asl/packages/asl-know/cards/"))) (str "the writer owns its package card file, not the cards dir: " (stringJoin w " ")))
+        (assert (= (listLength none) 2) "tests only, or a tool path, add nothing")
+        (assert (= (listLength twice) 4) (str "a doc.asn already owned is not repeated: " (stringJoin twice " ")))
+        (assert (cd/needsReviewGreen? (rcpt ok0 unav)) "needsReview, every gate exit 0, spec check unavailable: written")
+        (assert (cd/needsReviewGreen? (rcpt ok0 self)) "a spec fail only because the grader is the writer's model: written")
+        (assert (not (cd/needsReviewGreen? (rcpt ok0 real))) "a spec fail on the substance is a failure")
+        (assert (not (cd/needsReviewGreen? (rcpt ok0 mixed))) "a spec fail with one real reason beside it is a failure")
+        (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 0) (:cmd \"sh h\" :exit 1))" unav))) "a gate with exit 1 is a failure")
+        (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :timeout true :seconds 9))" unav))) "a timed out gate is a failure")
+        (assert (not (cd/needsReviewGreen? (rcpt "()" unav))) "no gate in the receipt is no evidence")
+        true))
+
 fn ! runTests -> Bool
   (do (assert (testBlock) "a review block journals its reason")
       (assert (testGateRetry) "a native cache fault runs the gate once more")
+      (assert (testOwnsPure) "docOwns and the needsReview judgement")
       (assert (testInfraRun) "gateInfra counted in a row, not in fails; handoffConflict blocks at once")
       (assert (testFaultKinds) "cache fault kinds and gateInfra never create a fix round")
       (assert (testGateWire) "gatesRes retries a cache fault once")

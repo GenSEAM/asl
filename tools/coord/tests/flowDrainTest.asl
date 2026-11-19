@@ -444,7 +444,7 @@ fn ! testArchiveFailed root: String -> Bool
         (uG (pf/unitIn "G2" "true"))
         (_ (pf/seedUnit! top uF "blocked" "impl.txt"))
         (wtG (pf/seedUnit! top uG "blocked" "impl.txt"))
-        (_ (cd/writeCUnit! store (pf/cuIn "F2" "blocked" (str top "/gone/asex-F2") "sh/F2")))
+        (_ (cd/writeCUnit! store (pf/cuIn "F2" "blocked" (str top "/gone/asex" "-F2") "sh/F2")))
         (refs (pf/sh (str "cd " repo " && sha=$(git rev-parse main) && printf 'reset refs/asex/preOnBase/F2\\nfrom %s\\n\\nreset refs/heads/sh/R9-reload-100\\nfrom %s\\n\\n' $sha $sha | git fast-import --quiet && echo refsOk")))
         (_ (fileWrite (str store "/repo.path") (str repo "\n")))
         (_ (fileWrite (str store "/worktrees.path") (str top "/elsewhere\n")))
