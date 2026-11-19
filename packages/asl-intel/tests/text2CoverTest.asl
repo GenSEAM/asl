@@ -3,15 +3,15 @@
   :i [(asl-intel/text :a text)])
 
 fn runTests -> Bool
-  (let [(r (text/absPath "/foo" "/home/user"))]
+  (let [(r (text/absPath "/foo" "/work/dir"))]
     (assert (= r "/foo") "absPath: absolute unchanged")
-    (assert (= (text/absPath "bar" "/home/user") "/home/user/bar") "absPath: relative joined")
-    (assert (= (text/absPath "" "/home/user") "/home/user") "absPath: empty path")
-    (assert (= (text/absPath "." "/home/user") "/home/user") "absPath: dot")
-    (assert (= (text/absPath ".." "/home/user") "/home") "absPath: dotdot")
-    (assert (= (text/absPath "a/../b" "/home/user") "/home/user/b") "absPath: normalizes ..")
-    (assert (= (text/absPath "//server/share" "/home/user") "//server/share") "absPath: UNC preserved")
-    (assert (= (text/absPath "///a" "/home/user") "/a") "absPath: triple slash collapses")
+    (assert (= (text/absPath "bar" "/work/dir") "/work/dir/bar") "absPath: relative joined")
+    (assert (= (text/absPath "" "/work/dir") "/work/dir") "absPath: empty path")
+    (assert (= (text/absPath "." "/work/dir") "/work/dir") "absPath: dot")
+    (assert (= (text/absPath ".." "/work/dir") "/work") "absPath: dotdot")
+    (assert (= (text/absPath "a/../b" "/work/dir") "/work/dir/b") "absPath: normalizes ..")
+    (assert (= (text/absPath "//server/share" "/work/dir") "//server/share") "absPath: UNC preserved")
+    (assert (= (text/absPath "///a" "/work/dir") "/a") "absPath: triple slash collapses")
 
     (assert (= (text/bytesIndexOf (stringToBytes "hello") 5 (stringToBytes "ll") 2 0) 2) "bytesIndexOf: found")
     (assert (= (text/bytesIndexOf (stringToBytes "hello") 5 (stringToBytes "xx") 2 0) -1) "bytesIndexOf: not found")

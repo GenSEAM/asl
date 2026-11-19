@@ -151,7 +151,7 @@ fn normHost s: String -> String
   (let [(parts (stringSplit s ":syntaxHost \"python"))]
     (stringJoin (cons (optionOr (listHead parts) "") (map hostTail (optionOr (listTail parts) (list)))) ":syntaxHost \"python"))
 
-; (:m :ref MAIN-RED-SWEEP :do "a hashOrder step lists paths in the order of a hash over absolute paths, so its order holds only under the root it was recorded at, /private/tmp/aslFormsEdits on macOS; e5e07ce9f neutralised the header wsParent to /tmp/aslFormsEdits, which no longer names that root but equals the real /tmp root on Linux, where the old exact-root rule then compared these 12 steps byte for byte and 8 failed; they are compared by length under every root, as they already were on macOS")
+; (:m :ref MAIN-RED-SWEEP :do "a hashOrder step lists paths in the order of a hash over absolute paths, so its order holds only under the root it was recorded at, the real path of /tmp/aslFormsEdits on macOS; e5e07ce9f neutralised the header wsParent to /tmp/aslFormsEdits, which no longer names that root but equals the real /tmp root on Linux, where the old exact-root rule then compared these 12 steps byte for byte and 8 failed; they are compared by length under every root, as they already were on macOS")
 fn step! r: Replay kw: (Map String String) -> Replay
   (let [(form (get kw "form"))
         (n (optionOr (stringToInt64 (get kw "n")) 0))
