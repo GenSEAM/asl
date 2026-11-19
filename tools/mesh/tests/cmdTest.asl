@@ -1,6 +1,6 @@
 (module ws/asl/tools/mesh/tests/cmdTest
   :x [runTests]
-  :i [(ws/asl/tools/mesh/cmd :a cmd)])
+  :i [(ws/asl/tools/mesh/cmd :a cmd) (asl-tools/fleet/run :a fr)])
 
 fn fixturePath -> String
   "tests/parity/mesh/cmdFixture.asn"
@@ -266,12 +266,11 @@ fn collect! pid: Int64 outFd: Int64 errFd: Int64 outs: (List String) errs: (List
                (match ec ((some x) (if (stringEmpty? x) errs (cons x errs))) ((none) errs))
                (and outOpen (some? oc)) (and errOpen (some? ec)) code2)))
 
-; (:m :ref FROZEN-HOSTLESS :do "children run bin/asl through /bin/bash (a case PATH may be empty, so the wrapper shebang cannot find bash) and share the already-built native CLI cache through ASL_NATIVE_CLI_CACHE, since each case has its own HOME")
-fn ! nativeCache! -> String
-  (str (optionOr (envGet "HOME") "") "/.asl/run/nativeCli")
+; (:m :ref FROZEN-HOSTLESS :do "children run bin/asl through /bin/bash (a case PATH may be empty, so the wrapper shebang cannot find bash)")
+; (:m :ref MAIN-RED-SWEEP :do "each case has its own HOME, so the child gets every cache row of fr/cacheEnv!, not the native CLI cache alone: in a linked worktree the compile store keys off HOME, and without its row each of the 190 child runs (184 fixture cases, 6 more) compiled cmd.asl and its imports from nothing, 764 s for the suite at load 20")
 
 fn ! runChild! argv: (List String) cwd: String env: (List String) -> (Result Run String)
-  (match (procSpawnv (cons "/bin/bash" argv) (some cwd) (some (cons (str "ASL_NATIVE_CLI_CACHE=" (nativeCache!)) env)))
+  (match (procSpawnv (cons "/bin/bash" argv) (some cwd) (some (listAppend (fr/cacheEnv!) env)))
     ((err e) (err e))
     ((ok sp)
       (do
