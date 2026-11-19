@@ -56,9 +56,10 @@ fn ! testExhausts work: String -> Bool
         (assert (= native.stdout "") (str "floorOom: native prints nothing before the error; got " native.stdout))
         true))
 
+; (:m :ref MAIN-RED-SWEEP :do "nm -u prints the bare name on macOS (_mmap) and a type column before it with GNU binutils (U mmap); the name is the last word of the line either way")
 fn undefinedNames text: String -> (List String)
   (map (fn [(line String)] -> String
-         (let [(name (stringTrim line))]
+         (let [(name (optionOr (listLast (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " "))) ""))]
            (if (stringStartsWith? name "_") (optionOr (stringSlice name 1 (stringLength name)) name) name)))
     (filter (fn [(line String)] -> Bool (not (stringEmpty? (stringTrim line)))) (stringLines text)))
 
