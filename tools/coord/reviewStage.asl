@@ -1,5 +1,5 @@
 (module asl-tools/coord/reviewStage
-  :x [sigOf blockedSig builtinNames LaneRow RevOut tableFor writerAliasFor profileChain modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes]
+  :x [sigOf blockedSig builtinNames LaneRow RevOut tableFor writerAliasFor profileChain modelNames modelRows costRows usageCost laneTable laneRowsOf unknownOf paceAllowance lanesFor startupProblems usageSum tokenSum tokensFilled callModelFor! reviewUnit! allowanceMap risingLanes reviewTask CiteCtx citeCtx cites? citeCall]
   :i [(asl-tools/coord/ladder :a l) (asl-tools/fleet/model :a fm) (aslGateway/subPace :a sp) (asl-parser/reader :a rd) (aslAgent/providers :a prov) (asl-json/json :a j)])
 
 ; (:m :ref COND3 :do "the conductor's real review stage over the COND2 ladder: lanes come from the lane table (alias, tier, quality, default allowance) with the allowance of subscription-backed aliases taken from subPace, the model call is the in-process gateway call Leon's provider uses, and the verdict goes back as a plain RevOut so the conductor owns the state machine")
@@ -253,13 +253,131 @@ fn blockedSig why: String defects: (List String) -> String
 fn sigOf r: l/Ruling -> String
   (cond ((= r.action "fix") (stringJoin r.defects "; ")) ((= r.action "await") r.awaitLane) ((= r.action "blocked") (blockedSig r.why r.defects)) (else ""))
 
+; (:m :ref REVIEW-CRITERIA-DOCDUP :do "node2 2026-11-19: the STD task texts carry a RULES AND EXEMPLAR block for the writer (write src and test in one txn, src first) and the reviewers, given the same text, failed gate-green units for not following it (5 of 44 fails); the reviewer judges the result, so a task text has writer-only parts by structure: every line from a line that is --- writerOnly --- to a line that is --- end writerOnly --- or the end of the text is the writer's and never reaches the review brief; the header of the block already queued on the node opens such a part too, so those texts need no re-import; a requirement of the result is written outside the markers")
+fn writerOnlyOpen -> String
+  "--- writerOnly ---"
+
+fn writerOnlyClose -> String
+  "--- end writerOnly ---"
+
+fn writerOnlyLegacy -> (List String)
+  (list "RULES AND EXEMPLAR (")
+
+fn opensWriterOnly? line: String -> Bool
+  (let [(t (stringTrim line))]
+    (or (= t (writerOnlyOpen)) (listAny? (fn [(h String)] -> Bool (stringStartsWith? t h)) (writerOnlyLegacy))))
+
+fn reviewTask text: String -> String
+  (stringTrim (stringJoin (pairSecond (fold (fn [(acc (Pair Bool (List String))) (l String)] -> (Pair Bool (List String))
+                                              (cond
+                                                ((= (stringTrim l) (writerOnlyClose)) (pair false (pairSecond acc)))
+                                                ((or (pairFirst acc) (opensWriterOnly? l)) (pair true (pairSecond acc)))
+                                                (else (pair false (listAppend (pairSecond acc) (list l))))))
+                                            (pair false (list)) (stringLines text)))
+                          "\n"))
+
+; (:m :ref REVIEW-CRITERIA-DOCDUP :do "a fail has to point at the change or at the task: a defect cites when it names a changed path or its file name, a name the diff defines (fn, schema, enum, module), a camelCase word of a changed line, or two adjacent words of four or more letters of the task text the reviewer was shown; the context is built once per review from the whole diff, not the clipped one")
+(schema CiteCtx (:f paths (List String)) (:f names (List String)) (:f toks (List String)) (:f pairs (List String)) (:f words (List String)))
+
+fn spaceMarks -> (List String)
+  (list " " " " " ")
+
+fn dashMarks -> (List String)
+  (list "‑" "‐" "–" "—")
+
+fn wordsOf text: String -> (List String)
+  (let [(spaced (fold (fn [(a String) (c String)] -> String (stringReplace a c " ")) text (spaceMarks)))
+        (dashed (fold (fn [(a String) (c String)] -> String (stringReplace a c "-")) spaced (dashMarks)))]
+    (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (l/identWords (stringReplace dashed "#" " "))))
+
+fn genericWords -> (List String)
+  (list "module" "function" "should" "tested" "against" "implement" "implemented" "missing" "return" "returns" "string" "number" "value" "values" "result" "results" "because" "enough" "correct" "incorrect" "proper" "properly" "working" "handle" "handled" "handles" "support" "supported" "support" "behavior" "behaviour" "feature" "features" "defined" "complete" "completely" "needed" "needs" "wrong" "broken" "failing" "failed" "fails" "without" "between" "another" "message" "default" "tests" "testing" "coverage" "package" "symbol" "symbols" "method" "methods" "create" "created" "update" "updated" "change" "changes" "changed" "output" "input" "inputs" "outputs" "expected" "actual" "wrapped" "single" "needed" "invalid" "issues" "problem" "problems" "quality" "design" "better" "unclear" "cannot" "actually" "nothing" "something" "anything" "everything" "include" "included" "includes" "specified" "required" "requires" "require" "present" "appropriate" "adequate" "sufficient" "satisfy" "satisfies" "matches" "reviewer" "writer")
+
+fn taskWord? w: String -> Bool
+  (and (or (camel? w) (>= (stringLength w) 6)) (not (listContains? (genericWords) (stringLower w))))
+
+fn restOf s: String n: Int64 -> String
+  (optionOr (stringSlice s n (stringLength s)) "")
+
+fn pathOfLine line: String -> String
+  (cond
+    ((or (stringStartsWith? line "+++ b/") (stringStartsWith? line "--- a/")) (stringTrim (restOf line 6)))
+    ((stringStartsWith? line "diff --git a/") (stringTrim (optionOr (listLast (stringSplit line " b/")) "")))
+    (else ""))
+
+fn changedLine? line: String -> Bool
+  (and (or (stringStartsWith? line "+") (stringStartsWith? line "-")) (and (not (stringStartsWith? line "+++")) (not (stringStartsWith? line "---"))))
+
+fn definedName line: String -> String
+  (let [(ws (filter (fn [(w String)] -> Bool (not (stringEmpty? w))) (stringSplit (stringTrim line) " ")))
+        (head (optionOr (listHead ws) ""))
+        (second (optionOr (listGet ws 1) ""))]
+    (cond
+      ((= head "fn") (if (= second "!") (optionOr (listGet ws 2) "") second))
+      ((listContains? (list "(schema" "(enum" "(module") head) second)
+      (else "")))
+
+fn camel? w: String -> Bool
+  (and (>= (stringLength w) 4) (!= (stringLower (restOf w 1)) (restOf w 1)))
+
+fn wordPairs text: String -> (List String)
+  (pairSecond (fold (fn [(acc (Pair String (List String))) (w String)] -> (Pair String (List String))
+                      (pair w (if (and (>= (stringLength w) 4) (>= (stringLength (pairFirst acc)) 4)) (listAppend (pairSecond acc) (list (str (pairFirst acc) " " w))) (pairSecond acc))))
+                    (pair "" (list)) (wordsOf (stringLower text))))
+
+fn citeCtx task: String diff: String -> CiteCtx
+  (let [(lines (stringLines diff))
+        (changed (map (fn [(x String)] -> String (restOf x 1)) (filter changedLine? lines)))]
+    (CiteCtx :paths (fold (fn [(acc (List String)) (x String)] -> (List String)
+                            (let [(p (pathOfLine x))] (if (or (stringEmpty? p) (listContains? acc p)) acc (listAppend acc (list p)))))
+                          (list) lines)
+             :names (filter (fn [(n String)] -> Bool (>= (stringLength n) 3)) (map definedName changed))
+             :toks (filter camel? (wordsOf (stringJoin changed "\n")))
+             :pairs (wordPairs task)
+             :words (map stringLower (filter taskWord? (wordsOf task)))))
+
+fn cites? d: String c: CiteCtx -> Bool
+  (or (listAny? (fn [(p String)] -> Bool
+                  (let [(file (optionOr (listLast (stringSplit p "/")) p))]
+                    (or (stringContains? d p) (and (>= (stringLength file) 3) (stringContains? d file)))))
+                c.paths)
+      (or (listAny? (fn [(w String)] -> Bool (or (listContains? c.names w) (and (camel? w) (listContains? c.toks w)))) (wordsOf d))
+          (listAny? (fn [(p String)] -> Bool (listContains? c.pairs p)) (wordPairs d))
+          (listAny? (fn [(w String)] -> Bool (listContains? c.words (stringLower w))) (wordsOf d))))
+
+fn rowAtom s: String -> String
+  (if (or (stringEmpty? s) (listAny? (fn [(c String)] -> Bool (stringContains? s c)) (list " " "(" ")" "\"" ";" "\n"))) (fm/asnQuote s) s)
+
+; (:m :ref REVIEW-CRITERIA-DOCDUP :do "the model call wrapped with the citation rule: a fail whose defects all cite passes through untouched; a defect that cites nothing is taken out of the reply and written as one (:reviewNoCite :unit :reviewer :kept :text) row, :kept being the defects of that verdict that stay; a fail left with no defect is what the ladder already reads as an abstention (fail without a concrete defect), so it sends no unit back to its writer and the next reviewer is asked; a diff with no file header gives nothing to cite and is not judged; a pass is never touched")
+fn ! citeCall unit: String c: CiteCtx notePath: String call: (fn ! [String String] -> (Result String String)) -> (fn ! [String String] -> (Result String String))
+  (fn [(alias String) (prompt String)] -> (Result String String)
+    (match (call alias prompt)
+      ((err e) (err e))
+      ((ok text)
+        (let [(v (l/parseVerdict text alias ""))
+              (bad (if (or (!= v.outcome "fail") (listEmpty? c.paths)) (list) (filter (fn [(d String)] -> Bool (not (cites? d c))) v.defects)))]
+          (if (listEmpty? bad) (ok text)
+            (let [(good (filter (fn [(d String)] -> Bool (cites? d c)) v.defects))
+                  (_ (fileAppend notePath (str (stringJoin (map (fn [(d String)] -> String
+                                                                  (str "(:reviewNoCite :unit " (rowAtom unit) " :reviewer " (rowAtom alias) " :kept " (stringFromInt64 (listLength good)) " :text " (fm/asnQuote (l/clip (stringReplace d "\n" " ") 300)) ")"))
+                                                                bad)
+                                                           "\n")
+                                               "\n")))]
+              (ok (str "(:verdict :fail :defects " (fm/asnStrings good) " :model " (fm/asnQuote alias) ")"))))))))
+
 fn ! reviewUnit! gatewayText: String lanesText: String paces: (List sp/SubPace) root: String usagePath: String ru: l/ReviewUnit diff: String receipt: String call: (fn ! [String String] -> (Result String String)) -> (Result RevOut String)
-  (match (l/reviewWith (reviewTableFor lanesText ru.writerAlias) (with ru :known (builtinNames root)) diff receipt (lanesFor gatewayText lanesText paces) call)
-    ((err e) (err e))
-    ((ok r)
-      (ok (RevOut :action r.action
-                  :models (stringJoin (map (fn [(v l/Verdict)] -> String v.model) r.verdicts) "+")
-                  :tokens (usageSum (resultOr (fileReadString usagePath) ""))
-                  :costMicro (usageCost (resultOr (fileReadString usagePath) ""))
-                  :sig (sigOf r)
-                  :rows (tokensFilled r.rows (resultOr (fileReadString usagePath) ""))))))
+  (let [(task (reviewTask ru.task))
+        (notePath (str usagePath ".noCite"))
+        (_ (pathRemove notePath))
+        (ruled (l/reviewWith (reviewTableFor lanesText ru.writerAlias) (with (with ru :known (builtinNames root)) :task task) diff receipt (lanesFor gatewayText lanesText paces) (citeCall ru.id (citeCtx task diff) notePath call)))
+        (notes (filter (fn [(x String)] -> Bool (stringStartsWith? x "(:reviewNoCite ")) (stringLines (resultOr (fileReadString notePath) ""))))
+        (_ (pathRemove notePath))]
+    (match ruled
+      ((err e) (err e))
+      ((ok r)
+        (ok (RevOut :action r.action
+                    :models (stringJoin (map (fn [(v l/Verdict)] -> String v.model) r.verdicts) "+")
+                    :tokens (usageSum (resultOr (fileReadString usagePath) ""))
+                    :costMicro (usageCost (resultOr (fileReadString usagePath) ""))
+                    :sig (sigOf r)
+                    :rows (listAppend (tokensFilled r.rows (resultOr (fileReadString usagePath) "")) notes))))))
