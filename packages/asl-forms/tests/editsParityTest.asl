@@ -151,7 +151,8 @@ fn normHost s: String -> String
   (let [(parts (stringSplit s ":syntaxHost \"python"))]
     (stringJoin (cons (optionOr (listHead parts) "") (map hostTail (optionOr (listTail parts) (list)))) ":syntaxHost \"python"))
 
-fn step! r: Replay kw: (Map String String) exact: Bool -> Replay
+; (:m :ref MAIN-RED-SWEEP :do "a hashOrder step lists paths in the order of a hash over absolute paths, so its order holds only under the root it was recorded at, /private/tmp/aslFormsEdits on macOS; e5e07ce9f neutralised the header wsParent to /tmp/aslFormsEdits, which no longer names that root but equals the real /tmp root on Linux, where the old exact-root rule then compared these 12 steps byte for byte and 8 failed; they are compared by length under every root, as they already were on macOS")
+fn step! r: Replay kw: (Map String String) -> Replay
   (let [(form (get kw "form"))
         (n (optionOr (stringToInt64 (get kw "n")) 0))
         (isHarness (stringStartsWith? form "(:harness"))
@@ -160,7 +161,7 @@ fn step! r: Replay kw: (Map String String) exact: Bool -> Replay
         (lines (normHost (stringJoin out.lines "\n")))
         (diverged (mapHas? kw "linesAsl"))
         (want (normHost (get kw (if diverged "linesAsl" "lines"))))
-        (loose (and (not exact) (= (get kw "hashOrder") "true")))
+        (loose (= (get kw "hashOrder") "true"))
         (linesOk (if loose (= (stringLength lines) (stringLength want)) (report! kw "lines" want lines)))
         (errOk (report! kw "err" (get kw "err") (stringFromInt64 out.errCount)))
         (treeOk (report! kw "tree" (get kw "tree") (tree! r.ws)))
@@ -177,7 +178,7 @@ fn fresh! parent: String sid: String -> Replay
 fn tally a: Replay b: Replay -> Replay
   (with b :steps (+ a.steps b.steps) :failures (+ a.failures b.failures) :loose (+ a.loose b.loose) :diverged (+ a.diverged b.diverged))
 
-fn replayAll! parent: String exact: Bool lines: (List String) cur: Replay sid: String total: Replay -> Replay
+fn replayAll! parent: String lines: (List String) cur: Replay sid: String total: Replay -> Replay
   (match (listHead lines)
     ((none) (tally total cur))
     ((some line)
@@ -188,10 +189,10 @@ fn replayAll! parent: String exact: Bool lines: (List String) cur: Replay sid: S
             (total2 (if (and switch (not (stringEmpty? sid))) (tally total cur) total))
             (base (if switch (fresh! parent lsid) cur))]
         (cond
-          ((stringStartsWith? line "(:file ") (replayAll! parent exact rest (setupFile! base kw) lsid total2))
-          ((stringStartsWith? line "(:link ") (replayAll! parent exact rest (addLink! base (get kw "path") (get kw "target")) lsid total2))
-          ((stringStartsWith? line "(:step ") (replayAll! parent exact rest (step! base kw exact) lsid total2))
-          (else (replayAll! parent exact rest cur sid total))))))
+          ((stringStartsWith? line "(:file ") (replayAll! parent rest (setupFile! base kw) lsid total2))
+          ((stringStartsWith? line "(:link ") (replayAll! parent rest (addLink! base (get kw "path") (get kw "target")) lsid total2))
+          ((stringStartsWith? line "(:step ") (replayAll! parent rest (step! base kw) lsid total2))
+          (else (replayAll! parent rest cur sid total))))))
 
 fn unitChecks! root: String -> Bool
   (let [(ws (str root "/unit"))
@@ -237,19 +238,17 @@ fn ! runTests -> Bool
         (text (resultOr (fileReadString (str root "/asl/packages/asl-forms/tests/fixtures/recorded/edits.asn")) ""))
         (lines (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:")) (stringSplit text "\n")))
         (header (kwOf (optionOr (listHead lines) "")))
-        (recorded (get header "wsParent"))
         (here (str (resultOr (realPath "/tmp") "/tmp") "/aslFormsEdits"))
-        (exact (= recorded here))
         (want (listLength (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:step ")) lines)))]
     (assert (= (get header "base") "75a7d7ba") "the fixture is pinned to base 75a7d7ba")
     (assert (>= want 120) "the fixture holds at least 120 recorded steps")
     (assert (unitChecks! here) "unit checks ran")
     (let [(zero (Replay :ws "" :steps 0 :failures 0 :loose 0 :diverged 0))
-          (r (replayAll! here exact lines zero "" zero))
+          (r (replayAll! here lines zero "" zero))
           (compared (listLength (filter (fn [(l String)] -> Bool (stringContains? l " :compare \"")) lines)))]
       (do
         (resultOr (pathRemove here) ())
-        (println (str "(:editsParity :steps " (stringFromInt64 r.steps) " :failures " (stringFromInt64 r.failures) " :hashOrderLoose " (stringFromInt64 r.loose) " :divergences " (stringFromInt64 r.diverged) " :exactRoot " (if exact "true" "false") ")"))
+        (println (str "(:editsParity :steps " (stringFromInt64 r.steps) " :failures " (stringFromInt64 r.failures) " :hashOrderLoose " (stringFromInt64 r.loose) " :divergences " (stringFromInt64 r.diverged) ")"))
         (assert (= r.steps want) "every recorded step replayed")
         (assert (and (> compared 0) (= r.diverged compared)) "every :compare step is checked against its recorded ASL receipt")
         (assert (= r.failures 0) "every step gives the recorded receipt, error count, tree and staged store")
