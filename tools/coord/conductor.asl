@@ -3139,9 +3139,7 @@ fn ! batchableNow! dir: String c: CUnit -> Bool
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the passengers of one train: candidates in order, each kept when its changed files share none with the leader's or an earlier pick's, at most k - 1 of them; a candidate whose files are unknown (none) never rides")
 ; (:m :ref COND-OWNS-DOC-SERIALISES :do "files two branches of one train may both change: a package doc.asn (rows merge by the row driver, trn/rowDriverArgs) and the generated asl-know cards and missing.asn (the train's derived step rewrites them on the merged tree); they never keep a unit out of a batch, every other shared file still does")
 fn mergeShared? f: String -> Bool
-  (or (stringStartsWith? f (cardsDir))
-      (or (= f (missingFile))
-          (let [(r (pkgRootOf (dirOf f)))] (and (not (stringEmpty? r)) (= f (str r "/doc.asn"))))))
+  (st/sharedPath? f)
 
 fn batchPick k: Int64 leaderFiles: (List String) cands: (List (Pair String (Option (List String)))) -> (List String)
   (pairFirst (fold (fn [(acc (Pair (List String) (List String))) (cd (Pair String (Option (List String))))] -> (Pair (List String) (List String))
@@ -4759,10 +4757,10 @@ fn ownsPackages owns: (List String) -> (List String)
         (list) owns)
 
 fn cardsDir -> String
-  "asl/packages/asl-know/cards/"
+  (st/cardsDir)
 
 fn missingFile -> String
-  "asl/packages/asl-know/missing.asn"
+  (st/missingFile)
 
 ; (:m :ref COND-OWNS-DOC :do "the card of one package is the file the writer may touch (named by the last segment of the package root); the generator's index files and missing.asn are the conductor's own commit")
 fn cardOf root: String -> String

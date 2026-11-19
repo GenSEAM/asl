@@ -1,5 +1,5 @@
 (module asl-tools/coord/store
-  :x [Task Lease Req q qList rowFields textField intField opt intOpt defaultDir! clashPath unitsDir leasesDir unitPath leasePath renderUnit renderLease parseUnit parseLease
+  :x [Task Lease Req q qList rowFields textField intField opt intOpt defaultDir! clashPath sharedPath? cardsDir missingFile unitsDir leasesDir unitPath leasePath renderUnit renderLease parseUnit parseLease
       live? fenced? ownsClash readUnits! readLeases! put! claim! claimNext! heartbeat! release! commit! list! apply! main]
   :i [(asl-syntax/asl/asn :a asn) (asl-coord/claims :a cl)])
 
@@ -158,12 +158,27 @@ fn leaseOf leases: (List Lease) id: String -> (Option Lease)
 fn unitOf units: (List Task) id: String -> (Option Task)
   (listFind (fn [(u Task)] -> Bool (= u.id id)) units)
 
-fn ownsHit mine: (List String) theirs: (List String) -> String
-  (match (listFind (fn [(p String)] -> Bool (listAny? (fn [(o String)] -> Bool (cl/pathsOverlap? p o)) theirs)) mine)
-    ((some p) p)
-    ((none) ""))
+fn cardsDir -> String
+  "asl/packages/asl-know/cards/"
 
-; (:m :ref FK-STORE :do "the asl-mesh coord areClaimsFullyDisjoint rule (write-write, write-read, read-write) over path prefixes: u's :owns against a live lease's :owns and :reads, and u's :reads against its :owns; the first hit path, empty when disjoint")
+fn missingFile -> String
+  "asl/packages/asl-know/missing.asn"
+
+; (:m :ref COND-DOC-CLAIM-SHARED :do "the one rule for a path several units write at once: a package contract asl/packages/X/doc.asn (rows merge by the row driver), anything under the asl-know cards dir and missing.asn (the train regenerates them on the merged tree). A lease is never exclusive over such a path and a train batch never splits on it (conductor.asl mergeShared? is this predicate); asl/doc/tools.asn, a doc.asn deeper in a package and every other path stay exclusive")
+fn sharedPath? f: String -> Bool
+  (or (stringStartsWith? f (cardsDir))
+      (or (= f (missingFile))
+          (let [(name (optionOr (listGet (stringSplit f "/") 2) ""))]
+            (and (not (stringEmpty? name)) (= f (str "asl/packages/" name "/doc.asn"))))))
+
+; (:m :ref COND-DOC-CLAIM-SHARED :do "the first of mine overlapping one of theirs, shared paths left out on both sides: a doc.asn the claimant's row declares, one the conductor added, and one an old lease or an old stored row still lists all count for nothing, so 110 of 202 node rows stored with the doc.asn and 47 of 88 ledger rows declaring it no longer refuse each other")
+fn ownsHit mine: (List String) theirs: (List String) -> String
+  (let [(held (filter (fn [(o String)] -> Bool (not (sharedPath? o))) theirs))]
+    (match (listFind (fn [(p String)] -> Bool (and (not (sharedPath? p)) (listAny? (fn [(o String)] -> Bool (cl/pathsOverlap? p o)) held))) mine)
+      ((some p) p)
+      ((none) "")))
+
+; (:m :ref FK-STORE :do "the asl-mesh coord areClaimsFullyDisjoint rule (write-write, write-read, read-write) over path prefixes: u's :owns against a live lease's :owns and :reads, and u's :reads against its :owns; the first hit path, empty when disjoint; shared paths (sharedPath?) never hit")
 fn clashPath u: Task l: Lease -> String
   (let [(ww (ownsHit u.owns l.owns)) (wr (ownsHit u.owns l.reads)) (rw (ownsHit u.reads l.owns))]
     (cond ((not (stringEmpty? ww)) ww) ((not (stringEmpty? wr)) wr) (else rw)))
