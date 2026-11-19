@@ -152,7 +152,7 @@ fn ! runTests -> Bool
                     (pair (sp/newPool (str temp "/none.sock") 8 64 60000 (str temp "/spill")) (list)) manyRoots))
         (manyOut (pump! (pairFirst manyPool) (pairSecond manyPool) (+ (nowMs!) 300000)))
         (manyExits (map (fn [(r String)] -> Int64 (lp/leonExit (pairSecond manyOut) (stringReplace r "/" "_"))) manyRoots))
-        (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 5000)))]
+        (removed (ok? (fr/shellOut (str "/bin/rm -rf " temp) 60000)))]
     (do
       (assert (and editPrep retryPrep gonePrep routedPrep manyPrep) "fixture roots prepared")
       (assert (and (= editA.exit 0) (= editA.exit editB.exit) (not (stringEmpty? editA.journal))) (str "edit: both end ok " (stringFromInt64 editA.exit) " " (stringFromInt64 editB.exit)))

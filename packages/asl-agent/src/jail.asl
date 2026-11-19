@@ -598,15 +598,18 @@ fn ! bwrapArgs j: Jail -> (List String)
         seal (if (or (listEmpty? hide) (listContains? j.writes j.realHome)) (list) (list "--remount-ro" j.realHome))
         resolve (if j.net (list "--ro-bind-try" "/run/systemd/resolve" "/run/systemd/resolve") (list))
         dotGit (str j.root "/.git")
-        git (if (or (dir? dotGit) (file? dotGit)) (list "--ro-bind" dotGit dotGit) (list))]
+        git (if (or (dir? dotGit) (file? dotGit)) (list "--ro-bind" dotGit dotGit) (list))
+        parentReads (filter (fn [r] (and (not (stringEmpty? j.realHome)) (and (!= r j.realHome) (under? j.realHome r)))) j.reads)
+        innerReads (filter (fn [r] (not (listContains? parentReads r))) j.reads)]
     (listAppend (list j.tool "--die-with-parent" "--unshare-pid" "--ro-bind" "/" "/" "--dev" "/dev" "--proc" "/proc" "--tmpfs" "/tmp" "--tmpfs" "/run")
       (listAppend resolve
-        (listAppend hide
-          (listAppend (flagPairs "--ro-bind" j.reads)
-            (listAppend (flagPairs "--bind" j.writes)
-              (listAppend git
-                (listAppend seal
-                  (listAppend (if j.net (list) (list "--unshare-net")) (list "--chdir" j.root "--"))))))))))
+        (listAppend (flagPairs "--ro-bind" parentReads)
+          (listAppend hide
+            (listAppend (flagPairs "--ro-bind" innerReads)
+              (listAppend (flagPairs "--bind" j.writes)
+                (listAppend git
+                  (listAppend seal
+                    (listAppend (if j.net (list) (list "--unshare-net")) (list "--chdir" j.root "--")))))))))))
 
 ; (:m :ref FABLE-BLIND-03 :do "what runs in place of a refused child: one line naming the refusal and exit 126, so every caller of jailWrap! fails closed whether or not it reads the mode")
 fn absentNote j: Jail -> String

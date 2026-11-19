@@ -93,7 +93,7 @@ fn budgetOpen left: (Option Int64) -> Bool
 fn ! decide! book: (List (Pair String Live)) id: String live: Live ask: m/LiveAsk raw: pv/Turn pause: Int64 -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(t (match raw.reply ((ok (some text)) (if (rt/junkReply? text) (rt/junkTurn raw) raw)) (_ raw)))
         (sess live.sess)
-        (slept (if (> pause 0) (sess.env.sleep pause) true))]
+        (slept (if (> pause 0) ((m/providerWaitSleep! sess.path live.wrapped.run.state.turn sess.env.sleep) pause) true))]
     (match t.reply
       ((ok _) (settled! book id live ask t))
       ((err error)
@@ -162,8 +162,9 @@ fn ! callAsk! book: (List (Pair String Live)) id: String live: Live headed: rl/P
     (match (pv/nextTurnAsk! (m/attractorProvider prov ask.prefill wall) ask.sysA ask.user)
       ((pv/askDone t) (decide! book id next ask t pause))
       ((pv/askHub p call)
-        (pair (bookPut book id (with next :provider p))
-              (sp/Turn :state id :request (some call.body) :exec none :result none :headers call.headers :holdMs (* 1000 pause))))))
+        (let [(_ (if (> pause 0) ((m/providerWaitSleep! sess.path state.turn (fn [_] true)) pause) true))]
+          (pair (bookPut book id (with next :provider p))
+                (sp/Turn :state id :request (some call.body) :exec none :result none :headers call.headers :holdMs (* 1000 pause)))))))
 
 fn ! endRun! book: (List (Pair String Live)) id: String live: Live finished: rl/ProviderRun -> (Pair (List (Pair String Live)) sp/Turn)
   (let [(res (m/liveResult live.sess (rl/loopFinish! live.sess.env finished)))]
