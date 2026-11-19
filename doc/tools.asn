@@ -1172,7 +1172,7 @@
 (:doc :symbol "tools/fleet/cache.asl#keyWithToolchain" :text "cache key over closure hash, CLI hash and all four Toolchain fields")
 (:doc :symbol "tools/fleet/cache.asl#exportVerdict!" :text "write a verdict for another node under exportDir/key with its Toolchain header")
 (:doc :symbol "tools/fleet/cache.asl#importInto!" :text "copy exported verdicts whose header equals the given Toolchain into a cache root, returns the count; foreign ones are skipped")
-(:doc :symbol "tools/fleet/cache.asl#memoToolchain!" :text "read the Toolchain memo for a clang path from dir while its stamp matches, else call probe and overwrite that one file")
+(:doc :symbol "tools/fleet/cache.asl#memoToolchain!" :text "read the Toolchain memo for a clang path from dir while its stamp, the size and mtimeNs of clang and of each witness file, matches, else call probe and overwrite that one file")
 (:doc :symbol "tools/fleet/cache.asl#probeToolchainOnce!" :text "probeToolchain! memoized per process; what cacheKey uses")
 (:doc :symbol "tools/fleet/cache.asl#clangPath!" :text "first clang on PATH found without spawning, absent when none")
 (:doc :symbol "tools/fleet/cache.asl#clangStamp!" :text "size and mtimeNs of a clang path by fileStat, absent when missing")
