@@ -125,6 +125,9 @@ fn ruleAt rule: Int64 s: String bs: Bytes i: Int64 n: Int64 -> (Pair Int64 Strin
                         a (+ (+ i (stringLength k)) 1)
                         e (digitsEnd bs a n)]
                     (if (and (not (stringEmpty? k)) (> e a)) (pair e (str k " <ms>")) none)))
+      ((= rule 12) (let [a (+ i 27)
+                         e (spacesEnd bs a n)]
+                     (if (and (litAt bs i n "Continuous Autonomous Audit") (> e a) (litAt bs e n "│")) (pair (+ e 3) "Continuous Autonomous Audit   │") none)))
       (else (let [e (digitsEnd bs (+ i 2) n)
                   sp (spacesEnd bs e n)]
               (if (and (litAt bs i n "| ") (> e (+ i 2)) (litAt bs sp n "ms |")) (pair (+ sp 4) "| <lat>ms |") none)))))
@@ -144,8 +147,9 @@ fn ruleLoop rule: Int64 s: String bs: Bytes i: Int64 start: Int64 n: Int64 acc: 
         (ruleLoop rule s bs (+ i 1) start n acc)
         (ruleLoop rule s bs (pairFirst m) (pairFirst m) n (cons (pairSecond m) (cons (sub s start i) acc))))))
 
+; (:m :ref MAIN-RED-SWEEP :do "rule 12: the daemon row is padded to the box width after the pid is printed, so a pid of six or more digits (Linux pid_max 4194304; the fixture was recorded with five) shortens the padding that closes the row; that padding is masked to the recorded three spaces, as rule 8 masks the padding inside the pid cell")
 fn normalize text: String root: String tmp: String -> String
-  (fold (fn [acc r] (applyRule r acc)) (replaceAll (replaceAll text root "<ROOT>") tmp "<TMP>") (range 0 12))
+  (fold (fn [acc r] (applyRule r acc)) (replaceAll (replaceAll text root "<ROOT>") tmp "<TMP>") (range 0 13))
 
 fn dirOf p: String -> String
   (let [parts (stringSplit p "/")]
