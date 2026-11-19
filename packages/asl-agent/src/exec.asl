@@ -861,7 +861,7 @@ fn withCanonical op: (List (Pair String c/KvVal)) rec: (List (Pair String Val)) 
   (let [canon (opStr op "aliased" "")]
     (if (stringEmpty? canon) rec (recSet rec "canonical" (vStr canon))))
 
-; (:m :ref AGENT-AUDIT-FIX :do "a write, edit or txn whose :raw block was taken from before its form (reply.asl singleBlockText tags it :rawPlace adjacent) says so in its receipt, ok or refused, so the model can see which text was bound")
+; (:m :ref AGENT-AUDIT-FIX :do "a write, edit or txn whose :raw block was taken from before its form (reply.asl singleBlockText tags it :rawPlace adjacent) says so in its receipt, ok or refused, so the model can see which text was bound; reply.asl puts a step's tag first among its keys, and opStr reads the first, so a :rawPlace the model wrote itself does not hide it (grader L2)")
 fn rawPlaceAdjacent? op: (List (Pair String c/KvVal)) opName: String -> Bool
   (or (= (opStr op "rawPlace" "") "adjacent")
     (and (= opName "txn") (stringEndsWith? (stringTrim (opStr op "form" "")) " :rawPlace \"adjacent\")")))

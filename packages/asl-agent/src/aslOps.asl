@@ -824,10 +824,18 @@ fn inRootRel? p: String -> Bool
 fn ! plainFile! path: String -> Bool
   (match (fileStat path) ((ok st) st.isFile) ((err _) false))
 
+; (:m :ref AGENT-AUDIT-FIX :do "grader 2026-11-19 L1: only an owns entry that names the asked path itself, no glob and no directory, marks it as a file the task creates; a path merely covered by an owned directory, glob or ** keeps the neighbour repair, else a typo beside an existing file was answered as a new file to write")
+fn ownedExact? asked: String owns: (List String) -> Bool
+  (listAny? (fn [o]
+    (let [e (stringTrim o)]
+      (and (not (stringEmpty? e))
+        (and (not (listAny? (fn [g] (stringContains? e g)) (list "*" "?" "[" "{")))
+          (and (not (stringEndsWith? e "/")) (= (t/normPath e) (t/normPath asked))))))) owns)
+
 ; (:m :ref K9-MISSING-ARG :do "a read of a path that does not exist and is not owned is read at the one existing file within two edits of it, among the owned files and the files of its directory; none or several such paths leave the read as sent")
-; (:m :ref AGENT-AUDIT-FIX :do "audit 2026-11-19: an owned path is never repaired (a file the task creates was read at its neighbour), a path or candidate that leaves the root is neither probed nor offered, and a directory is no candidate")
+; (:m :ref AGENT-AUDIT-FIX :do "audit 2026-11-19: a path an owns entry names exactly is never repaired (a file the task creates was read at its neighbour), a path or candidate that leaves the root is neither probed nor offered, and a directory is no candidate")
 fn ! nearestPath! root: String asked: String owns: (List String) -> (Option String)
-  (if (or (not (inRootRel? asked)) (or (c/checkOwns asked owns root) (>= (resultOr (fileSize (str root "/" asked)) -1) 0)))
+  (if (or (not (inRootRel? asked)) (or (ownedExact? asked owns) (>= (resultOr (fileSize (str root "/" asked)) -1) 0)))
     none
     (let [dir (parentDir asked)
           names (resultOr (dirList (if (stringEmpty? dir) root (str root "/" dir))) (list))

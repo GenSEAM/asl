@@ -1387,6 +1387,15 @@ fn tailGapBad? reply: String outer: (List Fence) -> Bool
           badLine (listAny? (fn [l] (let [t (stringTrim l)] (and (not (stringEmpty? t)) (not (stringEndsWith? t ":"))))) (stringSplit gap "\n"))]
       (or badLine (tailGapBad? reply (c/restOf outer)))))
 
+; (:m :ref AGENT-AUDIT-FIX :do "the model's own :rawPlace key and its scalar value, cut from a form whose tag has to go last because its head is glued to the op: nothing is inserted into a glued head, the form stays as toolCalls gluedStep reads it, and the first :rawPlace left is the harness tag (grader M1)")
+fn ownPlaceRepls toks: (List FormTok) -> (List Repl)
+  (if (or (listEmpty? toks) (listEmpty? (c/restOf toks)))
+    (list)
+    (let [t (c/firstOf toks) nx (c/firstOf (c/restOf toks))]
+      (if (and (= (tokT t) ":rawPlace") (and (!= (tokT nx) "(") (!= (tokT nx) ")")))
+        (match t ((formTok _ a _) (match nx ((formTok _ _ b) (cons (repl a b "") (ownPlaceRepls (c/restOf (c/restOf toks))))))))
+        (ownPlaceRepls (c/restOf toks)))))
+
 fn stepClose bs: Bytes n: Int64 fs: Int64 fe: Int64 txn: Bool fl: (List Fence) s: RawStep -> Int64
   (match s ((rawStep _ _ a _ _)
     (if txn (- (pairFirst (fencedClose bs n (+ fs (+ a 1)) 1 false false fl)) fs) (- fe fs))))
@@ -1422,8 +1431,14 @@ fn brForm reply: String bs: Bytes n: Int64 fl: (List Fence) fences: (List (Pair 
                     innerReps (map (fn [b] (repl (- (fStart (pairSecond (pairSecond b))) fs) (- (fEnd (pairSecond (pairSecond b))) fs) "")) inBound)
                     fenceReps (map (fn [b] (repl (fStart (pairSecond (pairSecond b))) (fEnd (pairSecond (pairSecond b))) "")) outBound)
                     names (map rfName (listFlatMap rsRaws rsteps))
-                    bodyText (applyTok ftext (listAppend tokReps innerReps))
-                    tagged (insertBeforeLast bodyText (str " :rawFields \"" (joinWith names " ") "\"" mark))]
+                    headEnd (if (> (listLength toks) 1) (match (c/firstOf (c/restOf toks)) ((formTok _ _ he) he)) 0)
+                    plainHead (and (> headEnd 0) (and (= (tokT (c/firstOf (c/restOf toks))) ":step") (member (sl ftext headEnd (+ headEnd 1)) (list " " "\n" "\t"))))
+                    atHead (and (not (stringEmpty? mark)) plainHead)
+                    headReps (cond (atHead (list (repl headEnd headEnd mark)))
+                                   ((or txn (stringEmpty? mark)) (list))
+                                   (else (ownPlaceRepls toks)))
+                    bodyText (applyTok ftext (listAppend headReps (listAppend tokReps innerReps)))
+                    tagged (insertBeforeLast bodyText (str " :rawFields \"" (joinWith names " ") "\"" (if atHead "" mark)))]
                 (brState (listAppend consumed (map (fn [b] (pairFirst (pairSecond b))) bound)) (+ count (listLength bound)) bad steps2
                   (cons (repl fs fe tagged) (fold (fn [acc r] (cons r acc)) repls fenceReps))))))))))))
 
@@ -1554,7 +1569,7 @@ fn bindRawBlocks reply: String -> RawBind
 fn bindStrict text: String -> RawBind
   (bindMarked text "")
 
-; (:m :ref AGENT-AUDIT-FIX :do "mark is appended to the tag of every form that binds a block: empty for a regular bind, the :rawPlace tag when the one block was taken from before its form")
+; (:m :ref AGENT-AUDIT-FIX :do "mark goes into every form that binds a block: empty for a regular bind, the :rawPlace tag when the one block was taken from before its form. A step with a plain head, (:step and a blank, gets it right after the head, where it is the first key and a :rawPlace the model wrote itself cannot shadow it (the first key wins when the step is read, grader L2). A txn, whose head is never (:step, gets it as its last key only, which exec reads off the end of the form text. Any other head, a glued (:step:op\"write\" among them, gets it as its last key too and loses its own :rawPlace key (ownPlaceRepls): a tag put inside a glued head lost the op (grader M1)")
 fn bindMarked text: String mark: String -> RawBind
   (if (= text "")
     (RawBind :text text :count 0 :missing (list))

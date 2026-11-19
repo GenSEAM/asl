@@ -28,6 +28,10 @@ fn ! runTests -> Bool
         outName (str "../" base "-out")
         outside (readRec root (str "(:step :op \"read\" :file \"" outName "/real.asl\")") owns)
         ownedOut (readRec root (str "(:step :op \"read\" :file \".a/" base "-f\")") (list (str "../" base "-f")))
+        viaDir (readRec root "(:step :op \"read\" :file \"src/rael.asl\")" (list "src/"))
+        viaGlob (readRec root "(:step :op \"read\" :file \"src/rael.asl\")" (list "src/*.asl"))
+        viaAll (readRec root "(:step :op \"read\" :file \"src/rael.asl\")" (list "**"))
+        globNew (readRec root "(:step :op \"read\" :file \"src/zzzzzz.asl\")" (list "src/*.asl"))
         cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root "-out"))) (ok? (pathRemove (str root "-f")))))]
     (do
       (assert made "the fixture root is made")
@@ -41,5 +45,9 @@ fn ! runTests -> Bool
       (assert (and (not (stringContains? dirNear "(repaired ")) (stringContains? dirNear "(file \"lib/sub2\")")) (str "a directory is no candidate: " dirNear))
       (assert (and (not (stringContains? outside "(repaired ")) (not (stringContains? outside "reel.asl"))) (str "a path that leaves the root is not repaired from a directory outside it: " outside))
       (assert (and (not (stringContains? ownedOut "(repaired ")) (not (stringContains? ownedOut (str "../" base "-f")))) (str "an owned entry that leaves the root is no candidate: " ownedOut))
+      (assert (and (stringContains? viaDir "(repaired ") (stringContains? viaDir "(file \"src/real.asl\")")) (str "a typo under an owned directory is still read at its one neighbour: " viaDir))
+      (assert (and (stringContains? viaGlob "(repaired ") (stringContains? viaGlob "(file \"src/real.asl\")")) (str "a typo covered by an owned glob is still read at its one neighbour: " viaGlob))
+      (assert (and (stringContains? viaAll "(repaired ") (stringContains? viaAll "(file \"src/real.asl\")")) (str "a typo under owns ** is still read at its one neighbour: " viaAll))
+      (assert (and (stringContains? globNew "(new true)") (not (stringContains? globNew "(repaired "))) (str "a glob-covered path with no neighbour is a new file: " globNew))
       (assert cleaned "the fixture roots are removed")
       true))
