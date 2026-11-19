@@ -653,7 +653,6 @@
 (:gap "asl/web/site/app/layout.asl#sectionHead")
 (:gap "asl/web/site/app/layout.asl#markNode")
 (:gap "asl/web/site/app/layout.asl#copyButton")
-(:gap "asl/web/site/app/mascot.asl#chameleon")
 (:gap "asl/web/site/app/mascot.asl#iconSvg")
 (:gap "asl/web/site/app/msg.asl#Msg")
 (:gap "asl/web/site/app/msg.asl#msgCode")

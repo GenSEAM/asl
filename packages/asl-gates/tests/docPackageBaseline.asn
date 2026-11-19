@@ -6615,7 +6615,6 @@
 (:gap "asl/packages/asl-parquet/src/writer.asl#i64Column")
 (:gap "asl/packages/asl-parquet/src/writer.asl#f64Column")
 (:gap "asl/packages/asl-parquet/src/writer.asl#i8Column")
-(:gap "asl/packages/asl-parquet/src/writer.asl#parquetWrite")
 (:gap "asl/packages/asl-parquet/tests/footerStatsTest.asl#runTests")
 (:gap "asl/packages/asl-parquet/tests/pqLoadUAtTest.asl#runTests")
 (:gap "asl/packages/asl-parquet/tests/readerNativeTest.asl#runTests")

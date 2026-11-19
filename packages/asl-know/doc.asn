@@ -82,3 +82,8 @@
 (:doc :symbol "asl/packages/asl-know/src/know.asl#genReceipt" :text "The gen receipt text: file count, then :orphans and :other only when non-empty")
 (:doc :symbol "asl/packages/asl-know/src/know.asl#genLineOf" :text "The gen receipt for given groups and cards, the orphan and other wiring a test drives with synthetic rows")
 (:doc :symbol "asl/packages/asl-know/src/know.asl#genLine!" :text "The gen receipt of a tree: reads groups.asn and the cards, then genLineOf")
+(:doc :symbol "asl/packages/asl-know/tests/camelIdCoverTest.asl#runTests" :text "KNOW-CAMEL-ID cover: camelId splits a card id at slashes and dashes, drops empty parts, keeps the first word lower and upper-firsts the rest")
+(:doc :symbol "asl/packages/asl-know/tests/examplesAslParquetCoverTest.asl#runTests" :text "asl-parquet example cover: rowCount! reports the rows of the 10k and big fixtures and of written zero-row and one-row files, and -1 for a zero-length, header-only, truncated-footer, bad-magic or missing file")
+(:doc :symbol "asl/packages/asl-know/tests/returnTypeCoverTest.asl#runTests" :text "returnType cover: the trimmed text after the first arrow of a signature, the empty string when it has no arrow")
+(:doc :symbol "asl/packages/asl-know/tests/scanDotFileTest.asl#runTests" :text "TRAIN-DERIVED-REGEN gate: sourceFiles! lists the plain source only, not a leaked check temp dot file or a file in a dot directory beside it")
+(:doc :symbol "asl/packages/asl-know/tests/scanEnumTest.asl#runTests" :text "enum scan gate: constructors on the enum head line and on following lines are all yielded once with their enum as owner, and a field type in parentheses is not a constructor")

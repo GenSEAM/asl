@@ -63,3 +63,4 @@
 (:doc :symbol "asl/packages/asl-text/src/pad.asl#center" :text "Center s in width code points, extra fill on the right.")
 (:doc :symbol "asl/packages/asl-text/src/pad.asl#truncate" :text "Cut s to width code points including marker; marker longer than width returns the marker's prefix.")
 (:doc :symbol "asl/packages/asl-text/tests/stringClipTest.asl#runTests" :text "stringClipUtf8 bounds and ASCII cuts, and every cut inside a 2-, 3- and 4-byte character moving back to its start")
+(:doc :symbol "asl/packages/asl-text/tests/padTest.asl#runTests" :text "pad gate: padStart on ascii and cyrillic text, padEnd, center, and truncate with a marker, an empty marker, a width above the length and a marker wider than the width")

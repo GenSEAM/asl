@@ -637,6 +637,7 @@
 (:doc :symbol "asl/packages/asl-forms/tests/repairTest.asl#" :text "Tests for the unique-candidate ASL and ASN delimiter repair")
 (:doc :symbol "asl/packages/asl-forms/tests/healTest.asl#" :text "One fixture per heal rule: red before, the mutant pipeline without the rule does not heal it, healed exactly after, idempotent, and a checking near-miss stays byte-identical")
 (:doc :symbol "asl/packages/asl-forms/tests/healCorpusTest.asl#" :text "HEAL corpus gate over real SYN-PROBES generations: passing programs byte-identical, failing ones never worse, healed count at or above the recorded floor")
+(:doc :symbol "asl/packages/asl-forms/tests/healCorpusTest.asl#cleanSourceDirs" :text "the directories whose tracked sources heal must leave unchanged: asl/packages/asl-agent/src")
 (:doc :symbol "asl/packages/asl-forms/tests/repairTest.asl#checkHostValid!" :text "run asl-host check on file content")
 (:doc :symbol "asl/packages/asl-forms/tests/repairTest.asl#testCleanInputs" :text "verify clean inputs produce clean receipts")
 (:doc :symbol "asl/packages/asl-forms/tests/repairTest.asl#testAsnUnclosedRepairs" :text "a lone opener has one repair; an unclosed form with several closing positions is left")
@@ -813,3 +814,4 @@
 (:doc :symbol "asl/packages/asl-forms/src/heal.asl#lintOnly?" :text "true when there are diagnostics and every one is the rule-13 lint")
 (:doc :symbol "asl/packages/asl-forms/src/kernel.asl#checkoutTop!" :text "the nearest directory at or above a path that holds a .git entry, an empty string when there is none")
 (:doc :symbol "asl/packages/asl-forms/src/kernel.asl#envWorkspaceRoot!" :text "the workspace root named by the inherited ASL_ROOT, empty when it is unset or must yield to a linked worktree the cwd is inside")
+(:doc :symbol "asl/packages/asl-forms/tests/editScopeTest.asl#runTests" :text "ASL-EDIT-SCOPE-ESCAPES gate on a laid-out repository with a linked worktree: an edit run from the worktree or a subdirectory of it lands in the worktree file and leaves the main checkout byte-equal, an inherited root is kept elsewhere, escapes round-trip, and a note write stays in the worktree")

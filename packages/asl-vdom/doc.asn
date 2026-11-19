@@ -138,3 +138,5 @@
 (:doc :symbol "asl/packages/asl-vdom/tests/themeTest.asl#" :text "Unit tests and D77 negative controls for pure ASL design tokens and theme substrate")
 (:doc :symbol "asl/packages/asl-vdom/tests/uiTest.asl#" :text "Unit tests and D77 dual-polarity negative controls for ASL cross-platform UI component library")
 (:doc :symbol "asl/packages/asl-vdom/tests/vdomTest.asl#" :text "Unit tests for S-expression Virtual DOM and Dual Perception in ASL")
+(:doc :symbol "asl/packages/asl-vdom/tests/html1CoverTest.asl#runTests" :text "vdom html cover 1: makeProps, propsToAttrs, the attr helpers, withAttr, withClass and the plain element builders from frm and spanPlain to labelPlain on normal, none and boundary input")
+(:doc :symbol "asl/packages/asl-vdom/tests/html2CoverTest.asl#runTests" :text "vdom html cover 2: the short plain builders (dPlain, sPlain, bPlain, btnPlain, ftrPlain, frmPlain, artPlain, tblPlain, lblPlain, elPlain) with and without children, escapeHtml, void elements and attrsToHtml")

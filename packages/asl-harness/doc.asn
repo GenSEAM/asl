@@ -85,3 +85,5 @@
 (:doc :symbol "asl/packages/asl-harness/src/launch.asl#writeStart!" :text "before exec, (:launchStart :client :startedAt :cwd :promptDigest) into <runDir>/start.asn for the sweep")
 (:doc :symbol "asl/packages/asl-harness/tests/launchTest.asl#checkSweep" :text "interactive stub exec leaves start.asn, the next launch writes run.asn for it; live pid and already-collected dirs untouched")
 (:doc :symbol "asl/packages/asl-harness/src/launch.asl#absentPaths" :text "ids of the harness5 path literals whose file does not exist under the project root; their :from and :lit pairs are dropped from an ASN render so a render outside asex names no asex files")
+(:doc :symbol "asl/packages/asl-harness/tests/pathJoinCoverTest.asl#runTests" :text "pathJoin cover: a plain join, a base ending in a slash, and an absolute second part that replaces the base")
+(:doc :symbol "asl/packages/asl-harness/tests/pyStrReprCoverTest.asl#runTests" :text "pyStrRepr cover: a plain string and a string holding an apostrophe")

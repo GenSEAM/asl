@@ -143,3 +143,4 @@
 (:doc :symbol "asl/packages/asl-stats/src/regress.asl#sandwich!" :text "c B M B covariance with the hc1 or cr1 small-sample factor")
 (:doc :symbol "asl/packages/asl-stats/src/regress.asl#halve!" :text "step halving: shrink the Newton step until the log-likelihood no longer falls, at most maxHalve times")
 (:doc :symbol "asl/packages/asl-stats/src/regress.asl#lgLoop!" :text "IRLS loop returning the converged or exhausted state, or the separation and singularity errors")
+(:doc :symbol "asl/packages/asl-stats/tests/regressTest.asl#runTests" :text "NUM-REGRESSION-MODELS gate against numpy and scipy reference constants: OLS coefficients, RSS, R2, classical, HC1 and clustered standard errors with t and p values, logit fits, their error cases, and robustness on scaled and near-singular designs")

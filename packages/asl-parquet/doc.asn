@@ -21,7 +21,9 @@
 (:doc :symbol "asl/packages/asl-parquet/src/merge.asl#parquetMergeSourceCount" :text "Number of sources in a merge.")
 (:doc :symbol "asl/packages/asl-parquet/src/merge.asl#parquetMergeWindowRows" :text "Largest window any source holds now in rows; never above chunkRows, the memory bound by construction.")
 (:doc :symbol "asl/packages/asl-parquet/tests/roundTripTest.asl#" :text "Writer and reader round trips per type: empty file, one row, several row groups with pages, metadata, row ranges at page and group boundaries, truncated and corrupted files as errors.")
+(:doc :symbol "asl/packages/asl-parquet/tests/roundTripTest.asl#runTests" :text "parquet round-trip gate on files written into a temp dir it creates and removes: empty, one-row, multi-group and single-page files read back their ranges, and truncated files, a delta overflow, an understated header and the cursor are checked")
 (:doc :symbol "asl/packages/asl-parquet/tests/mergeTest.asl#" :text "Merge of three files with interleaved and equal timestamps and one empty source, window bound, take, and error cases.")
+(:doc :symbol "asl/packages/asl-parquet/tests/mergeTest.asl#runTests" :text "PQ-MERGE gate on fixtures in a temp dir it creates and removes: the merged rows follow the order of sorted (ts, source, row) keys with every column following its row, the window never exceeds chunkRows, take, error and decode cases hold")
 (:doc :symbol "asl/packages/asl-parquet/src/merge.asl#" :text "Bounded-memory k-way merge reader over several parquet files ordered by an Int64 timestamp column.")
 
 (:doc :symbol "asl/packages/asl-parquet/src/reader.asl#PqCursor" :text "Forward cursor over the data pages of one column chunk: keeps the byte position of the next page, the decoded dictionary and the last decoded page; opening reads every page header once and requires the page value counts to sum to the group row count.")

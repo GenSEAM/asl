@@ -45,3 +45,5 @@
 (:doc :symbol "asl/packages/asl-utils/src/kit.asl#sh!" :text "Run argv (no shell) through fleet/run runGuarded in the working directory with a 120 s timeout and at most 64 descendants.")
 (:doc :symbol "asl/packages/asl-utils/src/kit.asl#shFor!" :text "sh! with a timeout in seconds.")
 (:doc :symbol "asl/packages/asl-utils/src/kit.asl#quote" :text "ASN string literal of a text, as receipts print paths.")
+(:doc :symbol "asl/packages/asl-utils/tests/exitOfStatusCoverTest.asl#runTests" :text "exitOfStatus cover: a signalled status maps to 128 plus the signal, a plain exit status passes through and zero stays zero")
+(:doc :symbol "asl/packages/asl-utils/tests/parseTimeoutCoverTest.asl#runTests" :text "parseTimeout cover: a decimal seconds text is converted to milliseconds, and a negative or malformed one is rejected")

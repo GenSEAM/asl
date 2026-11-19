@@ -9,3 +9,4 @@
 (:doc :symbol "asl/packages/asl-csv/src/csv.asl#CsvRowScan.fields" :text "Parsed row fields")
 (:doc :symbol "asl/packages/asl-csv/src/csv.asl#CsvRowScan.next" :text "Next byte after row")
 (:doc :symbol "asl/packages/asl-csv/src/csv.asl#csvFloatArray" :text "rows are a linked list, so one head/tail walk builds singleton arrays that one concat joins; indexed listGet per row was quadratic")
+(:doc :symbol "asl/packages/asl-csv/tests/csvCoverTest.asl#runTests" :text "csv cover: csvParseRows and csvParseColumns on normal, empty, zero, maximum, quoted, bad-quote and bad-width input, csvNumRows, and the F64, I64 and I8 column accessors on values, empty cells and unparseable cells")
