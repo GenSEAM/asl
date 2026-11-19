@@ -200,10 +200,14 @@ fn reachAdj! edges: (List ReachEdge) -> (Map Int64 (List Int64))
 fn reachEntryName? name: String -> Bool
   (listContains? (list "main" "RunTests" "runTests") name)
 
+; (:m :ref MAIN-RED-SWEEP :do "a root id is taken once by a mark per symbol id, in the same first-seen order: the list membership test it replaces walked the taken roots for every quoted name of the repo, about 20 s of a repo run")
 fn reachRoots! fns: (List ReachFn) names: (List String) tab: tb/Strtab prod: Bool -> (List Int64)
-  (let [(named (fold (fn [(acc (List Int64)) (name String)] -> (List Int64)
+  (let [(taken (tb/ivNew (tb/strtabCount tab)))
+        (fresh (fn [(id Int64)] -> Bool
+                 (if (and (>= id 0) (= (tb/ivGet taken id) 0)) (do (tb/ivAdd! taken id 1) true) false)))
+        (named (fold (fn [(acc (List Int64)) (name String)] -> (List Int64)
                        (let [(id (reachId tab name))]
-                         (if (and prod (and (>= id 0) (not (listContains? acc id)))) (cons id acc) acc)))
+                         (if (and prod (fresh id)) (cons id acc) acc)))
                      (list) names))]
     (fold (fn [(acc (List Int64)) (f ReachFn)] -> (List Int64)
             (let [(isProd (reachProdFile? f.file))
@@ -212,9 +216,10 @@ fn reachRoots! fns: (List ReachFn) names: (List String) tab: tb/Strtab prod: Boo
                            (and (not isProd)
                                 (or (reachEntryName? f.name) (stringStartsWith? f.name "test")))))
                   (id (reachId tab f.name))]
-              (if (and entry (and (>= id 0) (not (listContains? acc id)))) (cons id acc) acc)))
+              (if (and entry (fresh id)) (cons id acc) acc)))
           named fns))
 
+; (:m :ref MAIN-RED-SWEEP :do "successors go in front of the pending list: appending them behind it copied the whole pending list once per visited symbol, 2 of the 2.3 minutes of a repo run; the reached set does not depend on the visiting order")
 fn reachWalk! adj: (Map Int64 (List Int64)) todo: (List Int64) seen: Bytes -> Unit
   (match (listHead todo)
     ((none) ())
@@ -223,7 +228,7 @@ fn reachWalk! adj: (Map Int64 (List Int64)) todo: (List Int64) seen: Bytes -> Un
         (if (> (tb/ivGet seen id) 0)
           (reachWalk! adj rest seen)
           (do (tb/ivAdd! seen id 1)
-              (reachWalk! adj (listAppend rest (optionOr (mapGet adj id) (list))) seen))))))
+              (reachWalk! adj (listAppend (optionOr (mapGet adj id) (list)) rest) seen))))))
 
 fn reachFindings! defs: (List Def) tab: tb/Strtab prodSeen: Bytes testSeen: Bytes -> (List Def)
   (listReverse
