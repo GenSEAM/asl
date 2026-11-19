@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(aslHarness/tests/agentLoopRecorderKit :a rk) (aslAgent/main :a m) (aslAgent/core :a c) (aslAgent/tests/gitInitKit :a gk)])
 
-; (:m :ref LEONDELETE :do "a reply that deletes an owned file and then rewrites it (the delete+write idiom) in a write that is refused, once ERR_USE_RAW for large escaped content and since LEON-RAW-PROTOCOL a :raw field with no fenced block, and the delete used to have run already, leaving the pre-existing file deleted; a delete whose path a later write in the same reply targets is now superseded, so a refused write leaves the original file intact")
+; (:m :ref LEONDELETE :do "a reply that deletes an owned file and then rewrites it (the delete+write idiom) in a write that is refused, once ERR_USE_RAW for large escaped content and since LEON-RAW-PROTOCOL a :raw field with no fenced block, and the delete used to have run already, leaving the pre-existing file deleted; a delete whose path a later write in the same reply targets is now superseded, so a refused write leaves the original file intact; since 8b9f3b332 a reply whose :raw field has no block runs none of its steps, the (:done) beside it included, so the script closes the run with a (:done) of its own on the next turn")
 
 fn initRepo! root: String initial: String -> Bool
   (and (ok? (fileWrite (str root "/subject.txt") initial))
@@ -14,7 +14,7 @@ fn readText! path: String -> String
 fn driveReply! root: String reply: String -> m/MainResult
   (let [fixtureDir (str root "/tests/fixtures/agentLoop/mvp")
         _dir (dirCreate fixtureDir)
-        _fixture (fileWrite (str fixtureDir "/deleteThenRejectedWrite.asn") (rk/scriptFixtureTextFromReplies! "deleteThenRejectedWrite" (list reply)))
+        _fixture (fileWrite (str fixtureDir "/deleteThenRejectedWrite.asn") (rk/scriptFixtureTextFromReplies! "deleteThenRejectedWrite" (list reply "(:done)")))
         form (str "(:agent :task \"Rewrite subject.txt, then finish.\" :backend \"script/deleteThenRejectedWrite\" :root \""
                   (c/escapeAsn root) "\" :mode \"scout\" :owns (\"subject.txt\") :budget 3 :contextTokens 8000)")
         repoRoot (resultOr (realPath ".") ".")]

@@ -1218,8 +1218,9 @@ fn failedReceipts? receipts: String -> Bool
 fn notFoundStreakCap -> Int64
   2
 
+; (:m :ref AGENT-AUDIT-FIX :do "K9 (180426873) answers a read of an owned file that does not exist yet as ok with the write shape, no error code, so such turns counted as plain reads again and the run ended in readStreak (ownedMissingTest red since then); the read is known by its note and still extends the streak at most notFoundStreakCap turns")
 fn notFoundReceipts? receipts: String -> Bool
-  (or (stringContains? receipts "ERR_FILE_NOT_FOUND") (stringContains? receipts "ERR_SYMBOL_NOT_FOUND"))
+  (or (stringContains? receipts "ERR_FILE_NOT_FOUND") (or (stringContains? receipts "ERR_SYMBOL_NOT_FOUND") (stringContains? receipts (ao/ownedNewNote))))
 
 ; (:m :ref LEON-IDENTICAL-2 :do "node2 2026-11-03: 18 repeatFailure stops, 11 with a delimiter refusal the model resent byte-identical; on the turn before the cap the refusal text and the instruction to change the content are appended to what the model gets back")
 fn refusalOf receipts: String -> String

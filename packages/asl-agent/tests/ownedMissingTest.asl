@@ -32,7 +32,7 @@ fn replyCount journal: String -> Int64
 fn ! runTests -> Bool
   (let [run (recordedRun! "base")]
     (do
-      (assert (stringContains? run.journal "owned file missing: create it with one write") "a read of an owned file that does not exist says to create it")
+      (assert (stringContains? run.journal "owned file does not exist yet: the task creates it; write it whole with (:step :op") "a read of an owned file that does not exist says to create it")
       (assert (not (stringContains? run.journal ":signal :readStreak")) "not-found reads of owned files do not end the run with readStreak")
       (assert (>= (replyCount run.journal) 5) (str "the run goes past the readStreak limit of 4 turns, got " (stringFromInt64 (replyCount run.journal))))
       true))

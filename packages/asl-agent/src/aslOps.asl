@@ -2,7 +2,7 @@
   :x [RVal Bounded PumpEnd RunAslResult MemoEntry
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
-      nearestLines placeholderAssert? runBounded runAsl
+      nearestLines placeholderAssert? runBounded runAsl ownedNewNote
       memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor toolRootRows!]
   :i [(aslAgent/core :a c)
@@ -812,6 +812,10 @@ fn missingFileRec rid: String owns: (List String) -> (List (Pair String RVal))
         (pair "status" (rStr "rejected")) (pair "error" (rStr "ERR_MISSING_ARG")) (pair "message" (rStr "read needs :file")))
       (if (stringEmpty? first) (list) (list (pair "next" (rStr (str "(:step :op \"read\" :file \"" (c/escapeAsn first) "\")")))))))
 
+; (:m :ref AGENT-AUDIT-FIX :do "the opening words of the answer to a read of an owned file that does not exist yet; main.asl notFoundReceipts? knows such a read by them, since K9 made it an ok read with no ERR_FILE_NOT_FOUND")
+fn ownedNewNote -> String
+  "owned file does not exist yet"
+
 fn parentDir path: String -> String
   (let [parts (stringSplit path "/")]
     (if (< (listLength parts) 2) "" (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
@@ -1040,7 +1044,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               errVal (if (and (!= code 0) (not ownedNew)) (some (findReadError out "ERR_READ_FAILED")) (none))
               ownedMissing (and (!= code 0) (and (< (resultOr (fileSize fullPath) -1) 0) (c/checkOwns filePath owns root)))
               msgVal (cond
-                       (ownedMissing (some (str "owned file does not exist yet: the task creates it; write it whole with (:step :op \"write\" :file \"" (c/escapeAsn filePath) "\" :content :raw) and its text in a fenced block")))
+                       (ownedMissing (some (str (ownedNewNote) ": the task creates it; write it whole with (:step :op \"write\" :file \"" (c/escapeAsn filePath) "\" :content :raw) and its text in a fenced block")))
                        ((!= code 0) (some (findReadMsg out errText)))
                        (useOutline (some (if overBytes (oversizeBytesHint fileBytes outlineLimit) (oversizeWholeHint))))
                        ((some? widened)
