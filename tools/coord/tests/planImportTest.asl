@@ -158,12 +158,9 @@ fn ! testDocOwns -> Bool
         (u2 (unitOf store "D2"))
         (u3 (unitOf store "D3"))
         (_ (pathRemove root))]
-    (do (assert (= (pi/docPathFor "asl/packages/pkgA/src/a.asl") "asl/packages/pkgA/doc.asn") "docPathFor maps package src asl to doc.asn")
-        (assert (= (pi/docPathFor "asl/packages/pkgA/tests/aTest.asl") "") "docPathFor ignores package tests")
-        (assert (= (pi/docPathFor "tools/x.asl") "") "docPathFor ignores non-package paths")
-        (assert (= u1.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/src/b.asl" "asl/packages/pkgA/doc.asn")) (str "pkgA doc.asn appended once: " (stringJoin u1.owns ",")))
-        (assert (= u2.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/doc.asn")) (str "existing doc.asn is not duplicated: " (stringJoin u2.owns ",")))
-        (assert (= u3.owns (list "asl/packages/pkgB/src/c.asl")) (str "missing doc.asn is not appended: " (stringJoin u3.owns ",")))
+    (do (assert (= u1.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/src/b.asl")) (str "the row stores its declared owns, the existing package doc.asn is not appended: " (stringJoin u1.owns ",")))
+        (assert (= u2.owns (list "asl/packages/pkgA/src/a.asl" "asl/packages/pkgA/doc.asn")) (str "a doc.asn the row declares itself is stored: " (stringJoin u2.owns ",")))
+        (assert (= u3.owns (list "asl/packages/pkgB/src/c.asl")) (str "a package with no doc.asn stores its declared owns: " (stringJoin u3.owns ",")))
         true))
 
 fn ! runTests -> Bool
@@ -171,5 +168,5 @@ fn ! runTests -> Bool
       (assert (testRefresh) "a changed row refreshes an idle unit")
       (assert (testStaleOwns) "rows owning paths absent from the tree are reported")
       (assert (testSideLedgerKeepsParked) "side-ledger import keeps parked rows")
-      (assert (testDocOwns) "package src owns auto-include existing doc.asn once")
+      (assert (testDocOwns) "the store row holds the declared owns, a package doc.asn is never appended (COND-OWNS-DOC-SERIALISES)")
       true)

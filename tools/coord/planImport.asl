@@ -1,5 +1,5 @@
 (module asl-tools/coord/planImport
-  :x [PlanRow Report rowsOf rowsOfIn importable? needOf resolve refreshable? ownsLive? staleOwns docPathFor withDocOwns! plan! planIn! report main]
+  :x [PlanRow Report rowsOf rowsOfIn importable? needOf resolve refreshable? ownsLive? staleOwns plan! planIn! report main]
   :i [(asl-tools/coord/store :a st) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND4 :do "plan import: the ledger's (:u :id X ...) rows that are marked :auto true, or :queue conductor, and carry a :do become store tasks (:owns, :reads, :gate, :channel, :after) with the :do text as tasks/ID.txt; idempotent by row id (a unit already in the store is skipped, never rewritten); a row whose :owns or :gate is missing, or whose :after names something that will not be in the store, is parked in <store>/parked.asn with its :need and nothing is guessed; the ledger is only read")
@@ -145,26 +145,7 @@ fn ! refreshOne! store: String u: st/Task r: PlanRow changed: (List String) -> B
             (_ (fileAppend (str store "/journal.asn") (str "(:refresh :unit " (st/q r.id) " :changed (" (stringJoin changed " ") ") :at " (stringFromInt64 (/ (nowNs) 1000000)) ")\n")))]
         true)))
 
-fn docPathFor p: String -> String
-  (let [(parts (stringSplit p "/"))]
-    (if (and (>= (listLength parts) 5)
-             (and (= (optionOr (listGet parts 0) "") "asl")
-                  (and (= (optionOr (listGet parts 1) "") "packages")
-                       (and (not (stringEmpty? (optionOr (listGet parts 2) "")))
-                            (and (= (optionOr (listGet parts 3) "") "src")
-                                 (stringEndsWith? p ".asl"))))))
-      (str "asl/packages/" (optionOr (listGet parts 2) "") "/doc.asn")
-      ""))
-
-fn ! withDocOwns! root: String r: PlanRow -> PlanRow
-  (let [(owns (fold (fn [(acc (List String)) (o String)] -> (List String)
-                      (let [(d (docPathFor o))]
-                        (if (and (not (stringEmpty? d)) (and (not (listContains? acc d)) (fileExists? (str root "/" d))))
-                          (listAppend acc (list d))
-                          acc)))
-                    r.owns r.owns))]
-    (with r :owns owns))
-
+; (:m :ref COND-OWNS-DOC-SERIALISES :do "the store row holds the :owns the ledger row declares and nothing else: the lease is exclusive over exactly these paths, while the right to write the package doc.asn and the asl-know card is added by the conductor when a stage runs (conductor.asl docOwns), so two units of one package hold their leases at the same time; a row that an earlier import stored with the doc.asn appended differs from its ledger row and is rewritten by the refresh")
 ; (:m :ref COND4 :do "plan! LEDGER-TEXT STORE BASE DRY: rows to tasks; parked.asn is rewritten from the rows still parked, so a row that gained :owns leaves it at the next import")
 fn ! plan! text: String store: String base: String dry: Bool -> (Result Report String)
   (planIn! text store base dry "free")
@@ -175,8 +156,7 @@ fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (
     ((err e) (err e))
     ((ok units)
       (let [(inStore (map (fn [(u st/Task)] -> String u.id) units))
-            (root (let [(t (stringTrim (resultOr (fileReadString (str store "/repo.path")) "")))] (if (stringEmpty? t) "." t)))
-            (rows (map (fn [(r PlanRow)] -> PlanRow (withDocOwns! root r)) (rowsOfIn text lane)))
+            (rows (rowsOfIn text lane))
             (fresh (filter (fn [(r PlanRow)] -> Bool (not (listContains? inStore r.id))) rows))
             (keep (resolve fresh inStore))
             (parked (filter (fn [(r PlanRow)] -> Bool (not (listContains? keep r.id))) fresh))
