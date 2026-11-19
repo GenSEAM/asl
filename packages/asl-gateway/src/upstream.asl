@@ -101,6 +101,15 @@
       upstreamCallWithFirstByte
       upstreamCallFirstByteWaitMs
       upstreamCallFirstByteExpired?
+      CallDeadlines
+      noCallDeadlines
+      idleDeadlineText
+      idleExpired?
+      idleWaitMs
+      upstreamCallWithDeadlines
+      upstreamCallProgress
+      upstreamCallIdleExpired?
+      upstreamCallDeadlineWaitMs
       upstreamCallStart!
       upstreamCallStartFollowing!
       upstreamCallWatch
@@ -189,7 +198,15 @@
 (schema UpstreamCall
   (:f process SpawnedProc)
   (:f pipe PipeState)
-  (:f firstByteMs Int64))
+  (:f firstByteMs Int64)
+  ; (:m :ref TLE-2-PROVIDER-WAIT :do "idleMs is the longest gap allowed between stdout bytes once the first arrived, 0 for none; lastByteMs is when stdout last gave bytes")
+  (:f idleMs Int64 :default 0)
+  (:f lastByteMs Int64 :default 0))
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the two silence limits of one provider call in seconds, 0.0 meaning none: no byte at all since the start, and no further byte after the last one")
+(schema CallDeadlines
+  (:f firstByteSec Float64)
+  (:f idleSec Float64))
 
 fn pairUp xs: (List String) acc: (List String) -> (List String)
   (match (listHead xs)
@@ -1164,7 +1181,7 @@ fn curlConfigFollowing req: UpstreamRequest timeoutSec: Float64 caFile: (Option 
         (follow (if (> maxRedirects 0) (str "location\nmax-redirs = " (stringFromInt64 maxRedirects) "\n") ""))
         (method (if (and (> maxRedirects 0) (= req.method "POST")) (ok "") (configLine "request" req.method)))
         (fixed (list (configLine "url" req.url) (ok "proto = \"=http,https\"\n") method (ok "http1.1\n") (ok "include\n") (ok follow)
-                     (ok "silent\n") (ok "show-error\n") (ok (str "connect-timeout = " secs "\n")) (ok (str "speed-time = " secs "\n"))
+                     (ok "silent\n") (ok "no-buffer\n") (ok "show-error\n") (ok (str "connect-timeout = " secs "\n")) (ok (str "speed-time = " secs "\n"))
                      (ok "speed-limit = 1\n")))
         (headerLines (map (fn [(p (Pair String String))] -> (Result String String) (configLine "header" (str (pairFirst p) ": " (pairSecond p)))) hs))
         (tail (list (configLine "data-raw" req.data)
@@ -1315,7 +1332,20 @@ fn ! upstreamCallStartFollowing! req: UpstreamRequest env: (Map String String) t
 
 ; (:m :ref GW-SLOW-STREAM :do "the reactor's first-byte guard: startMs plus sec is the wall-clock ms by which curl must have written any stdout byte (headers or a stream chunk); sec 0.0 sets no deadline. The text is what chat.asl matches to note the attempt firstByteTimeout")
 fn firstByteDeadlineText -> String
-  "no response bytes within the first-byte deadline"
+  "firstByteTimeout: no response bytes within the first-byte deadline"
+
+fn noCallDeadlines -> CallDeadlines
+  (CallDeadlines :firstByteSec 0.0 :idleSec 0.0)
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the reactor's stream stall guard: a call that gave bytes and then none for idleMs is aborted with this text, which chat.asl matches to note the attempt idleTimeout")
+fn idleDeadlineText -> String
+  "idleTimeout: the response stream gave no bytes within the idle deadline"
+
+fn idleExpired? idleMs: Int64 lastByteMs: Int64 gotBytes: Bool nowMs: Int64 -> Bool
+  (and (> idleMs 0) (and gotBytes (>= nowMs (+ lastByteMs idleMs))))
+
+fn idleWaitMs idleMs: Int64 lastByteMs: Int64 gotBytes: Bool nowMs: Int64 -> (Option Int64)
+  (if (and (> idleMs 0) gotBytes) (some (max 0 (- (+ lastByteMs idleMs) nowMs))) none)
 
 fn firstByteDeadlineAt startMs: Int64 sec: Float64 -> Int64
   (if (> sec 0.0) (+ startMs (ceilMs sec)) 0)
@@ -1334,6 +1364,22 @@ fn upstreamCallFirstByteExpired? call: UpstreamCall nowMs: Int64 -> Bool
 
 fn upstreamCallFirstByteWaitMs call: UpstreamCall nowMs: Int64 -> (Option Int64)
   (firstByteWaitMs call.firstByteMs (not (listEmpty? call.pipe.out)) nowMs)
+
+fn upstreamCallWithDeadlines call: UpstreamCall startMs: Int64 d: CallDeadlines -> UpstreamCall
+  (with call :firstByteMs (firstByteDeadlineAt startMs d.firstByteSec) :idleMs (if (> d.idleSec 0.0) (ceilMs d.idleSec) 0) :lastByteMs startMs)
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "after a pump: stdout was readable this turn, so the idle clock restarts; an end of stream closes the call and needs no clock")
+fn upstreamCallProgress call: UpstreamCall ready: (List (Pair Int64 Int64)) nowMs: Int64 -> UpstreamCall
+  (if (readyFd? ready call.process.stdout) (with call :lastByteMs nowMs) call)
+
+fn upstreamCallIdleExpired? call: UpstreamCall nowMs: Int64 -> Bool
+  (idleExpired? call.idleMs call.lastByteMs (not (listEmpty? call.pipe.out)) nowMs)
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "when the reactor must look at this call again with no fd ready: the first-byte deadline before any byte, the idle deadline after")
+fn upstreamCallDeadlineWaitMs call: UpstreamCall nowMs: Int64 -> (Option Int64)
+  (match (upstreamCallFirstByteWaitMs call nowMs)
+    ((some w) (some w))
+    ((none) (idleWaitMs call.idleMs call.lastByteMs (not (listEmpty? call.pipe.out)) nowMs)))
 
 fn upstreamCallWatch call: UpstreamCall -> (List (Pair Int64 Int64))
   (watchSet call.process call.pipe)

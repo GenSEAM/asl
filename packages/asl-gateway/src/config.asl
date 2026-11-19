@@ -7,6 +7,8 @@
       scalarToString
       GatewayParams
       emptyGatewayParams
+      defaultStreamFirstByteSec
+      defaultStreamIdleSec
       mergeParams
       GatewayRoute
       GatewayProfile
@@ -146,7 +148,16 @@ fn scalarToString sc: AsnScalar -> String
   ; (:m :ref KIMI-TEMP-FIXED :do "a model that accepts one sampling temperature only (Kimi: 1): the gateway sends this value whatever the request or the route says; exclusive with :temperature on the same row")
   (:f temperatureFixed (Option Float64) :default none)
   ; (:m :ref GW-SYNTHETIC-INFINITE-STREAM :do "a model row :stream true is a route that answers only with stream true (Synthetic infinite mode): the gateway sends stream and stream_options include_usage and folds the SSE reply into one chat completion")
-  (:f stream (Option Bool) :default none))
+  (:f stream (Option Bool) :default none)
+  ; (:m :ref TLE-2-PROVIDER-WAIT :do "a model row :idleSec N: a stream row's attempt is cut when its stream gives no bytes for N seconds after the first; over the provider's :idleSec")
+  (:f idleSec (Option Float64) :default none))
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "what a :stream true row gets when neither it nor its provider names :firstByteSec or :idleSec; a row without :stream keeps no limit unless one is configured, since its first byte is the whole answer")
+fn defaultStreamFirstByteSec -> Float64
+  90.0
+
+fn defaultStreamIdleSec -> Float64
+  60.0
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -173,6 +184,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :contextBudget (if (some? override.contextBudget) override.contextBudget base.contextBudget)
     :timeoutSec (if (some? override.timeoutSec) override.timeoutSec base.timeoutSec)
     :firstByteSec (if (some? override.firstByteSec) override.firstByteSec base.firstByteSec)
+    :idleSec (if (some? override.idleSec) override.idleSec base.idleSec)
     :reasoning (if (some? override.reasoning) override.reasoning base.reasoning)
     :rpm (if (some? override.rpm) override.rpm base.rpm)
     :api (if (some? override.api) override.api base.api)
@@ -232,6 +244,7 @@ fn judgeDefault -> JudgeRules
   (:f sessionHeader String)
   (:f timeoutSec Float64)
   (:f firstByteSec Float64)
+  (:f idleSec Float64 :default 0.0)
   (:f rpm Float64)
   ; (:m :ref GW-PROVIDER-BUCKET :do "provider :rpmShared true makes :rpm the provider's own budget: every model of the provider draws from one rate bucket keyed on the provider, whatever rpm a model names")
   (:f rpmShared Bool)
@@ -271,6 +284,7 @@ fn noRetryPolicy -> RetryPolicy
   (:f upstream GatewayUpstream)
   (:f timeoutSec Float64)
   (:f firstByteSec Float64)
+  (:f idleSec Float64 :default 0.0)
   (:f rpm (Option Float64))
   (:f rpmKey String)
   (:f dropEmptyTools Bool)
@@ -1065,6 +1079,23 @@ fn checkFirstByteSec props: (Map String rd/SExpr) what: String cur: GatewayParam
           (_ (pair cur (cons (str what ": :firstByteSec must be a positive number") errs)))))))
 
 ; (:m :ref NATIVE-TOOLS-DEFAULT :do "a model row's :nativeTools false marks a route that rejects or mishandles native tools: the gateway strips tools and tool_choice from the body it sends there, so the caller's text contract carries the turn; absent means tools pass through")
+fn checkIdleSec props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (match (mapGet props "idleSec")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(sc (asnFigure expr))]
+        (match sc
+          ((scalarFloat f)
+            (if (> f 0.0)
+              (pair (with cur :idleSec (some f)) errs)
+              (pair cur (cons (str what ": :idleSec must be a positive number") errs))))
+          ((scalarInt n)
+            (if (> n 0)
+              (pair (with cur :idleSec (some (int64ToFloat64 n))) errs)
+              (pair cur (cons (str what ": :idleSec must be a positive number") errs))))
+          (_ (pair cur (cons (str what ": :idleSec must be a positive number") errs)))))))
+
+; (:m :ref NATIVE-TOOLS-DEFAULT :do "a model row's :nativeTools false marks a route that rejects or mishandles native tools: the gateway strips tools and tool_choice from the body it sends there, so the caller's text contract carries the turn; absent means tools pass through")
 fn checkNativeTools props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
   (match (mapGet props "nativeTools")
     ((none) (pair cur errs))
@@ -1115,7 +1146,8 @@ fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParam
         (s4 (checkContextBudget props what (pairFirst s3) (pairSecond s3)))
         (s5 (checkTimeoutSec props what (pairFirst s4) (pairSecond s4)))
         (s5b (checkFirstByteSec props what (pairFirst s5) (pairSecond s5)))
-        (s6 (checkReasoning props what (pairFirst s5b) (pairSecond s5b)))
+        (s5c (checkIdleSec props what (pairFirst s5b) (pairSecond s5b)))
+        (s6 (checkReasoning props what (pairFirst s5c) (pairSecond s5c)))
         (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))
         (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))
         (s8b (checkEffortDialect props what (pairFirst s8) (pairSecond s8)))
@@ -1165,6 +1197,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "contextBudget") (some? params.contextBudget))
     ((= k "timeoutSec") (some? params.timeoutSec))
     ((= k "firstByteSec") (some? params.firstByteSec))
+    ((= k "idleSec") (some? params.idleSec))
     ((= k "reasoning") (some? params.reasoning))
     ((= k "rpm") (some? params.rpm))
     ((= k "api") (some? params.api))
@@ -1190,7 +1223,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asnFigure expr)))))
                 acc))))
         (list)
-        (list "temperature" "topP" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
+        (list "temperature" "topP" "effort" "effortDialect" "maxTokens" "contextBudget" "timeoutSec" "firstByteSec" "idleSec" "reasoning" "rpm" "api" "prefill" "nativeTools" "temperatureFixed" "stream"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)
@@ -1637,14 +1670,24 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                     (_ (pair existing.firstByteSec (listAppendOne withToErr (str "provider " pid ": :firstByteSec must be a positive number")))))))))
                 (firstByteSec (pairFirst firstByteSecRes))
                 (withFbErr (pairSecond firstByteSecRes))
+                (idleSecRes (match (mapGet p "idleSec")
+                              ((none) (pair existing.idleSec withFbErr))
+                              ((some idleExpr)
+                                (let [(sc (asnScalar idleExpr))]
+                                  (match sc
+                                    ((scalarFloat f) (if (> f 0.0) (pair f withFbErr) (pair existing.idleSec (listAppendOne withFbErr (str "provider " pid ": :idleSec must be a positive number")))))
+                                    ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withFbErr) (pair existing.idleSec (listAppendOne withFbErr (str "provider " pid ": :idleSec must be a positive number")))))
+                                    (_ (pair existing.idleSec (listAppendOne withFbErr (str "provider " pid ": :idleSec must be a positive number")))))))))
+                (idleSec (pairFirst idleSecRes))
+                (withIdleErr (pairSecond idleSecRes))
                 (rpmRes (match (mapGet p "rpm")
-                          ((none) (pair existing.rpm withFbErr))
+                          ((none) (pair existing.rpm withIdleErr))
                           ((some rExpr)
                             (let [(sc (asnScalar rExpr))]
                               (match sc
-                                ((scalarFloat f) (if (> f 0.0) (pair f withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
-                                ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withFbErr) (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))
-                                (_ (pair existing.rpm (listAppendOne withFbErr (str "provider " pid ": :rpm must be a positive number")))))))))
+                                ((scalarFloat f) (if (> f 0.0) (pair f withIdleErr) (pair existing.rpm (listAppendOne withIdleErr (str "provider " pid ": :rpm must be a positive number")))))
+                                ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withIdleErr) (pair existing.rpm (listAppendOne withIdleErr (str "provider " pid ": :rpm must be a positive number")))))
+                                (_ (pair existing.rpm (listAppendOne withIdleErr (str "provider " pid ": :rpm must be a positive number")))))))))
                 (rpm (pairFirst rpmRes))
                 (withRpmErr (pairSecond rpmRes))
                 (poolRes (match (mapGet p "pool")
@@ -1669,7 +1712,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (finalErrs (if (and (= kind "gateway") (stringEmpty? secret))
                              (listAppendOne baseErrs (str "provider " pid ": a gateway provider needs :secret naming its bearer token in the secrets file"))
                              baseErrs))
-                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :assistantReasoning assistantReasoning :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :rpm rpm :pool poolValue :retry retryValue))]
+                (updated (GatewayProvider :rpmShared rpmShared :dropEmptyTools dropEmptyTools :assistantReasoning assistantReasoning :id pid :kind kind :base base :keyEnv (if (stringEmpty? secret) keyEnv (sc/secretEnvName secret)) :secret secret :promptCacheKey promptCacheKey :sessionHeader sessionHeader :timeoutSec timeoutSec :firstByteSec firstByteSec :idleSec idleSec :rpm rpm :pool poolValue :retry retryValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -2436,6 +2479,9 @@ fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                   (fbSec (match m.params.firstByteSec
                           ((some fb) fb)
                           ((none) pv.firstByteSec)))
+                  (idleSec (match m.params.idleSec
+                             ((some s) s)
+                             ((none) pv.idleSec)))
                   (rpmVal (if (and pv.rpmShared (> pv.rpm 0.0))
                             (some pv.rpm)
                             (match m.params.rpm
@@ -2454,6 +2500,7 @@ fn gatewayV2Entry! table: GatewayTable alias: String -> GatewayResolvedEntry
                                :upstream (GatewayUpstream :provider m.provider :url pv.base :key key)
                                :timeoutSec tSec
                                :firstByteSec fbSec
+                               :idleSec idleSec
                                :rpm rpmVal
                                :rpmKey (if (and pv.rpmShared (> pv.rpm 0.0)) (str "provider:" pv.id) "")
                                :dropEmptyTools pv.dropEmptyTools :assistantReasoning pv.assistantReasoning

@@ -126,7 +126,7 @@
   (:c effLog [(text String)])
   (:c effBucket [(model String) (rpm Float64) (timeout Float64)])
   (:c effSleepMs [(ms Int64)])
-  (:c effHttp [(provider String) (model String) (intent String) (role String) (request u/UpstreamRequest) (timeout Float64) (profile String) (firstByteSec Float64)])
+  (:c effHttp [(provider String) (model String) (intent String) (role String) (request u/UpstreamRequest) (timeout Float64) (profile String) (deadlines u/CallDeadlines)])
   (:c effPoolHttp [(provider String) (model String) (base String) (pool c/GatewayPool) (request u/UpstreamRequest) (timeout Float64)])
   (:c effCli [(client String) (args (List (Pair String j/Json)))]))
 
@@ -1755,11 +1755,22 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
          (httpAttempt cx l a)))
       ((none) (httpAttempt cx l a))))
 
-; (:m :ref GW-SLOW-STREAM :do "the attempt's resolved :firstByteSec (model over provider); 0.0 means none was set and the reactor applies no first-byte deadline, so only a configured row changes behaviour")
-fn httpFirstByteSec a: Attempt -> Float64
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the attempt's silence limits: :firstByteSec and :idleSec as resolved for the row (model over provider). A row sent as a stream takes defaultStreamFirstByteSec and defaultStreamIdleSec where none is set; a row not sent as a stream has no idle limit and a first-byte limit only when one is configured, since its first byte is its whole answer")
+fn httpDeadlines a: Attempt -> u/CallDeadlines
   (match a.v2
-    ((some e) e.firstByteSec)
-    ((none) 0.0))
+    ((none) (u/noCallDeadlines))
+    ((some e)
+      (if (and (rowStream a.v2) (= a.api "chat"))
+        (u/CallDeadlines :firstByteSec (if (> e.firstByteSec 0.0) e.firstByteSec (c/defaultStreamFirstByteSec))
+                         :idleSec (if (> e.idleSec 0.0) e.idleSec (c/defaultStreamIdleSec)))
+        (u/CallDeadlines :firstByteSec e.firstByteSec :idleSec 0.0))))
+
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the ledger outcome of an attempt the reactor cut for silence, empty for any other failure text")
+fn deadlineOutcome text: String -> String
+  (cond
+    ((stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout")
+    ((stringContains? text (u/idleDeadlineText)) "idleTimeout")
+    (else ""))
 
 fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
   (let [(body l.body)
@@ -1831,7 +1842,7 @@ fn httpAttemptSend cx: Ctx l: Loop a: Attempt -> ChatStep
          ((ok timeout)
           (askHttp (match (poolConfigFor a)
             ((some poolConfig) (effPoolHttp up.provider a.model up.url poolConfig request timeout))
-            ((none) (effHttp up.provider a.target cx.intent cx.role request timeout cx.profileName (httpFirstByteSec a))))
+            ((none) (effHttp up.provider a.target cx.intent cx.role request timeout cx.profileName (httpDeadlines a))))
             (fn [(r HttpReply)] -> ChatStep
               (match r
                 ((httpOk status headers body) (httpAnswered cx l a status headers body))
@@ -1861,7 +1872,7 @@ fn retryOrFinish cx: Ctx l: Loop a: Attempt policy: c/RetryPolicy retryAfterHead
 fn retryTransport cx: Ctx l: Loop a: Attempt timeout: Bool text: String policy: c/RetryPolicy -> ChatStep
   (retryOrFinish cx l a policy none
     (str "[Gateway Retry] " a.model " transport error: " text ". Retrying attempt " (stringFromInt64 (+ a.retryUsed 1)) " of " (stringFromInt64 policy.maxAttempts) "...\n")
-    (str "retry " (if (stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout" (if timeout "timeout" "transport")))
+    (str "retry " (if (not (stringEmpty? (deadlineOutcome text))) (deadlineOutcome text) (if timeout "timeout" "transport")))
     (fn [] -> ChatStep (raisedFinal cx l a timeout text)))
 
 fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
@@ -1874,7 +1885,7 @@ fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
 fn raisedOutcome timeout: Bool text: String -> String
   (cond
     ((not timeout) "other")
-    ((stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout")
+    ((not (stringEmpty? (deadlineOutcome text))) (deadlineOutcome text))
     (else "timeout"))
 
 fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
@@ -1888,7 +1899,8 @@ fn raisedFinal cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
                       (tellAll (list (effUsageFallback prov a.alias) (effLog (str "[Gateway Cascade] Model " a.model " error: " text ". Cascading to next...\n")))
                         (fn [] -> ChatStep (loopStep cx (advance l1 l1.body))))
                       (loopStep cx (advance l1 l1.body)))))))]
-    (if (stringEmpty? pool) (rest) (tell (effBreakerEvent "reset503" pool 0) rest)))
+    ; (:m :ref TLE-2-PROVIDER-WAIT :do "an attempt cut for silence counts a timeout strike on its own pool, as a 503 counts one: the third in a row closes the pool for the breaker cooldown, so later calls skip it instead of waiting out the deadline again; any answer clears the count")
+    (if (stringEmpty? pool) (rest) (tell (effBreakerEvent (if (stringEmpty? (deadlineOutcome text)) "reset503" "noteTimeout") pool 0) rest)))
 
 (schema Projection
   (:f resp j/Json)

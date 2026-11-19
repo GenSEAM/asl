@@ -23,7 +23,7 @@ fn ! drive! step: ch/ChatStep labels: String n1Reply: ch/HttpReply fuel: Int64 -
          ((ch/effUsageNote _ _ outcome _) (drive! (k ch/outDone) (str labels "|note:" outcome) n1Reply (- fuel 1)))
          ((ch/effHttp _ m _ _ _ _ _ fb)
           (drive! (k (ch/outHttp (if (= m "n1") n1Reply (ch/httpOk 200 (list (pair "Content-Type" "application/json")) "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fine\"},\"finish_reason\":\"stop\"}]}"))))
-                  (str labels "|http:" m ":" (stringFromFloat64 fb)) n1Reply (- fuel 1)))
+                  (str labels "|http:" m ":" (stringFromFloat64 fb.firstByteSec)) n1Reply (- fuel 1)))
          (_ (drive! (k ch/outDone) labels n1Reply (- fuel 1)))))))
 
 fn cfg fb: String -> String
