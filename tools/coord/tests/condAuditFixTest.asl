@@ -1,8 +1,8 @@
 (module asl-tools/coord/tests/condAuditFixTest
   :x [runTests]
-  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/vcs/vcs :a v)])
 
-; (:m :ref COND-AUDIT-FIX :do "fixes of the merged-code audit, each on a scratch repo under this worktree's .asl/cache with a stand-in bin/asl (know gen writes the card text of WORKTREE.gen, the row driver call is handed to this tree's mergeRows): a gates debt survives the conductor's own cards commit and is paid by a writer commit only; the cards commit names what it is; a commit the guard refuses is one cardsInfra row and a clean tree; freshBase! and leonGuard! rebase two branches that appended different doc.asn rows in a repo with no configured row driver")
+; (:m :ref COND-AUDIT-FIX :do "fixes of the merged-code audit, each on a scratch repo under this worktree's .asl/cache built by one fast-import stream, with a stand-in bin/asl (know gen writes the card text of WORKTREE.gen, the row driver call is handed to this tree's mergeRows): a gates debt survives the conductor's own cards commit and is paid by a writer commit only; the cards commit names what it is; a commit the guard refuses is one cardsInfra row and a clean tree; freshBase! and leonGuard! rebase two branches that appended different doc.asn rows in a repo with no configured row driver")
 
 fn ! scratch -> String
   (str (resultOr (realPath ".") ".") "/.asl/cache/condAuditFixTest-" (stringFromInt64 (procSelf)))
@@ -32,24 +32,40 @@ fn stubText real: String -> String
        "if [ \"$3\" = missing ]; then echo \"(:know :missing :new 0)\"; fi\n"
        "exit 0\n")
 
-; (:m :do "main c0 holds the package, one contract row and the stand-in host; each unit branch gets its worktree and one commit of its own (a file, or a row appended to doc.asn); then main moves: another row and a file under asl-agent")
+fn fileOp f: (Pair String String) -> String
+  (str "M " (if (= (pairFirst f) "bin/asl") "100755" "100644") " inline " (pairFirst f) "\ndata " (stringLength (pairSecond f)) "\n" (pairSecond f) "\n")
+
+fn commitOp ref: String mark: String from: String files: (List (Pair String String)) -> String
+  (str "commit refs/heads/" ref "\n" (if (stringEmpty? mark) "" (str "mark " mark "\n"))
+       "committer t <t@example.invalid> 1700000000 +0000\ndata " (stringLength ref) "\n" ref "\n"
+       (if (stringEmpty? from) "" (str "from " from "\n"))
+       (stringJoin (map fileOp files) "") "\n")
+
+; (:m :do "main c0 holds the package, one contract row and the stand-in host; each unit branch is one commit past it (a file, or a row appended to doc.asn); then main moves: another row and a file under asl-agent")
+fn stream real: String -> String
+  (let [(old (str (docRow "old") "\n"))]
+    (str (commitOp "main" ":1" "" (list (pair "bin/asl" (stubText real)) (pair ".gitattributes" "doc.asn merge=asnRows\n") (pair (docPath) old)
+                                         (pair "asl/packages/pk/src/a.asl" "(module pk/a :x [old] :i [])\nfn old -> Int64\n  1\n")
+                                         (pair "asl/packages/asl-know/missing.asn" "(:knowMissing :rule \"only shrinks\")\n")))
+         (commitOp "sh/B1" "" ":1" (list (pair "impl.txt" "impl\n")))
+         (commitOp "sh/D1" "" ":1" (list (pair "impl.txt" "impl\n")))
+         (commitOp "sh/C1" "" ":1" (list (pair (docPath) (str old (docRow "alpha") "\n"))))
+         (commitOp "sh/L1" "" ":1" (list (pair (docPath) (str old (docRow "gamma") "\n"))))
+         (commitOp "main" "" ":1" (list (pair (docPath) (str old (docRow "beta") "\n")) (pair "asl/packages/asl-agent/x.txt" "x\n")))
+         "done\n"))
+
+; (:m :do "the fixture reaches git through init, config, one fast-import stream, the vcs layer's worktreeAdd! and a symbolic-ref that puts each detached worktree on its unit branch; the conductor repo's own bin/asl is written to disk, which is all the row driver needs of it")
 fn ! build! root: String real: String -> Bool
   (let [(repo (str root "/repo"))
-        (wt (fn [(id String) (edit String)] -> String
-              (str " && git worktree add -q -b sh/" id " " root "/wt" id " main && (cd " root "/wt" id " && " edit " && git add -A && git commit -qm 'unit " id "')")))
-        (_ (sh! (str "mkdir -p " repo "/bin " repo "/asl/packages/pk/src " repo "/asl/packages/asl-know/cards " root "/store")))
+        (_ (sh! (str "mkdir -p " repo "/bin " root "/store")))
+        (_ (fileWrite (str root "/stream") (stream real)))
         (_ (fileWrite (str repo "/bin/asl") (stubText real)))
-        (_ (fileWrite (str repo "/.gitattributes") "doc.asn merge=asnRows\n"))
-        (_ (fileWrite (str repo "/" (docPath)) (str (docRow "old") "\n")))
-        (_ (fileWrite (str repo "/asl/packages/pk/src/a.asl") "(module pk/a :x [old] :i [])\nfn old -> Int64\n  1\n"))
-        (_ (fileWrite (str repo "/asl/packages/asl-know/missing.asn") "(:knowMissing :rule \"only shrinks\")\n"))
-        (made (sh! (str "cd " repo " && chmod +x bin/asl && git init -q -b main && git config user.email t@example.invalid && git config user.name t && git add -A && git commit -qm c0"
-                        (wt "B1" "echo impl > impl.txt")
-                        (wt "D1" "echo impl > impl.txt")
-                        (wt "C1" (str "echo '" (docRow "alpha") "' >> " (docPath)))
-                        (wt "L1" (str "echo '" (docRow "gamma") "' >> " (docPath)))
-                        " && echo '" (docRow "beta") "' >> " (docPath) " && mkdir -p asl/packages/asl-agent && echo x > asl/packages/asl-agent/x.txt && git add -A && git commit -qm c1 && echo madeOk")))]
-    (stringContains? made "madeOk"))
+        (made (sh! (str "cd " repo " && chmod +x bin/asl && git init -q -b main && git config user.email t@example.invalid && git config user.name t && git fast-import --quiet --done < " root "/stream && echo madeOk")))]
+    (and (stringContains? made "madeOk")
+      (listAll? (fn [(id String)] -> Bool
+                  (and (= (v/worktreeAdd! repo (str root "/wt" id) (str "sh/" id)).code 0)
+                       (= (cd/gitOut (str root "/wt" id) (list "symbolic-ref" "HEAD" (str "refs/heads/sh/" id))).exit 0)))
+                (list "B1" "D1" "C1" "L1"))))
 
 fn unit id: String -> st/Task
   (st/Task :id id :owns (list "asl/packages/pk/src/a.asl") :reads (list) :gate "" :channel "free" :model "" :base "main" :after (list) :st "queued" :epoch 0 :receipt "")
@@ -69,7 +85,8 @@ fn ! testCards root: String -> Bool
         (files (git b (list "show" "--name-only" "--format=" "HEAD")))
         (owed1 (cd/workFixOwed? dir "B1" b))
         (sig1 (cd/gatesFailureAt! dir "B1" b))
-        (_ (sh! (str "cd " b " && echo fix > impl.txt && git commit -qam 'writer fix'")))
+        (_ (fileWrite (str b "/impl.txt") "fix\n"))
+        (fixed (v/commit! b b (list "impl.txt") "(:c :a pk :do \"writer fix\" :ev (B1))" "commit"))
         (owed2 (cd/workFixOwed? dir "B1" b))
         (_ (fileWrite (str b ".gen") "(:card :id \"pk\" :n 2)\n"))
         (landed2 (cd/cardsRegen! dir b (unit "B1") "m" b))
@@ -84,7 +101,7 @@ fn ! testCards root: String -> Bool
         (assert (stringContains? files "asl/packages/asl-know/cards/pk.asn") (str "the commit carries the regenerated card: " files))
         (assert owed1 "the conductor's own cards commit pays no debt: a fix is still owed at the new head")
         (assert (stringContains? sig1 "exit 1 asserts 3") (str "the debt keeps its stage and signature: " sig1))
-        (assert (not owed2) "a writer commit pays the debt")
+        (assert (and (= fixed.code 0) (not owed2)) (str "a writer commit pays the debt: " fixed.text))
         (assert (and landed2 (not owed3)) "a later cards commit does not bring a paid debt back")
         (assert (and (stringStartsWith? subject "(:c :a coord :do \"regenerated know cards") (stringContains? subject ":ev (B1)")) (str "the cards commit names what it is: " subject))
         (assert (not (or (stringContains? subject "gate passed") (stringContains? subject "gate exit 0"))) (str "it claims no gate and no writer's work: " subject))
