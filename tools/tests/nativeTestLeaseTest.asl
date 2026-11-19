@@ -3,6 +3,7 @@
   :i [(asl-tools/nativeTest :a nt) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref PROC-REAPER-ALL :do "the source lives in the test's scratch directory, so this test owns every file it creates; the native fixture checks its own group's lease while its runTests body executes")
+; (:m :ref MAIN-RED-SWEEP :do "the runner writes the lease after the spawn returns and after a process snapshot of its own (fr/writeLease! runs ps), so the fixture, which also runs ps before it looks, could look first; it polls for the lease, at most 200 times 50 ms, as the suiteWall fixture does, and still passes only if the lease is there while it runs")
 fn fixtureSource -> String
   (stringJoin
     (list "(module aslTools/fixtures/nativeTestLease"
@@ -14,10 +15,13 @@ fn fixtureSource -> String
           "          (if (= p.pid (procSelf)) p.pgid found))"
           "        0 (fr/procSnapshot))"
           ""
+          "fn ! leaseSeen! pgid: Int64 tries: Int64 -> Bool"
+          "  (if (or (fileExists? (fr/leasePath pgid)) (<= tries 0)) (fileExists? (fr/leasePath pgid)) (do (sleepMs 50) (leaseSeen! pgid (- tries 1))))"
+          ""
           "fn ! runTests -> Bool"
           "  (let [(pgid (ownPgid))"
           "        (probe (optionOr (envGet \"ASL_NATIVE_LEASE_PROBE\") \"\"))"
-          "        (during (fileExists? (fr/leasePath pgid)))"
+          "        (during (leaseSeen! pgid 200))"
           "        (written (fileWrite probe (stringFromInt64 pgid)))]"
           "    (do (assert (> pgid 0) \"the fixture finds its own process group\")"
           "        (assert during \"the nativeTest runner writes the fixture pgid lease while the fixture runs\")"
