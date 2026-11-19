@@ -1,7 +1,7 @@
 (module asl/host/tests/buildClangTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
 
 fn toolNames -> String
-  "mkdir cp rm ls head tail cat sed grep awk uname tr cut ar gzip chmod mv basename dirname env perl sh tee wc sort printf sha256sum shasum openssl nice"
+  "mkdir cp rm ls head tail cat sed grep awk uname tr cut ar gzip chmod mv basename dirname env perl sh tee wc sort printf sha256sum shasum openssl nice cmp"
 
 fn setupScript -> String
   "set -e; w=$1; rm -rf \"$w\"; mkdir -p \"$w/tools\" \"$w/out\"; for t in $2; do p=$(command -v $t 2>/dev/null || true); [ -n \"$p\" ] && ln -s \"$p\" \"$w/tools/$t\" || true; done; printf '#!/bin/sh\\necho \"$0 $*\" >> \"%s/clangCalls\"\\nexit 1\\n' \"$w\" > \"$w/tools/clang-18\"; chmod +x \"$w/tools/clang-18\"; printf 'KEEP' > \"$w/out/libaslrt.a\""
