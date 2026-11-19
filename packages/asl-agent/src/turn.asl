@@ -48,10 +48,15 @@ fn dropThink text: String -> String
           ((some b) (dropThink (str (optionOr (stringSlice text 0 a) "") (optionOr (stringSlice rest (+ b 8) (stringLength rest)) ""))))))))
 
 ; (:m :ref ABSORB-AGENT-LOWS :do "the layout form keeps an ERR_ code the model copied into its reply as :error, so exec still marks the refusal :echoed and the copied code is not counted as a new attempt")
-fn echoedError reply: String -> String
-  (match (stringIndexOf reply ":error \"ERR_")
-    ((some at) (let [rest (c/sliceOf reply (+ at 8) (stringLength reply))] (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) ""))))
-    ((none) ""))
+; (:m :ref AGENT-AUDIT-FIX :do "audit 2026-11-19: the copied code is looked for outside the fenced blocks only; an :error \"ERR_ in a block is file text or quoted output, and reading it as an echo kept a real refusal out of the repeat count")
+fn outsideFences reply: String -> String
+  (fold (fn [acc f] (match f ((r/fence a b _) (str (c/sliceOf acc 0 a) (c/sliceOf acc b (stringLength acc)))))) reply (listReverse (r/rawFences reply)))
+
+fn echoedError reply0: String -> String
+  (let [reply (outsideFences reply0)]
+    (match (stringIndexOf reply ":error \"ERR_")
+      ((some at) (let [rest (c/sliceOf reply (+ at 8) (stringLength reply))] (match (stringIndexOf rest "\"") ((some e) (c/sliceOf rest 0 e)) ((none) ""))))
+      ((none) "")))
 
 fn layoutForm op: String file: String echo: String -> String
   (str "(:step :op \"" (if (= op "edit") "edit" "write") "\" :file \"" (c/escapeAsn file) "\" " (if (= op "edit") ":old :raw :new :raw" ":content :raw") (if (stringEmpty? echo) "" (str " :error \"" echo "\"")) ")")

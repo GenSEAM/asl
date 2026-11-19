@@ -326,6 +326,7 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                 (if (notNone rec "arrived") (str " :arrived \"" (escField rec "arrived") "\"") "")
                 (if (notNone rec "hint") (str " :hint \"" (escField rec "hint") "\"") "")
                 (if (truthyField rec "echoed") " :echoed true" "")
+                (if (truthyField rec "rawPlace") " :repaired (:raw adjacent)" "")
                 (if (notNone rec "balance") (str " :balance \"" (escField rec "balance") "\"") "")
                 (if (truthyField rec "nearest") (str " :nearest \"" (escField rec "nearest") "\"") "")
                 (if (truthyField rec "terminal") (str " :terminal (" (quotedList (field "terminal")) ")") "")
@@ -860,6 +861,14 @@ fn withCanonical op: (List (Pair String c/KvVal)) rec: (List (Pair String Val)) 
   (let [canon (opStr op "aliased" "")]
     (if (stringEmpty? canon) rec (recSet rec "canonical" (vStr canon))))
 
+; (:m :ref AGENT-AUDIT-FIX :do "a write, edit or txn whose :raw block was taken from before its form (reply.asl singleBlockText tags it :rawPlace adjacent) says so in its receipt, ok or refused, so the model can see which text was bound")
+fn rawPlaceAdjacent? op: (List (Pair String c/KvVal)) opName: String -> Bool
+  (or (= (opStr op "rawPlace" "") "adjacent")
+    (and (= opName "txn") (stringEndsWith? (stringTrim (opStr op "form" "")) " :rawPlace \"adjacent\")")))
+
+fn withRawPlace op: (List (Pair String c/KvVal)) opName: String rec: (List (Pair String Val)) -> (List (Pair String Val))
+  (if (rawPlaceAdjacent? op opName) (recSet rec "rawPlace" (vStr "adjacent")) rec)
+
 fn blockedKey op: (List (Pair String c/KvVal)) opName: String -> String
   (str "blocked:" opName "|" (opFirst op (list "file" "path") ""))
 
@@ -937,7 +946,7 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
       ((and step (= opName "note")) (eo (execNoteOp op (newId)) procs))
       ((and step (and (= opName "help") (not (stringEmpty? (builtinHelp (opStr op "name" ""))))))
         (eo (list (vs "id" (newId)) (vs "op" "help") (vs "status" "ok") (vs "name" (opStr op "name" "")) (vs "content" (builtinHelp (opStr op "name" "")))) procs))
-      (else (eo (withCanonical op (execRest! op opType opName env newId snap run)) procs))))
+      (else (eo (withRawPlace op opName (withCanonical op (execRest! op opType opName env newId snap run))) procs))))
 
 fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
   (let [step (= opType "step")

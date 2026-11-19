@@ -816,16 +816,25 @@ fn parentDir path: String -> String
   (let [parts (stringSplit path "/")]
     (if (< (listLength parts) 2) "" (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
 
-; (:m :ref K9-MISSING-ARG :do "a read of a path that does not exist and is not owned is read at the one existing path within two edits of it, among the owned files and the files of its directory; none or several such paths leave the read as sent")
+; (:m :ref AGENT-AUDIT-FIX :do "a relative path that stays inside the root once its .. segments are folded; decided on the text alone, so nothing outside the root is probed")
+fn inRootRel? p: String -> Bool
+  (let [n (t/normPath p)]
+    (not (or (stringEmpty? p) (or (stringStartsWith? p "/") (or (= n "..") (stringStartsWith? n "../"))))))
+
+fn ! plainFile! path: String -> Bool
+  (match (fileStat path) ((ok st) st.isFile) ((err _) false))
+
+; (:m :ref K9-MISSING-ARG :do "a read of a path that does not exist and is not owned is read at the one existing file within two edits of it, among the owned files and the files of its directory; none or several such paths leave the read as sent")
+; (:m :ref AGENT-AUDIT-FIX :do "audit 2026-11-19: an owned path is never repaired (a file the task creates was read at its neighbour), a path or candidate that leaves the root is neither probed nor offered, and a directory is no candidate")
 fn ! nearestPath! root: String asked: String owns: (List String) -> (Option String)
-  (if (or (stringEmpty? asked) (or (stringStartsWith? asked "/") (>= (resultOr (fileSize (str root "/" asked)) -1) 0)))
+  (if (or (not (inRootRel? asked)) (or (c/checkOwns asked owns root) (>= (resultOr (fileSize (str root "/" asked)) -1) 0)))
     none
     (let [dir (parentDir asked)
           names (resultOr (dirList (if (stringEmpty? dir) root (str root "/" dir))) (list))
           inDir (map (fn [n] (if (stringEmpty? dir) n (str dir "/" n))) names)
           owned (filter (fn [o] (and (not (stringEmpty? o)) (not (stringContains? o "*")))) owns)
-          cands (listAppend owned (filter (fn [p] (not (listContains? owned p))) inDir))
-          close (filter (fn [p] (and (!= p asked) (and (<= (c/editDistance p asked) 2) (>= (resultOr (fileSize (str root "/" p)) -1) 0)))) cands)]
+          cands (filter inRootRel? (listAppend owned (filter (fn [p] (not (listContains? owned p))) inDir)))
+          close (filter (fn [p] (and (!= p asked) (and (<= (c/editDistance p asked) 2) (plainFile! (str root "/" p))))) cands)]
       (if (= (listLength close) 1) (listHead close) none)))
 
 fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: String session: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))

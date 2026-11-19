@@ -432,7 +432,7 @@
 (:case :id "bindRawBlocks_429" :fn "bindRawBlocks" :args (l "(:step :op \"edit\" :file \"a\" :old :raw\n```\nx\n```\n :new :raw\n```\ny\n```\n)") :out (l "(:step :op \"edit\" :file \"a\" :old \"x\\n\"\n :new \"y\\n\"\n :rawFields \"old new\")" 2 (l)))
 (:case :id "bindRawBlocks_430" :fn "bindRawBlocks" :args (l "(:step :op \"write\" :file \"a\" :content :raw)\n```\nhello\n```\n") :out (l "(:step :op \"write\" :file \"a\" :content \"hello\\n\" :rawFields \"content\")\n" 1 (l)))
 (:case :id "bindRawBlocks_431" :fn "bindRawBlocks" :args (l "(:a)\n(:step :op \"write\" :file \"b\" :content :raw\n  ```\nz\n  ```\n  )\n(:c)") :out (l "(:a)\n(:step :op \"write\" :file \"b\" :content \"z\\n\"\n   :rawFields \"content\")\n(:c)" 1 (l)))
-(:case :id "bindRawBlocks_432" :fn "bindRawBlocks" :args (l "```\nlead\n```\n(:step :op \"write\" :file \"a\" :content :raw)") :out (l "(:step :op \"write\" :file \"a\" :content \"lead\\n\" :rawFields \"content\")\n\n" 1 (l)))
+(:case :id "bindRawBlocks_432" :fn "bindRawBlocks" :args (l "```\nlead\n```\n(:step :op \"write\" :file \"a\" :content :raw)") :out (l "(:step :op \"write\" :file \"a\" :content \"lead\\n\" :rawFields \"content\" :rawPlace \"adjacent\")\n\n" 1 (l)))
 (:case :id "bindRawBlocks_433" :fn "bindRawBlocks" :args (l "(:step :op \"write\" :content :raw\n```\nunclosed form\n```\n") :out (l "(:step :op \"write\" :content :raw\n```\nunclosed form\n```\n" 0 (l)))
 (:case :id "bindRawBlocks_434" :fn "bindRawBlocks" :args (l "(:x :raw\n```\n1\n```\n) (:y :raw\n```\n2\n```\n)") :out (l "(:x :raw\n```\n1\n```\n) (:y :raw\n```\n2\n```\n)" 0 (l)))
 (:case :id "bindRawBlocks_435" :fn "bindRawBlocks" :args (l "(:note \"(:raw\" :raw\n```\nq\n```\n)") :out (l "(:note \"(:raw\" :raw\n```\nq\n```\n)" 0 (l)))

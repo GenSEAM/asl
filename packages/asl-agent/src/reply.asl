@@ -1392,7 +1392,7 @@ fn stepClose bs: Bytes n: Int64 fs: Int64 fe: Int64 txn: Bool fl: (List Fence) s
     (if txn (- (pairFirst (fencedClose bs n (+ fs (+ a 1)) 1 false false fl)) fs) (- fe fs))))
 
 ; (:m :ref LEON-RAW-PROTOCOL :do "a :raw field binds only by place in the text as sent, nothing is moved first: a block inside its step's region (bindRegion), else, for the steps whose regions hold none, the blocks between the form's end and the next form's start, exactly as many as those fields and in their order; a form that breaks this, gives :raw to another key or binds a block cut at a nested fence of its own length is marked bad, and bindRawBlocks then binds nothing in the whole reply (grader 2026-11-18 c02 c04 c04c c04d c05b c09 c09b c09c c15 c16 c19 c20 H1)")
-fn brForm reply: String bs: Bytes n: Int64 fl: (List Fence) fences: (List (Pair Int64 Fence)) spans: (List (Pair Int64 Int64)) st: BrState span: (Pair Int64 Int64) -> BrState
+fn brForm reply: String bs: Bytes n: Int64 fl: (List Fence) fences: (List (Pair Int64 Fence)) spans: (List (Pair Int64 Int64)) mark: String st: BrState span: (Pair Int64 Int64) -> BrState
   (match span ((pair fs fe)
     (let [ftext (sl reply fs fe)
           inner (filter (fn [p] (and (> (fStart (pairSecond p)) fs) (<= (fEnd (pairSecond p)) fe))) fences)
@@ -1423,7 +1423,7 @@ fn brForm reply: String bs: Bytes n: Int64 fl: (List Fence) fences: (List (Pair 
                     fenceReps (map (fn [b] (repl (fStart (pairSecond (pairSecond b))) (fEnd (pairSecond (pairSecond b))) "")) outBound)
                     names (map rfName (listFlatMap rsRaws rsteps))
                     bodyText (applyTok ftext (listAppend tokReps innerReps))
-                    tagged (insertBeforeLast bodyText (str " :rawFields \"" (joinWith names " ") "\""))]
+                    tagged (insertBeforeLast bodyText (str " :rawFields \"" (joinWith names " ") "\"" mark))]
                 (brState (listAppend consumed (map (fn [b] (pairFirst (pairSecond b))) bound)) (+ count (listLength bound)) bad steps2
                   (cons (repl fs fe tagged) (fold (fn [acc r] (cons r acc)) repls fenceReps))))))))))))
 
@@ -1504,7 +1504,17 @@ fn formSlots text: String span: (Pair Int64 Int64) -> (Pair Int64 Bool)
           slots (fold (fn [acc o] (match o ((some s) (+ acc (listLength (rsRaws s)))) ((none) acc))) 0 steps)]
       (pair slots (rawKeyBad? toks)))))
 
-; (:m :ref ABSORB-AGENT-LOWS :do "lead 2026-11-18: a reply with exactly one fenced block, outside every form, and exactly one :raw slot among all its steps, none on a foreign key, has no ambiguity: the block is moved right after the slot's form so it binds by place; every other layout keeps the strict refusal")
+; (:m :ref AGENT-AUDIT-FIX :do "whether the form's one :raw slot sits in its first step region: a block standing before a txn belongs to the txn's first step, never to a later one")
+fn slotFirst? text: String span: (Pair Int64 Int64) -> Bool
+  (match span ((pair fs fe)
+    (let [toks (tokenizeForm (sl text fs fe))
+          txn (and (> (listLength toks) 1) (= (tokT (c/firstOf (c/restOf toks))) ":txn"))
+          regions (stepRegions toks txn (- fe fs))]
+      (match (listHead regions)
+        ((some rg) (match (rawStepOf toks rg) ((some s) (not (listEmpty? (rsRaws s)))) ((none) false)))
+        ((none) false)))))
+
+; (:m :ref AGENT-AUDIT-FIX :do "audit 2026-11-19: the single-block exception wrote a quoted gate output or a block meant for another step into the :raw write. It now holds only for a block that is adjacent before the slot's form: one fenced block in the reply, outside every form, one :raw slot, none on a foreign key, the slot in the form's first step, and nothing but blank lines between the block's end and the form's start; the block is then moved right after the form so it binds by place, and the form is tagged :rawPlace adjacent. A block right after the form is the regular place and needs no exception; every other layout keeps the strict refusal")
 fn singleBlockText text: String fl: (List Fence) forms: (List (Pair Int64 Int64)) -> (Option String)
   (if (!= (listLength fl) 1)
     none
@@ -1516,14 +1526,19 @@ fn singleBlockText text: String fl: (List Fence) forms: (List (Pair Int64 Int64)
           host (listHead (filter (fn [p] (> (pairFirst (pairSecond p)) 0)) per))]
       (match host
         ((some h)
-          (if (or inside (or foreign (!= total 1)))
-            none
-            (let [fe (pairSecond (pairFirst h))
-                  block (sl text (fStart f) (fEnd f))
-                  without (str (sl text 0 (fStart f)) (sl text (fEnd f) (stringLength text)))
-                  at (if (< (fStart f) fe) (- fe (- (fEnd f) (fStart f))) fe)]
-              (some (str (sl without 0 at) "\n" block "\n" (sl without at (stringLength without)))))))
+          (let [fs (pairFirst (pairFirst h))
+                fe (pairSecond (pairFirst h))
+                adjacent (and (<= (fEnd f) fs) (and (stringEmpty? (stringTrim (sl text (fEnd f) fs))) (slotFirst? text (pairFirst h))))]
+            (if (or inside (or foreign (or (!= total 1) (not adjacent))))
+              none
+              (let [block (sl text (fStart f) (fEnd f))
+                    without (str (sl text 0 (fStart f)) (sl text (fEnd f) (stringLength text)))
+                    at (- fe (- (fEnd f) (fStart f)))]
+                (some (str (sl without 0 at) "\n" block "\n" (sl without at (stringLength without))))))))
         ((none) none))))
+
+fn rawPlaceMark -> String
+  " :rawPlace \"adjacent\""
 
 fn bindRawBlocks reply: String -> RawBind
   (if (= reply "")
@@ -1533,10 +1548,14 @@ fn bindRawBlocks reply: String -> RawBind
       (if (listEmpty? strict.missing)
         strict
         (match (singleBlockText text (rawFences text) (brForms text (stringToBytes text) (bytesLength (stringToBytes text)) 0 (rawFences text) (list)))
-          ((some moved) (let [again (bindStrict moved)] (if (and (listEmpty? again.missing) (= again.count 1)) again strict)))
+          ((some moved) (let [again (bindMarked moved (rawPlaceMark))] (if (and (listEmpty? again.missing) (= again.count 1)) again strict)))
           ((none) strict)))))
 
 fn bindStrict text: String -> RawBind
+  (bindMarked text "")
+
+; (:m :ref AGENT-AUDIT-FIX :do "mark is appended to the tag of every form that binds a block: empty for a regular bind, the :rawPlace tag when the one block was taken from before its form")
+fn bindMarked text: String mark: String -> RawBind
   (if (= text "")
     (RawBind :text text :count 0 :missing (list))
     (let [bs (stringToBytes text)
@@ -1544,7 +1563,7 @@ fn bindStrict text: String -> RawBind
           fl (rawFences text)
           fences (indexed fl 0)
           forms (brForms text bs n 0 fl (list))
-          st (fold (fn [acc sp] (brForm text bs n fl fences forms acc sp)) (brState (list) 0 false (list) (list)) forms)]
+          st (fold (fn [acc sp] (brForm text bs n fl fences forms mark acc sp)) (brState (list) 0 false (list) (list)) forms)]
       (match st ((brState consumed count bad steps repls)
         (if (and (not (listEmpty? steps)) (or bad (listAny? (fn [p] (not (listAny? (fn [c] (= c (pairFirst p))) consumed))) fences)))
           (RawBind :text text :count 0 :missing steps)

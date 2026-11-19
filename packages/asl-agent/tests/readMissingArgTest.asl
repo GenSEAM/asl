@@ -15,14 +15,20 @@ fn ! readRec root: String op: String owns: (List String) -> String
 
 fn ! runTests -> Bool
   (let [root (str (optionOr (envGet "TMPDIR") "/tmp") "/readMissingArg" (stringFromInt64 (monotonicNs)))
-        made (and (ok? (dirCreate (str root "/src"))) (and (ok? (fileWrite (str root "/src/real.asl") "fn x -> Int64\n  1\n")) (and (ok? (fileWrite (str root "/src/aa1.asl") "a\n")) (ok? (fileWrite (str root "/src/aa2.asl") "b\n")))))
+        made (and (ok? (dirCreate (str root "/src"))) (and (ok? (fileWrite (str root "/src/real.asl") "fn x -> Int64\n  1\n")) (and (ok? (fileWrite (str root "/src/aa1.asl") "a\n")) (and (ok? (fileWrite (str root "/src/aa2.asl") "b\n")) (and (ok? (fileWrite (str root "/src/naw.asl") "n\n")) (and (ok? (dirCreate (str root "/lib"))) (and (ok? (fileWrite (str root "/lib/one.asl") "1\n")) (and (ok? (fileWrite (str root "/lib/ona.asl") "2\n")) (and (ok? (dirCreate (str root "/lib/sub1"))) (and (ok? (dirCreate (str root "-out"))) (and (ok? (fileWrite (str root "-out/reel.asl") "r\n")) (ok? (fileWrite (str root "-f") "f\n")))))))))))))
         owns (list "src/*.txt" "src/real.asl" "src/new.asl")
         noFile (readRec root "(:step :op \"read\")" owns)
         typo (readRec root "(:step :op \"read\" :file \"src/rael.asl\")" owns)
         far (readRec root "(:step :op \"read\" :file \"src/other.asl\")" owns)
         twin (readRec root "(:step :op \"read\" :file \"src/aa3.asl\")" owns)
         fresh (readRec root "(:step :op \"read\" :file \"src/new.asl\")" owns)
-        cleaned (ok? (pathRemove root))]
+        exists (readRec root "(:step :op \"read\" :file \"lib/one.asl\")" owns)
+        dirNear (readRec root "(:step :op \"read\" :file \"lib/sub2\")" owns)
+        base (optionOr (listLast (stringSplit root "/")) "")
+        outName (str "../" base "-out")
+        outside (readRec root (str "(:step :op \"read\" :file \"" outName "/real.asl\")") owns)
+        ownedOut (readRec root (str "(:step :op \"read\" :file \".a/" base "-f\")") (list (str "../" base "-f")))
+        cleaned (and (ok? (pathRemove root)) (and (ok? (pathRemove (str root "-out"))) (ok? (pathRemove (str root "-f")))))]
     (do
       (assert made "the fixture root is made")
       (assert (and (stringContains? noFile "ERR_MISSING_ARG") (stringContains? noFile "(:step :op \\\"read\\\" :file \\\"src/real.asl\\\")")) (str "a read without :file is refused with a ready read of the first owned file, globs skipped: " noFile))
@@ -30,5 +36,10 @@ fn ! runTests -> Bool
       (assert (and (not (stringContains? far "(repaired ")) (stringContains? far "(status \"rejected\")")) (str "a path far from every file stays a rejected read: " far))
       (assert (and (stringContains? fresh "(status \"ok\")") (and (stringContains? fresh "(new true)") (stringContains? fresh ":content :raw"))) (str "an owned file the task creates is an ok read marked new with the write shape: " fresh))
       (assert (not (stringContains? twin "(repaired ")) (str "a path within two edits of two files is not repaired: " twin))
-      (assert cleaned "the fixture root is removed")
+      (assert (not (stringContains? fresh "(repaired ")) (str "an owned file the task creates is never read at its neighbour src/naw.asl: " fresh))
+      (assert (and (stringContains? exists "(file \"lib/one.asl\")") (and (not (stringContains? exists "(repaired ")) (not (stringContains? exists "lib/ona.asl")))) (str "an existing file with a close neighbour is read as sent: " exists))
+      (assert (and (not (stringContains? dirNear "(repaired ")) (stringContains? dirNear "(file \"lib/sub2\")")) (str "a directory is no candidate: " dirNear))
+      (assert (and (not (stringContains? outside "(repaired ")) (not (stringContains? outside "reel.asl"))) (str "a path that leaves the root is not repaired from a directory outside it: " outside))
+      (assert (and (not (stringContains? ownedOut "(repaired ")) (not (stringContains? ownedOut (str "../" base "-f")))) (str "an owned entry that leaves the root is no candidate: " ownedOut))
+      (assert cleaned "the fixture roots are removed")
       true))
