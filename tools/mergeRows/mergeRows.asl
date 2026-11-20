@@ -321,8 +321,22 @@ fn withNewline s: String -> String
 fn wholeConflict ours: String theirs: String -> MergeResult
   (MergeResult :text (str "<<<<<<< ours\n" (withNewline ours) "=======\n" (withNewline theirs) ">>>>>>> theirs\n") :conflict true)
 
-fn lineMerge base: String ours: String theirs: String mode: String -> MergeResult
-  (let [(bl (parseLines base)) (ol (parseLines ours)) (tl (parseLines theirs))
+; (:m :ref MERGEROWS-TRAILING-BLANK :do "trailing blank lines are not structure: they were skeleton lines, so a side that appended one changed the skeleton length and the whole file conflicted; each side is trimmed to its content plus one final newline before parsing")
+fn dropBlankTail lines: (List String) -> (List String)
+  (listReverse (dropBlankHead (listReverse lines)))
+
+fn dropBlankHead lines: (List String) -> (List String)
+  (match (listHead lines)
+    ((none) lines)
+    ((some l) (if (stringEmpty? (stringTrim l)) (dropBlankHead (optionOr (listTail lines) (list))) lines)))
+
+fn trimTrailingBlank text: String -> String
+  (let [(core (stringJoin (dropBlankTail (stringSplit text "\n")) "\n"))]
+    (if (or (stringEmpty? core) (not (stringEndsWith? text "\n"))) core (str core "\n")))
+
+fn lineMerge base0: String ours0: String theirs0: String mode: String -> MergeResult
+  (let [(base (trimTrailingBlank base0)) (ours (trimTrailingBlank ours0)) (theirs (trimTrailingBlank theirs0))
+        (bl (parseLines base)) (ol (parseLines ours)) (tl (parseLines theirs))
         (bMap (rowMap bl)) (oMap (rowMap ol)) (tMap (rowMap tl))
         (skel (skeletonMerge (skeletonTexts bl) (skeletonTexts ol) (skeletonTexts tl) mode))]
     (if (not skel.ok)

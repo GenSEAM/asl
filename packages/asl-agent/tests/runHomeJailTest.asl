@@ -124,7 +124,8 @@ fn ! runTests -> Bool
         cleanedLink (pathRemove linkOut)]
     (do
       (assert (listContains? rows (str "HOME=" (r/jailHome root))) "the child HOME is the jail inside the root")
-      (assert (listContains? rows (str "TMPDIR=" (r/jailHome root) "/tmp")) "the child TMPDIR is under the jail")
+      (assert (listContains? rows (str "TMPDIR=" (jl/jailTmp root))) "the child TMPDIR is the private directory of the root")
+      (assert (and (not (stringStartsWith? (jl/jailTmp root) (str root "/"))) (match (fileStat (jl/jailTmp root)) ((ok st) st.isDir) ((err _) false))) "AGENT-LINUX-REDS-2: the child TMPDIR exists and lies outside the task tree, so a fixture under it is not inside the task repository")
       (assert (not (listContains? rows (str "HOME=" home))) "the real HOME is not passed")
       (assert (= homeSeen (r/jailHome root)) (str "a command run in the root sees the jail HOME, got " homeSeen))
       (assert (stringContains? okSeen "fine") "a normal command in the root still runs")

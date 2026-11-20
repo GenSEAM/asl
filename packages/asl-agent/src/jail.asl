@@ -1,5 +1,5 @@
 (module aslAgent/jail
-  :x [Jail envKey secretName? passName? scrubEnv cacheNames jailHome jailCacheEnv! cacheSources! seedCaches! seedCachesWith! seedHow linkFree! CliSource resyncNeeded? pickSource resyncCli! cloneKind! cliHeadName cliCopyArgv currentHeads seedReportText childEnv! childEnvIn! jailOf! jailPlan! jailMode lexicalOptIn! jailTool! jailWrap! refusedArgv lexicalJail seatbeltProfile bwrapArgs denialText? sandboxNote absentNote]
+  :x [Jail envKey secretName? passName? scrubEnv cacheNames jailHome jailCacheEnv! cacheSources! seedCaches! seedCachesWith! seedHow linkFree! CliSource resyncNeeded? pickSource resyncCli! cloneKind! cliHeadName cliCopyArgv currentHeads seedReportText childEnv! childEnvIn! jailOf! jailPlan! jailMode lexicalOptIn! jailTool! jailWrap! jailTmp envSignals! refusedArgv lexicalJail seatbeltProfile bwrapArgs denialText? sandboxNote absentNote]
   :i [(aslAgent/agentConfig :a ac)])
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "B-02: the lexical guard and the HOME swap are not a boundary. A unit child (run, manage, gate) now gets an allowlisted environment and runs under an OS sandbox: sandbox-exec on macOS, bwrap on Linux, writes only under :root, the jail home and the rebuildable caches, the root's own .git and the real HOME unreadable and unwritable, no network beyond loopback unless the unit declares :net true. Where no sandbox tool applies (none installed, or already inside a sandbox, which cannot nest) the child runs under the lexical guard only and the receipt says :sandbox lexical")
@@ -12,7 +12,8 @@
   (:f lists (List String))
   (:f realHome String)
   (:f net Bool)
-  (:f why String :default ""))
+  (:f why String :default "")
+  (:f signalEnv String :default ""))
 
 fn envKey row: String -> String
   (match (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
@@ -53,6 +54,10 @@ fn ! file? p: String -> Bool
 ; (:m :ref LEON-RUN-HOME-JAIL :do "the child of a unit op gets HOME and TMPDIR inside <root>/.asl/run/agentLoop/home, created by childEnv!; the real HOME is never passed")
 fn jailHome absRoot: String -> String
   (str absRoot "/.asl/run/agentLoop/home")
+
+; (:m :ref AGENT-LINUX-REDS-2 :do "JAIL-TMPDIR-IN-WORKTREE: the child TMPDIR lies outside the task tree, so a fixture made under it is not inside the repository the gate runs in; one directory per task root under /tmp, created by childEnvIn!, bound writable by jailPlan!")
+fn ! jailTmp absRoot: String -> String
+  (str "/tmp/aslJailTmp-" (stringReplace (resultOr (realPath absRoot) absRoot) "/" "_"))
 
 ; (:m :ref FABLE-BLIND-03 :do "the six cache variables of fleet/run#cacheRows and their place under a HOME. The shared caches of the real HOME hold executables every later asl run on the machine starts unsandboxed, so a unit child never gets them writable: each variable names a private directory under the jail home, and the shared one is at most a read-only source")
 fn jailCacheRows -> (List (Pair String String))
@@ -438,6 +443,8 @@ fn ! childEnvIn! absRoot: String inherited: (List String) hidden: (List String) 
   (let [home (jailHome absRoot)
         free (listAll? (fn [p] (linkFree! absRoot (str home p))) (list "/tmp" "/.asl/seedReport.asn" "/.asl/.gitignore"))
         said (if free true (do (eprintln "(:leon :seed :failed \"a symlink lies on the jail home path; nothing was created or seeded there\")") false))
+        tmpFree (linkFree! "/tmp" (jailTmp absRoot))
+        madeTmp (if tmpFree (ok? (dirCreate (jailTmp absRoot))) false)
         made (and free (and (ok? (dirCreate home)) (ok? (dirCreate (str home "/tmp")))))
         kept (filter (fn [r] (passName? (envKey r))) inherited)
         toolRoot (seedRoot! absRoot inherited)
@@ -457,7 +464,7 @@ fn ! childEnvIn! absRoot: String inherited: (List String) hidden: (List String) 
         ignore (str home "/.asl/.gitignore")
         ignored (if (and (and seed free) (not (file? ignore))) (and (ok? (dirCreate (str home "/.asl"))) (ok? (fileWrite ignore "*\n"))) true)
         caches (jailCacheEnv! absRoot home)
-        own (listAppend caches (list (str "PWD=" absRoot) (str "HOME=" home) (str "TMPDIR=" home "/tmp") "PYTHONDONTWRITEBYTECODE=1"))]
+        own (listAppend caches (list (str "PWD=" absRoot) (str "HOME=" home) (str "TMPDIR=" (jailTmp absRoot)) "PYTHONDONTWRITEBYTECODE=1"))]
     (filter (fn [r] (not (listContains? hidden (envKey r)))) (scrubEnv kept own)))
 
 ; (:m :ref FABLE-BLIND-03 :do "the caches are seeded only for a root that carries its own bin/asl: any other root (a foreign project, a test fixture) never starts the tool from its child and keeps empty private caches")
@@ -551,6 +558,12 @@ fn ! lexicalOptIn! realHome: String -> Bool
     (= (optionOr (ac/agentLoopValue (resultOr (fileReadString (str realHome "/.asl/config.asn")) "") ":jailLexicalOnly") "") "true"))
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "the jail of one child: writes are the root, the jail home (its private caches inside) and the scratch directories the harness adds; reads under the real HOME are those plus the shared repository, the tool root, the shared caches (read-only) and the PATH entries that live there; the root's ancestors up to the real HOME are listable (path and import resolution list them; without that an asl test in the jail cannot stage its sources) but their other children are not readable. JAIL-SEED-SYMLINK: the jail home is granted only where its real path lies inside the root; a symlink the unit planted at <root>/.asl/run/agentLoop/home (or above it) pointing at the real HOME's .asl would otherwise make keys.env and gateway.asn readable and writable")
+fn ! signalEnvFor! tool: String -> String
+  (cond
+    ((or (stringEmpty? tool) (= tool "sandbox-exec")) "")
+    ((envSignals! "/usr/bin/env") "/usr/bin/env")
+    (else (do (eprintln "(:leon :jail :warn \"env lacks --ignore-signal/--default-signal: a bwrap child is not shielded from TERM, so a child that ignores TERM dies with its supervisor\")") "")))
+
 fn ! jailPlan! tool: String lexicalOnly: Bool root: String home: String envRows: (List String) extraReads: (List String) extraWrites: (List String) net: Bool realHomeRaw: String sources: (List String) -> Jail
   (let [mode (jailMode tool lexicalOnly)]
     (if (!= mode "os")
@@ -560,10 +573,10 @@ fn ! jailPlan! tool: String lexicalOnly: Bool root: String home: String envRows:
             pathRow (optionOr (listHead (filter (fn [r] (= (envKey r) "PATH")) envRows)) "")
             pathDirs (filter (fn [d] (under? d realHome)) (map realOr! (filter dir? (stringSplit (envValue pathRow) ":"))))
             homeReal (realOr! home)
-            writes (dedupe (listAppend (cons rroot (if (under? homeReal rroot) (list homeReal) (list))) (map realOr! (filter dir? extraWrites))) (list))
+            writes (dedupe (listAppend (cons rroot (if (under? homeReal rroot) (list homeReal) (list))) (map realOr! (filter dir? (cons (jailTmp rroot) extraWrites)))) (list))
             reads (dedupe (listAppend (listAppend (listAppend (commonGit! rroot) (map realOr! (filter dir? extraReads))) (map realOr! (filter dir? sources))) pathDirs) (list))
             lists (if (and (under? rroot realHome) (!= rroot realHome)) (cons realHome (ancestorsIn rroot realHome (list))) (list))]
-        (Jail :mode "os" :tool tool :root rroot :writes writes :reads reads :lists lists :realHome realHome :net net))))
+        (Jail :mode "os" :tool tool :root rroot :writes writes :reads reads :lists lists :realHome realHome :net net :signalEnv (signalEnvFor! tool)))))
 
 fn ! jailOf! root: String home: String envRows: (List String) extraReads: (List String) extraWrites: (List String) net: Bool -> Jail
   (let [realHome (optionOr (envGet "HOME") "")]
@@ -630,12 +643,18 @@ fn absentNote j: Jail -> String
 fn refusedArgv j: Jail -> (List String)
   (list "/bin/sh" "-c" "printf '%s\\n' \"$1\" >&2; exit 126" "sh" (absentNote j))
 
+; (:m :ref AGENT-LINUX-REDS-2 :do "bwrap is the process the harness signals and it dies of SIGTERM at once, taking a child that ignores TERM down with it by its death signal, so a kill never reached its KILL step; bwrap now ignores TERM (env --ignore-signal) and the child gets the default again (env --default-signal), so TERM reaches the child alone and a child that survives it meets KILL as under sandbox-exec")
+; (:m :ref AGENT-LINUX-REDS-2 :do "the TERM wrapper needs an env that knows --ignore-signal and --default-signal (coreutils 8.31); probed by running it, and a bwrap jail on an env without them keeps the plain argv and says so once on stderr")
+fn ! envSignals! envPath: String -> Bool
+  (probe! (list envPath "--ignore-signal=TERM" "--default-signal=TERM" "true"))
+
 fn ! jailWrap! j: Jail argv: (List String) -> (List String)
   (cond
     ((= j.mode "lexical") argv)
     ((!= j.mode "os") (refusedArgv j))
     ((= j.tool "sandbox-exec") (listAppend (list "/usr/bin/sandbox-exec" "-p" (seatbeltProfile j)) argv))
-    (else (listAppend (bwrapArgs j) argv)))
+    ((stringEmpty? j.signalEnv) (listAppend (bwrapArgs j) argv))
+    (else (listAppend (list j.signalEnv "--ignore-signal=TERM") (listAppend (bwrapArgs j) (cons j.signalEnv (cons "--default-signal=TERM" argv))))))
 
 ; (:m :ref LEON-RUN-HOME-JAIL :do "what a sandbox refusal looks like in a child's output: EPERM from seatbelt, EROFS from a read-only bind")
 fn denialText? text: String -> Bool

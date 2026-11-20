@@ -2,7 +2,7 @@
   :x [RVal Bounded PumpEnd RunAslResult MemoEntry
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
-      nearestLines placeholderAssert? runBounded runAsl ownedNewNote
+      nearestLines placeholderAssert? runBounded runAsl binTargetDir binDirRefusal ownedNewNote
       memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor toolRootRows!]
   :i [(aslAgent/core :a c)
@@ -358,6 +358,23 @@ fn ! toolRootRows! aslBin: String given: (List String) -> (List String)
       (cons (str "ASL_CLI_ROOT=" (resultOr (realPath tool) tool)) (filter (fn [r] (!= (jl/envKey r) "ASL_CLI_ROOT")) given)))
     given)
 
+; (:m :ref AGENT-LINUX-REDS-2 :do "bin/asl may be a symlink whose target lies outside the tool root; bwrap mounts its own /tmp, so the exec path goes through the real tool root (a symlinked ancestor is absent in the jail) and the resolved target is bound read-only too (its directory, the jail binds directories only) or exec finds a dangling link")
+; (:m :ref AGENT-LINUX-REDS-2 :do "the directory of the resolved bin/asl target when it lies outside the real tool root (compared with a trailing slash, so /x/asexOther is not inside /x/asex), else an empty string")
+fn ! binTargetDir aslBin: String toolRoot: String -> String
+  (let [binReal (resultOr (realPath aslBin) aslBin)
+        rootReal (resultOr (realPath toolRoot) toolRoot)]
+    (if (stringStartsWith? binReal (str rootReal "/"))
+      ""
+      (c/sliceOf binReal 0 (- (stringLength binReal) (+ 1 (stringLength (optionOr (listLast (stringSplit binReal "/")) "")))))))
+
+; (:m :ref AGENT-LINUX-REDS-2 :do "a bin/asl target whose directory is the real HOME or one of its ancestors would bind the whole HOME (or the file system) into the jail; refused with a message instead of bound")
+fn ! binDirRefusal aslBin: String -> String
+  (let [dir (binTargetDir aslBin (if (stringEndsWith? aslBin "/bin/asl") (c/sliceOf aslBin 0 (- (stringLength aslBin) 8)) aslBin))
+        home (let [h (optionOr (envGet "HOME") "")] (resultOr (realPath h) h))]
+    (if (and (not (stringEmpty? dir)) (and (not (stringEmpty? home)) (or (= dir home) (stringStartsWith? (str home "/") (str dir "/")) (= dir ""))))
+      (str "ERR_RUN_SANDBOX: " aslBin " resolves into " dir ", the real HOME or a directory above it; a jailed run does not bind it")
+      ""))
+
 fn ! jailedAsl! aslBin: String form: String rootDir: String env: (Option (List String)) -> (Pair (List String) (List String))
   (let [absRoot (resultOr (realPath rootDir) rootDir)
         toolRoot (if (stringEndsWith? aslBin "/bin/asl") (c/sliceOf aslBin 0 (- (stringLength aslBin) 8)) absRoot)
@@ -368,9 +385,11 @@ fn ! jailedAsl! aslBin: String form: String rootDir: String env: (Option (List S
         rows (listAppend (filter (fn [r] (not (listContains? extraKeys (jl/envKey r)))) (jl/childEnvIn! absRoot base (list) (optionOr (envGet "HOME") "") true)) extra)
         envCliRaw (optionOr (envGet "ASL_CLI_ROOT") "")
         envCli (if (stringEmpty? envCliRaw) "" (resultOr (realPath envCliRaw) envCliRaw))
-        reads (if (or (stringEmpty? envCli) (= envCli (resultOr (realPath toolRoot) toolRoot))) (list toolRoot) (list toolRoot envCli))
+        reads0 (if (or (stringEmpty? envCli) (= envCli (resultOr (realPath toolRoot) toolRoot))) (list toolRoot) (list toolRoot envCli))
+        binDir (binTargetDir aslBin toolRoot)
+        reads (if (stringEmpty? binDir) reads0 (listAppend reads0 (list binDir)))
         jail (jl/jailOf! absRoot (jl/jailHome absRoot) rows reads (list) false)]
-    (pair (jl/jailWrap! jail (list aslBin form)) rows))
+    (pair (jl/jailWrap! jail (list (if (stringEndsWith? aslBin "/bin/asl") (str (resultOr (realPath toolRoot) toolRoot) "/bin/asl") aslBin) form)) rows))
 
 fn ! isDirAt! p: String -> Bool
   (match (fileStat p) ((ok st) st.isDir) ((err _) false))
@@ -379,6 +398,8 @@ fn ! runnable! p: String -> Bool
   (match (fileStat p) ((ok st) (and st.isFile (!= (& st.mode 73) 0))) ((err _) false))
 
 fn ! runAslOnBin aslBin: String form: String rootDir: String timeoutSec: Int64 env: (Option (List String)) -> RunAslResult
+  (if (and (isDirAt! rootDir) (and (runnable! aslBin) (not (stringEmpty? (binDirRefusal aslBin)))))
+    (RunAslResult :exit 1 :stdout "" :stderr (binDirRefusal aslBin) :timedOut false :seconds 0 :fellBack "")
   (let [jailed (if (and (isDirAt! rootDir) (runnable! aslBin))
                  (jailedAsl! aslBin form rootDir env)
                  (pair (list aslBin form) (envWithAslRoot! rootDir env)))
@@ -392,7 +413,7 @@ fn ! runAslOnBin aslBin: String form: String rootDir: String timeoutSec: Int64 e
           (RunAslResult :exit 1 :stdout b.out
             :stderr (str "killed after " (stringFromInt64 timeoutSec) " s (:timeout true :seconds " (stringFromInt64 timeoutSec) ")\n" b.errText)
             :timedOut true :seconds timeoutSec :fellBack "")
-          (RunAslResult :exit (optionOr b.code 1) :stdout b.out :stderr b.errText :timedOut false :seconds 0 :fellBack "")))))
+          (RunAslResult :exit (optionOr b.code 1) :stdout b.out :stderr b.errText :timedOut false :seconds 0 :fellBack ""))))))
 
 fn ! runAsl repoRoot: String form: String rootDir: String timeoutSec: Int64 env: (Option (List String)) mode: String -> RunAslResult
   (let [toolRoot repoRoot

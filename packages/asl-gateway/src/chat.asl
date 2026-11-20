@@ -2266,11 +2266,19 @@ fn geminiToChat body: String -> (Option String)
              (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
          (some (pt/jsonDumps chat -1))))))
 
+; (:m :ref GW-LENGTH-USAGE :do "the emptyLength note carries the reply's own usage so the ledger counts the output the cap cut off; when the reply counted prompt tokens but no completion tokens, :out is estimated as the row's maxTokens and the usage object says usageEstimated true")
+fn lengthUsage a: Attempt resp: j/Json -> j/Json
+  (let [(use (getOr resp "usage" (j/jnull)))
+        (cap (match a.v2 ((some e) (optionOr e.params.maxTokens 0)) ((none) 0)))]
+    (if (and (= (usageInt use "completion_tokens") 0) (> cap 0))
+      (pt/jset (pt/jset (if (isObj? use) use (j/jobj (list))) "completion_tokens" (j/jint cap)) "usageEstimated" (j/jbool true))
+      use))
+
 ; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty reply whose finish_reason is length spent its max_tokens before any content (a reasoning model thinking past the cap): it is its own outcome emptyLength with a message naming the cap, never the blind same-model retry an empty reply gets; a cascade moves to the next member, a single member answers 502 ERR_EMPTY_LENGTH")
 fn lengthStopped cx: Ctx l: Loop a: Attempt p: Projection -> ChatStep
   (let [(chars (stringLength (optionOr (reasoningFallbackText (firstMessage p.resp)) "")))
         (why (str "ERR_EMPTY_LENGTH: model " a.model " stopped at its max_tokens (finish_reason length) after " (stringFromInt64 chars) " reasoning chars and no content; raise :maxTokens or lower :effort on its row"))]
-    (tell (usageNote a.upstream.provider a.alias "emptyLength")
+    (tell (effUsageNote a.upstream.provider a.alias "emptyLength" (lengthUsage a p.resp))
       (fn [] -> ChatStep
         (if (> cx.cascadeLen 1)
           (tellAll (list (effUsageFallback a.upstream.provider a.alias) (effLog (str "[Gateway Cascade] " why ". Cascading to next...\n")))

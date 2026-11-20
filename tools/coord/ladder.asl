@@ -603,6 +603,14 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
                                  ((err e) (err e))
                                  ((ok next) (ok (withEarlier next calls))))))))))))
 
+; (:m :ref GATES-PROVEN-FIRST :do "the mechanical check before the models: a receipt that proves no red-before with executed assertions can never merge (decide refuses it after any pass), so the review answers fix (first time) or blocked (after a fix round) with decide's own words and asks no reviewer; 25% of review outcomes were this refusal after the model calls")
+fn unprovenRuling u: ReviewUnit -> Ruling
+  (let [(grade (fn [(note String)] -> String (g/gradeRow u.id "none" "none" u.writerChannel "reject" note)))]
+    (if (< u.fixesUsed 1)
+      (ruling "fix" (startRungOf u) (list "gates not proven red-before with executed assertions") "" (list (grade "gates not proven red-before with executed assertions")) u.prior "")
+      (let [(why "gates not proven after a fix round")]
+        (ruling "blocked" (startRungOf u) (list why) "" (list (g/gradeRow u.id "none" "none" u.writerChannel "pending" why) (escalateRow u (startRungOf u) u.prior why)) u.prior why))))
+
 ; (:m :ref COND2 :do "the conductor's review stage: (review unit diff gates lanes callModel) -> Ruling.")
 ; (:m :ref COND2 :do "callModel takes a lane alias and a prompt and returns the reply text; ruling.action is merge | fix | await | blocked.")
 fn ! reviewWith table: String u: ReviewUnit diff: String gates: String lanes: (List Lane) callModel: (fn ! [String String] -> (Result String String)) -> (Result Ruling String)
@@ -611,6 +619,7 @@ fn ! reviewWith table: String u: ReviewUnit diff: String gates: String lanes: (L
       ((listEmpty? rows) (err "family table does not parse or is empty"))
       ((not (listContains? (list "low" "med" "high") u.risk)) (err (str "risk " u.risk " is not low, med or high")))
       ((= (rungNum (startRungOf u)) 0) (err (str "startRung " u.startRung " is not R1, R2 or R3")))
+      ((not (gatesProven gates)) (ok (unprovenRuling u)))
       (else (runRung u rows lanes (reviewBrief u diff gates) gates callModel (startRungOf u) u.prior u.fixesUsed))))
 
 fn ! review u: ReviewUnit diff: String gates: String lanes: (List Lane) callModel: (fn ! [String String] -> (Result String String)) -> (Result Ruling String)

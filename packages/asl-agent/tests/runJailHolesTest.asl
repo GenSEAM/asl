@@ -93,7 +93,7 @@ fn ! runTests -> Bool
       (assert (not (listContains? refusedArgv (str "echo ran > " root "/refusedRan.txt"))) "a refused jail does not hand back the command")
       (assert (and (= refusedRun.exit 126) (not refusedRan)) (str "a refused jail runs nothing and exits 126, got " (stringFromInt64 refusedRun.exit)))
       (assert (stringContains? refusedRun.out "ERR_RUN_SANDBOX_ABSENT") (str "the refusal names its error: " refusedRun.out))
-      (assert (stringStartsWith? mktempSeen (str home "/tmp/")) (str "mktemp in a unit child lands under the private TMPDIR, got " mktempSeen))
+      (assert (stringStartsWith? mktempSeen (str (jl/jailTmp root) "/")) (str "mktemp in a unit child lands under the private TMPDIR outside the tree, got " mktempSeen))
       (assert (not tmpLeft) "a unit child cannot create a file in the shared /tmp")
       (assert (if mac (and (stringContains? tmpRec "ERR_RUN_SANDBOX") (stringContains? tmpRec "$TMPDIR")) (and (not tmpLeft) (stringContains? tmpRec "(sandbox \"os\")")))
         (str (if mac "the refusal of a /tmp write names TMPDIR (seatbelt denies the shared /tmp)" "a /tmp write of a unit child stays in the jail's private tmpfs and never reaches the shared /tmp (bwrap: no refusal to report, the run is under the OS sandbox)") ": " tmpRec))

@@ -8,5 +8,6 @@
    "asl-http/http2"
    "asl-http/wsProtocol"
    "asl-http/download"
+   "asl-http/client"
  ]
  :dependencies [])

@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv withNet execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv withNet withGateSame execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings moduleMismatch!
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -42,7 +42,8 @@ enum Val
   (:f deadlineAt (Option Float64))
   (:f session String)
   (:f env (Option (List String)))
-  (:f net Bool :default false))
+  (:f net Bool :default false)
+  (:f gateSame (List (List (Pair String Val))) :default (list)))
 
 (schema ExecOut
   (:f rec (List (Pair String Val)))
@@ -56,6 +57,13 @@ fn makeExecEnv root: String repoRoot: String mode: String owns: (List String) wr
 ; (:m :ref LEON-RUN-HOME-JAIL :do "the unit's :net true, from the run arguments; without it run and manage children have no network beyond loopback")
 fn withNet env: ExecEnv net: Bool -> ExecEnv
   (with env :net net)
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "the gate verdicts still valid for this turn, one record per gate (cmd exit stdout stderr since): the loop passes them only when the owned tree is the one they were taken on and the turn holds no step that can change it; a gate step answers each gate found here from it, marked :same true :since N, and starts a process only for the others")
+fn withGateSame env: ExecEnv recs: (List (List (Pair String Val))) -> ExecEnv
+  (with env :gateSame recs)
+
+fn gateSameFor env: ExecEnv cmd: String -> (Option (List (Pair String Val)))
+  (listHead (filter (fn [rec] (= (recGet rec "cmd") (some (vStr cmd)))) env.gateSame))
 
 ; (:m :adopted NormativeAndEmpiricalAreNotMixed)
 fn rawRequiredBytes -> Int64
@@ -270,7 +278,9 @@ fn gateOutcome gate: (List (Pair String Val)) -> String
 
 fn formatGateRun gate: (List (Pair String Val)) -> String
   (let [n (if (notNone gate "n") (str ":n " (fieldStr gate "n" "") " ") "")]
-    (str "(" n ":cmd \"" (escField gate "cmd") "\" " (gateOutcome gate) " :tail \"" (c/escapeAsn (gateTail gate)) "\")"))
+    (str "(" n ":cmd \"" (escField gate "cmd") "\" " (gateOutcome gate)
+      (if (truthyField gate "same") (str " :same true :since " (fieldStr gate "since" "0")) "")
+      " :tail \"" (c/escapeAsn (gateTail gate)) "\")"))
 
 fn capped s: String cap: Int64 cut: Int64 tail: String -> String
   (if (> (cpLen s) cap) (str (cpTake s cut) tail) s)
@@ -621,9 +631,15 @@ fn ! execGateOp! n: (Option c/KvVal) env: ExecEnv newId: (fn [] -> String) -> (L
           (let [picked (if all
                          (map (fn [k] (pair (+ k 1) (optionOr (listGet gates k) ""))) (range 0 count))
                          (list (pair i (optionOr (listGet gates (- i 1)) ""))))
-                withIds (map (fn [pk] (pair (newId) (pairSecond pk))) picked)
-                runs (g/runGates! withIds env.root (stepTimeout! env) (none) (none))
-                recs (map (fn [k] (listAppend (mapRec (optionOr (listGet runs k) (list)) fromGit)
+                fresh (filter (fn [pk] (none? (gateSameFor env (pairSecond pk)))) picked)
+                withIds (map (fn [pk] (pair (newId) (pairSecond pk))) fresh)
+                ran (if (listEmpty? withIds) (list) (map (fn [run] (mapRec run fromGit)) (g/runGates! withIds env.root (stepTimeout! env) (none) (none))))
+                runs (map (fn [k]
+                            (match (gateSameFor env (pairSecond (optionOr (listGet picked k) (pair 0 ""))))
+                              ((some rec) (recSet rec "same" (vBool true)))
+                              ((none) (optionOr (listGet ran (listLength (filter (fn [pk] (none? (gateSameFor env (pairSecond pk)))) (listTake picked k)))) (list)))))
+                       (range 0 (listLength picked)))
+                recs (map (fn [k] (listAppend (optionOr (listGet runs k) (list))
                                     (list (pair "n" (vInt (pairFirst (optionOr (listGet picked k) (pair 0 ""))))))))
                        (range 0 (min (listLength picked) (listLength runs))))
                 passed (listAll? (fn [rr] (= (recGet rr "exit") (some (vInt 0)))) recs)]

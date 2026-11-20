@@ -180,7 +180,7 @@ fn withHeadState state: s/LoopState turn: Int64 readStreak: Int64 writesPersiste
       :missingGateIntro state.missingGateIntro
       :patchErr state.patchErr
       :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak
-      :prefetch state.prefetch :baselineGreen state.baselineGreen
+      :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo
       :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath
       :retries state.retries
@@ -217,7 +217,7 @@ fn withOwnsRejections state: s/LoopState rejections: (List j/Json) -> s/LoopStat
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -257,7 +257,7 @@ fn withUsageTotals state: s/LoopState usageTotals: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -294,7 +294,7 @@ fn withBatching state: s/LoopState batching: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -324,7 +324,7 @@ fn withPlan state: s/LoopState plan: j/Json -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -354,7 +354,7 @@ fn withFindings state: s/LoopState findings: (List j/Json) confirms: (List j/Jso
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -385,7 +385,7 @@ fn withPrefetch state: s/LoopState prefetch: String -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch prefetch :baselineGreen state.baselineGreen :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch prefetch :baselineGreen state.baselineGreen :gateMemo state.gateMemo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -428,9 +428,21 @@ fn noOutline f: String -> (Pair Int64 String)
 
 ; (:m :ref LEON-CAPS :do "the task's gates run once before the first turn, in the run root, with the run's gate timeout; a gate that exits 0 here is green before any edit, so a later green of it proves nothing about the change and the end status lists it as vacuous; a resumed run skips this because its root may already carry edits")
 fn ! baselineGreen! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (Pair (List String) (List String))
-  (let [rows (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent)]
-    (pair (map (fn [row] (rowText row "cmd")) (filter (fn [row] (= (rowExit row) 0)) rows))
-      (map (fn [row] (rowText row "cmd")) (filter baselineLost? rows))))
+  (baselineVerdictsOf (baselineRows! gates rootDir timeout parent))
+
+fn ! baselineRows! gates: (List String) rootDir: String timeout: Int64 parent: (Option Int64) -> (List (List (Pair String go/RVal)))
+  (go/runGatesWatched! (map (fn [p] (pair (stringFromInt64 (+ (pairFirst p) 1)) (pairSecond p))) (enumerate gates)) rootDir timeout none parent)
+
+fn baselineVerdictsOf rows: (List (List (Pair String go/RVal))) -> (Pair (List String) (List String))
+  (pair (map (fn [row] (rowText row "cmd")) (filter (fn [row] (= (rowExit row) 0)) rows))
+    (map (fn [row] (rowText row "cmd")) (filter baselineLost? rows)))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "the baseline pass kept whole, one memo per gate at turn 0 on the digest of the owned tree before any edit; a row with no verdict (baselineLost?) is kept as a timeout result, which is shown as lost and never served as a stored answer")
+fn baselineMemo rows: (List (List (Pair String go/RVal))) digest: String -> (List s/GateMemo)
+  (map (fn [row]
+         (s/GateMemo :digest digest :turn 0
+           :result (g/makeGateResult (rowText row "cmd") (rowExit row) (rowText row "stdout") (rowText row "stderr") (baselineLost? row) 0)))
+    rows)
 
 ; (:m :ref LDR-BASELINE-RAN :do "a baseline row with no verdict: the gate timed out, or never ran (a spawn failure row has no stdout key); such a gate is neither green nor red on the base")
 fn baselineLost? row: (List (Pair String go/RVal)) -> Bool
@@ -447,7 +459,7 @@ fn rowExit row: (List (Pair String go/RVal)) -> Int64
     ((some p) (match (pairSecond p) ((go/rInt v) v) (_ 1)))
     ((none) 1))
 
-fn withBaseline state: s/LoopState green: (List String) -> s/LoopState
+fn withBaseline state: s/LoopState green: (List String) memo: (List s/GateMemo) -> s/LoopState
   (s/LoopState
       :turn state.turn :contextTokens state.contextTokens :core state.core
       :wallBudget state.wallBudget :intent state.intent :plan state.plan :mode state.mode
@@ -471,7 +483,7 @@ fn withBaseline state: s/LoopState green: (List String) -> s/LoopState
       :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
       :header state.header :history state.history :lastGates state.lastGates
       :missingGateIntro state.missingGateIntro :patchErr state.patchErr
-      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen green :priorIds state.priorIds
+      :placeholderBriefs state.placeholderBriefs :doneNoWriteStreak state.doneNoWriteStreak :malformedStreak state.malformedStreak :notFoundStreak state.notFoundStreak :prefetch state.prefetch :baselineGreen green :gateMemo memo :priorIds state.priorIds
       :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
       :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
@@ -551,9 +563,13 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
           (let [swept (ex/sweepRevertBackups! rootDir)
                 _swept (if (listEmpty? swept) true
                          (ok? (jr/journalWrite env.journalPath (str "(:revertSwept :files (" (stringJoin (map (fn [f] (str "\"" (c/escapeAsn f) "\"")) swept) " ") "))\n"))))
-                baseVerdicts (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
-                        (baselineGreen! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
-                        (pair (list) (list)))
+                ; (:m :ref LOOP-BASELINE-STORED-GATE :do "the digest is taken before the gates run, so a gate that itself changes an owned file leaves a tree its stored verdict does not answer for")
+                baseDigest (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ownedDigest! env.owns rootDir) "")
+                baseRows (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates))))
+                        (baselineRows! env.gates rootDir (match env.wallBudget ((some w) (if (> w 0) (max 1 (min timeout w)) timeout)) ((none) timeout)) parent)
+                        (list))
+                baseVerdicts (baselineVerdictsOf baseRows)
+                baseMemo (if (listEmpty? baseRows) (list) (baselineMemo baseRows baseDigest))
                 green (pairFirst baseVerdicts)
                 lost (pairSecond baseVerdicts)
                 _ (if (and baselineOn (and (none? env.resume) (not (listEmpty? env.gates)))) (ok? (jr/journalWrite env.journalPath (str "(:baseline :green (" (quoted green) ") :red (" (quoted (filter (fn [g] (not (listContains? green g))) env.gates)) ")" (if (listEmpty? lost) "" (str " :lost (" (quoted lost) ")")) ")\n"))) true)
@@ -562,7 +578,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
           (ready (LoopRun
             :state (withBaseline (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
               state.deliver state.allGateResults state.lastGates state.status state.signalName
-              state.escalateReceipt state.runStarted) prefetchText) green)
+              state.escalateReceipt state.runStarted) prefetchText) green baseMemo)
             :procs (ro/newProcs) :written (pairFirst patchState) :session sid :commitMessage none :parseDefects 0 :lastDefect false :lastDefectTurn none :parseDefectStreak 0)))))))
 
 fn latestRed entry: j/Json -> Bool

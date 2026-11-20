@@ -32,6 +32,8 @@ fn ! testPick -> Bool
     (do (assert (= three (list "B" "E")) (str "disjoint candidates in order up to K - 1, one sharing the leader's file and one with unknown files skipped: " (stringJoin three ",")))
         (assert (listEmpty? one) "a batch of 1 carries no passenger")
         (assert (= shared (list "B")) "a candidate sharing a file with an earlier pick is skipped")
+        (assert (= (cd/batchPick 4 (list "a.txt" ".asl/mem/grades.asn") (list (pair "B" (some (list "b.txt" ".asl/mem/grades.asn"))) (pair "C" (some (list "c.txt" ".asl/mem/grades.asn"))))) (list "B" "C")) "every reviewed branch adds a grades.asn row, which merges by row and keeps no one apart")
+        (assert (= (cd/batchPick 4 (list "a.txt" ".asl/mem/grades.asn") (list (pair "B" (some (list "a.txt" ".asl/mem/grades.asn"))))) (list)) "a shared ordinary file still keeps a candidate out beside grades.asn")
         (assert (cd/batchable? (pf/cuIn "N" "merging" "" "sh/N")) "a fresh merging unit may ride")
         (assert (cd/batchable? killed) "a unit whose last train was killed may ride")
         (assert (not (cd/batchable? red)) "a unit whose last train was red runs alone")

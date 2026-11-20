@@ -33,7 +33,8 @@ enum RVal
   (:f logSize Int64)
   (:f code (Option Int64))
   (:f signalled Bool)
-  (:f sandbox String :default ""))
+  (:f sandbox String :default "")
+  (:f bwrap Bool :default false))
 
 (schema Mark
   (:f rel String)
@@ -621,6 +622,12 @@ fn reapKilled! p: Proc killed: Bool -> Proc
         ((ok got) (closeIn! (withState p p.inOpen (some (optionOr got -9)) true)))
         ((err _) (closeIn! (withState p p.inOpen (some -9) true))))))
 
+; (:m :ref AGENT-LINUX-REDS-2 :do "bwrap reports a child killed by signal n as exit 128+n where a direct child reports -n; a killed bwrap run is normalised to -n so the exit of a kill does not depend on the platform")
+fn signalExit p: Proc -> Proc
+  (match p.code
+    ((some c) (if (and p.bwrap (and (> c 128) (< c 160))) (with p :code (some (- 128 c))) p))
+    ((none) p))
+
 fn killProc! p: Proc -> Proc
   (let [q (reap! p)]
     (if (not (running q))
@@ -628,7 +635,7 @@ fn killProc! p: Proc -> Proc
       (do
         (signalGroup! q.pid "SIGTERM")
         (let [waited (waitGone! q 100)]
-          (drain! (reapKilled! waited (signalGroup! waited.pid "SIGKILL")) 128)))))
+          (signalExit (drain! (reapKilled! waited (signalGroup! waited.pid "SIGKILL")) 128))))))
 
 fn tableGet table: (List Proc) sid: String -> (Option Proc)
   (listHead (filter (fn [p] (= p.sid sid)) table))
@@ -685,7 +692,7 @@ fn spawnProc! sid: String cmd: String ctx: RunCtx stdin: Bool -> (Result Proc St
           ((ok sp)
             (let [inOpen (if stdin (ok? (fdNonBlocking sp.stdin true)) (do (fdClose sp.stdin) false))]
               (ok (Proc :sid sid :pid sp.pid :inFd sp.stdin :outFd sp.stdout :errFd sp.stderr
-                    :inOpen inOpen :outOpen true :errOpen true :log (list) :logSize 0 :code (none) :signalled false :sandbox jail.mode))))))))
+                    :inOpen inOpen :outOpen true :errOpen true :log (list) :logSize 0 :code (none) :signalled false :sandbox jail.mode :bwrap (and (stringEndsWith? jail.tool "bwrap") (not (stringEmpty? jail.signalEnv)))))))))))
 
 fn sortMarks ms: (List Mark) -> (List Mark)
   (listSortBy (fn [m] m.rel) ms)

@@ -3,6 +3,10 @@
   :i [(aslAgent/jail :a jl) (aslAgent/core :a c) (asl-tools/fleet/run :a fr)])
 
 ; (:m :ref FABLE-BLIND-03 :do "the jail plan with every input explicit, on a stand-in HOME under one <tmp>/leonjail-plan-<ns> directory removed at the end (tmp is /private/tmp where that is a directory, else /tmp): no sandbox tool means refused unless the stand-in HOME's config opts into the lexical guard, and a row in the unit's own root never counts; private caches start as a clone of the shared ones; under the OS sandbox the shared cache is readable and not writable while the rest of the stand-in HOME stays unreadable; the bwrap argv binds the shared cache read-only inside its own process namespace and /tmp. JAIL-LINUX: the bwrap argv is asserted as data on any machine (/run masked, the hidden HOME sealed read-only), and the no-clone seed of the native CLI cache runs here with the clone kind passed as none. Where this test already runs inside a sandbox the tool probe is empty and the end-to-end part is skipped by name")
+fn ! stubEnv! path: String text: String -> Bool
+  (and (ok? (fileWrite path text))
+    (= (fr/runOneLimited (fr/job (list "chmod" "755" path) "/" (list "PATH=/usr/bin:/bin")) (fr/limits 10 4)).exit 0))
+
 fn ! readText! p: String -> String
   (resultOr (fileReadString p) "")
 
@@ -83,6 +87,10 @@ fn ! runTests -> Bool
         readShared (readText! (str root "/readShared.txt"))
         readSecret (readText! (str root "/readSecret.txt"))
         ownSeen (readText! (str home "/.asl/run/nativeCli/own.txt"))
+        stubBad (stubEnv! (str base "/envBad") "#!/bin/sh\necho \"env: unrecognized option\" >&2\nexit 125\n")
+        stubGood (stubEnv! (str base "/envGood") "#!/bin/sh\nexit 0\n")
+        probeBad (jl/envSignals! (str base "/envBad"))
+        probeGood (jl/envSignals! (str base "/envGood"))
         linux (jl/Jail :mode "os" :tool "/usr/bin/bwrap" :root "/r/unit" :writes (list "/r/unit" "/r/unit/.asl/run/agentLoop/home") :reads (list "/h/.asl/run/nativeCli") :lists (list) :realHome "/h" :net false)
         bwrap (c/joinSep (jl/bwrapArgs linux) " ")
         bwrapNet (c/joinSep (jl/bwrapArgs (with linux :net true)) " ")
@@ -109,6 +117,9 @@ fn ! runTests -> Bool
       (assert (not (listAny? (fn [k] (or (covers? k (listAppend macPlan.reads macPlan.writes)) (covers? k (listAppend linuxPlan.reads linuxPlan.writes)))) decoyPaths)) (str "LEON-JAIL-CLI-CACHE: no read or write of either plan covers keys.env, gateway.asn or .env.free: " (c/joinSep (listAppend macPlan.reads macPlan.writes) " ")))
       (assert (and (stringContains? macProfile (str "(deny file-read* (subpath \"" fakeHomeReal "\"))")) (not (listAny? (fn [k] (stringContains? macProfile (str "\"" k "\""))) (cons (str fakeHomeReal "/.asl") decoyPaths)))) "LEON-JAIL-CLI-CACHE: the seatbelt profile denies the stand-in HOME and allows nothing naming its .asl or a key file")
       (assert (and (stringContains? linuxArgv (str "--tmpfs " fakeHomeReal)) (not (listAny? (fn [k] (stringContains? linuxArgv (str " " k " "))) (cons (str fakeHomeReal "/.asl") decoyPaths)))) "LEON-JAIL-CLI-CACHE: bwrap hides the stand-in HOME under a tmpfs and binds nothing naming its .asl or a key file")
+      (assert (and stubBad (and stubGood (and (not probeBad) probeGood))) "AGENT-LINUX-REDS-2: an env that rejects the signal options fails the probe, one that accepts them passes")
+      (assert (= (jl/jailWrap! (with linux :signalEnv "") (list "/bin/echo" "x")) (listAppend (jl/bwrapArgs linux) (list "/bin/echo" "x"))) "AGENT-LINUX-REDS-2: without a usable env the bwrap argv is the plain one")
+      (assert (= (jl/jailWrap! (with linux :signalEnv "/usr/bin/env") (list "/bin/echo" "x")) (listAppend (list "/usr/bin/env" "--ignore-signal=TERM") (listAppend (jl/bwrapArgs linux) (list "/usr/bin/env" "--default-signal=TERM" "/bin/echo" "x")))) "AGENT-LINUX-REDS-2: with a usable env bwrap ignores TERM and the child gets the default back")
       (assert (= (jl/jailMode "" false) "refused") "no sandbox tool and no opt-in is refused")
       (assert (= (jl/jailMode "" true) "lexical") "no sandbox tool with the opt-in is lexical")
       (assert (and (= (jl/jailMode "sandbox-exec" false) "os") (= (jl/jailMode "/usr/bin/bwrap" true) "os")) "a sandbox tool is used whatever the opt-in says")

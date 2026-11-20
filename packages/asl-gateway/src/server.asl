@@ -1,5 +1,5 @@
 (module aslGateway/server
-  :x [gatewayCliMode? hubStatusText! staleHeaderName staleHeaderLine staleMarked addConn requeueWriting stepWriting! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
+  :x [paramsFromRequest gatewayCliMode? hubStatusText! staleHeaderName staleHeaderLine staleMarked addConn requeueWriting stepWriting! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
       breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-text/say :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
@@ -951,7 +951,11 @@ fn paramsFromRequest sent: u/UpstreamRequest -> ul/CallParams
     ((ok body)
      (let [(messages (jsonArrOf (j/jsonGet body "messages")))
            (effortDirect (jsonStrOf (j/jsonGet body "effort")))
-           (effort (match effortDirect ((some s) (some s)) ((none) (jsonStrOf (j/jsonGet body "reasoning_effort")))))]
+           ; (:m :ref GW-LENGTH-USAGE :do "the openrouter dialect writes reasoning.effort, so the ledger reads it back too; before this such a row showed effort absent")
+           (effort (match effortDirect ((some s) (some s))
+                     ((none) (match (jsonStrOf (j/jsonGet body "reasoning_effort"))
+                               ((some s) (some s))
+                               ((none) (match (j/jsonGet body "reasoning") ((some r) (jsonStrOf (j/jsonGet r "effort"))) ((none) none)))))))]
        (ul/CallParams
          :temperature (jsonFloatOf (j/jsonGet body "temperature"))
          :topP (jsonFloatOf (j/jsonGet body "top_p"))

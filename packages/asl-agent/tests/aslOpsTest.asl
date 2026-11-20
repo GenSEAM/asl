@@ -190,7 +190,7 @@ fn ! replayRunAslCase form: String real: String root: String -> Bool
         aslForm (getStr kv "form")
         timeoutSec (getInt kv "timeoutSec")
         res (o/runAsl repo aslForm root timeoutSec (none) mode)]
-    (do (assert (= (o/runExit res) (getInt kv "exitCode")) (str id ": runAsl exit matches"))
+    (do (assert (= (o/runExit res) (getInt kv "exitCode")) (str id ": runAsl exit matches got=" (o/runExit res) " want=" (getInt kv "exitCode") " stderr=" (o/runStderr res)))
         (assert (= (unplace (o/runStdout res) real root) (getStr kv "stdout")) (str id ": runAsl stdout matches"))
         (assert (= (unplace (o/runStderr res) real root) (getStr kv "stderr")) (str id ": runAsl stderr matches got=" (o/runStderr res) " want=" (getStr kv "stderr")))
         (assert (= (o/runTimedOut res) (getBool kv "timedOut")) (str id ": runAsl timedOut matches"))
@@ -308,6 +308,8 @@ fn ! runTests -> Bool
               (assert (and (= (o/runExit defaultMemoryObserve) 0) (stringContains? (o/runStdout defaultMemoryObserve) "(:observe")
                            (= (o/runStderr defaultMemoryObserve) ""))
                 "default memory observe dispatches in-process through the existing runAsl entry point")
+              (assert (and (= (o/binTargetDir "/nonexistent/asexOther/bin/asl" "/nonexistent/asex") "/nonexistent/asexOther/bin") (= (o/binTargetDir "/nonexistent/asex/bin/asl" "/nonexistent/asex") "")) "AGENT-LINUX-REDS-2: a sibling whose name starts with the tool root is outside it, a target under the root needs no extra read")
+              (assert (= (o/binDirRefusal (str real "/bin/stubEcho")) "") "AGENT-LINUX-REDS-2: a bin outside HOME is not refused")
               true)
         n (runAllCases (c/restOf forms) real link 0)
         cleaned (runOk (list "rm" "-rf" tmpBase))]

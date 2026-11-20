@@ -1,6 +1,6 @@
 (module aslAgent/tests/gitOpsTest
   :x [runTests]
-  :i [(aslAgent/gitOps :a g) (aslAgent/core :a c)])
+  :i [(aslAgent/gitOps :a g) (aslAgent/core :a c) (aslAgent/jail :a jl)])
 
 fn kvGet kv: (List (Pair String c/KvVal)) k: String -> (Option c/KvVal)
   (match (listHead (filter (fn [p] (= (pairFirst p) k)) kv))
@@ -115,7 +115,7 @@ fn runCase! base: String kv: (List (Pair String c/KvVal)) formats: (Map String S
         (pair (subBase base (g/serRecs "gates" (g/runGates! (map (fn [x] (pair "ID" x)) (listed kv "g")) root (getI kv "t") env (none)))) formats))
       ((= fnName "runGatesGroup")
         (let [recs (g/runGates! (map (fn [x] (pair "ID" (withBase base x))) (listed kv "g")) root (getI kv "t") env (none))
-              pidFile (str root "/.asl/run/agentLoop/home/tmp/bg.pid")
+              pidFile (str (jl/jailTmp root) "/bg.pid")
               pid (optionOr (stringToInt64 (stringTrim (resultOr (fileReadString pidFile) ""))) 0)
               dropped (pathRemove pidFile)]
           (pair (str (subBase base (g/serRecs "gates" recs)) " (alive " (if (pidAlive! pid 100) "true" "false") ")") formats)))

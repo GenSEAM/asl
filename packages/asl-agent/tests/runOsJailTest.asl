@@ -85,7 +85,7 @@ fn ! runTests -> Bool
         curlSeen (readText! (str root "/curl.txt"))
         insideSeen (readText! (str root "/inside.txt"))
         scratchSeen (readText! (str (r/jailHome root) "/scratch.txt"))
-        tempSeen (readText! (str (r/jailHome root) "/tmp/temp.txt"))
+        tempSeen (readText! (str (jl/jailTmp root) "/temp.txt"))
         cleaned (pathRemove base)]
     (do
       (assert (and madeDirs (and (ok? wroteSubject) (and repo (and wroteMarkers (and (ok? wroteEscape) (and (ok? wroteGate) (and (ok? wroteGit) (and (ok? wroteHomeWrite) (ok? wroteProbe))))))))) "the jail fixture (root repo, stand-in home and sibling markers, scripts) was built")

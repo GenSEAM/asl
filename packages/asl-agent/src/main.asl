@@ -1278,6 +1278,73 @@ fn liveOpName op: (List (Pair String c/KvVal)) -> String
     ((some value) (match value ((c/kvStr name) name) (_ "")))
     ((none) ""))
 
+fn liveOpText op: (List (Pair String c/KvVal)) key: String -> String
+  (match (c/dictGet op key)
+    ((some value) (match value ((c/kvStr text) text) ((c/kvInt digits) digits)))
+    ((none) ""))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "turnPath over 52 journals, 278 turns: 34 turns asked for the gate before any change; a step that only asks for a declared gate is (:step :op gate) without :revert, or a run whose command is a declared gate (exec runs that as the gate too)")
+fn gateAskOp? op: (List (Pair String c/KvVal)) gates: (List String) -> Bool
+  (let [name (liveOpName op)
+        cmd (stringTrim (let [argv (liveOpText op "argv")] (if (stringEmpty? argv) (liveOpText op "cmd") argv)))]
+    (or (and (= name "gate") (stringEmpty? (liveOpText op "revert")))
+      (and (= name "run") (listAny? (fn [gate] (= (stringTrim gate) cmd)) gates))))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "a turn that asks for a gate and can change nothing the gate sees: every step is a gate request or read-only")
+fn gateAskTurn? ops: (List (List (Pair String c/KvVal))) gates: (List String) -> Bool
+  (and (listAny? (fn [op] (gateAskOp? op gates)) ops)
+    (listAll? (fn [op] (or (gateAskOp? op gates) (listContains? (readOnlyOps) (liveOpName op)))) ops))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "the stored verdicts a turn may answer from: taken on this owned-tree digest and carrying a verdict (a timeout is none)")
+fn memoValid memo: (List ls/GateMemo) digest: String -> (List ls/GateMemo)
+  (if (stringEmpty? digest) (list)
+    (filter (fn [entry] (and (= entry.digest digest) (not (g/gateTimeout entry.result)))) memo))
+
+fn memoFor cmd: String memo: (List ls/GateMemo) -> (Option ls/GateMemo)
+  (listHead (filter (fn [entry] (= (g/gateCmd entry.result) cmd)) memo))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "the stored results for these gates in order, only when every one of them is stored")
+fn memoResults cmds: (List String) memo: (List ls/GateMemo) -> (Option (List g/GateResult))
+  (if (or (listEmpty? cmds) (not (listAll? (fn [cmd] (some? (memoFor cmd memo))) cmds)))
+    none
+    (some (listFlatMap (fn [cmd] (match (memoFor cmd memo) ((some entry) (list entry.result)) ((none) (list)))) cmds)))
+
+fn memoSince cmds: (List String) memo: (List ls/GateMemo) -> Int64
+  (fold (fn [acc cmd] (match (memoFor cmd memo) ((some entry) (max acc entry.turn)) ((none) acc))) 0 cmds)
+
+fn memoRec entry: ls/GateMemo -> (List (Pair String ex/Val))
+  (list (pair "cmd" (ex/vStr (g/gateCmd entry.result))) (pair "exit" (ex/vInt (g/gateExit entry.result)))
+    (pair "stdout" (ex/vStr (g/gateStdout entry.result))) (pair "stderr" (ex/vStr (g/gateStderr entry.result)))
+    (pair "since" (ex/vInt entry.turn)))
+
+fn gateWhyWords -> (List String)
+  (list "ERR_" "FAIL" "fail" "Error" "error" "assert" "panic" "not found" "No such")
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "the first line of a red gate's output that names a cause, else its first non-blank line, at most 200 bytes")
+fn gateWhy result: g/GateResult -> String
+  (let [lines (filter (fn [line] (not (stringEmpty? line))) (map stringTrim (stringSplit (str (g/gateStdout result) "\n" (g/gateStderr result)) "\n")))
+        named (filter (fn [line] (listAny? (fn [word] (stringContains? line word)) (gateWhyWords))) lines)
+        line (optionOr (listHead named) (optionOr (listHead lines) ""))]
+    (if (> (stringLength line) 200) (ts/stringClipUtf8 line 200) line))
+
+; (:m :ref LOOP-BASELINE-STORED-GATE :do "what the pass before the first turn found, one form in the first turn's own text: per declared gate green, red with exit and first cause line, or lost, with the executed assertions when the output states them; a fact only, empty when no baseline ran")
+fn baselineForm gates: (List String) memo: (List ls/GateMemo) -> String
+  (let [before (filter (fn [entry] (= entry.turn 0)) memo)
+        row (fn [k]
+              (let [cmd (optionOr (listGet gates k) "")
+                    head (str "(:n " (stringFromInt64 (+ k 1)) " :cmd \"" (c/escapeAsn cmd) "\"")]
+                (match (memoFor cmd before)
+                  ((none) "")
+                  ((some entry)
+                    (let [result entry.result
+                          asserts (match (cb/executedAsserts (g/gateStdout result)) ((some count) (str " :asserts " (stringFromInt64 count))) ((none) ""))]
+                      (cond
+                        ((g/gateTimeout result) (str head " :state lost)"))
+                        ((= (g/gateExit result) 0) (str head " :state green" asserts ")"))
+                        (else (str head " :state red :exit " (stringFromInt64 (g/gateExit result)) asserts " :why \"" (c/escapeAsn (gateWhy result)) "\")"))))))))
+        rows (filter (fn [text] (not (stringEmpty? text))) (map row (range 0 (listLength gates))))]
+    (if (listEmpty? rows) "" (str "(:gatesBefore :turn 1 " (c/joinSep rows " ") ")")))
+
 fn liveOpPath op: (List (Pair String c/KvVal)) -> String
   (match (c/dictGet op "file")
     ((some value) (match value ((c/kvStr path) path) (_ "")))
@@ -2221,11 +2288,11 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
     (liveTurn! ra repoRoot rootDir path system env providerCall wrapped))
 
 ; (:m :ref LEON-ECHO-GUARD :do "every user turn ends with one imperative line naming the next required form, so a weak model that continues the prompt text has an instruction to follow")
-fn nextFormLine persisted: Bool wroteSinceGate: Bool hasGates: Bool -> String
+fn nextFormLine persisted: Bool wroteSinceGate: Bool redGate: Bool -> String
   (cond
     ((and persisted wroteSinceGate)
       "\n\nReply with ASN forms only; the next form is a (:step :op \"gate\") or the (:done).")
-    ((and persisted hasGates)
+    ((and persisted redGate)
       "\n\nReply with ASN forms only; the last gate was red and nothing was written since -- write or edit an owned file before running the gate again.")
     (persisted
       "\n\nReply with ASN forms only; the next form is a (:step :op ...) or the (:done).")
@@ -2263,7 +2330,10 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
             (stringFromInt64 (ctx/noWriteTurns)) " without a write. Write now to "
             (c/joinSep ra.owns ", ") " -- stop re-reading and make the edit.")
           "")
-        prefetched (rl/firstTurnPrefetch state)
+        prefetchBlock (rl/firstTurnPrefetch state)
+        ; (:m :ref LOOP-BASELINE-STORED-GATE :do "the baseline verdicts ride the first turn's own text beside the prefetch block, after the task line and never in the system text, so the provider's cached prefix is untouched")
+        gatesBefore (if (= state.turn (+ state.startTurn 1)) (baselineForm ra.gates state.gateMemo) "")
+        prefetched (str prefetchBlock (if (or (stringEmpty? prefetchBlock) (stringEmpty? gatesBefore)) "" "\n\n") gatesBefore)
         shapes (map pairSecond (ex/opShapes))
         sysA (at/attractorSystem ra.attractor shapes system)
         ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "no (:step prefill when the turn offers the step tool, unless the prior reply had no step, which is how a route whose gateway row strips tools (:nativeTools false) shows up, so the model is never left without both tool and prefill; the model took the open (:step for the tool and wrote its parameters as markup after it (node2 2026-11-17, synDs41Flash: (:step<arg_key>form</arg_key><arg_value>(:step ...)</arg_value>), about 490 turns a day); the prefill stays for a session with nativeTools off")
@@ -2280,7 +2350,7 @@ fn ! liveAsk! ra: RunArgs repoRoot: String rootDir: String path: String system: 
           (ctx/readStreakNudgeLine state.readStreak (rl/redGateOf env.gates state.lastGates)
             (ctx/readStreakNudgeFor! rootDir) (ctx/readStreakEscalateFor! rootDir))
           (focusTail ra.prefix ra.task ra.gates state.wroteSinceGate)
-          (nextFormLine state.writesPersisted state.wroteSinceGate (not (listEmpty? ra.gates))))
+          (nextFormLine state.writesPersisted state.wroteSinceGate (rl/redGateOf env.gates state.lastGates)))
         turnOwnSent (str "Task: " ra.task (if (stringEmpty? prefetched) "" (str "\n\n" prefetched))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." "")
@@ -2369,9 +2439,12 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   servedCtx (if state.explicitContext state.contextTokens
                     (match (servedContextTokens response.meta ra.backend) ((some t) (some t)) ((none) state.contextTokens)))
                   effects (resultOr (tx/loadEffects! repoRoot) (list))
-                  execEnv (ex/withNet (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
+                  ; (:m :ref LOOP-BASELINE-STORED-GATE :do "the first turn of a run, when it only asks for gates on the owned tree the baseline ran on, gets the baseline verdicts back: the gate step answers :same true :since 0 and the turn's own gate pass takes the same results, so no gate process starts; the turn counts toward every stop exactly as a gate turn that ran did. Grade D1: only that turn, because a gate may depend on state outside :owns (a package, a fixture) that the digest does not see, and a verdict seconds old is the measured loss (gateFirst); every later gate step starts the process")
+                  gateAsk (and (= turn (+ state.startTurn 1)) (and (not (listEmpty? state.gateMemo)) (gateAskTurn? operations ra.gates)))
+                  memoLive (if gateAsk (memoValid state.gateMemo (worktreeDigest! ra.owns rootDir)) (list))
+                  execEnv (ex/withGateSame (ex/withNet (ex/makeExecEnv rootDir repoRoot (optionOr (modeOf ra.modeHint) "auto") ra.owns state.writesPersisted ra.base
                     ra.gates effects "" (list) (ctx/readPayloadChars (optionOr servedCtx 24000))
-                    ra.timeout none run.session none) ra.net)
+                    ra.timeout none run.session none) ra.net) (map memoRec memoLive))
                   parseDefect (and (listEmpty? moduleOps) (or (listEmpty? operations)
                     (or (listEmpty? facts.forms) (stringEmpty? (stringTrim normalized)))))
                   unnamedNow (unnamedOnly? operations)
@@ -2436,15 +2509,21 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   reused (if reuseGates (reusedGateResults ra.gates state.allGateResults) (list))
                   reuseAll (and reuseGates (= (listLength reused) (listLength ra.gates)))
                   _reuseNote (if reuseAll (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :gateReuse :digest \"" digestNow "\" :gates " (stringFromInt64 (listLength reused)) ")\n"))) true)
+                  sameGates (if (and wantGates (and (not wallStop) (not reuseAll))) (memoResults turnGates memoLive) none)
+                  _sameNote (if (some? sameGates) (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :gateSame :since " (stringFromInt64 (memoSince turnGates memoLive)) " :gates " (stringFromInt64 (listLength turnGates)) ")\n"))) true)
                   gateStartNs (monotonicNs)
                   newGates (cond
                              ((or (not wantGates) wallStop) (list))
                              (reuseAll reused)
-                             (else (let [firstRun (runLiveGates! turnGates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid ra.gateParallelism)
+                             (else (let [firstRun (match sameGates
+                                                    ((some stored) stored)
+                                                    ((none) (runLiveGates! turnGates rootDir (wallCapped ra.gateTimeout gateLeft) ra.parentPid ra.gateParallelism)))
                                          skipped (filter (fn [cmd] (and (not (listContains? turnGates cmd)) (or doneTurn (not (g/gateWholeTree? cmd))))) ra.gates)
                                          redPassed (listAll? (fn [r] (= (g/gateExit r) 0)) firstRun)]
                                      (if (and redPassed (not (listEmpty? skipped)))
-                                       (listAppend firstRun (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid ra.gateParallelism))
+                                       (listAppend firstRun (match (memoResults skipped memoLive)
+                                                              ((some stored) stored)
+                                                              ((none) (runLiveGates! skipped rootDir (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) ra.parentPid ra.gateParallelism))))
                                        firstRun))))
                   gateEndNs (monotonicNs)
                   _digestSaved (if (and (not (stringEmpty? digestNow)) (not (listEmpty? newGates))) (ok? (fileWrite digestPath digestNow)) true)

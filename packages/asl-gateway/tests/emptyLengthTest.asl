@@ -12,12 +12,14 @@
   (:f status Int64)
   (:f body String)
   (:f end String)
-  (:f notes (List String)))
+  (:f notes (List String))
+  (:f ledger String)
+  (:f sent String))
 
 fn configText dir: String -> String
   (str "(:gateway :v 2 :ledgerPath \"" dir "/calls.asn\" :sharedUsagePath \"" dir "/shared.asn\""
        " :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))"
-       " :models ((:model :id m1 :provider test :name \"model-1\") (:model :id m2 :provider test :name \"model-2\"))"
+       " :models ((:model :id m1 :provider test :name \"model-1\" :effort low :maxTokens 77) (:model :id m2 :provider test :name \"model-2\"))"
        " :intents ((:intent :id solo) (:intent :id any))"
        " :profiles ((:profile :id default :routes ((:intent solo :chain (m1)) (:intent any :chain (m1 m2)))))"
        " :uses ((:use :for default :profile default)))")
@@ -40,19 +42,19 @@ fn request intent: String -> ch/ChatRequest
 fn statusOf head: (List ch/HeadItem) -> Int64
   (fold (fn [(acc Int64) (h ch/HeadItem)] -> Int64 (match h ((ch/headStatus code) code) (_ acc))) 200 head)
 
-fn ! drive! srv: srv/GatewayLoop step: ch/ChatStep stub: (fn [String] -> String) models: (List String) notes: (List String) fuel: Int64 -> Run
+fn ! drive! srv: srv/GatewayLoop step: ch/ChatStep stub: (fn [String] -> String) models: (List String) notes: (List String) sent: String fuel: Int64 -> Run
   (if (<= fuel 0)
-    (Run :models models :status 0 :body "" :end "fuel" :notes notes)
+    (Run :models models :status 0 :body "" :end "fuel" :notes notes :ledger "" :sent sent)
     (match step
       ((ch/stepEffect eff k)
        (match eff
-         ((ch/effHttp _ model _ _ _ _ _ _)
-          (drive! srv (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) (stub model)))) stub (listAppend models (list model)) notes (- fuel 1)))
+         ((ch/effHttp _ model _ _ req _ _ _)
+          (drive! srv (k (ch/outHttp (ch/httpOk 200 (list (pair "Content-Type" "application/json")) (stub model)))) stub (listAppend models (list model)) notes (if (stringEmpty? sent) req.data sent) (- fuel 1)))
          (_ (let [(r (srv/runEffect! srv eff))
                   (seen (match eff ((ch/effUsageNote _ _ o _) (listAppend notes (list o))) (_ notes)))]
-              (drive! (pairFirst r) (k (pairSecond r)) stub models seen (- fuel 1))))))
-      ((ch/stepDone resp) (Run :models models :status (statusOf resp.head) :body resp.body :end "done" :notes notes))
-      ((ch/stepRaised kind msg) (Run :models models :status 0 :body "" :end (str "raised " kind ": " msg) :notes notes))))
+              (drive! (pairFirst r) (k (pairSecond r)) stub models seen sent (- fuel 1))))))
+      ((ch/stepDone resp) (Run :models models :status (statusOf resp.head) :body resp.body :end "done" :notes notes :ledger "" :sent sent))
+      ((ch/stepRaised kind msg) (Run :models models :status 0 :body "" :end (str "raised " kind ": " msg) :notes notes :ledger "" :sent sent))))
 
 fn ! once! tag: String intent: String stub: (fn [String] -> String) -> Run
   (let [(dir (str "/tmp/gwEmptyLength-" tag "-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
@@ -60,16 +62,17 @@ fn ! once! tag: String intent: String stub: (fn [String] -> String) -> Run
         (_2 (dirCreate (str dir "/.asl")))
         (_3 (fileWrite (str dir "/.asl/gateway.asn") (str (configText dir) "\n")))
         (run (match (srv/linkOpen! (mapSet (testEnv) "HOME" dir) dir dir (list))
-               ((err e) (Run :models (list) :status 0 :body "" :end (str "linkOpen: " e) :notes (list)))
+               ((err e) (Run :models (list) :status 0 :body "" :end (str "linkOpen: " e) :notes (list) :ledger "" :sent ""))
                ((ok loop)
                 (match (u/upstreamSettings (testEnv))
-                  ((err e) (Run :models (list) :status 0 :body "" :end (str "settings: " e) :notes (list)))
+                  ((err e) (Run :models (list) :status 0 :body "" :end (str "settings: " e) :notes (list) :ledger "" :sent ""))
                   ((ok settings)
                    (let [(world (ch/ChatWorld :env (testEnv) :rootDir "/" :settings settings :agyPromptMaxBytes 10000
                                               :table (c/gatewayProfilesLoadText! "/test" true (ok (configText dir)) "")))]
-                     (drive! loop (ch/chatStart! (request intent) world) stub (list) (list) 200)))))))
+                     (drive! loop (ch/chatStart! (request intent) world) stub (list) (list) "" 200)))))))
+        (ledger (resultOr (fileReadString (str dir "/calls.asn")) ""))
         (_4 (removeTree! dir))]
-    run)
+    (with run :ledger ledger))
 
 fn lengthEmpty model: String -> String
   (reply model "" "length" "thinking thinking thinking")
@@ -90,6 +93,7 @@ fn ! runTests -> Bool
         (cascade (once! "any" "any" (fn [(m String)] -> String (if (= m "model-1") (lengthEmpty m) (reply m "(:step ok)" "stop" "")))))
         (plain (once! "plain" "solo" (fn [(m String)] -> String (reply m "" "stop" ""))))
         (cut (once! "cut" "solo" (fn [(m String)] -> String (replyUsing m "" "stop" "" "{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}"))))
+        (estimated (once! "estimated" "solo" (fn [(m String)] -> String (replyUsing m "" "length" "thinking" "{\"prompt_tokens\":9,\"completion_tokens\":0,\"total_tokens\":9}"))))
         (cutLength (once! "cutLength" "solo" (fn [(m String)] -> String (replyUsing m "" "length" "" "{\"prompt_tokens\":0,\"completion_tokens\":0,\"total_tokens\":0}"))))]
     (do (assert (= solo.end "done") (str "the single-member chat ends: " solo.end))
         (assert (= solo.models (list "model-1")) (str "a length-empty reply is not retried on the same model, asked: " (stringJoin solo.models " ")))
@@ -102,4 +106,9 @@ fn ! runTests -> Bool
         (assert (and (= cutLength.models (list "model-1" "model-1")) (listContains? cutLength.notes "upstreamCut") (not (listContains? cutLength.notes "emptyLength")))
                 (str "a zero-usage empty 200 with finish_reason length is an upstream cut, noted upstreamCut and retried, not emptyLength: " (stringJoin cutLength.models " ") " notes " (stringJoin cutLength.notes " ")))
         (assert (and (listContains? plain.notes "empty") (not (listContains? plain.notes "upstreamCut"))) (str "an empty reply that counted tokens stays noted empty: " (stringJoin plain.notes " ")))
+        (assert (stringContains? solo.ledger ":outcome \"emptyLength\"") (str "the emptyLength call is a ledger row: " solo.ledger))
+        (assert (and (stringContains? solo.ledger ":out 32768") (stringContains? solo.ledger ":in 5")) (str "the emptyLength row carries the reply's usage: " solo.ledger))
+        (assert (stringContains? estimated.ledger ":out 77") (str "a length reply with prompt tokens only estimates :out as the row's maxTokens: " estimated.ledger))
+        (assert (stringContains? solo.sent "\"reasoning_effort\": \"low\"") (str "the row's :effort low reaches the request body in the openai dialect: " solo.sent))
+        (assert (= (srv/paramsFromRequest (u/UpstreamRequest :url "https://example.test/v1/chat/completions" :fragment "" :method "POST" :headers (list) :data solo.sent)).effort (some "low")) "the ledger params read the sent effort back")
         true))
