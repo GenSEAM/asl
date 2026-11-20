@@ -38,6 +38,23 @@ fn testTree! -> Bool
     (assert (= (run! "(:tree :path \"../..\")").errCount 1) "a tree outside the root is refused")
     true)
 
+; (:m :ref FORMS-SOCKET-TREE-LINUX :do "a tree of a workspace shows .asl/mem and .asl/rules.asn for agents and hides the runtime dirs .asl/cache and .asl/run that a subprocess run fills")
+fn testTreeAslDir! -> Bool
+  (let [(tmp (str (optionOr (envGet "TMPDIR") "/tmp/") "aslTreeAsl_" (stringFromInt64 (mod (nowNs) 1000000))))
+        (made (listAll? (fn [(d String)] -> Bool (ok? (dirCreate (str tmp d)))) (list "" "/.asl" "/.asl/mem" "/.asl/cache" "/.asl/run")))
+        (written (listAll? (fn [(f String)] -> Bool (ok? (fileWrite (str tmp f) "x"))) (list "/.asl/mem/x.asn" "/.asl/rules.asn" "/.asl/cache/y.txt" "/.asl/run/z.txt" "/t.txt")))
+        (root (resultOr (realPath tmp) tmp))
+        (l (optionOr (listHead (ops/runStep! root 1 "(:tree :path \".\" :depth 4)").lines) ""))
+        (clean (listAll? (fn [(p String)] -> Bool (ok? (pathRemove (str tmp p)))) (list "/.asl/mem/x.asn" "/.asl/rules.asn" "/.asl/cache/y.txt" "/.asl/run/z.txt" "/t.txt" "/.asl/mem" "/.asl/cache" "/.asl/run" "/.asl" "")))]
+    (do
+      (assert clean "temp workspace removed")
+      (assert (and made written) "temp workspace written")
+      (assert (stringContains? l "\".asl/mem/x.asn\"") (str ".asl/mem stays visible: " l))
+      (assert (stringContains? l "\".asl/rules.asn\"") (str ".asl/rules.asn stays visible: " l))
+      (assert (not (stringContains? l ".asl/cache")) (str ".asl/cache is hidden: " l))
+      (assert (not (stringContains? l ".asl/run")) (str ".asl/run is hidden: " l))
+      true))
+
 fn testReadPaging! -> Bool
   (do
     (assert (stringContains? (line! "(:read :file \"unicode.md\" :maxBytes 256)") ":truncated true :limit 200 :maxBytes 256 :totalLines 4 :more (:start 3 :end 4)") ":maxBytes counts characters, not bytes")
@@ -318,6 +335,7 @@ fn testGateContextUsesNativeCli! -> Bool
 
 fn ! runTests -> Bool
   (do
+    (assert (testTreeAslDir!) "testTreeAslDir")
     (assert (testManifestCoverage!) "manifest declares all forms modules and direct package dependencies")
     (assert (testGateContextUsesNativeCli!) "testGateContextUsesNativeCli")
     (assert (testLegacyRoutes!) "testLegacyRoutes")
