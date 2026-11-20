@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-proc/src/jobPool :a jp) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -59,13 +59,13 @@ fn rcArgs mode: String -> (List String)
 fn ! interpretAsl1! ctx: sys/Context target: String ll: String mode: String -> Int64
   (if (not (sys/executable? ctx.hostBin))
     (do (sys/say! (sys/hostAbsent "build")) 2)
-    (sys/run! (listAppend (jp/niceWords) (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode)))))
+    (sys/run! (listAppend (list "nice" "-n" "15" ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode))))
 
 fn ! compileLl! ctx: sys/Context clang: String lib: String target: String ll: String mode: String -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl")))
     (interpretAsl1! ctx target ll mode)
     (match (cache/nativeAsl1! ctx lib clang)
-      ((ok native) (sys/runAt! ctx.root (listAppend (jp/niceWords) (listAppend (list native "build" (resultOr (realPath target) target) "-o" ll) (rcArgs mode)))))
+      ((ok native) (sys/runAt! ctx.root (listAppend (list "nice" "-n" "15" native "build" (resultOr (realPath target) target) "-o" ll) (rcArgs mode))))
       ((err reason)
         (do
           (sys/sayErr! (str "NATIVE-ASL1-FALLBACK " reason))
@@ -182,10 +182,9 @@ fn ! linksFor! root: String target: String -> (Result (List String) String)
                                                 (list) files))
                             (list)))))
 
-; (:m :ref BUILD-CACHE :do "objs is the :native :objStore row of the config nearest the target, empty when absent: a build with a store links through the module object cache, one without links by size as before")
-fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String links: (List String) ll: String part: String n: Int64 tmp: String objs: String -> (Result (Pair Int64 String) String)
+fn ! linkAttempt! ctx: sys/Context clang: String flags: (List String) lib: String links: (List String) ll: String part: String n: Int64 tmp: String -> (Result (Pair Int64 String) String)
   (let [(b (nb/Build :root ctx.root :cache tmp :tmp tmp :lib lib :base "" :clangVersion "" :owner ""
-                     :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n)) :links links :objs objs))]
+                     :deadlineNs (+ (monotonicNs) 3600000000000) :maxDesc (+ 16 (* 4 n)) :links links))]
     (nb/linkParts! b clang flags ll part n))
 
 ; (:m :ref BUILD-OUTSIDE-WS-FRESH-HOME :do "nb/linkParts! runs clang from the workspace root, so a relative part path landed in the root while the caller's cwd held the output; the part path is made absolute against the caller's cwd")
@@ -201,14 +200,8 @@ fn ! effectiveMode! ctx: sys/Context clang: String lib: String requested: String
       ((err why) (do (sys/sayErr! (str "(:receipt :rc tracing :reason \"notrace runtime needs a native asl1: " (stringReplace why "\"" "'") "\" :effect \"compiled and linked with the tracing runtime\")"))
                      "0"))))
 
-; (:m :ref BUILD-CACHE :do "after a link from a configured :objStore the store is swept under the :native storeCap and storeMinAge rows, unless :native :sweep is false; an entry used within storeMinAge stays, which covers every build still running against the store")
-fn ! sweepStore! objs: String dir: String -> Int64
-  (if (nb/sweepOn? dir) (nb/sweepObjectsAs! objs objs (nb/storeCapFor! dir) (nb/storeMinAgeNs! dir) (procSelf)) 0)
-
 fn ! link! ctx: sys/Context clang: String lib: String target: String out: String tmp: String requested: String shape: (Pair Int64 String) exact: Bool links: (List String) -> Int64
   (let [(mode (effectiveMode! ctx clang lib requested))
-        (here (sys/parentOf (resultOr (realPath target) target)))
-        (objs (nb/objStoreFor! here))
         (ll (str tmp "/out.ll"))
         (part (absolutePath! (str out ".part" (stringFromInt64 (procSelf)))))
         (compiled (compileLl! ctx clang lib target ll mode))]
@@ -226,10 +219,9 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
                   (let [(flags (pairSecond libFlags))
                         (start (monotonicNs))
                         (n (if exact (pairFirst shape) (nb/partsForSize (pairFirst shape) (resultOr (fileSize ll) 0))))
-                        (linkRes (linkAttempt! ctx clang flags (pairFirst libFlags) links ll part (if (stringEmpty? objs) n (max n 4)) tmp objs))
+                        (linkRes (linkAttempt! ctx clang flags (pairFirst libFlags) links ll part n tmp))
                         (ms (/ (- (monotonicNs) start) 1000000))
-                        (removed (drop! tmp))
-                        (_ (if (and (ok? linkRes) (not (stringEmpty? objs))) (sweepStore! objs here) 0))]
+                        (removed (drop! tmp))]
                     (match linkRes
                       ((err e) (do (drop! part) (fail (str "ERR_BUILD: clang link failed for " target ": " e) 1)))
                       ((ok linked)

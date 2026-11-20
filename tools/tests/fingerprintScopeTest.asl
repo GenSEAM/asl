@@ -18,13 +18,6 @@ fn ! put! root: String rel: String text: String -> Bool
         (dir (optionOr (stringSlice path 0 (- (stringLength path) (+ (stringLength (optionOr (listLast (stringSplit rel "/")) "")) 1))) root))]
     (and (ok? (dirCreate dir)) (ok? (fileWrite path text))))
 
-; (:m :ref NT-FP-NARROW :do "the imports a module header names: the head word of every (name :a alias) item between :i [ and the first ]")
-fn importsOf src: String -> (List String)
-  (let [(afterI (optionOr (listGet (stringSplit src ":i [") 1) ""))
-        (items (optionOr (listHead (stringSplit afterI "]")) ""))]
-    (filter (fn [(w String)] -> Bool (not (stringEmpty? w)))
-            (map (fn [(it String)] -> String (optionOr (listHead (stringSplit (stringTrim it) " ")) "")) (optionOr (listTail (stringSplit items "(")) (list)))))
-
 fn ! fpOf root: String -> String
   (nt/fingerprintIn root "clang test" "test-triple")
 
@@ -62,10 +55,6 @@ fn ! runTests -> Bool
         (namedB (nt/artifactSlice (str hdr "fn f -> Int64\n  (strideOrder 1)\n\nfn strideOrder n: Int64 -> Int64\n  2\n")))
         (loneA (nt/artifactSlice (str hdr "fn f -> Int64\n  1\n\nfn strideOrder n: Int64 -> Int64\n  1\n")))
         (loneB (nt/artifactSlice (str hdr "fn f -> Int64\n  1\n\nfn strideOrder n: Int64 -> Int64\n  2\n")))
-        (imports (importsOf src))
-        (unclassified (filter (fn [(i String)] -> Bool (not (or (listContains? (nt/objectSeeds) i) (listContains? (nt/nonObjectImports) i)))) imports))
-        (closure (nt/objectClosureIn! "."))
-        (rels (optionOr closure (list)))
         (removed (pathRemove root))]
     (do
       (assert (and (ok? made) wroteLlvm wroteChecker) (str "a temp toolchain tree at " rootRaw))
@@ -93,14 +82,5 @@ fn ! runTests -> Bool
       (assert (= semiA semiC) "an edit inside a trailing comment keeps the slice")
       (refute (= namedA namedB) "a driver-only fn named by a kept fn enters the slice")
       (assert (= loneA loneB) "a driver-only fn no kept fn names stays out of the slice")
-      (assert (> (listLength imports) 10) (str "nativeTest.asl names its imports: " (stringJoin imports " ")))
-      (assert (listEmpty? unclassified) (str "every nativeTest import is an object seed or a non-object import: " (stringJoin unclassified " ")))
-      (assert (some? closure) "the object closure resolves in the source tree")
-      (assert (listAll? (fn [(p String)] -> Bool (nt/rootCovered? p)) rels) (str "every object source lies under a toolchain root, so the stamp memo sees its edits: " (stringJoin (filter (fn [(p String)] -> Bool (not (nt/rootCovered? p))) rels) " ")))
-      (assert (listContains? rels "asl/packages/asl-target-llvm/src/emit.asl") "the object closure holds asl-target-llvm/emit")
-      (assert (listContains? rels "asl/packages/asl-checker/src/check.asl") "the object closure holds asl-checker/check (link elaborates through it)")
-      (refute (listContains? rels "asl/packages/asl-checker/src/lint.asl") "the object closure leaves out asl-checker/lint")
-      (refute (listContains? rels "asl/packages/asl-checker/src/checkCached.asl") "the object closure leaves out asl-checker/checkCached")
-      (refute (listAny? (fn [(p String)] -> Bool (stringStartsWith? p "asl/packages/asl-compiler/")) rels) "the object closure leaves out asl-compiler")
       (assert (ok? removed) (str "remove " root))
       true))

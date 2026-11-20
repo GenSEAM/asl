@@ -21,6 +21,7 @@
   (:c attractorNonVacuity [] "Direct operational execution without mocks or tautological self-confirmation")
   (:c attractorReversibility [] "Stage in RAM VFS first (:edit -> :diff -> :flush | :discard); branch before merge")
   (:c attractorContainment [] "Monorepo sovereignty; zero git remotes; write set strictly contained within :owns")
+  (:c attractorSanctuary [] "Legacy alias for attractorContainment; monorepo sovereignty")
   (:c attractorSimplicity [] "Minimal AST perturbation; lowest causal diff hunk count; eliminate decorative bloat")
   (:c attractorAttentionDensity [] "Byte-stable prompt prefixes, symbol-slice addressing, and minimal token noise")
   (:c attractorContractPrecision [] "Explicit typed preconditions and closed boundary specifications")

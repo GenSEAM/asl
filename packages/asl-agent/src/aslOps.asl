@@ -2,11 +2,10 @@
   :x [RVal Bounded PumpEnd RunAslResult MemoEntry
       budgetLeft stepTimeout nowMono chooseTransport transportField engineSocketPath! gateTimeoutSec
       engineRequest runAslSocket
-      nearestLines spliceDef placeholderAssert? runBounded runAsl binTargetDir binDirRefusal ownedNewNote
+      nearestLines placeholderAssert? runBounded runAsl binTargetDir binDirRefusal ownedNewNote
       memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor toolRootRows!]
   :i [(aslAgent/core :a c)
-      (aslAgent/gateLimit :a gl)
       (aslAgent/agentConfig :a ac)
       (aslAgent/jail :a jl)
       (aslAgent/diff :a diff)
@@ -80,7 +79,7 @@ fn serReceipt r: (List (Pair String RVal)) -> String
   (str "(receipt" (stringJoin (map (fn [p] (str " (" (pairFirst p) " " (serValue (pairSecond p)) ")")) r) "") ")")
 
 fn gateTimeoutSec -> Int64
-  (gl/gateLimitSec)
+  300
 
 fn ! nowMono -> Float64
   (/ (int64ToFloat64 (monotonicNs)) 1000000000.0)
@@ -871,55 +870,6 @@ fn ! nearestPath! root: String asked: String owns: (List String) -> (Option Stri
           close (filter (fn [p] (and (!= p asked) (and (<= (c/editDistance p asked) 2) (plainFile! (str root "/" p))))) cands)]
       (if (= (listLength close) 1) (listHead close) none)))
 
-; (:m :ref EDIT-BY-SYMBOL :do "replaceDef swaps exactly the outline span a-b (1-based, inclusive) for the body and leaves every other byte of the file as it was; the body's trailing newlines are dropped so the file's own line ends stay. none when the span is outside the file")
-fn spliceDef text: String a: Int64 b: Int64 body: String -> (Option String)
-  (let [parts (stringSplit text "\n")
-        n (listLength parts)
-        trimmed (trimTrailingNewlines body)]
-    (if (or (< a 1) (or (< b a) (> b n)))
-      none
-      (some (stringJoin (listAppend (listAppend (optionOr (listSlice parts 0 (- a 1)) (list)) (list trimmed)) (optionOr (listSlice parts b n) (list))) "\n"))))
-
-fn trimTrailingNewlines s: String -> String
-  (if (stringEndsWith? s "\n") (trimTrailingNewlines (c/sliceOf s 0 (- (stringLength s) 1))) s)
-
-; (:m :ref EDIT-BY-SYMBOL :do "the symbol names a read :symbol miss lists as its :outline, each \"name a-b\"; empty when the reply has no outline (a text file, an unreadable one)")
-fn outlineNames out: String -> (List String)
-  (match (stringIndexOf out ":outline (\"")
-    ((none) (list))
-    ((some i)
-      (let [rest (c/sliceOf out (+ i 11) (stringLength out))
-            cut (match (stringIndexOf rest "\")") ((some j) (c/sliceOf rest 0 j)) ((none) rest))]
-        (filter (fn [x] (!= x "")) (stringSplit cut "\" \"")))))
-
-fn entryName entry: String -> String
-  (c/firstOf (stringSplit entry " "))
-
-; (:m :ref EDIT-BY-SYMBOL :do "a miss names at most 8 definitions, those whose name contains the symbol or is within edit distance 3 of it, else the first 8, so a 96-definition file does not spend its list")
-fn nearestNames names: (List String) symbol: String -> String
-  (let [close (filter (fn [e] (let [n (entryName e)] (or (stringContains? n symbol) (or (stringContains? symbol n) (<= (c/editDistance n symbol) 3))))) names)
-        shown (optionOr (listSlice (if (listEmpty? close) names close) 0 8) (list))]
-    (stringJoin shown ", "))
-
-; (:m :ref EDIT-BY-SYMBOL :do "the name a column-0 definition line defines, for any head the outline knows (fn, fn !, schema, enum, type, const, df, dfs, dfe), else empty; a schema and a fn of one name count as two")
-fn defHeadName line: String -> String
-  (let [toks (if (stringStartsWith? line " ") (list) (filter (fn [w] (!= w "")) (stringSplit line " ")))
-        h (match (listHead toks) ((some w) (if (stringStartsWith? w "(") (c/sliceOf w 1 (stringLength w)) w)) ((none) ""))
-        rest (match (listTail toks) ((some r) r) ((none) (list)))
-        n1 (optionOr (listHead rest) "")
-        n (if (= n1 "!") (optionOr (listHead (match (listTail rest) ((some r) r) ((none) (list)))) "") n1)]
-    (if (listContains? (list "fn" "schema" "enum" "type" "const" "df" "dfs" "dfe") h) n ""))
-
-; (:m :ref EDIT-BY-SYMBOL :do "line numbers of the lines that define a definition of this name, whatever its head; more than one means read :symbol silently takes the first, so replaceDef refuses and names the lines")
-fn defLineNumbers text: String symbol: String -> (List Int64)
-  (map (fn [p] (+ (pairFirst p) 1))
-    (filter (fn [p] (= (defHeadName (pairSecond p)) symbol))
-      (enumerate (stringSplit text "\n"))))
-
-fn replaceDefReject rid: String filePath: String err: String msg: String -> (List (Pair String RVal))
-  (list (pair "id" (rStr rid)) (pair "op" (rStr "replaceDef")) (pair "file" (rStr filePath)) (pair "status" (rStr "rejected"))
-    (pair "error" (rStr err)) (pair "message" (rStr msg)) (pair "persisted" (rBool false)))
-
 fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: String session: String newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) cap: Int64 budgetLeft: (Option Float64) -> (List (Pair String RVal))
   (let [opHead (getKvStr op "_head")
         rawOpName (let [o (getKvStr op "op")] (if (!= o "") o opHead))
@@ -985,47 +935,6 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
                     (if (and (= code 0) (placeholderAssert? content))
                       (list (pair "warning" (rStr "placeholder assert: red-first needs a real assertion on the missing behaviour")))
                       (list)))))))))
-      ((= opName "replaceDef")
-        (let [filePath (getKvStr op "file")
-              symbol (getKvStr op "symbol")
-              body (getKvStr op "content")
-              full (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
-              text (match (t/readText! full) ((fileText s) (some s)) (_ none))
-              readRes (if (and (!= symbol "") (some? text)) (run (buildReadForm filePath symbol "" "" "" 0) root) (t/aslRun 1 "" ""))
-              readOut (aslRunOut readRes)
-              head (c/firstOf (stringSplit readOut ":content "))
-              hitA (if (stringContains? head ":error ") none (findIntField head ":start "))
-              hitB (if (stringContains? head ":error ") none (findIntField head ":end "))
-              defLines (defLineNumbers (optionOr text "") symbol)]
-          (cond
-            ((or (= symbol "") (= filePath "")) (replaceDefReject rid filePath "ERR_MISSING_ARG" "replaceDef needs :file, :symbol and a :content body"))
-            ((none? text) (replaceDefReject rid filePath "ERR_NO_FILE" "replaceDef needs an existing file; a new file is a write"))
-            ((or (none? hitA) (none? hitB))
-              (let [names (outlineNames readOut)]
-                (if (listEmpty? names)
-                  (replaceDefReject rid filePath "ERR_NO_OUTLINE" (str "no definition outline for " filePath " (" (c/sliceOf (pyStrip head) 0 (min 160 (stringLength (pyStrip head)))) "); use edit"))
-                  (replaceDefReject rid filePath "ERR_NO_SYMBOL" (str "no definition named " symbol "; nearest of " (stringFromInt64 (listLength names)) ": " (nearestNames names symbol))))))
-            ((> (listLength defLines) 1)
-              (replaceDefReject rid filePath "ERR_AMBIGUOUS_SYMBOL" (str symbol " names several definitions, at lines " (stringJoin (map stringFromInt64 defLines) " ") "; use edit with the lines of the one you mean")))
-            (else
-              (match (spliceDef (optionOr text "") (optionOr hitA 0) (optionOr hitB 0) body)
-                ((none) (replaceDefReject rid filePath "ERR_NO_SPAN" "the definition span is outside the file; read the file again"))
-                ((some newText)
-                  (let [_ (snap filePath)
-                        res (run (buildWriteForm filePath newText false owns) root)
-                        code (aslRunCode res)
-                        out (aslRunOut res)
-                        errText (aslRunErr res)
-                        ref (if (!= code 0) (t/txnRefusal out errText "ERR_REPLACEDEF_FAILED" (some newText)) (pair "" ""))
-                        err0 (cond ((= code 0) "") ((stringContains? out "ERR_OWNS") "ERR_OWNS") (else (pairFirst ref)))]
-                    (list (pair "id" (rStr rid)) (pair "op" (rStr "replaceDef")) (pair "file" (rStr filePath)) (pair "symbol" (rStr symbol))
-                      (pair "status" (rStr (if (= code 0) "ok" "rejected")))
-                      (pair "error" (if (= code 0) (rNone) (rStr err0)))
-                      (pair "message" (if (= code 0) (rNone) (rStr (pairSecond ref))))
-                      (pair "replaced" (rPair (optionOr hitA 0) (optionOr hitB 0)))
-                      (pair "cmd" (rStr (str "asl txn write " filePath)))
-                      (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool (= code 0)))
-                      (pair "hint" (if (= code 0) (rNone) (rStr "the file is unchanged; :content must be the one whole definition with balanced delimiters, or use edit")))))))))))
       ((= opName "edit")
         (let [filePath (getKvStr op "file")
               old (getKvStr op "old")
@@ -1074,7 +983,7 @@ fn ! execAslOpMemo! op: (List (Pair String c/KvVal)) owns: (List String) root: S
               near (if (and (!= st "ok") noMatch) (nearestLines root filePath old) (none))
               finalMsg (match near ((some _) (str refMsg "; the file's lines nearest the :old follow")) ((none) refMsg))]
           (listAppend
-            (match near ((some p) (list (pair "span" (rPair (pairFirst (pairFirst p)) (pairSecond (pairFirst p)))) (pair "near" (rPair (pairFirst (pairFirst p)) (pairSecond (pairFirst p)))) (pair "content" (rStr (pairSecond p))))) ((none) (list)))
+            (match near ((some p) (list (pair "span" (rPair (pairFirst (pairFirst p)) (pairSecond (pairFirst p)))) (pair "content" (rStr (pairSecond p))))) ((none) (list)))
             (listAppend
               (listAppend
                 (list (pair "id" (rStr rid)) (pair "op" (rStr "edit")) (pair "file" (rStr filePath)) (pair "status" (rStr st))

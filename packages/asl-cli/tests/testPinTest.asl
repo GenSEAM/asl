@@ -85,12 +85,11 @@ fn ! refreshes base: String -> Bool
         (_ (sleepMs 30))
         (marker (str root "-built"))
         (build (fn [(r String) (c String)] -> Int64 (do (fileWrite marker r) 1)))
-        (miss (fn [(r String) (c String)] -> (Pair String String) (pair "" "testPinKey")))
         (_ (touch! (str root "/outside.asl")))
-        (kept (nr/refresh! root cache (list "test" "x/yTest.asl") miss build))
+        (kept (nr/refresh! root cache (list "test" "x/yTest.asl") build))
         (builtKept (fileExists? marker))
         (_ (touch! (str root "/inside.asl")))
-        (stale (nr/refresh! root cache (list "test" "x/yTest.asl") miss build))]
+        (stale (nr/refresh! root cache (list "test" "x/yTest.asl") build))]
     (do (assert (and (= kept 0) (not builtKept)) (str "refresh keeps the CLI for test without building when only an outside dep moved: rc " (stringFromInt64 kept)))
         (assert (!= stale 0) (str "refresh does not keep it once a reached file moved: rc " (stringFromInt64 stale)))
         true))

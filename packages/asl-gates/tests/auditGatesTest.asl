@@ -493,7 +493,6 @@ fn execErrText e: p/ProcessError -> String
     ((p/timeout ms) (str "timeout after " (stringFromInt64 ms) " ms"))
     ((p/executionFailed code msg) (str "executionFailed " (stringFromInt64 code) " " msg)))
 
-; (:m :ref AUDITGATES-FIXTURE-TIMEOUT :do "the two bin/asl run children compile auditMain cold after any asl-gates change (651 s on the Mac 2026-11-21, 5 s warm), so they get the 1200 s bound the other children of this suite use, not the 5000 ms exec default")
 fn testRoot! tmp: String -> Bool
   (let [(root (str tmp "/rootOption"))
         (made (dirCreate root))
@@ -505,9 +504,9 @@ fn testRoot! tmp: String -> Bool
         (result (am/main (list "steps" "--root" root)))
         (run (am/runAudit! root (list "steps") "" false))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
-        (envRun (p/exec! (p/withTimeout (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo) 1200000)))
+        (envRun (p/exec! (p/withCwd (p/cmd "env" (list (str "ROOT_DIR=" root) (str repo "/bin/asl") "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "steps")) repo)))
         (envOutput (match envRun ((err e) (str "execError " (execErrText e))) ((ok o) (str o.stdout "EXIT" (stringFromInt64 o.exitCode) "ERR" o.stderr))))
-        (cliRoot (p/exec! (p/withTimeout (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo) 1200000)))
+        (cliRoot (p/exec! (p/withCwd (p/cmd (str repo "/bin/asl") (list "run" (str repo "/asl/packages/asl-gates/src/auditMain.asl") "gates" "--static" "--root" root)) repo)))
         (cliOutput (match cliRoot ((err e) (str "execError " (execErrText e))) ((ok o) o.stdout)))
         (cleaned (pathRemove root))]
     (do

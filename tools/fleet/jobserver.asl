@@ -1,5 +1,5 @@
 (module asl-tools/fleet/jobserver
-  :x [Grant rootDir snapshot startOf tokenCount classRank want wantWith acquire acquireProc dropTicket psCommand maxHoldNs bind releaseIdxs releasePid heldCount backoffMs]
+  :x [Grant rootDir snapshot startOf tokenCount classRank want wantWith acquire acquireProc psCommand maxHoldNs bind releaseIdxs releasePid heldCount backoffMs]
   :i [])
 
 ; (:m :ref MACHINE-JOBSERVER :do "a machine-wide CPU token pool: N token files under <dir>/tokens claimed with fileCreateExclusive, a dead owner's token reclaimed by pid liveness, and one waiting ticket per waiter under <dir>/wait ordered by class rank then arrival, so a higher class gets the next free token first; the dir is a call argument or ~/.asl/run/jobserver, N is the :tokens row of <dir>/config.asn or half the cores (FABLE-GATE-ADMIT), never env")
@@ -201,39 +201,20 @@ fn ! heldCount dir: String -> Int64
 fn ticketName rank: Int64 owner: Int64 key: String -> String
   (str rank "-" owner "-" key)
 
-; (:m :ref JOBSERVER-ABANDONED-TICKET :do "a ticket is live only while its owner keeps calling want for its key: every want refreshes :beatNs, and liveTickets prunes a ticket whose beat is older than :ticketStaleMs of config.asn (default 30000: a waiting pool loop returns to want only after its onDone callbacks and judge pass, which are unbounded, so 5 s would prune live waiters); chosen over pruning the older of one owner's tickets because a nested pool in an onDone callback legitimately waits for two keys of one owner, and a pruned live waiter only re-files, losing its place")
-fn staleNs root: String -> Int64
-  (* 1000000 (optionOr (fieldInt (resultOr (fileReadString (str root "/config.asn")) "") ":ticketStaleMs ") 30000))
-
-fn ticketText rank: Int64 owner: Int64 start: Int64 deadline: Int64 beat: Int64 -> String
-  (str "(:tk :rank " rank " :ownerPid " owner " :startNs " start " :deadlineNs " deadline " :beatNs " beat ")\n")
-
 fn ! ensureTicket root: String rank: Int64 owner: Int64 key: String timeoutMs: Int64 -> Int64
   (let [(path (str root "/wait/" (ticketName rank owner key)))
         (_ (dirCreate (str root "/wait")))
-        (_ (dirCreate (str root "/tokens")))
-        (now (monotonicNs))]
+        (_ (dirCreate (str root "/tokens")))]
     (match (fileReadString path)
-      ((ok t)
-       (let [(start (optionOr (fieldInt t ":startNs ") now))
-             (beat (optionOr (fieldInt t ":beatNs ") start))
-             (tmp (str root "/beat-" (ticketName rank owner key)))
-             (_ (if (> (- now beat) (min 200000000 (/ (staleNs root) 4)))
-                  (if (ok? (fileWrite tmp (ticketText rank owner start (optionOr (fieldInt t ":deadlineNs ") 0) now)))
-                    (match (pathRename tmp path) ((ok _) true) ((err _) (let [(_ (pathRemove tmp))] false)))
-                    (let [(_ (pathRemove tmp))] false))
-                  true))]
-         start))
-      ((err _) (let [(span (* (if (> timeoutMs 0) timeoutMs 3600000) 1000000))
-                     (_ (fileWrite path (ticketText rank owner now (+ now span) now)))]
+      ((ok t) (optionOr (fieldInt t ":startNs ") (monotonicNs)))
+      ((err _) (let [(now (monotonicNs))
+                     (span (* (if (> timeoutMs 0) timeoutMs 3600000) 1000000))
+                     (_ (fileWrite path (str "(:tk :rank " rank " :ownerPid " owner " :startNs " now " :deadlineNs " (+ now span) ")\n")))]
                  now))))
 
-; (:m :ref JOBSERVER-ABANDONED-TICKET :do "this process cannot poll two keys at once: while it runs a nested call (an onDone pool) an own ticket not refreshed for 1 s is skipped, not removed, so the nested wait is not queued behind its own outer waiter, which regains its place on its next want")
-; (:m :ref MACHINE-JOBSERVER :do "a ticket of a dead owner, past its deadline or without a beat for :ticketStaleMs is pruned; the rest sort by rank, arrival, name")
+; (:m :ref MACHINE-JOBSERVER :do "a ticket of a dead owner or past its deadline is pruned; the rest sort by rank, arrival, name")
 fn ! liveTickets root: String -> (List (Pair Int64 String))
-  (let [(now (monotonicNs))
-        (stale (staleNs root))
-        (me (procSelf))]
+  (let [(now (monotonicNs))]
     (fold (fn [(acc (List (Pair Int64 String))) (f String)] -> (List (Pair Int64 String))
             (let [(path (str root "/wait/" f))
                   (t (resultOr (fileReadString path) ""))]
@@ -242,13 +223,10 @@ fn ! liveTickets root: String -> (List (Pair Int64 String))
                 ((some start)
                  (let [(rank (optionOr (fieldInt t ":rank ") 3))
                        (owner (optionOr (fieldInt t ":ownerPid ") 0))
-                       (deadline (optionOr (fieldInt t ":deadlineNs ") 0))
-                       (beat (optionOr (fieldInt t ":beatNs ") start))]
-                   (if (or (not (alive? owner)) (and (> deadline 0) (> now deadline)) (> (- now beat) stale))
+                       (deadline (optionOr (fieldInt t ":deadlineNs ") 0))]
+                   (if (or (not (alive? owner)) (and (> deadline 0) (> now deadline)))
                      (let [(_ (pathRemove path))] acc)
-                     (if (and (= owner me) (> (- now beat) (min stale 1000000000)))
-                       acc
-                       (cons (pair (+ (* rank 100000000000000000) start) f) acc))))))))
+                     (cons (pair (+ (* rank 100000000000000000) start) f) acc)))))))
           (list) (resultOr (dirList (str root "/wait")) (list))))
 
 fn ! head? root: String mine: String start: Int64 rank: Int64 -> Bool
@@ -261,11 +239,6 @@ fn ! head? root: String mine: String start: Int64 rank: Int64 -> Bool
 
 fn ! removeTicket root: String name: String -> Unit
   (match (pathRemove (str root "/wait/" name)) ((ok _) ()) ((err _) ()))
-
-; (:m :ref JOBSERVER-ABANDONED-TICKET :do "a caller that stops waiting for a key removes that key's ticket so it never heads the queue")
-fn ! dropTicket dir: String cls: String key: String -> Unit
-  (let [(rank (classRank cls))]
-    (if (< rank 0) () (removeTicket (rootDir dir) (ticketName rank (procSelf) key))))
 
 fn backoffMs startNs: Int64 -> Int64
   (let [(waited (/ (- (monotonicNs) startNs) 1000000))

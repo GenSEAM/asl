@@ -1,14 +1,7 @@
 (:package asl-crypto
  :version "0.1.0"
  :entry "src/hmac.asl"
- :description "Pure ASL cryptographic primitives: SHA-1/SHA-512, HMAC-SHA256/512, AES, Fernet and OS randomness"
+ :description "Pure ASL cryptographic primitives: HMAC-SHA256, AES and Fernet"
  :status "frozen"
  :aslFirst true
- :modules [
-   "asl-crypto/aes"
-   "asl-crypto/fernet"
-   "asl-crypto/hmac"
-   "asl-crypto/random"
-   "asl-crypto/sha"
- ]
  :dependencies [])

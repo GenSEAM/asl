@@ -1,5 +1,5 @@
 (module aslGateway/limits
-  :x [seedTtlMs seedTtlFromText needsSeedWithin? needsSeed? longestStartMs keepRows withOwnRow Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?
+  :x [seedTtlMs needsSeed? longestStartMs keepRows withOwnRow Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?
       decideIn decideWith windowStartFor windowEndFor spentRatioWith paceRatioWith coversIn covers? usedCallsIn usedTokensIn usedUsdIn spentRatioIn Lease concurrencyOf liveLeases full? admit release limitKey]
   :i [(aslGateway/config :a c)
       (aslGateway/usageLedger :a ul)
@@ -168,12 +168,12 @@ fn dayUse sc: c/LimitScope u: Used d: ul/DayRow -> Used
 fn calendar? lim: c/GatewayLimit -> Bool
   (= (trailingMs lim.window) 0)
 
-; (:m :ref GW-LIMIT-LONG-WINDOW :do "a calendar window counts the day rows of its days plus the live rows after the rollup's :last, which are in no day row; a trailing window never spans a pruned generation and counts live rows only. Both bounds are inclusive and day aligned for a calendar window, so a day row is whole inside or outside; a trailing window's start is exclusive, so a call exactly the window length ago is outside")
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a calendar window counts the day rows of its days plus the live rows after the rollup's :last, which are in no day row; a trailing window never spans a pruned generation and counts live rows only. Both bounds are inclusive and day aligned for a calendar window, so a day row is whole inside or outside")
 fn usedBetween sc: c/LimitScope lim: c/GatewayLimit rows: (List ul/CallRow) days: (List ul/DayRow) fromMs: Int64 toMs: Int64 -> Used
   (let [(cal (calendar? lim))
         (through (if cal (ul/daysThrough days) 0))
         (live (fold (fn [(u Used) (r ul/CallRow)] -> Used
-                      (if (and (if cal (>= r.atMs fromMs) (> r.atMs fromMs)) (and (<= r.atMs toMs) (and (> r.atMs through) (and (sentRow? r) (coversIn sc lim r.provider r.alias)))))
+                      (if (and (>= r.atMs fromMs) (and (<= r.atMs toMs) (and (> r.atMs through) (and (sentRow? r) (coversIn sc lim r.provider r.alias)))))
                         (rowUse sc u r) u))
                     (noUse) rows))]
     (if (not cal)
@@ -286,17 +286,8 @@ fn release leases: (List Lease) provider: String alias: String -> (List Lease)
 fn seedTtlMs -> Int64
   300000
 
-; (:m :ref SETTINGS-FIRST :do "(:gateway ... :limitSeedTtlSec S): how long the server holds the limit window rows it seeded from the shared ledger before reading it again; 1..86400 seconds, anything else keeps the default 300")
-fn seedTtlFromText text: String -> Int64
-  (match (c/gatewayTopIntOverride text "limitSeedTtlSec")
-    ((some n) (if (and (>= n 1) (<= n 86400)) (* n 1000) (seedTtlMs)))
-    ((none) (seedTtlMs)))
-
-fn needsSeedWithin? seededMs: Int64 nowMs: Int64 ttlMs: Int64 -> Bool
-  (or (<= seededMs 0) (>= (- nowMs seededMs) ttlMs))
-
 fn needsSeed? seededMs: Int64 nowMs: Int64 -> Bool
-  (needsSeedWithin? seededMs nowMs (seedTtlMs))
+  (or (<= seededMs 0) (>= (- nowMs seededMs) (seedTtlMs)))
 
 ; (:m :ref LIMITS-LEDGER-COST :do "the oldest instant any configured window can still count: rows before it are dropped at seeding, so a month window is the only thing that keeps a month of rows")
 fn longestStartMs limits: (List c/GatewayLimit) nowMs: Int64 -> Int64

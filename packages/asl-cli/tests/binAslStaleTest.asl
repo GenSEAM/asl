@@ -1,4 +1,4 @@
-(module asl-cli/binAslStaleTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/tests/nativeColdFixture :a nf)])
+(module asl-cli/binAslStaleTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref NATIVETEST-PER-SUITE-WALL :do "two CLI builds: 1245 s at load 35, 2464 s at load 60 to 116, past the 1800 s default")
 fn suiteWallS -> Int64
@@ -38,7 +38,6 @@ fn ! headOf cache: String root: String -> String
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (shared (str root "/.asl/cache/binAslStale/shared-" (stringFromInt64 (procSelf))))
-        (sharedUpstream (nf/adoptFrom! shared (list "seed" "rt" "asl1" "cli")))
         (warm (binAsl! root (list "test" (probe)) (envFor (some shared) (list "ASL_NATIVE_CLI_WAIT=1"))))
         (built (headOf shared root))
         (builtFresh (nc/fresh? root built))
@@ -49,7 +48,6 @@ fn ! runTests -> Bool
         (copy (str cache "/cli-staleCopy"))
         (badCopy (str cache "/badProbe/cli-broken"))
         (linked (sh! root (list "/bin/sh" "-c" "rm -rf \"$1\" && mkdir -p \"$1\" && cp -R \"$2\" \"$3\" && for d in \"$0\"/seed-* \"$0\"/asl1-* \"$0\"/cli-*; do ln -s \"$d\" \"$1/\"; done" shared cache built copy)))
-        (cacheUpstream (fileWrite (str cache "/upstream.asn") (nf/upstreamText shared (list "rt"))))
         (badLinked (sh! root (list "/bin/sh" "-c" "mkdir -p \"$(dirname \"$1\")\" && cp -R \"$2\" \"$1\"" "" badCopy built)))
         (badBin (sh! root (list "/bin/sh" "-c" "printf '#!/bin/sh\\nexit 77\\n' > \"$1\" && chmod +x \"$1\"" "" (str badCopy "/bin"))))
         (badProbed (nc/probe? root badCopy))
@@ -62,7 +60,6 @@ fn ! runTests -> Bool
         (deadOwnerCache (str cache "/deadOwner"))
         (deadOwnerBuild (nativeBuild! root deadOwnerCache))
         (waitLinked (sh! root (list "/bin/sh" "-c" "mkdir -p \"$1\" && for d in \"$0\"/seed-* \"$0\"/asl1-*; do ln -s \"$d\" \"$1/\"; done" shared (str cache "/waitDeadOwner"))))
-        (waitUpstream (fileWrite (str cache "/waitDeadOwner/upstream.asn") (nf/upstreamText shared (list "cli" "rt"))))
         (waitLock (str cache "/waitDeadOwner/lock"))
         (waitLockCreated (dirCreate waitLock))
         (waitPid (fileWrite (str waitLock "/pid") (str (stringFromInt64 (procSelf)) "\n")))
@@ -84,9 +81,7 @@ fn ! runTests -> Bool
         (linkedRoot (sh! root (list "/bin/ln" "-s" root symlink)))
         (viaLink (binAslAt! symlink root (list "test" (probe)) (envFor (some shared) (list "ASL_NATIVE_CLI_WAIT=1"))))
         (cleaned (sh! root (list "/bin/rm" "-rf" cache shared)))]
-    (do (assert sharedUpstream "the shared test cache names the run's native CLI store as read-only upstream, so its CLI is copied, not lowered cold")
-        (assert (ok? cacheUpstream) "the rebuild cache copies the notrace runtime from the shared test cache, so the rebuild lowers only what the stale head forced, not the runtime again")
-        (assert (= warm.exit 0) (str "the shared cache serves the probe natively: " warm.out))
+    (do (assert (= warm.exit 0) (str "the shared cache serves the probe natively: " warm.out))
         (assert builtFresh (str "the shared head names a binary built from this tree: " built))
         (assert (= linked.exit 0) (str "the stale copy was made: " linked.out))
         (assert (= badLinked.exit 0) "the broken-binary copy was made")
@@ -100,8 +95,7 @@ fn ! runTests -> Bool
         (assert builderStale "out/aslNativeBuild is stale when its clang version changes")
         (assert (ok? builderVersionRestored) "the build-cache clang version was restored")
         (assert (= deadOwnerBuild.exit 1) (str "a detached build exits when its lock owner is gone: " deadOwnerBuild.out))
-        (assert (= waitLinked.exit 0) (str "the dead-owner cache links the shared seed and asl1 stages and copies its CLI from the shared test cache: " waitLinked.out))
-        (assert (ok? waitUpstream) "the dead-owner cache copies its CLI and notrace runtime from the shared test cache instead of lowering them again")
+        (assert (= waitLinked.exit 0) (str "the dead-owner cache reuses the shared seed and asl1 stages, so only its CLI is built: " waitLinked.out))
         (assert (ok? waitLockCreated) "the simulated detached build lock was created")
         (assert (ok? waitPid) "the simulated lock has a live builder pid")
         (assert (ok? waitOwner) "the simulated lock has a dead owner pid")

@@ -153,7 +153,7 @@ fn ! scriptLeon! root: String replies: (List String) -> Bool
 fn ! devCloneFor! root: String -> String
   (let [(dev (str root "/dev"))
         (made (sh (str "git clone -q " root "/repo " dev " && cd " dev " && git config user.email t@example.invalid && git config user.name t && git checkout -q -b dev && mkdir -p bin"
-                       " && printf '#!/bin/sh\nif [ \"$1\" = audit ]; then echo \"(:audit :sub $2 :status :passed)\"; exit 0; fi\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\ncase \" $* \" in *\" --admit \"*) echo \"$@\" >> \"$D/.git/admitArgs\"; echo \"(:admission :verdict admitted :branch $2 :red () :baseRed ())\"; exit 0;; esac\necho \"$@\" >> \"$D/.git/trainArgs\"\ngit -C \"$D\" merge --no-ff -q -m \"train $2\" \"$2\" || exit 1\nexit 0\n' > bin/asl && chmod 755 bin/asl && echo bin/asl >> .git/info/exclude && echo madeOk")))]
+                       " && printf '#!/bin/sh\nif [ \"$1\" = audit ]; then echo \"(:audit :sub $2 :status :passed)\"; exit 0; fi\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\necho \"$@\" >> \"$D/.git/trainArgs\"\ngit -C \"$D\" merge --no-ff -q -m \"train $2\" \"$2\" || exit 1\nexit 0\n' > bin/asl && chmod 755 bin/asl && echo bin/asl >> .git/info/exclude && echo madeOk")))]
     (if (stringContains? made "madeOk") dev ""))
 
 ; (:m :do "stage child argv: the real conductor stage with its own HOME (hub.asn, gateway.asn, lanes), gateway env pointing nowhere so only the hub answers, the temp repo as repo and the dev clone as dev repo")

@@ -3,4 +3,4 @@
  :entry "src/cron.asl"
  :description "Pure cron, interval and persisted slot scheduling primitives"
  :aslFirst true
- :dependencies ["asl-utils"])
+ :dependencies [])

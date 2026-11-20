@@ -1,5 +1,5 @@
 (module asl-tools/vcs/vcs
-  :x [VcsReceipt head! status! diff! stage! commit! commitWith! branch! baseMerge! mergeFf! log! isAncestor! receiptOf restore! applyPatch! worktreeAdd! worktreeRemove!]
+  :x [VcsReceipt head! status! diff! stage! commit! commitWith! branch! mergeFf! log! isAncestor! receiptOf restore! applyPatch! worktreeAdd! worktreeRemove!]
   :i [(asl-tools/vcs/git :a g) (asl-tools/coord/commitGuard :a cg)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the backend-neutral version-control API: every op takes a repo root and answers an ASN receipt line; the git backend is vcs/git.asl, the only file that spawns git, so a different backend replaces that one file; commit lands exactly the blobs the guard judged and refuses when commitGuard blocks or leaves a file unchecked")
@@ -75,9 +75,6 @@ fn ! commitWith! repo: String aslRoot: String toolRoot: String paths: (List Stri
 
 fn ! branch! repo: String name: String base: String -> VcsReceipt
   (outReceipt "branch" (g/branchCreate! repo name base))
-
-fn ! baseMerge! repo: String name: String a: String b: String msg: String cfg: (List String) -> VcsReceipt
-  (outReceipt "baseMerge" (g/mergeBase! repo name a b msg cfg))
 
 fn ! mergeFf! repo: String source: String -> VcsReceipt
   (outReceipt "mergeFf" (g/mergeFf! repo source))

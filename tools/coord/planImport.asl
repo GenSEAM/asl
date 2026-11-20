@@ -1,15 +1,10 @@
 (module asl-tools/coord/planImport
-  :x [PlanRow Report rowsOf rowsOfIn importable? needOf resolve refreshable? ownsLive? staleOwns autofillPick plan! planIn! report main]
+  :x [PlanRow Report rowsOf rowsOfIn importable? needOf resolve refreshable? ownsLive? staleOwns plan! planIn! report main]
   :i [(asl-tools/coord/store :a st) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND4 :do "plan import: the ledger's (:u :id X ...) rows that are marked :auto true, or :queue conductor, and carry a :do become store tasks (:owns, :reads, :gate, :channel, :after) with the :do text as tasks/ID.txt; idempotent by row id (a unit already in the store is skipped, never rewritten); a row whose :owns or :gate is missing, or whose :after names something that will not be in the store, is parked in <store>/parked.asn with its :need and nothing is guessed; the ledger is only read")
 
-(schema PlanRow (:f id String) (:f doc String) (:f gate String) (:f owns (List String)) (:f reads (List String)) (:f after (List String)) (:f channel String) (:f pri String))
-
-fn itemText x: rd/SExpr -> String
-  (match x
-    ((rd/sexprAtom v) (fm/stripColon (fm/unquote v)))
-    (_ (rd/renderSexpr x)))
+(schema PlanRow (:f id String) (:f doc String) (:f gate String) (:f owns (List String)) (:f reads (List String)) (:f after (List String)) (:f channel String))
 
 fn listOf v: (Option rd/SExpr) -> (List String)
   (match v
@@ -18,7 +13,7 @@ fn listOf v: (Option rd/SExpr) -> (List String)
       (let [(items (fm/itemsOf x))]
         (if (listEmpty? items)
           (let [(t (fm/textOf x))] (if (stringEmpty? t) (list) (list t)))
-          (map itemText items)))))
+          (map fm/textOf items)))))
 
 fn textAt items: (List rd/SExpr) key: String -> String
   (match (fm/kvGet items key) ((none) "") ((some v) (fm/textOf v)))
@@ -40,26 +35,12 @@ fn gateCommand gateCmd: String gate: String -> String
 fn ownedPath p: String -> String
   (if (stringEndsWith? p " (new)") (optionOr (stringSlice p 0 (- (stringLength p) 6)) p) p)
 
-; (:m :ref PLANIMPORT-SYMBOL-OWNS :do "owns paths are validated exactly as the store's validPath? (which asl-tools/coord/store does not export), in the dry and the non-dry branch alike, so an invalid :owns is refused with the store's refusal text and reported as :bad instead of being stored")
-fn validOwns? path: String -> Bool
-  (and (not (stringEmpty? path)) (not (stringStartsWith? path "/")) (!= path "..")
-       (not (stringStartsWith? path "../")) (not (stringContains? path "/../")) (not (stringEndsWith? path "/..")))
-
 ; (:m :ref NODE2-FEED-BACKLOG :do "the workers of the backlog schema whose rows the conductor may take: the cheap-model ones")
 fn backlogWorker? worker: String -> Bool
   (listContains? (list "deepseek" "cheap") worker)
 
 ; (:m :ref COND4 :do "selected rows: one-line (:u :id ...) forms, :auto true or :queue conductor, a :do, and no :status other than queued; an :auto list (the older survey rows) selects nothing")
 ; (:m :ref NODE2-FEED-BACKLOG :do "a row of the backlog schema (id status prio area do gate effort src model, optional worker owns) is selected too when its :worker is deepseek or cheap and its :status is exactly open, so running, review, done and blocked rows never enter; it has no :channel, so it takes the caller's lane, and its gate is gateCommand; a row without :owns or without a gate command is parked like any other")
-; (:m :do "priority of a row: :pri or :prio; p0 and p1 are high, med and p2 medium, low low; absent or unknown is medium")
-fn priOf items: (List rd/SExpr) -> String
-  (let [(p (textAt items ":pri"))
-        (v (if (stringEmpty? p) (textAt items ":prio") p))]
-    (cond
-      ((or (= v "p0") (or (= v "p1") (= v "high"))) "high")
-      ((= v "low") "low")
-      (else "medium")))
-
 fn rowOf line: String lane: String -> (Option PlanRow)
   (match (fm/parseForms line)
     ((err _) (none))
@@ -76,7 +57,6 @@ fn rowOf line: String lane: String -> (Option PlanRow)
               (some (PlanRow :id id :doc (textAt items ":do")
                              :gate (if backlog (gateCommand (textAt items ":gateCmd") (textAt items ":gate")) (textAt items ":gate"))
                              :owns (map ownedPath (listOf (fm/kvGet items ":owns")))
-                             :pri (priOf items)
                              :reads (listOf (fm/kvGet items ":reads")) :after (listOf (fm/kvGet items ":after"))
                              :channel (let [(c (textAt items ":channel"))] (if (stringEmpty? c) (if backlog lane "free") c))))))))))
 
@@ -93,34 +73,6 @@ fn rowsOf text: String -> (List PlanRow)
 
 fn importable? r: PlanRow -> Bool
   (and (not (listEmpty? r.owns)) (not (stringEmpty? r.gate)))
-
-fn priRank p: String -> Int64
-  (cond
-    ((= p "high") 0)
-    ((= p "low") 2)
-    (else 1))
-
-fn pathOverlap? a: String b: String -> Bool
-  (or (= a b) (or (stringStartsWith? a (str b "/")) (stringStartsWith? b (str a "/"))))
-
-fn ownsOverlap? a: (List String) b: (List String) -> Bool
-  (listAny? (fn [(x String)] -> Bool (listAny? (fn [(y String)] -> Bool (pathOverlap? x y)) b)) a)
-
-fn rowsAtRank n: Int64 rows: (List PlanRow) -> (List PlanRow)
-  (filter (fn [(r PlanRow)] -> Bool (= (priRank r.pri) n)) rows)
-
-; (:m :do "autofillPick ROWS QUEUED CAPACITY: the importable rows whose id is not queued, by pri then file order, at most capacity, skipping a row whose owns overlaps an already picked row")
-fn autofillPick rows: (List PlanRow) queued: (List String) capacity: Int64 -> (List PlanRow)
-  (let [(cands (filter (fn [(r PlanRow)] -> Bool (and (importable? r) (not (listContains? queued r.id)))) rows))
-        (ordered (listAppend (rowsAtRank 0 cands) (listAppend (rowsAtRank 1 cands) (rowsAtRank 2 cands))))]
-    (pairFirst
-      (fold (fn [(acc (Pair (List PlanRow) (List String))) (r PlanRow)] -> (Pair (List PlanRow) (List String))
-              (let [(picked (pairFirst acc))
-                    (used (pairSecond acc))]
-                (if (or (not (< (listLength picked) capacity)) (ownsOverlap? r.owns used))
-                  acc
-                  (pair (listAppend picked (list r)) (listAppend used r.owns)))))
-            (pair (list) (list)) ordered)))
 
 ; (:m :do "why a row cannot become a task yet: owns, gate, or after (a dependency that is neither in the store nor itself importable)")
 fn needOf r: PlanRow known: (List String) -> String
@@ -172,7 +124,7 @@ fn keptParked existing: String ids: (List String) -> (List String)
 
 ; (:m :ref CONDUCTOR-TASK-REFRESH :do "a unit already in the store whose ledger row changed (task text, :owns or :gate) is refreshed when it is not in a stage: tasks/ID.txt and the store row's owns and gate are rewritten from the row and one (:refresh :unit :changed ...) row is appended to <store>/journal.asn; a unit in writing, gating, awaitReview, reviewing, merging or merged, a unit blocked awaiting the lead or a rebase, a unit holding a lease (store put refuses it) and a row that is no longer importable are left alone; a dry import only reports")
 fn refreshable? st: String await: String -> Bool
-  (and (not (listContains? (list "writing" "gating" "awaitReview" "reviewing" "admitting" "merging" "merged") st))
+  (and (not (listContains? (list "writing" "gating" "awaitReview" "reviewing" "merging" "merged") st))
        (not (and (= st "blocked") (listContains? (list "lead" "rebase") await))))
 
 fn ! cuField! store: String id: String key: String -> String
@@ -212,11 +164,9 @@ fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (
             (_ (if dry () (let [(_ (dirCreate (str store "/tasks")))] ())))
             (results (map (fn [(r PlanRow)] -> (Pair String (Result String String))
                             (pair r.id
-                                  (if (not (listAll? validOwns? r.owns))
-                                    (err (str "(:refused :unit " (st/q r.id) " :why owns :path \"invalid\")"))
-                                    (if dry (ok "dry")
-                                      (let [(_ (if (fileExists? (str store "/tasks/" r.id ".txt")) (ok ()) (fileWrite (str store "/tasks/" r.id ".txt") r.doc)))]
-                                        (st/put! store (st/Task :id r.id :owns r.owns :reads r.reads :gate r.gate :channel r.channel :model "" :base base :after r.after :st "queued" :epoch 0 :receipt "")))))))
+                                  (if dry (ok "dry")
+                                    (let [(_ (if (fileExists? (str store "/tasks/" r.id ".txt")) (ok ()) (fileWrite (str store "/tasks/" r.id ".txt") r.doc)))]
+                                      (st/put! store (st/Task :id r.id :owns r.owns :reads r.reads :gate r.gate :channel r.channel :model "" :base base :after r.after :st "queued" :epoch 0 :receipt ""))))))
                           (filter (fn [(r PlanRow)] -> Bool (listContains? keep r.id)) fresh)))
             (parkedLines (listAppend (keptParked (resultOr (fileReadString (str store "/parked.asn")) "") (listAppend inStore (map (fn [(r PlanRow)] -> String r.id) rows)))
                                      (map (fn [(p (Pair PlanRow String))] -> String (parkedRow (pairFirst p) (pairSecond p))) needs)))
@@ -229,7 +179,7 @@ fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (
         (ok (Report :put (map pairFirst (filter (fn [(p (Pair String (Result String String)))] -> Bool (ok? (pairSecond p))) results))
                     :skipped (filter (fn [(i String)] -> Bool (listContains? inStore i)) (map (fn [(r PlanRow)] -> String r.id) rows))
                     :parked (map (fn [(p (Pair PlanRow String))] -> String (str (let [(r (pairFirst p))] r.id) ":" (pairSecond p))) needs)
-                    :bad (map (fn [(p (Pair String (Result String String)))] -> String (match (pairSecond p) ((err e) (str (pairFirst p) ":" e)) ((ok _) (pairFirst p)))) (filter (fn [(p (Pair String (Result String String)))] -> Bool (not (ok? (pairSecond p)))) results))
+                    :bad (map pairFirst (filter (fn [(p (Pair String (Result String String)))] -> Bool (not (ok? (pairSecond p)))) results))
                     :refreshed refreshed)))))
 
 ; (:m :ref COND4 :do "import --ledger FILE --store DIR [--base REF] [--dry]: prints the (:import ...) report; the ledger is read, never written")

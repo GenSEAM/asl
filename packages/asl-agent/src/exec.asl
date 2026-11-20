@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv aliasedOp fileFormHeads opSynonymNames withNet withGateSame withCreated execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv withNet execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings moduleMismatch!
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -42,9 +42,7 @@ enum Val
   (:f deadlineAt (Option Float64))
   (:f session String)
   (:f env (Option (List String)))
-  (:f net Bool :default false)
-  (:f gateSame (List (List (Pair String Val))) :default (list))
-  (:f created (List String) :default (list)))
+  (:f net Bool :default false))
 
 (schema ExecOut
   (:f rec (List (Pair String Val)))
@@ -58,17 +56,6 @@ fn makeExecEnv root: String repoRoot: String mode: String owns: (List String) wr
 ; (:m :ref LEON-RUN-HOME-JAIL :do "the unit's :net true, from the run arguments; without it run and manage children have no network beyond loopback")
 fn withNet env: ExecEnv net: Bool -> ExecEnv
   (with env :net net)
-
-; (:m :ref LOOP-BASELINE-STORED-GATE :do "the gate verdicts still valid for this turn, one record per gate (cmd exit stdout stderr since): the loop passes them only when the owned tree is the one they were taken on and the turn holds no step that can change it; a gate step answers each gate found here from it, marked :same true :since N, and starts a process only for the others")
-fn withGateSame env: ExecEnv recs: (List (List (Pair String Val))) -> ExecEnv
-  (with env :gateSame recs)
-
-; (:m :ref EDIT-BY-SYMBOL :do "the paths this session itself created, from the run journal: a whole write of such a file is never refused as a rewrite of an existing one, the model is still building it")
-fn withCreated env: ExecEnv paths: (List String) -> ExecEnv
-  (with env :created paths)
-
-fn gateSameFor env: ExecEnv cmd: String -> (Option (List (Pair String Val)))
-  (listHead (filter (fn [rec] (= (recGet rec "cmd") (some (vStr cmd)))) env.gateSame))
 
 ; (:m :adopted NormativeAndEmpiricalAreNotMixed)
 fn rawRequiredBytes -> Int64
@@ -94,7 +81,7 @@ fn gitOpNames -> (List String)
   (list "gitDiff" "gitLog" "gitShow")
 
 fn aslOpNames -> (List String)
-  (list "write" "edit" "replaceDef" "read" "check" "diff" "flush" "discard" "query" "q" "test" "tree" "fix" "tools" "help" "observe"
+  (list "write" "edit" "read" "check" "diff" "flush" "discard" "query" "q" "test" "tree" "fix" "tools" "help" "observe"
         "outline" "intel" "search" "research" "crawl")
 
 
@@ -283,9 +270,7 @@ fn gateOutcome gate: (List (Pair String Val)) -> String
 
 fn formatGateRun gate: (List (Pair String Val)) -> String
   (let [n (if (notNone gate "n") (str ":n " (fieldStr gate "n" "") " ") "")]
-    (str "(" n ":cmd \"" (escField gate "cmd") "\" " (gateOutcome gate)
-      (if (truthyField gate "same") (str " :same true :since " (fieldStr gate "since" "0")) "")
-      " :tail \"" (c/escapeAsn (gateTail gate)) "\")"))
+    (str "(" n ":cmd \"" (escField gate "cmd") "\" " (gateOutcome gate) " :tail \"" (c/escapeAsn (gateTail gate)) "\")"))
 
 fn capped s: String cap: Int64 cut: Int64 tail: String -> String
   (if (> (cpLen s) cap) (str (cpTake s cut) tail) s)
@@ -312,7 +297,6 @@ fn formatOpReceipt rec: (List (Pair String Val)) readCap: Int64 -> String
                     " :totalChars " (fieldStr rec "totalChars" "None"))
                   "")
                 (if (truthyField rec "span") (str " :lines (" (itemAt (field "span") 0) " " (itemAt (field "span") 1) ")") "")
-                (if (truthyField rec "near") (str " :near (" (itemAt (field "near") 0) " " (itemAt (field "near") 1) ")") "")
                 (if (= op "note")
                   (str " :chars " (fieldStr rec "chars" "0") (if (truthyField rec "cap") (str " :cap " (fieldStr rec "cap" "")) ""))
                   "")
@@ -365,7 +349,6 @@ fn opShapes -> (List (Pair String String))
   (list
     (pair "write" "(:step :op \"write\" :file f :content :raw|s)")
     (pair "edit" "(:step :op \"edit\" :file f :old :raw|s :new :raw|s)")
-    (pair "replaceDef" "(:step :op \"replaceDef\" :file f :symbol name :content :raw) ; :content is the whole definition from its head line to its last paren, nothing else")
     (pair "read" "(:step :op \"read\" :file f [:symbol name] [:anchor s] [:start n :end m])")
     (pair "query" "(:step :op \"query\" :query s [:in code|text|all] [:limit n])")
     (pair "outline" "(:step :op \"outline\" :file f)")
@@ -398,7 +381,7 @@ fn opShapes -> (List (Pair String String))
     (pair "crawl" "(:step :op \"crawl\" :url u [:distill text|asn] [:limit n])"))
 
 fn scoutMutating -> (List String)
-  (list "write" "edit" "replaceDef" "flush" "discard" "fix" "txn" "gate" "run" "manage" "delete")
+  (list "write" "edit" "flush" "discard" "fix" "txn" "gate" "run" "manage" "delete")
 
 fn acceptedOpsForMode mode: String effects: (List (Pair String String)) -> (List String)
   (let [local (map pairFirst (filter (fn [p] (= (pairSecond p) "local")) effects))]
@@ -422,9 +405,9 @@ fn undeclaredAnswer unknown: String mode: String effects: (List (Pair String Str
       (list (vs "nearest" nearest))))
 
 ; (:m :tags (claims))
-fn collectProseStrings formText: String inEvidence: Bool out: (List String) planOn: Bool -> (List String)
+fn collectProseStrings formText: String inEvidence: Bool out: (List String) useOld: Bool planOn: Bool -> (List String)
   (listAppend out
-    (cl/collectProseStringsInner formText inEvidence (cl/newStructuralKeys) planOn (list)))
+    (cl/collectProseStringsInner formText inEvidence (if useOld (cl/oldStructuralKeys) (cl/newStructuralKeys)) planOn (list)))
 
 
 fn isWs c: String -> Bool
@@ -638,15 +621,9 @@ fn ! execGateOp! n: (Option c/KvVal) env: ExecEnv newId: (fn [] -> String) -> (L
           (let [picked (if all
                          (map (fn [k] (pair (+ k 1) (optionOr (listGet gates k) ""))) (range 0 count))
                          (list (pair i (optionOr (listGet gates (- i 1)) ""))))
-                fresh (filter (fn [pk] (none? (gateSameFor env (pairSecond pk)))) picked)
-                withIds (map (fn [pk] (pair (newId) (pairSecond pk))) fresh)
-                ran (if (listEmpty? withIds) (list) (map (fn [run] (mapRec run fromGit)) (g/runGates! withIds env.root (stepTimeout! env) (none) (none))))
-                runs (map (fn [k]
-                            (match (gateSameFor env (pairSecond (optionOr (listGet picked k) (pair 0 ""))))
-                              ((some rec) (recSet rec "same" (vBool true)))
-                              ((none) (optionOr (listGet ran (listLength (filter (fn [pk] (none? (gateSameFor env (pairSecond pk)))) (listTake picked k)))) (list)))))
-                       (range 0 (listLength picked)))
-                recs (map (fn [k] (listAppend (optionOr (listGet runs k) (list))
+                withIds (map (fn [pk] (pair (newId) (pairSecond pk))) picked)
+                runs (g/runGates! withIds env.root (stepTimeout! env) (none) (none))
+                recs (map (fn [k] (listAppend (mapRec (optionOr (listGet runs k) (list)) fromGit)
                                     (list (pair "n" (vInt (pairFirst (optionOr (listGet picked k) (pair 0 ""))))))))
                        (range 0 (min (listLength picked) (listLength runs))))
                 passed (listAll? (fn [rr] (= (recGet rr "exit") (some (vInt 0)))) recs)]
@@ -821,13 +798,9 @@ fn ! moduleMismatch! root: String opName: String target: String content: String 
       (else "")))
 
 ; (:m :ref LEON-OWNS-ONE-RULE-20261018 :do "no :owns on the session means the session may write anywhere inside :root; c/effectiveOwns is the one place that normalization happens, shared with main.asl's liveExecOps! instead of each keeping its own if-empty-then-** copy")
-; (:m :ref EDIT-BY-SYMBOL :do "a whole-file write over an existing file of more than this many lines is refused: node2 2026-11-22, 389 of 508 whole-file writes failed; adopted")
-fn wholeWriteLines -> Int64
-  80
-
 fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (Option (List (Pair String Val)))
   (let [target (opStr op "file" "")
-        field (if (or (= opName "write") (= opName "replaceDef")) "content" "new")
+        field (if (= opName "write") "content" "new")
         form (opStr op "form" "")
         isRaw (fn [k] (match (opGet op k)
                         ((some v) (or (= v (c/kvStr ":raw")) (and (= v (c/kvStr "raw")) (stringContains? form (str ":" k " :raw")))))
@@ -838,9 +811,7 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
         effOwns (c/effectiveOwns owns)
         full (if (stringStartsWith? target "/") target (str (absRoot! env.root) "/" target))
         existing (resultOr (fileSize full) 0)
-        existingLines (if (and (= opName "write") (> existing 0)) (listLength (t/splitLines (resultOr (fileReadString full) ""))) 0)
-        sessionMade (listContains? env.created (t/normPath target))
-        wholeFile (and (= opName "write") (and (not sessionMade) (or (> existing 4096) (> existingLines (wholeWriteLines)))))
+        wholeFile (and (= opName "write") (> existing 4096))
         modWhy (moduleMismatch! (absRoot! env.root) opName target (opStr op "content" ""))]
     (cond
       (unbound
@@ -854,8 +825,7 @@ fn ! writeCheck op: (List (Pair String c/KvVal)) opName: String env: ExecEnv new
       (wholeFile
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_WRITE_WHOLE_FILE")
           (vs "file" target) (pair "bytes" (vInt existing))
-          (vs "message" (str "(:refused :why \"a whole-file write overwrites an existing file of " (stringFromInt64 existingLines) " lines (" (stringFromInt64 existing) " bytes); resending it is how delimiters break\" :fix \"replaceDef the one definition that changes, or edit it\")"))
-          (vs "hint" "(:step :op \"replaceDef\" :file \"F\" :symbol \"S\" :content :raw) swaps one definition, or (:step :op \"edit\" :file \"F\" :old \"...\" :new \"...\") on the fn that changes, or (:step :op \"read\" :file \"F\" :symbol \"S\") first"))))
+          (vs "hint" "(:step :op \"edit\" :file \"F\" :old \"...\" :new \"...\") on the fn that changes, or (:step :op \"read\" :file \"F\" :symbol \"S\") first"))))
       ((not (stringEmpty? modWhy))
         (some (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_MODULE_PATH") (vs "file" target) (vs "message" modWhy))))
       (else (none))))
@@ -879,7 +849,7 @@ fn ! aslOp! op: (List (Pair String c/KvVal)) env: ExecEnv newId: (fn [] -> Strin
 
 ; (:m :ref LEON-REMOTE-TOOLS :do "a step with :remote UNIT leaves the local root: the owns check still applies to write and edit, the rest is remoteOps over the relay")
 fn ! remoteRec! op: (List (Pair String c/KvVal)) opName: String env: ExecEnv newId: (fn [] -> String) -> (List (Pair String Val))
-  (let [refused (if (or (= opName "write") (or (= opName "edit") (= opName "replaceDef"))) (writeCheck op opName env newId) (none))]
+  (let [refused (if (or (= opName "write") (= opName "edit")) (writeCheck op opName env newId) (none))]
     (match refused
       ((some rec) rec)
       ((none)
@@ -899,27 +869,11 @@ fn rawPlaceAdjacent? op: (List (Pair String c/KvVal)) opName: String -> Bool
 fn withRawPlace op: (List (Pair String c/KvVal)) opName: String rec: (List (Pair String Val)) -> (List (Pair String Val))
   (if (rawPlaceAdjacent? op opName) (recSet rec "rawPlace" (vStr "adjacent")) rec)
 
-; (:m :ref LEON-OP-HINTS :do "HARNESS_PATH_REPEAT counted 62 refusals of the same blocked path written as ./p, p and the absolute p inside :root; the repeat key is the root-relative path so the three spellings are one path")
-fn blockedKey op: (List (Pair String c/KvVal)) opName: String root: String -> String
-  (let [p (opFirst op (list "file" "path") "")
-        rootParts (pathSegs (absRoot! root))
-        parts (pathSegs p)
-        rel (if (and (stringStartsWith? p "/") (listAny? (fn [x] true) rootParts) (= (optionOr (listSlice parts 0 (listLength rootParts)) (list)) rootParts))
-              (optionOr (listSlice parts (listLength rootParts) (listLength parts)) (list))
-              parts)]
-    (str "blocked:" opName "|" (c/joinSep rel "/")))
+fn blockedKey op: (List (Pair String c/KvVal)) opName: String -> String
+  (str "blocked:" opName "|" (opFirst op (list "file" "path") ""))
 
-fn pathSegs p: String -> (List String)
-  (listReverse
-    (fold (fn [acc x]
-            (cond
-              ((or (= x "") (= x ".")) acc)
-              ((= x "..") (if (listEmpty? acc) acc (c/restOf acc)))
-              (else (cons x acc))))
-      (list) (stringSplit p "/")))
-
-fn ! blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String root: String -> Bool
-  (listContains? procs.blocked (blockedKey op opName root))
+fn blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String -> Bool
+  (listContains? procs.blocked (blockedKey op opName))
 
 fn blockedBump procs: r/Procs key: String -> r/Procs
   (if (listContains? procs.blocked key) procs (with procs :blocked (cons key procs.blocked)))
@@ -934,89 +888,8 @@ fn fileFormHead? op: (List (Pair String c/KvVal)) opName: String -> Bool
 fn fileFormMessage opName: String -> String
   (str "(:" opName " ...) is text from a source file, not a step; to put it in a file send (:step :op \"write\" :file \"PATH\" :content :raw) and the whole file in a ``` block after it")
 
-; (:m :ref LEON-OP-HINTS :do "OP-ALIASES, node2 48h: ~190 turns lost on tool misuse; an op name a cheap model writes for a registered op (tests, ls, open, man) and the argument key it writes for the file or topic (:path, :target, :about) are read as the registered op and key, the receipt carries :canonical with the exact step form; a step naming no op answers ERR_NO_OP with the form its keys imply")
-fn opSynonymTable -> (List (Pair String (List String)))
-  (list
-    (pair "test" (list "tests" "runtest" "runtests" "unittest" "testfile" "asltest"))
-    (pair "tree" (list "ls" "list" "listdir" "dir" "listfiles" "listdirectory"))
-    (pair "read" (list "open" "view" "readfile" "head" "type"))
-    (pair "help" (list "man" "usage" "info" "?"))
-    (pair "write" (list "writefile" "savefile" "newfile" "createfile"))
-    (pair "edit" (list "editfile" "update"))
-    (pair "check" (list "checkfile" "lint" "verify"))
-    (pair "run" (list "exec" "shell" "bash" "sh" "cmd" "command")))
-
-; (:m :ref LEON-OP-HINTS :do "a synonym never names a form head the loop reads as text or data (fileFormHeads, patch, txn, findings...), or a pasted (:doc ...) would run as help")
-fn opSynonymNames -> (List String)
-  (listFlatMap (fn [p] (pairSecond p)) (opSynonymTable))
-
-fn opSynonym name: String -> String
-  (let [n (stringLower name)]
-    (match (listFind (fn [p] (listContains? (pairSecond p) n)) (opSynonymTable))
-      ((some p) (pairFirst p))
-      ((none) "")))
-
-fn opKeyAliases opName: String -> (Pair String (List String))
-  (cond
-    ((listContains? (list "test" "check" "fix") opName) (pair "file" (list "path" "target" "filename" "spec" "suite" "name")))
-    ((= opName "help") (pair "name" (list "about" "command" "cmd" "for" "what" "of" "subject" "tool" "target")))
-    ((= opName "tree") (pair "path" (list "dir" "directory" "folder" "file" "target")))
-    ((listContains? (list "read" "write" "edit") opName) (pair "file" (list "path" "filename" "target")))
-    (else (pair "" (list))))
-
-fn opSetStr op: (List (Pair String c/KvVal)) k: String v: String -> (List (Pair String c/KvVal))
-  (listAppend (filter (fn [p] (!= (pairFirst p) k)) op) (list (pair k (c/kvStr v))))
-
-fn withKeyAlias op: (List (Pair String c/KvVal)) opName: String -> (List (Pair String c/KvVal))
-  (match (opKeyAliases opName)
-    ((pair key aliases)
-      (if (or (stringEmpty? key) (opTruthy op key))
-        op
-        (match (listFind (fn [k] (opTruthy op k)) aliases)
-          ((some k) (opSetStr op key (opStr op k "")))
-          ((none) op)))))
-
-fn canonicalForm opName: String op: (List (Pair String c/KvVal)) -> String
-  (let [arg (match (opKeyAliases opName) ((pair key _) key))
-        v (if (stringEmpty? arg) "" (opStr op arg ""))]
-    (if (stringEmpty? arg)
-      (str "(:step :op \"" opName "\")")
-      (str "(:step :op \"" opName "\" :" arg " \"" (c/escapeAsn v) "\")")))
-
-fn aliasedOp op: (List (Pair String c/KvVal)) env: ExecEnv -> (List (Pair String c/KvVal))
-  (let [isStep (= (opStr op "type" "raw") "step")
-        opName (opStr op "op" "")
-        syn (if (stringEmpty? opName) "" (opSynonym opName))
-        undeclared (and (!= opName "") (match (t/checkEffect env.effects opName) ((t/effectUndeclared) true) (_ false)))
-        renamed (if (and isStep (and undeclared (!= syn ""))) (opSetStr op "op" syn) op)
-        name (opStr renamed "op" "")
-        keyed (if isStep (withKeyAlias renamed name) renamed)]
-    (if (and isStep (and (!= name "") (or (!= name opName) (!= (listLength keyed) (listLength renamed)))))
-      (opSetStr keyed "aliased" (canonicalForm name keyed))
-      keyed))
-
-fn inferStepForm op: (List (Pair String c/KvVal)) -> String
-  (let [f (opFirst op (list "file" "path") "")]
-    (cond
-      ((and (!= f "") (opTruthy op "content")) (str "(:step :op \"write\" :file \"" (c/escapeAsn f) "\" :content :raw)"))
-      ((and (!= f "") (and (opTruthy op "old") (opTruthy op "new"))) (str "(:step :op \"edit\" :file \"" (c/escapeAsn f) "\" :old :raw :new :raw)"))
-      ((opTruthy op "query") (str "(:step :op \"query\" :query \"" (c/escapeAsn (opStr op "query" "")) "\")"))
-      ((opTruthy op "argv") (str "(:step :op \"run\" :argv \"" (c/escapeAsn (opStr op "argv" "")) "\")"))
-      ((opTruthy op "cmd") (str "(:step :op \"run\" :argv \"" (c/escapeAsn (opStr op "cmd" "")) "\")"))
-      ((!= f "") (str "(:step :op \"read\" :file \"" (c/escapeAsn f) "\")"))
-      ((opTruthy op "dir") (str "(:step :op \"tree\" :path \"" (c/escapeAsn (opStr op "dir" "")) "\")"))
-      (else "")))
-
-fn noOpReceipt op: (List (Pair String c/KvVal)) rid: String -> (List (Pair String Val))
-  (let [fix (inferStepForm op)]
-    (listAppend
-      (list (vs "id" rid) (vs "op" "") (vs "status" "rejected") (vs "error" "ERR_NO_OP")
-        (vs "message" "this step names no op; the op is a double-quoted name right after :op"))
-      (if (stringEmpty? fix) (list) (list (vs "fix" fix)))))
-
-fn ! execOp! opIn: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
-  (let [op (aliasedOp opIn env)
-        opType (opStr op "type" "raw")
+fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
+  (let [opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
         step (= opType "step")
         effect (if (and step (and (!= opName "intent") (not (stringEmpty? opName)))) (t/checkEffect env.effects opName) (t/effectAllowed))
@@ -1045,7 +918,7 @@ fn ! execOp! opIn: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newI
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HIDDEN_PATH")
               (vs "message" "that path belongs to the evaluation, not the task; it is not read; declared gates run with (:step :op \"gate\") and after each write"))
           procs))
-      ((and step (blockedRepeat? procs op opName env.root))
+      ((and step (blockedRepeat? procs op opName))
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HARNESS_PATH_REPEAT")
               (vs "file" (opFirst op (list "file" "path") ""))
               (vs "message" "this exact op on this blocked path was already refused; it is not checked or run again"))
@@ -1057,7 +930,7 @@ fn ! execOp! opIn: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newI
               (pair "owns" (vStrs env.owns))
               (vs "hint" (str "task inputs live under .asl/mem/work; the allowed roots are :root \"" env.root "\" and :owns (" (stringJoin (map (fn [o] (str "\"" o "\"")) env.owns) " ") "); .asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
               (vs "message" ".asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
-          (blockedBump procs (blockedKey op opName env.root))))
+          (blockedBump procs (blockedKey op opName))))
       ((and step (and (= opName "run") (opTruthy op "readHint")))
         (eo (list (vs "id" (newId)) (vs "op" "run") (vs "status" "rejected") (vs "error" "ERR_RUN_READ") (pair "cmd" (opVal op "argv" (vStr "")))
               (pair "message" (opVal op "message" (vNone))))
@@ -1077,12 +950,11 @@ fn ! execOp! opIn: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newI
 
 fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String env: ExecEnv newId: (fn [] -> String) snap: (fn [String] -> Bool) run: (fn [String String] -> t/AslRun) -> (List (Pair String Val))
   (let [step (= opType "step")
-        refused (if (and step (or (= opName "write") (or (= opName "edit") (= opName "replaceDef")))) (writeCheck op opName env newId) (none))]
+        refused (if (and step (or (= opName "write") (= opName "edit"))) (writeCheck op opName env newId) (none))]
     (cond
       ((some? refused) (optionOr refused (list)))
       ((and step (= opName "txn"))
         (mapRec (t/execTxn! (opStr op "form" "") env.owns env.root env.effects newId snap run) fromTxn))
-      ((and step (or (stringEmpty? opName) (= opName "step"))) (noOpReceipt op (newId)))
       ((and step (and (= opName "flush") env.writesPersisted))
         (list (vs "id" (newId)) (vs "op" "flush") (vs "status" "ok") (pair "exit" (vInt 0)) (vs "message" "no-op: writes already persisted")))
       ((and step (listContains? (gitOpNames) opName))

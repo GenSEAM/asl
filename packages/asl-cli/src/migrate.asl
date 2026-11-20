@@ -96,13 +96,13 @@ fn ! writeBatchFilesLoop remaining: (List (Pair Str Str)) -> (Result Bool Str)
 fn ! migrateBatch paths: (List Str) dryRun: Bool checkOnly: Bool -> (Result (List Str) Str)
   (match (validateBatchFilesLoop paths (list)) ((err e) (err e)) ((ok validatedPairs) (if checkOnly (ok (map (fn [(p Str)] -> Str (str "✓ " p ": Validated migratable.")) paths)) (if dryRun (ok (map (fn [(item (Pair Str Str))] -> Str (pairSecond item)) validatedPairs)) (match (writeBatchFilesLoop validatedPairs) ((err e) (err e)) ((ok _) (ok (map (fn [(p Str)] -> Str (str "✓ " p ": Successfully migrated.")) paths))))))))
 
-(schema MigrateCliOptions (:f path String) (:f dryRun Bool) (:f checkOnly Bool))
+(schema MigrateCliOptions (:f path String) (:f dryRun Bool) (:f checkOnly Bool) (:f v04 Bool))
 
 fn parseMigrateArgsLoop args: (List String) opts: MigrateCliOptions -> MigrateCliOptions
-  (match (listHead args) ((none) opts) ((some arg) (let [(restArgs (optionOr (listTail args) (list)))] (cond ((= arg "--dry-run") (parseMigrateArgsLoop restArgs (with opts :dryRun true))) ((= arg "--check") (parseMigrateArgsLoop restArgs (with opts :checkOnly true))) (else (let [(curPath opts.path) (newPath (if (stringEmpty? curPath) arg curPath))] (parseMigrateArgsLoop restArgs (with opts :path newPath))))))))
+  (match (listHead args) ((none) opts) ((some arg) (let [(restArgs (optionOr (listTail args) (list)))] (cond ((= arg "--dry-run") (parseMigrateArgsLoop restArgs (with opts :dryRun true))) ((= arg "--check") (parseMigrateArgsLoop restArgs (with opts :checkOnly true))) ((= arg "--v04") (parseMigrateArgsLoop restArgs (with opts :v04 true))) (else (let [(curPath opts.path) (newPath (if (stringEmpty? curPath) arg curPath))] (parseMigrateArgsLoop restArgs (with opts :path newPath))))))))
 
 fn parseMigrateArgs args: (List String) -> MigrateCliOptions
-  (parseMigrateArgsLoop args (MigrateCliOptions :path "" :dryRun false :checkOnly false))
+  (parseMigrateArgsLoop args (MigrateCliOptions :path "" :dryRun false :checkOnly false :v04 false))
 
 fn ! runMigrate args: (List Str) -> (Result Str Str)
   (if (listEmpty? args) (err "Usage: asl migrate [--dry-run|--check] <file.asl>") (let [(opts (parseMigrateArgs args)) (path opts.path)] (if (stringEmpty? path) (err "Usage: asl migrate [--dry-run|--check] <file.asl>") (let [(srcRes (fileReadString path))] (match srcRes ((err _) (err (str "Failed to read target file: " path))) ((ok src) (migrateSource src path opts.dryRun opts.checkOnly)))))))

@@ -67,21 +67,8 @@ fn consultStep id: Int64 kw: (Map String String) args: (List String) -> StepOutc
                 (str " :role \"" (k/escapeAsnVal role) "\" :prompt \"" (k/escapeAsnVal prompt) "\" :target \"" (k/escapeAsnVal target)
                      "\" :message \"no critic model is wired to this op; route external consultation through asl-relay\""))))
 
-; (:m :ref FORMS-SOCKET-TREE-LINUX :do "a subprocess form run writes caches under the request root at .asl/run (agentLoop memo) and .asl/vfs, which the socket path never does, so counting them made the same (:tree :path \".\") answer differ by transport on Linux; only the runtime dirs of .asl are skipped, like .git, while .asl/mem, .asl/rules.asn and the rest stay visible to agents")
-fn aslRuntimeDir? name: String -> Bool
-  (or (= name "cache") (= name "run") (= name "vfs") (= name "build") (= name "tmp") (= name "staging") (= name "log") (= name "metrics"))
-
-; (:m :ref FORMS-SOCKET-TREE-LINUX :do "a .asl that holds only runtime dirs is no workspace content, so it is not counted either: the socket path never creates it")
-fn runtimeOnlyAsl? dir: String name: String -> Bool
-  (and (= name ".asl")
-       (match (dirList (k/joinPath dir name))
-         ((err _) false)
-         ((ok kids) (listAll? aslRuntimeDir? kids))))
-
-fn excludedTreeDir? dir: String name: String -> Bool
-  (or (= name ".git") (= name "node_modules") (= name "__pycache__")
-      (and (aslRuntimeDir? name) (= (k/baseName dir) ".asl"))
-      (runtimeOnlyAsl? dir name))
+fn excludedTreeDir? name: String -> Bool
+  (or (= name ".git") (= name "node_modules") (= name "__pycache__"))
 
 fn relJoin relDir: String name: String -> String
   (if (stringEmpty? relDir) name (str relDir "/" name))
@@ -93,7 +80,7 @@ fn walkTree! maxDepth: Int64 dir: String relDir: String depth: Int64 acc: TreeAc
       (let [(isDirs (map (fn [(nm String)] -> Bool (k/isDir! (k/joinPath dir nm))) names))
             (pairs (zip names isDirs))
             (files (map pairFirst (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) pairs)))
-            (dirs (filter (fn [(nm String)] -> Bool (not (excludedTreeDir? dir nm))) (map pairFirst (filter pairSecond pairs))))
+            (dirs (filter (fn [(nm String)] -> Bool (not (excludedTreeDir? nm))) (map pairFirst (filter pairSecond pairs))))
             (listed (if (< depth maxDepth) (fold (fn [(es (List String)) (f String)] -> (List String) (cons (relJoin relDir f) es)) acc.entries files) acc.entries))
             (here (TreeAcc :files (+ acc.files (listLength files)) :dirs (+ acc.dirs (listLength dirs)) :entries listed))]
         (fold (fn [(a TreeAcc) (d String)] -> TreeAcc

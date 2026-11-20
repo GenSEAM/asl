@@ -67,7 +67,7 @@ fn ! runClean! cwd: String path: String program: String file: String -> (Result 
   (limited! (list "/usr/bin/env" "-i" (str "PATH=" path) program "check" file) cwd 120)
 
 fn ! runCleanHelp! cwd: String path: String program: String -> (Result sys/Captured String)
-  (limited! (list "/usr/bin/env" "-i" (str "PATH=" path) program "human" "help") cwd 120)
+  (limited! (list "/usr/bin/env" "-i" (str "PATH=" path) program "help") cwd 120)
 
 fn lastLine text: String -> String
   (optionOr (listLast (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit text "\n"))) "")
@@ -121,7 +121,7 @@ fn ! runTests -> Bool
       (assert (ok? cwdR) (match cwdR ((err e) e) ((ok _) "outside cwd")))
       (assert (= (listLength outcomes) 4) "four cases ran")
       (map expectCheck! outcomes)
-      (assert (and (ok? helpOut) (match helpOut ((err _) false) ((ok got) (= got.exitCode 0)))) "clean standalone human help exits successfully")
+      (assert (and (ok? helpOut) (match helpOut ((err _) false) ((ok got) (= got.exitCode 0)))) "clean standalone help exits successfully")
       (assert (match helpOut ((err _) false) ((ok got) (and (stringContains? got.stdout "Host evaluates expressions and echoes (:keyword ...) as ASN data")
                                                          (stringContains? got.stdout "--native evaluates a single Int64 expression only"))))
               "help distinguishes host ASN echo from native single-Int64 evaluation")

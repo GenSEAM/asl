@@ -619,7 +619,7 @@ fn ! suiteBuiltFrom! ctx: sys/Context fp: String path: String rel: String buildR
               (sampling (or opts.stats (> opts.maxRssMb 0)))
               (env (listAppend (list "ASL_ASSERT_REPORT=1" (preludeOverride ctx) (nt/initPhaseOff))
                                (listAppend (if opts.keepGoing (list "ASL_ASSERT_KEEP_GOING=1") (list)) (if opts.stats (list "ASL_NATIVE_TEST_STATS=1") (list)))))
-              (w (nt/runWatched (listAppend (run/niceWords) (list bin)) (suiteCwd ctx rel) (some (nt/withEnvOverrides! env)) (pairFirst wall) (* opts.maxRssMb 1024) sampling))
+              (w (nt/runWatched (list "nice" "-n" "15" bin) (suiteCwd ctx rel) (some (nt/withEnvOverrides! env)) (pairFirst wall) (* opts.maxRssMb 1024) sampling))
               (rawErr (if (= rel buildRel) w.out.stderr (stringReplace (stringReplace w.out.stderr (str ctx.root "/" buildRel) (str ctx.root "/" rel)) buildRel rel)))
               (errText (nt/withoutPeakLines rawErr))
               (judged (nt/judgeInit! bin path (preludeOverride ctx) (if (stringEmpty? opts.only) (nt/verdictOf path w.out.exitCode errText) (nt/selectedVerdict path opts.only w.out.exitCode errText))))
@@ -702,8 +702,7 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
         (lost (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
                      (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 127 :last (str "cannot create " tmp) :out ""))
                    (if (ok? made) (list) runnable)))
-        (removed (pathRemove tmp))
-        (_ (nt/releaseHeld!))]
+        (removed (pathRemove tmp))]
     (listAppend fromRuns (listAppend fromChecker (listAppend fromBuilds lost))))
 
 fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64 unbuilt: (List (Pair (Pair Int64 String) nt/Built)) -> (List sw/Done)
@@ -1021,11 +1020,11 @@ fn ! runBinaries! ctx: sys/Context testRel: String bins: (List String) wallS: In
         (cwd (suiteCwd ctx testRel))]
     (if (<= jobs 1)
       (map (fn [(bin String)] -> MutRun
-             (let [(w (nt/runWatched (listAppend (run/niceWords) (list bin)) cwd (some env) wallS 0 false))]
+             (let [(w (nt/runWatched (list "nice" "-n" "15" bin) cwd (some env) wallS 0 false))]
                (MutRun :exit w.out.exitCode :stderr w.out.stderr :timedOut (= w.killedBy "wall") :ms w.wallMs)))
            bins)
       (let [(errOf (fn [(bin String)] -> String (str (sys/parentOf bin) "/mutant.err")))
-            (pool (map (fn [(bin String)] -> run/Job (run/job (list "/bin/sh" "-c" (str "exec " (run/niceShell) "\"$0\" 2>\"$ASL_MUTANT_ERR\"") bin) (optionOr cwd ctx.root) (cons (str "ASL_MUTANT_ERR=" (errOf bin)) env))) bins))
+            (pool (map (fn [(bin String)] -> run/Job (run/job (list "/bin/sh" "-c" "exec nice -n 15 \"$0\" 2>\"$ASL_MUTANT_ERR\"" bin) (optionOr cwd ctx.root) (cons (str "ASL_MUTANT_ERR=" (errOf bin)) env))) bins))
             (done (run/runPoolLimited pool jobs (run/limits wallS 64)))]
         (map (fn [(p (Pair String run/Done))] -> MutRun
                (MutRun :exit (pairSecond p).exit :stderr (resultOr (fileReadString (errOf (pairFirst p))) "") :timedOut (= (pairSecond p).verdict "timeout") :ms (pairSecond p).ms))
@@ -1308,31 +1307,7 @@ fn ! localEntry! ctx: sys/Context args: (List String) -> Int64
       (else (let [(r (cmd/route! ctx args))]
               (dispatch! ctx (pairFirst r) (pairSecond r))))))
 
-; (:m :ref SANDBOX-NICE-FALLBACK :do "a sandbox that grants the workspace but denies setpriority or writes under the home gets one stderr line per process for each denial, with what, why, effect and fix; nothing restarts: asl-proc/jobPool niceWords drops the nice prefix by its own probe, nativeTest picks the workspace test cache by its own writability check, and child-env builders pass ASL_NICE_STATE on so a nested CLI answers from the environment and prints nothing; an explicit ASL_NATIVE_TEST_CACHE, a main checkout and a writable home are untouched, and neither is ever a reason to run without the jail")
-fn ! sandboxNote! ctx: sys/Context args: (List String) -> Bool
-  (if (!= (nc/verbKind args) "native")
-    true
-    (let [(home (optionOr (envGet "HOME") ""))
-          (shared (str home "/.asl/run/nativeTest"))
-          (own (str ctx.root "/.asl/cache/nativeTest"))
-          (linked (match (fileStat (str ctx.root "/.git")) ((ok st) (not st.isDir)) ((err _) false)))
-          (niceNote (and (stringEmpty? (optionOr (envGet "ASL_NICE_STATE") "")) (run/niceDenied?)))
-          (cacheNote (and (not (stringEmpty? home)) (and linked (and (stringEmpty? (optionOr (envGet "ASL_NATIVE_TEST_CACHE") "")) (not (cf/writable? shared))))))]
-      (do (if niceNote (sys/sayErr! "(:nice :denied :what setpriority :why \"sandbox denies setpriority\" :effect \"children run at normal priority\" :fix \"allow setpriority, or nothing to do\")") true)
-          (if cacheNote (sys/sayErr! (str "(:cache :denied :what nativeTestCache :why \"" shared " is not writable\" :effect \"the suite compile cache moves to " own "\" :fix \"grant write access to ~/.asl or set ASL_NATIVE_TEST_CACHE to a writable directory\")")) true)
-          true)))
-
-; (:m :ref CLI-AGENT-HELP :do "asl human X ARGS is asl X ARGS: the prefix, nested ones too, is stripped before gating, rerooting and routing, so a path suite, -e, -f, test and check behave the same; asl human, asl human help and asl human -h keep the human usage")
-fn humanStripped args: (List String) -> (List String)
-  (if (and (= (first args) "human") (and (not (listEmpty? (rest args))) (not (listContains? (list "help" "-h" "--help") (first (rest args))))))
-    (humanStripped (rest args))
-    args)
-
-fn ! main argv: (List String) -> (Result Int64 String)
-  (let [(args (humanStripped argv))]
-    (mainRun! args))
-
-fn ! mainRun! args: (List String) -> (Result Int64 String)
+fn ! main args: (List String) -> (Result Int64 String)
   (match (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
-    ((ok ctx) (match (nc/nativeGate! ctx args) ((some code) (ok code)) ((none) (match (cf/reroot! ctx args) ((some code) (ok code)) ((none) (do (sandboxNote! ctx args) (ok (entry! ctx args)))))))))
+    ((ok ctx) (match (nc/nativeGate! ctx args) ((some code) (ok code)) ((none) (match (cf/reroot! ctx args) ((some code) (ok code)) ((none) (ok (entry! ctx args))))))))

@@ -10,6 +10,7 @@
       shellQuote
       skillOps
       stripBlock
+      civilFromDays
       RunResult
       runArgv!
       chmodTo!
@@ -44,7 +45,7 @@
       stepProbe!
       Step
       Inst]
-  :i [(asl-target-sh/emitSh :a sh) (asl-utils/civilDate :a cd)])
+  :i [(asl-target-sh/emitSh :a sh)])
 
 fn formatGeneratedHeader lang: String targetName: String ssotPath: String -> String
   (let [(commentPrefix (if (= lang "cmd") "::" "#"))]
@@ -830,6 +831,20 @@ fn addToPath! st: Inst config: String -> Bool
           ((err e) (warn! (str "install.sh: " e)))))
       true))
 
+(schema Civil (:f y Int64) (:f m Int64) (:f d Int64))
+
+fn civilFromDays z0: Int64 -> Civil
+  (let [(z (+ z0 719468))
+        (era (/ (if (>= z 0) z (- z 146096)) 146097))
+        (doe (- z (* era 146097)))
+        (yoe (/ (- (- (+ doe (/ doe 36524)) (/ doe 1460)) (/ doe 146096)) 365))
+        (doy (- doe (- (+ (* 365 yoe) (/ yoe 4)) (/ yoe 100))))
+        (mp (/ (+ (* 5 doy) 2) 153))
+        (d (+ (- doy (/ (+ (* 153 mp) 2) 5)) 1))
+        (m (if (< mp 10) (+ mp 3) (- mp 9)))
+        (y (+ (+ yoe (* era 400)) (if (<= m 2) 1 0)))]
+    (Civil :y y :m m :d d))
+
 fn pad2 n: Int64 -> String
   (if (< n 10) (str "0" (stringFromInt64 n)) (stringFromInt64 n))
 
@@ -837,8 +852,8 @@ fn stamp! -> String
   (let [(secs (/ (nowNs) 1000000000))
         (days (/ secs 86400))
         (rem (- secs (* days 86400)))
-        (c (cd/civilFromDays days))]
-    (str (stringFromInt64 (optionOr (listGet c 0) 1970)) (pad2 (optionOr (listGet c 1) 1)) (pad2 (optionOr (listGet c 2) 1)) (pad2 (/ rem 3600)) (pad2 (/ (mod rem 3600) 60)) (pad2 (mod rem 60)) "-" (stringFromInt64 (procSelf))))
+        (c (civilFromDays days))]
+    (str (stringFromInt64 c.y) (pad2 c.m) (pad2 c.d) (pad2 (/ rem 3600)) (pad2 (/ (mod rem 3600) 60)) (pad2 (mod rem 60)) "-" (stringFromInt64 (procSelf))))
 
 fn backupTag home: String path: String -> String
   (let [(rel (if (stringStartsWith? path (str home "/")) (sliceFrom path (+ (stringLength home) 1)) path))

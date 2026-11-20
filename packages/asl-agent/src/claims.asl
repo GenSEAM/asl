@@ -8,7 +8,7 @@
       turnEvidenceEntry forgetCutEvidence forgetCutResultText forgetCutResultCoverage forgetCutResultSeenKeys
       isTurnObservation unwrapReadTxns unwrapResultOps unwrapResultCount
       mergeFindings wrongCitationNote hasNegatorNear extractProseStrings collectProseStringsInner
-      newStructuralKeys
+      oldStructuralKeys newStructuralKeys
       Receipt Claim ClaimsResult EvidenceUpdate TurnEvidenceEntry ForgetCutResult UnwrapResult]
   :i [(aslAgent/core :a c)])
 
@@ -158,11 +158,14 @@ fn negatorsList -> (List String)
 fn punctSet -> (List String)
   (list "." "," ";" ":" "!" "?")
 
+fn oldStructuralKeys -> (List String)
+  (list "cmd" "file" "content" "old" "new" "op" "path" "anchor" "base" "rev" "limit" "claim")
+
 fn newStructuralKeys -> (List String)
   (list "cmd" "file" "content" "old" "new" "op" "path" "anchor" "base" "rev" "limit" "commit")
 
 fn argumentHeads -> (List String)
-  (list "write" "edit" "replaceDef" "read" "query" "outline" "check" "diff" "flush" "discard" "test" "tree" "fix"
+  (list "write" "edit" "read" "query" "outline" "check" "diff" "flush" "discard" "test" "tree" "fix"
         "txn" "tools" "help" "gitDiff" "gitLog" "gitShow" "gate" "run" "delete" "manage" "note" "observe"
         "search" "research" "crawl")
 
@@ -246,6 +249,17 @@ fn hasNegatorNear sentence: String matchStart: Int64 -> Bool
     (listAny? (fn [w] (listContains? (negatorsList) (punctStrip w))) window))
 
 
+fn oldDelimUnitLen text: String n: Int64 i: Int64 -> (Option Int64)
+  (if (>= i n)
+    (none)
+    (let [ch (c/ch text i)]
+      (if (or (= ch ".") (or (= ch ";") (= ch "\n"))) (some 1) (none))))
+
+fn oldDelimRunLen text: String n: Int64 i: Int64 -> (Option Int64)
+  (match (oldDelimUnitLen text n i)
+    ((some l) (match (oldDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
+    ((none) (none)))
+
 fn newDelimUnitLen text: String n: Int64 i: Int64 -> (Option Int64)
   (if (>= i n)
     (none)
@@ -264,12 +278,22 @@ fn newDelimRunLen text: String n: Int64 i: Int64 -> (Option Int64)
     ((some l) (match (newDelimRunLen text n (+ i l)) ((some more) (some (+ l more))) ((none) (some l))))
     ((none) (none)))
 
+fn oldSplitLoop text: String n: Int64 i: Int64 segStart: Int64 acc: (List String) -> (List String)
+  (if (>= i n)
+    (listReverse (cons (c/sliceOf text segStart n) acc))
+    (match (oldDelimRunLen text n i)
+      ((some len) (oldSplitLoop text n (+ i len) (+ i len) (cons (c/sliceOf text segStart i) acc)))
+      ((none) (oldSplitLoop text n (+ i 1) segStart acc))))
+
 fn newSplitLoop text: String n: Int64 i: Int64 segStart: Int64 acc: (List String) -> (List String)
   (if (>= i n)
     (listReverse (cons (c/sliceOf text segStart n) acc))
     (match (newDelimRunLen text n i)
       ((some len) (newSplitLoop text n (+ i len) (+ i len) (cons (c/sliceOf text segStart i) acc)))
       ((none) (newSplitLoop text n (+ i 1) segStart acc))))
+
+fn oldSplitSentences text: String -> (List String)
+  (oldSplitLoop text (stringLength text) 0 0 (list))
 
 fn newSplitSentences text: String -> (List String)
   (newSplitLoop text (stringLength text) 0 0 (list))
@@ -562,6 +586,31 @@ fn extractEvidenceClaims replyText: String receipts: (List Receipt) -> (Pair (Li
         nestedAll (fold (fn [acc ef] (listAppend acc (c/parseForms (c/sliceOf ef 1 (stringLength ef))))) (list) evidenceForms)]
     (extractEvidenceClaimLoop nestedAll receipts (list) 0))
 
+fn extractProseClaimsOldLoop sentences: (List String) receipts: (List Receipt) claims: (List Claim) unbacked: Int64 -> (Pair (List Claim) Int64)
+  (if (listEmpty? sentences)
+    (pair claims unbacked)
+    (let [sentRaw (c/firstOf sentences)
+          rest (c/restOf sentences)
+          sentence (c/trimSpace sentRaw)]
+      (if (or (stringEmpty? sentence) (stringStartsWith? sentence "("))
+        (extractProseClaimsOldLoop rest receipts claims unbacked)
+        (let [lc (lowerStr sentence)
+              starts (findClaimVerbStarts lc (stringLength lc) 0 false (list))
+              firstOk (findFirstNonNegated sentence starts)]
+          (match firstOk
+            ((none) (extractProseClaimsOldLoop rest receipts claims unbacked))
+            ((some _)
+              (let [backed (isProseClaimBacked sentence receipts (list) false)
+                    claim (proseClaim sentence backed)]
+                (extractProseClaimsOldLoop rest receipts (listAppend claims (list claim)) (if backed unbacked (+ unbacked 1))))))))))
+
+fn extractProseClaimsOld replyText: String receipts: (List Receipt) -> (Pair (List Claim) Int64)
+  (let [proseText0 (c/stripForms replyText)
+        inner (extractProseStrings replyText (oldStructuralKeys) false)
+        proseText (if (listEmpty? inner) proseText0 (str proseText0 "\n" (c/joinSep inner "\n")))
+        sentences (oldSplitSentences proseText)]
+    (extractProseClaimsOldLoop sentences receipts (list) 0))
+
 fn extractProseClaimsNewLoop sentences: (List String) receipts: (List Receipt) gates: (List String) gatePassBacked: Bool claims: (List Claim) unbacked: Int64 -> (Pair (List Claim) Int64)
   (if (listEmpty? sentences)
     (pair claims unbacked)
@@ -587,12 +636,12 @@ fn extractProseClaimsNew replyText: String receipts: (List Receipt) gates: (List
         sentences (newSplitSentences proseText)]
     (extractProseClaimsNewLoop sentences receipts gates gatePassBacked (list) 0))
 
-fn extractClaims replyText: String receipts: (List Receipt) gates: (List String) checkProse: Bool gatePassBacked: Bool planOn: Bool -> ClaimsResult
+fn extractClaims replyText: String receipts: (List Receipt) isOldCall: Bool gates: (List String) checkProse: Bool gatePassBacked: Bool planOn: Bool -> ClaimsResult
   (let [ev (extractEvidenceClaims replyText receipts)
         evClaims (pairFirst ev) evUnbacked (pairSecond ev)]
-    (if (not checkProse)
+    (if (and (not isOldCall) (not checkProse))
       (claimsResult (listLength evClaims) evUnbacked evClaims)
-      (let [prose (extractProseClaimsNew replyText receipts gates gatePassBacked planOn)
+      (let [prose (if isOldCall (extractProseClaimsOld replyText receipts) (extractProseClaimsNew replyText receipts gates gatePassBacked planOn))
             proseClaimsL (pairFirst prose) proseUnbacked (pairSecond prose)
             allClaims (listAppend evClaims proseClaimsL)
             totalUnbacked (+ evUnbacked proseUnbacked)]

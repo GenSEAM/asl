@@ -118,7 +118,7 @@ native_background() { local f="$NATIVE_CACHE/bg${ASL_WRAPPER_ROOT//\//_}" p s=tr
   if [ -e "$f.failed" ] && ! native_suspect "$NATIVE_DIR" "$f.failed"; then s=failed; else
     for i in 1 2; do
       set -C; if { echo $$ > "$f"; } 2> /dev/null; then set +C
-        perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' /bin/sh -c 'f=$1; shift; if nice -n 0 true 2> /dev/null; then nice -n 15 "$@"; else "$@"; fi; rc=$?; if [ "$rc" -eq 0 ]; then rm -f "$f.failed"; else : > "$f.failed"; fi; rm -f "$f"; exit "$rc"' sh "$f" "$SCRIPT_DIR/asl" --fresh version < /dev/null >> "$NATIVE_CACHE/build.log" 2>&1 &
+        perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' nice -n 15 /bin/sh -c 'f=$1; shift; "$@"; rc=$?; if [ "$rc" -eq 0 ]; then rm -f "$f.failed"; else : > "$f.failed"; fi; rm -f "$f"; exit "$rc"' sh "$f" "$SCRIPT_DIR/asl" --fresh version < /dev/null >> "$NATIVE_CACHE/build.log" 2>&1 &
         echo $! > "$f"; break
       fi; set +C; p=; read -r p 2> /dev/null < "$f" || :
       [ -z "$p" ] || kill -0 "$p" 2> /dev/null || { rm -f "$f"; continue; }; break

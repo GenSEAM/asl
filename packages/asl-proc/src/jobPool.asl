@@ -1,5 +1,5 @@
 (module asl-proc/jobPool
-  :x [niceWords niceShell niceDenied? niceState! niceStateRow Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix gitGuarded secretName? executedOf errorLinesOf quoteArgv]
+  :x [Job Done Limits Proc job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! shellOut childEnv inheritedOk? gitUnsetPrefix gitGuarded secretName? executedOf errorLinesOf quoteArgv]
   :i [])
 
 ; (:m :ref HL-FIXWAVE-M4 :do "the bounded-job, process-tree-killing engine asl/tools/fleet/run.asl carries (watchdog timeout, descendant cap, group-wide SIGSTOP/SIGKILL) moved here verbatim so the published asl/ subtree (asl-cli/nativeBuild.asl, asl-cli/native.asl) can build and run its own native CLI without importing tools/, which lives outside asl/ and is absent from a standalone checkout; asl/tools/fleet/run.asl keeps its own copy for its many existing callers (fleetRunTest.asl and the fleetCompareTest/fleetGuardTest/fleetWatchTest/fleetReceiptTest/fleetRedBeforeTest families, none of them under asl/), since re-exporting a schema type under a second module name is not available here")
@@ -334,66 +334,9 @@ fn ! finish r: Running -> Done
     (Done :idx r.idx :exit (if killed (killedExit r.killed) code) :out r.text :ms (/ (- (monotonicNs) r.startNs) 1000000)
           :verdict (if killed r.killed "exit")))
 
-; (:m :ref SANDBOX-NICE-FALLBACK :do "every child the toolchain starts under nice -n 15 takes its prefix from here: ASL_NICE_STATE (denied or ok) when the environment has it, else one probe, nice -n 0 true; a denial (a sandbox that denies setpriority) drops the prefix and nothing else about the child changes, and no process restarts itself. Child-env builders pass the state on as ASL_NICE_STATE (niceStateRow), so a descendant starts from this process's answer instead of probing again")
-fn ! niceProbe! -> String
-  (match (procSpawnv (list "nice" "-n" "0" "true") (none) (some (envList)))
-    ((err _) "denied")
-    ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdClose p.stdout)) (_ (fdClose p.stderr))]
-              (match (procWaitPid p.pid false) ((ok st) (if (= (optionOr st 1) 0) "ok" "denied")) ((err _) "denied")))))
-
-; (:m :ref SANDBOX-NICE-FALLBACK :do "a process cannot set its own environment and the language has no global cell, so the one-probe-per-process answer lives in a small file, <ASL_CLI_ROOT>/.asl/cache/niceCell/<pid>, read before probing and valid for two minutes (a recycled pid cannot inherit an old answer for longer); each write prunes entries older than ten minutes; a process without ASL_CLI_ROOT or a workspace that cannot write there probes on every call, as before")
-fn ! niceCellDir -> String
-  (let [(root (optionOr (envGet "ASL_CLI_ROOT") ""))]
-    (if (stringEmpty? root) "" (str root "/.asl/cache/niceCell")))
-
-fn ! niceCellRead! dir: String -> String
-  (match (fileReadString (str dir "/" (stringFromInt64 (procSelf))))
-    ((err _) "")
-    ((ok text) (let [(parts (stringSplit (stringTrim text) " "))
-                     (state (optionOr (listHead parts) ""))
-                     (at (optionOr (stringToInt64 (optionOr (listHead (optionOr (listTail parts) (list))) "")) 0))]
-                 (if (and (or (= state "denied") (= state "ok")) (< (- (nowNs) at) 120000000000)) state ""))))
-
-fn ! nicePrune! dir: String -> Bool
-  (match (dirList dir)
-    ((err _) false)
-    ((ok names) (do (map (fn [(n String)] -> Bool
-                           (match (fileStat (str dir "/" n))
-                             ((ok st) (if (> (- (nowNs) st.mtimeNs) 600000000000) (ok? (pathRemove (str dir "/" n))) false))
-                             ((err _) false)))
-                         names)
-                    true)))
-
-fn ! niceCellWrite! dir: String state: String -> Bool
-  (match (dirCreate dir)
-    ((err _) false)
-    ((ok _) (do (nicePrune! dir) (ok? (fileWrite (str dir "/" (stringFromInt64 (procSelf))) (str state " " (stringFromInt64 (nowNs))))))))
-
-fn ! niceState! -> String
-  (let [(given (optionOr (envGet "ASL_NICE_STATE") ""))
-        (dir (niceCellDir))]
-    (if (or (= given "denied") (= given "ok"))
-      given
-      (let [(cached (if (stringEmpty? dir) "" (niceCellRead! dir)))]
-        (if (stringEmpty? cached)
-          (let [(state (niceProbe!))] (do (if (stringEmpty? dir) false (niceCellWrite! dir state)) state))
-          cached))))
-
-fn ! niceDenied? -> Bool
-  (= (niceState!) "denied")
-
-fn ! niceStateRow -> String
-  (str "ASL_NICE_STATE=" (niceState!))
-
-fn ! niceWords -> (List String)
-  (if (niceDenied?) (list) (list "nice" "-n" "15"))
-
-fn ! niceShell -> String
-  (if (niceDenied?) "" "nice -n 15 ")
-
 fn ! spawn idx: Int64 j: Job -> (Result Running Done)
   (let [(start (monotonicNs))]
-    (match (procSpawnv (listAppend (niceWords) j.argv) (some j.cwd) (some (withPwd j.cwd j.env)))
+    (match (procSpawnv (listAppend (list "nice" "-n" "15") j.argv) (some j.cwd) (some (withPwd j.cwd j.env)))
       ((err e) (err (Done :idx idx :exit 127 :out (str "spawn failed: " (quoteArgv j.argv) ": " e) :ms 0 :verdict "spawnFailed")))
       ((ok p) (let [(_ (fdClose p.stdin)) (_ (fdNonBlocking p.stdout true)) (_ (fdNonBlocking p.stderr true))]
                 (ok (Running :idx idx :pid p.pid :outFd p.stdout :errFd p.stderr :text "" :outOpen true :errOpen true :startNs start :killed "" :groups (list p.pid) :known (list)))))))

@@ -71,8 +71,6 @@ fn ! runTests -> Bool
         (_ (pathRemove home))
         (_ (pathRemove home2))]
     (do
-      (assert (and (= (pairSecond (c/gatewayConfigCheckText! (cfgWith " :limitSeedTtlSec 600") "src" ".asl/mem/calibration/index.asn")) 0) (= (pairSecond (c/gatewayConfigCheckText! (cfgWith " :limitSeedTtlSec 0") "src" ".asl/mem/calibration/index.asn")) 1) (= (pairSecond (c/gatewayConfigCheckText! (cfgWith " :limitSeedTtlSec 86401") "src" ".asl/mem/calibration/index.asn")) 1)) "limitSeedTtlSec 600 is a clean config, 0 and 86401 are config errors")
-      (assert (and (lim/needsSeedWithin? (- 1700000000000 1000) 1700000000000 1000) (not (lim/needsSeedWithin? (- 1700000000000 999) 1700000000000 1000))) "a seed exactly ttl old is refreshed, one millisecond younger is held")
       (assert (and (>= (lim/seedTtlMs) 60000) (<= (lim/seedTtlMs) 3600000)) (str "the seed ttl stays between a minute and an hour, so the cached ask in this test is inside it: " (stringFromInt64 (lim/seedTtlMs))))
       (assert (= (pairSecond first) "") (str "two sent calls in the ledger leave a limit of three open: " (pairSecond first)))
       (assert (= (listLength firstSrv.limitRows) 2) "the first ask seeded both rows from the file")

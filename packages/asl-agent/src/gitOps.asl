@@ -715,12 +715,11 @@ fn ! gatePrep! g: (Pair String String) timesPath: String timeoutSec: Int64 -> (P
                          :extra (list (ri "timeoutSec" raised) (ri "recordedMs" ms) (rs "raised" "gateTimes")))))))
       ((none) (pair none (GateSpec :rid rid :cmd cmd :sec timeoutSec :extra (list))))))
 
-; (:m :ref WALL-SLOW-GATES :do "the limit of this run reaches the gate child as ASL_GATE_LIMIT_SEC (the wall-capped timeout before any gateTimes raise), so a gate that bounds its own work (docRowsGate) derives its inner budget from the limit it was actually given")
 fn ! chunkRecs! chunk: (List (Pair String String)) root: String timeoutSec: Int64 childEnv: (List String) watch: (Option Int64) timesPath: String limit: Int64 -> (List (List (Pair String RVal)))
   (let [preps (map (fn [g] (gatePrep! g timesPath timeoutSec)) chunk)
         jobs (map (fn [p] (pair (pairFirst p) (pairSecond (pairSecond p))))
                (filter (fn [p] (none? (pairFirst (pairSecond p)))) (enumerate preps)))
-        got (parLoop! root (listAppend childEnv (list (str "ASL_GATE_LIMIT_SEC=" (itos timeoutSec)))) watch limit jobs (list) (list))]
+        got (parLoop! root childEnv watch limit jobs (list) (list))]
     (map (fn [p]
            (match (pairFirst (pairSecond p))
              ((some r) r)

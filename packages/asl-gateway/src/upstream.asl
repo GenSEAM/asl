@@ -37,8 +37,6 @@
       envMapFromList
       envGetOr
       upstreamSettings
-      upstreamSettingsFrom
-      defaultBases
       UpstreamProvider
       upstreamProviders
       upstreamFallback
@@ -106,8 +104,6 @@
       CallDeadlines
       noCallDeadlines
       idleDeadlineText
-      stallDeadlineText
-      stallDeadlinePrefix
       idleExpired?
       idleWaitMs
       upstreamCallWithDeadlines
@@ -480,28 +476,11 @@ fn pyFloat text: String -> (Result Float64 String)
                 ((none) (err fail)))
               (err fail))))))))
 
-; (:m :do "the one table of built-in base URLs, keyed by provider id; a gateway config provider row's :base overrides its row here, and the env URL vars are only the fallback below both")
-fn defaultBases -> (Map String String)
-  (mapFromPairs
-    (list (pair "gemini" "https://generativelanguage.googleapis.com/v1beta/openai")
-          (pair "openrouter" "https://openrouter.ai/api/v1")
-          (pair "groq" "https://api.groq.com/openai/v1")
-          (pair "ollama" "https://ollama.com")))
-
-fn defaultBase id: String -> String
-  (optionOr (mapGet (defaultBases) id) "")
-
-fn baseOr bases: (Map String String) id: String fallback: String -> String
-  (optionOr (mapGet bases id) fallback)
-
 fn upstreamSettings env: (Map String String) -> (Result UpstreamSettings String)
-  (upstreamSettingsFrom env (mapEmpty))
-
-fn upstreamSettingsFrom env: (Map String String) bases: (Map String String) -> (Result UpstreamSettings String)
   (let [(openrouter (envTruthy? env "OPENROUTER_API_KEY"))
         (baseUrl (if openrouter
-                   (baseOr bases "openrouter" (envGetOr env "OPENROUTER_BASE_URL" (defaultBase "openrouter")))
-                   (baseOr bases "openrouter" (envGetOr env "OPENAI_BASE_URL" (envGetOr env "LLM_GATEWAY_BASE_URL" (defaultBase "openrouter"))))))
+                   (envGetOr env "OPENROUTER_BASE_URL" "https://openrouter.ai/api/v1")
+                   (envGetOr env "OPENAI_BASE_URL" (envGetOr env "LLM_GATEWAY_BASE_URL" "https://openrouter.ai/api/v1"))))
         (key (if openrouter
                (envGetOr env "OPENROUTER_API_KEY" "")
                (envGetOr env "OPENAI_API_KEY" (envGetOr env "LLM_GATEWAY_API_KEY" ""))))]
@@ -509,10 +488,10 @@ fn upstreamSettingsFrom env: (Map String String) bases: (Map String String) -> (
       ((err e) (err e))
       ((ok timeout)
        (ok (UpstreamSettings
-             :geminiUrl (baseOr bases "gemini" (defaultBase "gemini"))
+             :geminiUrl "https://generativelanguage.googleapis.com/v1beta/openai"
              :geminiKey (envGetOr env "GEMINI_API_KEY" "")
-             :groqUrl (rstripSlash (baseOr bases "groq" (envGetOr env "GROQ_BASE_URL" (defaultBase "groq"))))
-             :ollamaUrl (str (removeSuffix (rstripSlash (baseOr bases "ollama" (envGetOr env "OLLAMA_BASE_URL" (defaultBase "ollama")))) "/v1") "/v1")
+             :groqUrl (rstripSlash (envGetOr env "GROQ_BASE_URL" "https://api.groq.com/openai/v1"))
+             :ollamaUrl (str (removeSuffix (rstripSlash (envGetOr env "OLLAMA_BASE_URL" "https://ollama.com")) "/v1") "/v1")
              :groqKey (envGetOr env "GROQ_API_KEY" "")
              :url (rstripSlash (replaceAll baseUrl "/v1/v1" "/v1"))
              :key key
@@ -1361,13 +1340,6 @@ fn noCallDeadlines -> CallDeadlines
 ; (:m :ref TLE-2-PROVIDER-WAIT :do "the reactor's stream stall guard: a call that gave bytes and then none for idleMs is aborted with this text, which chat.asl matches to note the attempt idleTimeout")
 fn idleDeadlineText -> String
   "idleTimeout: the response stream gave no bytes within the idle deadline"
-
-; (:m :ref STALL-FIRST-BYTE :do "the text of a non-stream call cut for sending no byte within its first-byte limit: stall: no first byte in Ns from <provider>; stallDeadlinePrefix is what chat.asl matches to note the attempt stall, a class distinct from the stream rows firstByteTimeout")
-fn stallDeadlinePrefix -> String
-  "stall: no first byte in "
-
-fn stallDeadlineText provider: String sec: Int64 -> String
-  (str (stallDeadlinePrefix) (stringFromInt64 sec) "s from " provider)
 
 fn idleExpired? idleMs: Int64 lastByteMs: Int64 gotBytes: Bool nowMs: Int64 -> Bool
   (and (> idleMs 0) (and gotBytes (>= nowMs (+ lastByteMs idleMs))))

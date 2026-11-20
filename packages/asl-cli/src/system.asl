@@ -1,6 +1,6 @@
 (module asl-cli/system
   :x [Context Captured context! childEnv! childEnvOf execv! run! runWith! runMerged! runAt! capture! captureWith! findCommand! onPath! executable? isFile? isDir? trimLeft stripTrailingNewlines hostAbsent say! sayErr! parentOf baseName]
-  :i [(asl-text/say :a out) (asl/packages/asl-proc/src/jobPool :a jp)])
+  :i [(asl-text/say :a out)])
 
 (schema Context
   (:f root String)
@@ -135,7 +135,7 @@ fn childEnvOf rows: (List String) extra: (List String) dropHost: Bool -> (List S
     (listAppend kept extra))
 
 fn childEnv! extra: (List String) -> (List String)
-  (childEnvOf (envList) (if (listAny? (fn [(e String)] -> Bool (stringStartsWith? e "ASL_NICE_STATE=")) extra) extra (cons (jp/niceStateRow) extra)) (= (envOr! "ASL_CLI_HOST_UNSET") "1"))
+  (childEnvOf (envList) extra (= (envOr! "ASL_CLI_HOST_UNSET") "1"))
 
 fn ! execv! argv: (List String) extra: (List String) -> Int64
   (match (procExecv argv (some (childEnv! extra)))

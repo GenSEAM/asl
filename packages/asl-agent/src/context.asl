@@ -988,7 +988,7 @@ fn wroteFileIn got: String file: String -> Bool
     (listAny? (fn [l] (and (stringStartsWith? l "(:receipt ")
         (and (stringContains? l " :status :ok")
           (and (stringContains? l name)
-            (listAny? (fn [op] (stringContains? l (str " :op \"" op "\""))) (list "write" "edit" "replaceDef" "delete" "txn"))))))
+            (listAny? (fn [op] (stringContains? l (str " :op \"" op "\""))) (list "write" "edit" "delete" "txn"))))))
       (stringSplit got "\n")))
 
 ; (:m :do "the turns still rendered whole in the next prompt, oldest first, without the newest one")

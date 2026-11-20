@@ -48,7 +48,7 @@ host/out/asl-host run <file.asl>      # calls main
 host/out/asl-host eval '<expr>'
 ```
 
-Through the CLI (`asl human help` lists the commands):
+Through the CLI (`asl help` lists the commands):
 
 ```bash
 asl check <file|--all> # delimiter balance, then asl-host check for .asl; --all: every tracked file, bare is refused

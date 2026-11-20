@@ -278,10 +278,6 @@ int main(void) {
   P("SIGSTOP", SIGSTOP);
   P("SIGWINCH", SIGWINCH);
   P("SIGPIPE", SIGPIPE);
-  P("SIGBUS", SIGBUS);
-  P("SIGSEGV", SIGSEGV);
-  P("SA_SIGINFO", SA_SIGINFO);
-  P("SA_ONSTACK", SA_ONSTACK);
   P("SIG_DFL", (long)SIG_DFL);
   P("SIG_IGN", (long)SIG_IGN);
   P("SIG_BLOCK", SIG_BLOCK);
@@ -299,11 +295,6 @@ int main(void) {
   P("sizeof_pthread_attr_t", sizeof(pthread_attr_t));
   P("siginfo_t.si_signo", offsetof(siginfo_t, si_signo));
   P("siginfo_t.si_pid", offsetof(siginfo_t, si_pid));
-  P("siginfo_t.si_addr", offsetof(siginfo_t, si_addr));
-  P("sizeof_stack_t", sizeof(stack_t));
-  P("stack_t.ss_sp", offsetof(stack_t, ss_sp));
-  P("stack_t.ss_size", offsetof(stack_t, ss_size));
-  P("stack_t.ss_flags", offsetof(stack_t, ss_flags));
   /* sysNet's sysNetSendFd and sysNetRecvFd (FDHANDOFF): one int of SCM_RIGHTS over sendmsg/recvmsg */
   P("SCM_RIGHTS", SCM_RIGHTS);
   P("MSG_CTRUNC", MSG_CTRUNC);

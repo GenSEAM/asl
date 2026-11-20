@@ -1,6 +1,6 @@
 (module asl-cli/asl1Cache
   :x [baseHashesIn headNameOf headName! memoSha! memoShaIn! statFacts! notraceLib! nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-proc/src/jobPool :a jp) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl/packages/asl-cli/src/nativeBuild :a nb)])
 
 fn compilerPath! ctx: sys/Context -> String
   (optionOr (envGet "ASL_NATIVE_ASL1_SOURCE") (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl"))
@@ -305,7 +305,7 @@ fn ! linkSeed! dir: String gz: String llBytes: String llSha: String lib: String 
           (do (drop copy) (drop ll) (err (str "ERR_SEED_UNPACK: gzip -d " gz " failed")))
           (if (not (bytesMatch? ll llBytes llSha))
             (do (drop ll) (err (str "ERR_SEED_SHA: " gz " unpacks to IR whose size or sha256 differs from llBytes/llSha256")))
-            (let [(linked (sys/runMerged! (listAppend (jp/niceWords) (list clang "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" part))))]
+            (let [(linked (sys/runMerged! (list "nice" "-n" "15" clang "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" part)))]
               (do (drop ll)
                 (if (or (!= linked 0) (not (sys/isFile? part)))
                   (do (drop part) (err (str "ERR_SEED_LINK: clang could not link the seed (exit " (stringFromInt64 linked) ")")))
@@ -382,7 +382,7 @@ fn ! nativeStage! compiler: String source: String root: String lib: String clang
 fn ! stageWith! root: String compiler: String source: String lib: String clang: String rcArgs: (List String) -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))
         (part (str compiler ".boot.native"))
-        (compiled (sys/runAt! root (listAppend (jp/niceWords) (listAppend (list compiler "build" source "-o" ll) rcArgs))))
+        (compiled (sys/runAt! root (listAppend (list "nice" "-n" "15" compiler "build" source "-o" ll) rcArgs)))
         (inputCleanup (if (stringContains? compiler ".boot.native") (and (drop compiler) (drop (str compiler ".tracing"))) true))]
     (if (!= compiled 0)
       (do (drop ll) (drop part) (err (str "native asl1 stage failed (exit " (stringFromInt64 compiled) ")")))
@@ -549,7 +549,7 @@ fn rootRelative root: String line: String -> String
   (if (stringStartsWith? line (str root "/")) (optionOr (stringSlice line (+ (stringLength root) 1) (stringLength line)) line) line)
 
 fn ! nativeDeps! root: String native: String compiler: String -> (Result String String)
-  (match (sys/capture! (listAppend (jp/niceWords) (list native "deps" compiler)) (none))
+  (match (sys/capture! (list "nice" "-n" "15" native "deps" compiler) (none))
     ((err e) (err (str "cannot run " native " deps: " e)))
     ((ok captured)
       (if (!= captured.exitCode 0)

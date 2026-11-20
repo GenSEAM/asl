@@ -175,8 +175,8 @@ fn ! tableCase xs: (List p/SexpNode) effects: (List (Pair String String)) -> Boo
               ((= kind "terminal") (serStrs (x/terminalForms a1)))
               ((= kind "undeclared") (x/serRec (x/undeclaredAnswer a1 (strOf (at xs 2)) effects)))
               (else
-                (serStrs (x/collectProseStrings (strOf (at xs 2)) (= (atomOf (at xs 3)) "true") (map strOf (items (at xs 5)))
-                           (= (atomOf (at xs 4)) "true")))))]
+                (serStrs (x/collectProseStrings (strOf (at xs 2)) (= (atomOf (at xs 3)) "true") (map strOf (items (at xs 6)))
+                           (= (atomOf (at xs 4)) "true") (= (atomOf (at xs 5)) "true")))))]
     (do
       (if (= got want) () (eprintln (str "MISMATCH " kind " " a1 "\n  want " want "\n  got  " got)))
       (= got want)))

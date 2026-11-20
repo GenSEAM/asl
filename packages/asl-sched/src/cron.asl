@@ -1,9 +1,42 @@
 (module asl-sched/cron
   :x [Cron parseCron nextFire]
-  :i [(asl-utils/civilDate :a cd)])
+  :i [])
 
 enum Cron
   (cron minutes: (List Int64) hours: (List Int64) days: (List Int64) months: (List Int64) weekdays: (List Int64) dayWildcard: Bool weekdayWildcard: Bool)
+
+fn leapYear? year: Int64 -> Bool
+  (and (= (mod year 4) 0) (or (not (= (mod year 100) 0)) (= (mod year 400) 0)))
+
+fn monthLength year: Int64 month: Int64 -> Int64
+  (cond ((= month 2) (if (leapYear? year) 29 28))
+        ((or (= month 4) (= month 6) (= month 9) (= month 11)) 30)
+        (else 31))
+
+fn floorDiv value: Int64 divisor: Int64 -> Int64
+  (if (< (mod value divisor) 0) (- (/ value divisor) 1) (/ value divisor))
+
+fn daysFromCivil year0: Int64 month: Int64 day: Int64 -> Int64
+  (let [(year (if (<= month 2) (- year0 1) year0))
+        (era (floorDiv year 400))
+        (yoe (- year (* era 400)))
+        (mp (if (> month 2) (- month 3) (+ month 9)))
+        (doy (+ (/ (+ (* 153 mp) 2) 5) (- day 1)))
+        (doe (+ (* yoe 365) (/ yoe 4) (- 0 (/ yoe 100)) doy))]
+    (+ (* era 146097) doe -719468))
+
+fn civilFromDays days: Int64 -> (List Int64)
+  (let [(z (+ days 719468))
+        (era (floorDiv z 146097))
+        (doe (- z (* era 146097)))
+        (yoe (/ (+ doe (- (/ doe 1460)) (/ doe 36524) (- 0 (/ doe 146096))) 365))
+        (year (+ yoe (* era 400)))
+        (doy (- doe (+ (* 365 yoe) (/ yoe 4) (- 0 (/ yoe 100)))) )
+        (mp (/ (+ (* 5 doy) 2) 153))
+        (day (+ (- doy (/ (+ (* 153 mp) 2) 5)) 1))
+        (month (if (< mp 10) (+ mp 3) (- mp 9)))
+        (realYear (if (<= month 2) (+ year 1) year))]
+    [realYear month day])
 
 fn nameValue text: String field: Int64 -> (Option Int64)
   (cond ((and (= field 3) (= text "JAN")) (some 1))
@@ -117,7 +150,7 @@ fn parseCron expression: String -> (Result Cron String)
 
 fn dateMatches value: Cron days: Int64 -> Bool
   (match value ((cron _ _ dom months dow domStar dowStar)
-    (let [(parts (cd/civilFromDays days))
+    (let [(parts (civilFromDays days))
           (year (optionOr (listGet parts 0) 1970))
           (month (optionOr (listGet parts 1) 1))
           (day (optionOr (listGet parts 2) 1))
@@ -148,4 +181,4 @@ fn searchDay value: Cron afterSeconds: Int64 startDay: Int64 offset: Int64 -> (R
           ((none) (searchDay value afterSeconds startDay (+ offset 1)))))))
 
 fn nextFire value: Cron afterSeconds: Int64 -> (Result Int64 String)
-  (searchDay value afterSeconds (/ afterSeconds 86400) 0)
+  (searchDay value afterSeconds (floorDiv afterSeconds 86400) 0)

@@ -222,13 +222,13 @@ fn ! sourceMatches! root: String dir: String -> Bool
   (let [deps (if (stringEmpty? root) (list) (depsOf! dir))]
     (and (not (listEmpty? deps)) (sameFrom! root dir deps)))
 
-; (:m :ref LEON-JAIL-CLI-CACHE :do "bin/asl's suspect, by lstat only: a dependency of the entry that is missing in the root, behind a symlink, not a regular file, or not older than the pointer (bin/asl -ot; ext4 stamps from a coarse clock, so a source written in the pointer's tick has its mtime, JAIL-SHARED-LINUX); an unreadable dependency list is suspect")
+; (:m :ref LEON-JAIL-CLI-CACHE :do "bin/asl's suspect, by lstat only: a dependency of the entry that is missing in the root, behind a symlink, not a regular file, or newer than the pointer; an unreadable dependency list is suspect")
 fn ! sourceSuspect! root: String dir: String stamp: Int64 -> Bool
   (let [deps (depsOf! dir)]
     (or (listEmpty? deps)
       (listAny? (fn [p] (let [rp (str root "/" p)]
                           (or (not (linkFree! root rp))
-                            (match (fileLstat rp) ((ok st) (or (not st.isFile) (or st.isSymlink (>= st.mtimeNs stamp)))) ((err _) true)))))
+                            (match (fileLstat rp) ((ok st) (or (not st.isFile) (or st.isSymlink (> st.mtimeNs stamp)))) ((err _) true)))))
         deps)))
 
 ; (:m :ref LEON-JAIL-CLI-CACHE :do "the gate of the re-seed, as data: nothing to follow is nothing to do; a missing private head, a shared pointer newer than it (a deploy moved it) or a private entry the root's sources moved past (bin/asl would take it as stale) is looked at again; anything else costs one stat per pointer")

@@ -1,6 +1,7 @@
 (module asl-forms/search
   :x [KnowCtx KnowOutcome queryStep! noteStep! whereStep! observeStep! observeResult kwOrder localDate! localDateAt! pyStrip pyDecode pySplitWs pyInt utf8Take utf8TakeLast splitLinesPy quoted stepHead okLine badLine procErrorMessage]
-  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v) (asl-forms/evalOp :a ev) (asl-utils/civilDate :a cd)])
+  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v) (asl-forms/evalOp :a ev)
+      (ws/asl/tools/observe/observe :a obs) (ws/asl/tools/observe/common :a oc)])
 
 
 (schema KnowCtx (:f ws String) (:f toolRoot String) (:f binDir String) (:f vfsDir String) (:f toolsFile String) (:f home String))
@@ -1030,61 +1031,36 @@ fn confirmCands! ws: String cands: (List Cand) limit: Int64 st: Confirm -> Confi
                           (with st :defs (listAppend st.defs (list c)) :index index)
                           (with st :rejected (listAppend st.rejected (list (Hit :rel c.rel :no c.no :line c.line))) :index index)))))))
 
-fn hitDelim? c: Int64 -> Bool
-  (listContains? (list 32 9 10 13 40 41 91 93 123 125 34 39 44 59 96) c)
+fn lineStarts b: Bytes n: Int64 i: Int64 want: Int64 acc: (List Int64) count: Int64 -> (List Int64)
+  (cond
+    ((> count want) (listReverse acc))
+    ((>= i n) (listReverse acc))
+    ((= (bytesGet b i) 10) (lineStarts b n (+ i 1) want (cons (+ i 1) acc) (+ count 1)))
+    (else (lineStarts b n (+ i 1) want acc count)))
 
-fn hitCut? b: Bytes n: Int64 i: Int64 -> Bool
-  (and (> i 0) (< i n) (not (hitDelim? (bytesGet b (- i 1)))) (not (hitDelim? (bytesGet b i))))
+fn countAnchor t: String b: Bytes anchor: String pos: Int64 i: Int64 k: Int64 -> Int64
+  (if (or (= i -1) (> i pos)) k (countAnchor t b anchor pos (k/findFrom t b anchor (+ i 1)) (+ k 1)))
 
-fn hitTokStart b: Bytes i: Int64 -> Int64
-  (if (and (> i 0) (not (hitDelim? (bytesGet b (- i 1))))) (hitTokStart b (- i 1)) i)
+fn occurrence! ws: String h: Hit anchor: String -> Int64
+  (match (readText! (k/joinPath ws h.rel))
+    ((none) 1)
+    ((some t)
+      (let [(b (stringToBytes t))
+            (starts (lineStarts b (stringLength t) 0 h.no (list 0) 1))
+            (pos (if (< (- h.no 1) (listLength starts)) (+ (optionOr (listGet starts (- h.no 1)) 0) (pyLstripLen h.line)) 0))]
+        (max 1 (countAnchor t b anchor pos (k/findFrom t b anchor 0) 0)))))
 
-fn hitTokEnd b: Bytes n: Int64 i: Int64 -> Int64
-  (if (and (< i n) (not (hitDelim? (bytesGet b i)))) (hitTokEnd b n (+ i 1)) i)
+fn cellOf! ws: String h: Hit -> String
+  (let [(excerpt (utf8Take (pyStrip h.line) 60)) (n (occurrence! ws h excerpt)) (cell (quoted excerpt))]
+    (if (> n 1) (str "(" cell " " (stringFromInt64 n) ")") cell))
 
-fn hitSnapStart b: Bytes n: Int64 i: Int64 lim: Int64 -> Int64
-  (if (and (< i lim) (hitCut? b n i)) (hitSnapStart b n (+ i 1) lim) i)
-
-fn hitSnapEnd b: Bytes n: Int64 j: Int64 lim: Int64 -> Int64
-  (if (and (> j lim) (hitCut? b n j)) (hitSnapEnd b n (- j 1) lim) j)
-
-fn hitUtf8Fwd b: Bytes n: Int64 i: Int64 -> Int64
-  (if (and (< i n) (contByte? (bytesGet b i))) (hitUtf8Fwd b n (+ i 1)) i)
-
-fn hitUtf8Back b: Bytes n: Int64 j: Int64 -> Int64
-  (if (and (> j 0) (< j n) (contByte? (bytesGet b j))) (hitUtf8Back b n (- j 1)) j)
-
-fn hitTokenCap -> Int64
-  160
-
-fn hitExcerpt line: String low: String -> String
-  (let [(s (pyStrip line)) (n (stringLength s)) (b (stringToBytes s)) (ls (stringLower s))
-        (at (if (= (stringLength ls) n) (optionOr (stringIndexOf ls low) 0) 0))
-        (ms0 (hitTokStart b at))
-        (me0 (hitTokEnd b n (min n (+ at (stringLength low)))))
-        (big (> (- me0 ms0) (hitTokenCap)))
-        (mlen (min (hitTokenCap) (stringLength low)))
-        (ms (if big (hitUtf8Fwd b n (max ms0 (- at (/ (- (hitTokenCap) mlen) 2)))) ms0))
-        (me (if big (max (min n (+ at mlen)) (hitUtf8Back b n (min me0 (+ ms (hitTokenCap))))) me0))
-        (span (- me ms))
-        (st0 (max 0 (- ms (/ (max 0 (- 100 span)) 2))))
-        (en0 (min n (+ st0 (max 100 span))))
-        (st (hitSnapStart b n st0 ms))
-        (en (hitSnapEnd b n en0 me))]
-    (str (if (and big (> ms ms0)) "..." "") (slice s st en) (if (and big (< me me0)) "..." "")))
-
-fn enclosingDef idx: (List (Pair Int64 String)) no: Int64 -> String
-  (pairSecond (fold (fn [(best (Pair Int64 String)) (p (Pair Int64 String))] -> (Pair Int64 String)
-                      (if (and (<= (pairFirst p) no) (>= (pairFirst p) (pairFirst best))) p best))
-                    (pair 0 "") idx))
-
-fn hitForm! ws: String low: String h: Hit -> String
-  (let [(path (k/joinPath ws h.rel))
-        (def (match (readText! path) ((some t) (enclosingDef (defLines t (languageOf! path)) h.no)) ((none) "")))]
-    (str "(:at " (quoted (str h.rel ":" (stringFromInt64 h.no))) (if (stringEmpty? def) "" (str " :after " (quoted def))) " :text " (quoted (hitExcerpt h.line low)) ")"))
-
-fn groupCells! ws: String low: String hits: (List Hit) -> (List String)
-  (map (fn [(h Hit)] -> String (hitForm! ws low h)) hits)
+fn groupCells! ws: String hits: (List Hit) order: (List String) cells: (Map String (List String)) -> (List String)
+  (match (listHead hits)
+    ((none) (map (fn [(rel String)] -> String (str (quoted rel) " (" (stringJoin (optionOr (mapGet cells rel) (list)) " ") ")")) (listReverse order)))
+    ((some h)
+      (let [(rel h.rel) (have (mapGet cells rel))]
+        (groupCells! ws (optionOr (listTail hits) (list)) (if (some? have) order (cons rel order))
+                    (mapSet cells rel (listAppend (optionOr have (list)) (list (cellOf! ws h))))))))
 
 fn countPairs sp: Split -> (List (Pair String Int64))
   (filter (fn [(p (Pair String Int64))] -> Bool (> (pairSecond p) 0))
@@ -1110,13 +1086,13 @@ fn workspaceQuery! ws: String q: String limit: Int64 scope: String -> QueryResul
             (texts (listAppend conf.rejected plain))
             (shownDefs (map (fn [(c Cand)] -> String (quoted (str c.rel "#" c.name))) (listTake conf.defs limit)))
             (shownTexts (listTake texts (max 0 (- limit (listLength shownDefs)))))
-            (hits (groupCells! ws low shownTexts))
+            (hits (groupCells! ws shownTexts (list) (mapEmpty)))
             (more0 (+ (max 0 (- (listLength conf.defs) (listLength shownDefs))) (max 0 (- (listLength texts) (listLength shownTexts)))))
             (kinds (list (pair "comment" sp.comment) (pair "doc" sp.doc) (pair "memory" sp.memory) (pair "data" sp.data)))
             (textScope (or (= scope "text") (= scope "all")))
             (sections (if textScope
                         (filter (fn [(p (Pair String (List String)))] -> Bool (not (listEmpty? (pairSecond p))))
-                                (map (fn [(kp (Pair String (List Hit)))] -> (Pair String (List String)) (pair (pairFirst kp) (groupCells! ws low (listTake (pairSecond kp) limit)))) kinds))
+                                (map (fn [(kp (Pair String (List Hit)))] -> (Pair String (List String)) (pair (pairFirst kp) (groupCells! ws (listTake (pairSecond kp) limit) (list) (mapEmpty)))) kinds))
                         (list)))
             (moreText (if textScope (listSum (map (fn [(kp (Pair String (List Hit)))] -> Int64 (max 0 (- (listLength (pairSecond kp)) limit))) kinds)) 0))]
         (QueryResult :defs shownDefs :hits hits :more (+ more0 moreText) :capped scan.capped :binSkipped (listLength scan.skipped)
@@ -1465,7 +1441,24 @@ fn observeResult id: Int64 code: Int64 stdout: String stderr: String -> KnowOutc
               (msg (utf8TakeLast (cond ((not (stringEmpty? errText)) errText) ((not (stringEmpty? obOut)) obOut) (else "observe produced no receipt")) 400))]
           (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :exitCode " (stringFromInt64 code) " :message " (quoted msg)))))))
 
-; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "every dim runs as a child built from the tool root's asl/tools/observe by evalOp#nativeModule! (per-module objects cached by digest in that tree), so observe stays out of the native CLI's import closure and key, and a tree that edits observe answers with its own code; the in-process path for memory, session and tokenCost (17804a274) linked observe into the CLI")
+fn safeObserveInProcessDim? dim: String -> Bool
+  (listContains? (list "memory" "session" "tokenCost") dim)
+
+fn obsEnvPair row: String -> (Pair String String)
+  (match (stringIndexOf row "=")
+    ((some i) (pair (optionOr (stringSlice row 0 i) row) (optionOr (stringSlice row (+ i 1) (stringLength row)) "")))
+    ((none) (pair row "")))
+
+fn notCliRootKey p: (Pair String String) -> Bool
+  (!= (pairFirst p) "ASL_CLI_ROOT")
+
+fn observeInProcess! root: String ws: String argv: (List String) id: Int64 -> KnowOutcome
+  (let [(baseEnv (filter notCliRootKey (map obsEnvPair (envList))))
+        (env (cons (pair "ASL_CLI_ROOT" root) baseEnv))
+        (ctx (oc/Ctx :cwd ws :env env :spawnEnv (none) :now (/ (nowNs) 1000000000) :date ""))
+        (out (obs/runObserve ctx argv))]
+    (observeResult id out.code out.out out.err))
+
 fn observeStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List String) keys: (List String) -> KnowOutcome
   (let [(dim (k/lstripColons (k/kwOr kw "dim" (optionOr (listHead args) ""))))
         (extra (fold (fn [(acc (List String)) (key String)] -> (List String)
@@ -1473,13 +1466,39 @@ fn observeStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List Strin
                          (if (or (= key "dim") (stringEmpty? v)) acc (listAppend acc (list (str "--" key) (k/lstripColons v))))))
                      (list) keys))
         (root ctx.toolRoot)]
-    (match (match (ev/nativeModule! root "asl/tools/observe/observe.asl") ((ok b) (ok b)) ((err _) (ev/nativeEntry! root "asl/tools/observe/observe" false)))
-      ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted e))))
-      ((ok bin)
-        (let [(argv (listAppend (list bin "--dim" dim) extra))]
-          (match (runObserveArgv! argv ctx.ws root 300000)
-            ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
-            ((ok out) (observeResult id out.exitCode out.stdout out.stderr)))))))
+    (if (safeObserveInProcessDim? dim)
+      (observeInProcess! root ctx.ws (listAppend (list "--dim" dim) extra) id)
+      (match (ev/nativeEntry! root "asl/tools/observe/observe" false)
+        ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted e))))
+        ((ok bin)
+          (let [(argv (listAppend (list bin "--dim" dim) extra))]
+            (match (runObserveArgv! argv ctx.ws root 300000)
+              ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
+              ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))))))
+
+fn floorDiv a: Int64 b: Int64 -> Int64
+  (/ a b)
+
+fn daysFromCivil y0: Int64 m: Int64 d: Int64 -> Int64
+  (let [(y (if (<= m 2) (- y0 1) y0))
+        (era (floorDiv y 400))
+        (yoe (- y (* era 400)))
+        (mp (if (> m 2) (- m 3) (+ m 9)))
+        (doy (+ (/ (+ (* 153 mp) 2) 5) (- d 1)))
+        (doe (+ (* yoe 365) (/ yoe 4) (- 0 (/ yoe 100)) doy))]
+    (+ (* era 146097) doe -719468))
+
+fn civilFromDays z0: Int64 -> (List Int64)
+  (let [(z (+ z0 719468))
+        (era (floorDiv z 146097))
+        (doe (- z (* era 146097)))
+        (yoe (/ (- (+ doe (/ doe 146096)) (+ (/ doe 1460) (/ doe 36524))) 365))
+        (doy (- doe (- (+ (* 365 yoe) (/ yoe 4)) (/ yoe 100))))
+        (mp (/ (+ (* 5 doy) 2) 153))
+        (d (+ (- doy (/ (+ (* 153 mp) 2) 5)) 1))
+        (m (if (< mp 10) (+ mp 3) (- mp 9)))
+        (y (+ yoe (* era 400)))]
+    (list (if (<= m 2) (+ y 1) y) m d))
 
 fn pad2 v: Int64 -> String
   (if (< v 10) (str "0" (stringFromInt64 v)) (stringFromInt64 v))
@@ -1488,7 +1507,7 @@ fn pad4 v: Int64 -> String
   (let [(s (stringFromInt64 v))] (str (stringRepeat "0" (max 0 (- 4 (stringLength s)))) s))
 
 fn isoDate days: Int64 -> String
-  (let [(c (cd/civilFromDays days))]
+  (let [(c (civilFromDays days))]
     (str (pad4 (optionOr (listGet c 0) 1970)) "-" (pad2 (optionOr (listGet c 1) 1)) "-" (pad2 (optionOr (listGet c 2) 1))))
 
 fn be32 b: Bytes i: Int64 -> Int64
@@ -1547,8 +1566,11 @@ fn parseTzRule s: String -> (Option TzRule)
                 (et (if (= (k/charAt rules (pairSecond ef)) "/") (tzClock rules (+ (pairSecond ef) 1)) (pair 7200 (pairSecond ef))))]
             (some (TzRule :stdOff stdOff :dstOff (- 0 (pairFirst dst)) :hasDst true :start (pairFirst sf) :startTime (pairFirst st) :end (pairFirst ef) :endTime (pairFirst et))))))))
 
+fn leapYear? y: Int64 -> Bool
+  (and (= (mod y 4) 0) (or (!= (mod y 100) 0) (= (mod y 400) 0)))
+
 fn monthDays y: Int64 m: Int64 -> Int64
-  (cond ((= m 2) (if (cd/leapYear? y) 29 28)) ((listContains? (list 4 6 9 11) m) 30) (else 31))
+  (cond ((= m 2) (if (leapYear? y) 29 28)) ((listContains? (list 4 6 9 11) m) 30) (else 31))
 
 fn ruleDay y: Int64 rule: String -> Int64
   (cond
@@ -1557,15 +1579,15 @@ fn ruleDay y: Int64 rule: String -> Int64
             (m (optionOr (stringToInt64 (optionOr (listGet parts 0) "1")) 1))
             (w (optionOr (stringToInt64 (optionOr (listGet parts 1) "1")) 1))
             (d (optionOr (stringToInt64 (optionOr (listGet parts 2) "0")) 0))
-            (first (cd/daysFromCivil y m 1))
+            (first (daysFromCivil y m 1))
             (wday1 (mod (+ (mod (+ first 4) 7) 7) 7))
             (day (+ 1 (mod (+ (- d wday1) 7) 7) (* (- w 1) 7)))
             (fit (lastFit day (monthDays y m)))]
         (+ first (- fit 1))))
     ((stringStartsWith? rule "J")
       (let [(jn (optionOr (stringToInt64 (slice rule 1 (stringLength rule))) 1))]
-        (+ (cd/daysFromCivil y 1 1) (- jn 1) (if (and (cd/leapYear? y) (>= jn 60)) 1 0))))
-    (else (+ (cd/daysFromCivil y 1 1) (optionOr (stringToInt64 rule) 0))))
+        (+ (daysFromCivil y 1 1) (- jn 1) (if (and (leapYear? y) (>= jn 60)) 1 0))))
+    (else (+ (daysFromCivil y 1 1) (optionOr (stringToInt64 rule) 0))))
 
 fn lastFit day: Int64 dim: Int64 -> Int64
   (if (> day dim) (lastFit (- day 7) dim) day)
@@ -1573,7 +1595,7 @@ fn lastFit day: Int64 dim: Int64 -> Int64
 fn ruleOffset r: TzRule t: Int64 -> Int64
   (if (not r.hasDst)
     r.stdOff
-    (let [(y (optionOr (listHead (cd/civilFromDays (/ (+ t r.stdOff) 86400))) 1970))
+    (let [(y (optionOr (listHead (civilFromDays (floorDiv (+ t r.stdOff) 86400))) 1970))
           (startUtc (- (+ (* (ruleDay y r.start) 86400) r.startTime) r.stdOff))
           (endUtc (- (+ (* (ruleDay y r.end) 86400) r.endTime) r.dstOff))
           (inDst (if (< startUtc endUtc) (and (>= t startUtc) (< t endUtc)) (not (and (>= t endUtc) (< t startUtc)))))]
@@ -1629,7 +1651,7 @@ fn utcOffset! tz: (Option String) t: Int64 -> Int64
       (else (match (parseTzRule spec) ((some r) (ruleOffset r t)) ((none) 0)))))
 
 fn localDateAt! tz: (Option String) t: Int64 -> String
-  (isoDate (/ (+ t (utcOffset! tz t)) 86400))
+  (isoDate (floorDiv (+ t (utcOffset! tz t)) 86400))
 
 fn localDate! t: Int64 -> String
   (localDateAt! (envGet "TZ") t)

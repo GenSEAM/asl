@@ -51,7 +51,7 @@ fn ! writeFixture! dir: String n: Int64 steps: Int64 -> String
     suite)
 
 fn ! drive env: (List String) driver: String how: String cache: String suite: String -> fr/ProcOut
-  (guarded (listAppend (fr/niceWords) (list "bin/asl" "run" driver how cache suite)) (listAppend env (list "ASL_NATIVE_TRACE=1" "ASL_NATIVE_JOBS=4")))
+  (guarded (list "/usr/bin/nice" "-n" "10" "bin/asl" "run" driver how cache suite) (listAppend env (list "ASL_NATIVE_TRACE=1" "ASL_NATIVE_JOBS=4")))
 
 fn ! seedPrelude! from: String to: String -> Bool
   (let [(names (filter (fn [(n String)] -> Bool (stringStartsWith? n "prelude-")) (resultOr (dirList (str from "/modules")) (list))))

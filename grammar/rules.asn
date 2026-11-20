@@ -40,10 +40,6 @@
     :do "camelCase whole words; among names that carry the meaning, the measured cheapest wins"
     :refute "was a name chosen by length or looks over meaning and measured cost?"
     :enforcedBy :none :basis (MeasuredCostDecidesTheName CamelCaseCorpusSaving))
-  (:rule :id docs :force :invariant :when (implement grade)
-    :do "documentation lights up only what is not obvious: why it exists, which problem it solves, how it is used in practice; what a symbol does comes from its name and types; no (:doc) row is required; a row may exist only for an export another package imports or a public module, one sentence of at most 200 chars (adopted, p90 197 of 19815 rows on 2026-11-21); a row that repeats the name, restates the signature, repeats the symbol's (:m) or names a removed symbol is refused, and only rows a diff adds are judged against other packages; requirements and intents live in .asl/mem, not in doc.asn"
-    :refute "does a doc row restate the name, the signature or its (:m), outlive its symbol, exceed one sentence of 200 chars, or get added where no other package imports the symbol?"
-    :enforcedBy "./bin/asl test asl/packages/asl-gates/tests/docLedgerTest.asl" :basis (DocumentationThatMisdirectsIsWorseThanNone MeasureTheThingNotItsProxy))
   (:pack :id architecture
     :outcomes ("minimal causal surface" "one-way dependency DAG" "host independence")
     :affordances ("./bin/asl audit consistency" "./bin/asl audit foreign")))

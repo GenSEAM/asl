@@ -1,9 +1,9 @@
 (module aslAgent/retry
   :x [buildRetryBrief costForm batchingRates reinforceWhyFor escalationNear nowForm noWriteNudge gateNow
       advisorSummary advisorSkip parseAdvice parseSpecVerdict digestLine evidenceDigest advisorGateOutput advisorOpLine
-      makeGateRec makeReceiptRec gateResultParts verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
+      makeGateRec makeReceiptRec verdictMet verdictMissing adviceNext adviceWhy adviceAvoid escapeAsn
       providerRetryPause hintedPause chargeSeconds junkReply? junkTurn errorTransient errorClass httpStatusIn retryTurn! retryTurnWaiting! allDown? GateRec ReceiptRec AdviceRec SpecVerdict]
-  :i [(aslAgent/context :a ctx) (aslAgent/providers :a pv) (aslAgent/firstError :a fe)])
+  :i [(aslAgent/context :a ctx) (aslAgent/providers :a pv)])
 
 ; (:m :ref LEON-CAPS :do "a transport error is transient (429, 408, 5xx, timeout, connection reset, empty body, gateway or queue trouble) and is retried with backoff under the wall budget, or permanent (4xx, unknown codes) and is surfaced at once; ERR_VENDOR with no status in its message stays transient as before, because the gateway reports unreadable and statusless failures through it")
 fn transientCodes -> (List String)
@@ -493,17 +493,10 @@ fn gateFailLine i: Int64 total: Int64 g: GateRec -> (List String)
                      " s (:timeout true :seconds " (optDisplayInt (gSeconds g))
                      "): killed by the run's :gateTimeout, not a failing exit")
                 (str name ", exit code: " (optDisplayIntDefault (gExit g) 1)))
-        tail (gateTail g)
-        firstErr (fe/firstErrorLine (str (gStdout g) "\n" (gStderr g)))
-        errParts (match firstErr
-                   ((some e) (if (stringContains? tail e)
-                               (list)
-                               (list (str "gate " (stringFromInt64 i) " first error: " e))))
-                   ((none) (list)))]
+        tail (gateTail g)]
     (if (stringEmpty? tail)
-      (listAppend (list line1) errParts)
-      (listAppend (listAppend (list line1) errParts)
-                  (list (str "gate " (stringFromInt64 i) " output (last 20 lines, at most 2000 chars):\n" tail)))))
+      (list line1)
+      (list line1 (str "gate " (stringFromInt64 i) " output (last 20 lines, at most 2000 chars):\n" tail))))
 
 fn optDisplayIntDefault o: (Option Int64) d: Int64 -> String
   (stringFromInt64 (optionOr o d))

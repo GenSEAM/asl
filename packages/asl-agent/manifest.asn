@@ -19,7 +19,6 @@
    "aslAgent/frame"
    "aslAgent/frontAgent"
    "aslAgent/gateIntegrity"
-   "aslAgent/gateLimit"
    "aslAgent/gates"
    "aslAgent/gitOps"
    "aslAgent/grounding"
@@ -52,4 +51,4 @@
    "aslAgent/txn"
    "aslAgent/unbiasedContext"
  ]
- :dependencies ["asl-text" "asl-json" "asl-proc" "asl-forms" "asl-gateway" "asl-harness" "asl-engine" "asl-checker" "asl-gates"])
+ :dependencies ["asl-text" "asl-json" "asl-proc" "asl-forms" "asl-gateway" "asl-harness" "asl-engine" "asl-checker"])

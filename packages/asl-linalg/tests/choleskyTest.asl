@@ -23,7 +23,7 @@ fn unwrap r: (Result F64Array String) -> F64Array
     ((ok v) v))
 
 fn hilbert n: Int64 -> F64Array
-  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (/ 1.0 (int64ToFloat64 (+ (+ (/ k n) (mod k n)) 1)))))
+  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (/ 1.0 (int64ToFloat64 (+ (+ (/ k n) (% k n)) 1)))))
 
 fn ! rcondOf n: Int64 a: F64Array -> Float64
   (match (ch/choleskyFactor n a)

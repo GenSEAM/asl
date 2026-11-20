@@ -164,14 +164,6 @@ fn ! testOwnsPure -> Bool
         (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 0) (:cmd \"sh h\" :exit 1))" unav))) "a gate with exit 1 is a failure")
         (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :timeout true :seconds 9))" unav))) "a timed out gate is a failure")
         (assert (not (cd/needsReviewGreen? (rcpt "()" unav))) "no gate in the receipt is no evidence")
-        (assert (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 1) (:cmd \"sh g\" :exit 1) (:cmd \"sh g\" :exit 0) (:cmd \"sh h\" :exit 0))" unav)) "a gate red before the write and green on its last run is green: the receipt lists every run (LEON-SPEC-RECEIPTS 2026-11-23)")
-        (assert (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 1) (:cmd \"sh h\" :timeout true :seconds 300) (:cmd \"sh g\" :exit 0) (:cmd \"sh h\" :exit 0))" self)) "a timeout on an earlier run of a gate whose last run exited 0 is green")
-        (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 0) (:cmd \"sh g\" :exit 1))" unav))) "a gate whose last run is red is a failure even after an earlier green")
-        (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh g\" :exit 0) (:cmd \"sh g\" :timeout true :seconds 9))" unav))) "a gate whose last run timed out is a failure")
-        (assert (not (cd/needsReviewGreen? (rcpt "((:cmd \"sh -c 'echo :exit 0 :done'\" :exit 1))" unav))) "a command text holding :exit 0 with a real exit 1 reads red: the outcome is the last :exit")
-        (assert (cd/needsReviewGreen? (rcpt "((:cmd \"sh -c 'echo :exit 1 :done'\" :exit 0))" unav)) "a command text holding :exit 1 with a real exit 0 reads green")
-        (assert (= (cd/withUnitTask ":model \"m\"" "add \"streamOpen!\"\nline two") ":model \"m\" :unitTask \"add \\\"streamOpen!\\\"\\nline two\"") "the stored task rides the Leon form quoted as :unitTask")
-        (assert (and (= (cd/withUnitTask ":model \"m\"" "  ") ":model \"m\"") (= (cd/withUnitTask ":unitTask \"x\"" "y") ":unitTask \"x\"")) "a blank task or an extra that already names :unitTask is left as it is")
         true))
 
 fn ! runTests -> Bool

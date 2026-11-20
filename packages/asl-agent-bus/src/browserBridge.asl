@@ -1,4 +1,4 @@
-(module aslAgentBus/browserBridge :x [BridgeTab BridgeCommand BrowserBridgeState BrowserBridgeTraceFrame bridgeInit bridgeRegisterTab bridgeEnqueueCommand bridgePollCommands bridgeCompleteCommand corsOriginFor formatCorsHttpResponse isBridgeOpfsPathSafe? emitBrowserTraceFrame queryBrowserBridgeCapability] :i [(mesh :a mesh)])
+(module aslAgentBus/browserBridge :x [BridgeTab BridgeCommand BrowserBridgeState BrowserBridgeTraceFrame bridgeInit bridgeRegisterTab bridgeEnqueueCommand bridgePollCommands bridgeCompleteCommand formatCorsHttpResponse isBridgeOpfsPathSafe? emitBrowserTraceFrame queryBrowserBridgeCapability] :i [(mesh :a mesh)])
 
 (schema BridgeTab (:f tabId Str) (:f url Str) (:f title Str) (:f connectedAt I64))
 
@@ -21,11 +21,8 @@ fn bridgePollCommands state: BrowserBridgeState tabId: Str -> (Pair BrowserBridg
 fn bridgeCompleteCommand state: BrowserBridgeState cmdId: Str status: Str result: Str -> BrowserBridgeState
   (let [(updatedCommands (map (fn [(c BridgeCommand)] -> BridgeCommand (if (= c.id cmdId) (BridgeCommand :id c.id :tabId c.tabId :action c.action :payload c.payload :status status :result result) c)) state.commands))] (with state :commands updatedCommands))
 
-fn corsOriginFor allowed: (List String) requestOrigin: String -> (Option String)
-  (if (listContains? allowed requestOrigin) (some requestOrigin) none)
-
-fn formatCorsHttpResponse statusCode: I64 contentType: Str body: Str requestOrigin: Str -> Str
-  (let [(corsOrigin (corsOriginFor (list "http://localhost:5173" "https://example.com") requestOrigin)) (corsHeaders (match corsOrigin ((some o) (str "Access-Control-Allow-Origin: " o "\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n")) ((none) "")))] (if (= statusCode 204) (str "HTTP/1.1 204 No Content\r\n" corsHeaders "Content-Length: 0\r\n\r\n") (let [(statusLine (cond ((= statusCode 200) "HTTP/1.1 200 OK") ((= statusCode 400) "HTTP/1.1 400 Bad Request") ((= statusCode 404) "HTTP/1.1 404 Not Found") (else "HTTP/1.1 500 Internal Server Error"))) (bodyLen (stringLength body))] (str statusLine "\r\n" corsHeaders "Content-Type: " contentType "\r\nContent-Length: " bodyLen "\r\n\r\n" body))))
+fn formatCorsHttpResponse statusCode: I64 contentType: Str body: Str -> Str
+  (let [(corsHeaders "Access-Control-Allow-Origin: http://localhost\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With")] (if (= statusCode 204) (str "HTTP/1.1 204 No Content\r\n" corsHeaders "\r\nContent-Length: 0\r\n\r\n") (let [(statusLine (cond ((= statusCode 200) "HTTP/1.1 200 OK") ((= statusCode 400) "HTTP/1.1 400 Bad Request") ((= statusCode 404) "HTTP/1.1 404 Not Found") (else "HTTP/1.1 500 Internal Server Error"))) (bodyLen (stringLength body))] (str statusLine "\r\n" corsHeaders "\r\nContent-Type: " contentType "\r\nContent-Length: " bodyLen "\r\n\r\n" body))))
 
 fn checkBridgeSegments segs: (List Str) depth: I64 -> Bool
   (if (listEmpty? segs) true (let [(h (optionOr (listHead segs) "")) (t (optionOr (listTail segs) (list)))] (cond ((or (stringEmpty? h) (= h ".")) (checkBridgeSegments t depth)) ((= h "..") (if (<= depth 0) false (checkBridgeSegments t (- depth 1)))) (else (checkBridgeSegments t (+ depth 1))))))

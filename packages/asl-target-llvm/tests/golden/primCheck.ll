@@ -2383,11 +2383,6 @@ unknown:
 @rterr.assertCount = weak global i64 0
 @rterr.refuteCount = weak global i64 0
 @rterr.siteReport = weak global i1 false
-@rterr.keepGoing = weak global i1 false
-@rterr.failCount = weak global i64 0
-@.rterr.keepEnv = private unnamed_addr constant [22 x i8] c"ASL_ASSERT_KEEP_GOING\00"
-@.rterr.keptReport = private unnamed_addr constant [70 x i8] c"%lld assertion(s) executed, %lld refutation(s) executed, %lld failed\0A\00"
-@.rterr.nl = private unnamed_addr constant [2 x i8] c"\0A\00"
 @.rterr.reportEnv = private unnamed_addr constant [18 x i8] c"ASL_ASSERT_REPORT\00"
 @.rterr.reportLine = private unnamed_addr constant [57 x i8] c"%lld assertion(s) executed, %lld refutation(s) executed\0A\00"
 
@@ -2397,17 +2392,7 @@ entry:
   store i8 0, ptr %buf
   %asserts = load i64, ptr @rterr.assertCount
   %refutes = load i64, ptr @rterr.refuteCount
-  %on = load i1, ptr @rterr.keepGoing
-  br i1 %on, label %kept, label %plain
-kept:
-  call void @rterr.writeAll(i32 2, ptr @.rterr.nl, i64 1)
-  %failed = load i64, ptr @rterr.failCount
-  %keptLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 128, ptr @.rterr.keptReport, i64 %asserts, i64 %refutes, i64 %failed)
-  br label %write
-plain:
   %written = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 128, ptr @.rterr.reportLine, i64 %asserts, i64 %refutes)
-  br label %write
-write:
   %len = call i64 @strlen(ptr %buf)
   call void @rterr.writeAll(i32 2, ptr %buf, i64 %len)
   ret void
@@ -2426,16 +2411,6 @@ install:
   %rc = call i32 @atexit(ptr @rterr.report)
   store i1 true, ptr @rterr.siteReport
   %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)
-  %keepEnv = call ptr @getenv(ptr @.rterr.keepEnv)
-  %keepSet = icmp ne ptr %keepEnv, null
-  br i1 %keepSet, label %keepCheck, label %installed
-keepCheck:
-  %keepFirst = load i8, ptr %keepEnv
-  %keepOne = icmp eq i8 %keepFirst, 49
-  store i1 %keepOne, ptr @rterr.keepGoing
-  %ku = call i32 @unsetenv(ptr @.rterr.keepEnv)
-  br label %installed
-installed:
   %failed = icmp ne i32 %rc, 0
   br i1 %failed, label %fail, label %done
 fail:

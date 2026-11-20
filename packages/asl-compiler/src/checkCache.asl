@@ -1,4 +1,4 @@
-(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! verdictKeyWith! keyText rootPairs! portable localize encodeVerdict decodeVerdict lookup! store! replay! capOf defaultCap sweepWith!] :i [(asl-checker/resolve :a r)])
+(module asl-compiler/checkCache :x [Verdict cacheDir! verdictKey! verdictKeyWith! keyText encodeVerdict decodeVerdict lookup! store! replay! capOf defaultCap sweepWith!] :i [(asl-checker/resolve :a r)])
 
 (schema Verdict (:f exitCode Int64) (:f body String))
 
@@ -16,32 +16,12 @@ fn ! shaOf! memo: (Map String String) path: String -> (Option (Pair String (Map 
       ((err _) (none))
       ((ok bytes) (let [(d (bytesSha256 bytes))] (some (pair d (mapSet memo path d))))))))
 
-fn dirParts path: String -> (List String)
-  (let [(parts (stringSplit path "/"))]
-    (listTake parts (- (listLength parts) 1)))
-
-fn commonLen a: (List String) b: (List String) -> Int64
-  (match (listHead a)
-    ((none) 0)
-    ((some x) (match (listHead b)
-      ((none) 0)
-      ((some y) (if (= x y) (+ 1 (commonLen (optionOr (listTail a) (list)) (optionOr (listTail b) (list)))) 0)))))
-
-; (:m :ref CHECK-VERDICT-RELPATH :do "a closure path is keyed relative to the directory of the file that roots the closure, so the same content in another tree root keys the same; the entry itself is the token <entry>")
-fn relTo baseParts: (List String) entryReal: String path: String -> String
-  (if (= path entryReal)
-    "<entry>"
-    (let [(parts (stringSplit path "/"))
-          (n (commonLen baseParts parts))
-          (ups (- (listLength baseParts) n))]
-      (stringJoin (listAppend (map (fn [(i Int64)] -> String "..") (range 0 ups)) (listDrop parts n)) "/")))
-
-fn ! hashLines! base: String entryReal: String paths: (List String) memo: (Map String String) acc: (List String) -> (Option (Pair String (Map String String)))
+fn ! hashLines! paths: (List String) memo: (Map String String) acc: String -> (Option (Pair String (Map String String)))
   (match (listHead paths)
-    ((none) (some (pair (stringJoin (listSort acc) "") memo)))
+    ((none) (some (pair acc memo)))
     ((some p) (match (shaOf! memo p)
       ((none) (none))
-      ((some got) (hashLines! base entryReal (optionOr (listTail paths) (list)) (pairSecond got) (cons (str (relTo (dirParts base) entryReal p) "=" (pairFirst got) "\n") acc))))))
+      ((some got) (hashLines! (optionOr (listTail paths) (list)) (pairSecond got) (str acc p "=" (pairFirst got) "\n"))))))
 
 fn ! closureOf! real: String -> (Option (List String))
   (let [(cl (r/loadModuleClosure! real false))]
@@ -51,21 +31,8 @@ fn ! checkerSource! -> (Option String)
   (let [(p "./asl/packages/asl-compiler/src/asl1.asl")]
     (if (fileExists? p) (resultToOption (realPath p)) (none)))
 
-fn keyText entryLabel: String deps: String checker: String -> String
-  (str (magic) "\nentry " entryLabel "\ndeps\n" deps "checker\n" checker)
-
-; (:m :ref CHECK-VERDICT-RELPATH :do "the key names the entry by its path under the nearest workspace config (basename when none), so two identical files at different paths in one tree get two verdicts and the same path in two trees shares one")
-fn ! wsRootOf! parts: (List String) -> String
-  (let [(dir (stringJoin parts "/"))]
-    (if (listEmpty? parts) ""
-      (if (fileExists? (str dir "/.asl.config.asn")) dir (wsRootOf! (listTake parts (- (listLength parts) 1))))))
-
-fn ! entryLabel! entryReal: String -> String
-  (let [(root (wsRootOf! (dirParts entryReal)))
-        (prefix (str root "/"))]
-    (if (and (not (stringEmpty? root)) (stringStartsWith? entryReal prefix))
-      (optionOr (stringSlice entryReal (stringLength prefix) (stringLength entryReal)) entryReal)
-      (optionOr (listLast (stringSplit entryReal "/")) entryReal)))
+fn keyText entryReal: String deps: String checker: String -> String
+  (str (magic) "\nentry " entryReal "\ndeps\n" deps "checker\n" checker)
 
 fn ! verdictKey! entry: String -> (Option String)
   (match (resultToOption (realPath entry))
@@ -76,11 +43,11 @@ fn ! verdictKey! entry: String -> (Option String)
         ((none) (none))
         ((some checkerReal) (match (if (= checkerReal entryReal) (some deps) (closureOf! checkerReal))
           ((none) (none))
-          ((some checkerDeps) (match (hashLines! entryReal entryReal deps (mapEmpty) (list))
+          ((some checkerDeps) (match (hashLines! deps (mapEmpty) "")
             ((none) (none))
-            ((some d) (match (hashLines! checkerReal entryReal checkerDeps (pairSecond d) (list))
+            ((some d) (match (hashLines! checkerDeps (pairSecond d) "")
               ((none) (none))
-              ((some c) (some (bytesSha256 (stringToBytes (keyText (entryLabel! entryReal) (pairFirst d) (pairFirst c)))))))))))))))))
+              ((some c) (some (bytesSha256 (stringToBytes (keyText entryReal (pairFirst d) (pairFirst c)))))))))))))))))
 
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a caller whose checker is compiled into it keys by its own build id instead of rehashing the checker source closure, and an entry staged under a per-run name (asl -e, asl -) is keyed under a stable alias in place of its path; the deps lines still carry its content digest")
 fn ! verdictKeyWith! entry: String alias: String checkerId: String -> (Option String)
@@ -88,23 +55,10 @@ fn ! verdictKeyWith! entry: String alias: String checkerId: String -> (Option St
     ((none) (none))
     ((some entryReal) (match (closureOf! entryReal)
       ((none) (none))
-      ((some deps) (match (hashLines! entryReal entryReal deps (mapEmpty) (list))
+      ((some deps) (match (hashLines! deps (mapEmpty) "")
         ((none) (none))
-        ((some d) (let [(text (keyText (if (stringEmpty? alias) "<entry>" alias) (pairFirst d) checkerId))]
-                    (some (bytesSha256 (stringToBytes text))))))))))
-
-; (:m :ref CHECK-VERDICT-RELPATH :do "a stored body names the writing tree by placeholder tokens for the entry directory and the working root, and a replay substitutes the asking tree, so a shared verdict never sends the reader to another tree; a path outside both roots stays absolute")
-fn ! rootPairs! entry: String -> (List (Pair String String))
-  (let [(entryDir (match (resultToOption (realPath entry)) ((some r) (stringJoin (dirParts r) "/")) ((none) "")))
-        (cwd (optionOr (resultToOption (realPath ".")) ""))
-        (all (filter (fn [(q (Pair String String))] -> Bool (not (stringEmpty? (pairFirst q)))) (list (pair entryDir "<root:entry>/") (pair cwd "<root:cwd>/"))))]
-    (listSortBy (fn [(q (Pair String String))] -> Int64 (- 0 (stringLength (pairFirst q)))) all))
-
-fn portable v: Verdict roots: (List (Pair String String)) -> Verdict
-  (Verdict :exitCode v.exitCode :body (fold (fn [(b String) (q (Pair String String))] -> String (stringReplace b (str (pairFirst q) "/") (pairSecond q))) v.body roots))
-
-fn localize v: Verdict roots: (List (Pair String String)) -> Verdict
-  (Verdict :exitCode v.exitCode :body (fold (fn [(b String) (q (Pair String String))] -> String (stringReplace b (pairSecond q) (str (pairFirst q) "/"))) v.body roots))
+        ((some d) (let [(text (keyText entryReal (pairFirst d) checkerId))]
+                    (some (bytesSha256 (stringToBytes (if (stringEmpty? alias) text (stringReplace text entryReal alias))))))))))))
 
 fn entryPath dir: String key: String -> String
   (str dir "/" key ".verdict")

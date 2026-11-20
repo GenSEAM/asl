@@ -29,7 +29,7 @@ fn ! diffMax a: F64Array b: F64Array -> Float64
   (maxAbs! (axpy -1.0 b a) 0 0.0)
 
 fn scaled n: Int64 v: F64Array lam: F64Array -> F64Array
-  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (* (f64ArrayGet v k) (f64ArrayGet lam (mod k n)))))
+  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (* (f64ArrayGet v k) (f64ArrayGet lam (% k n)))))
 
 fn ! avErr n: Int64 a: F64Array r: e/Eigen -> Float64
   (diffMax (gemm n n n a r.vectors) (scaled n r.vectors r.values))
@@ -38,7 +38,7 @@ fn ! orthErr n: Int64 r: e/Eigen -> Float64
   (diffMax (gemm n n n (tr n r.vectors) r.vectors) (d/identity n))
 
 fn symm s: Float64 -> F64Array
-  (f64ArrayGenerate 36 (fn [(k Int64)] -> Float64 (* s (+ (sin (int64ToFloat64 (+ (+ (/ k 6) (mod k 6)) 1))) (if (= (/ k 6) (mod k 6)) (int64ToFloat64 (/ k 6)) 0.0)))))
+  (f64ArrayGenerate 36 (fn [(k Int64)] -> Float64 (* s (+ (sin (int64ToFloat64 (+ (+ (/ k 6) (% k 6)) 1))) (if (= (/ k 6) (% k 6)) (int64ToFloat64 (/ k 6)) 0.0)))))
 
 fn ! scaleErr! s: Float64 -> Float64
   (let [(r1 (eig 6 (symm 1.0)))
@@ -56,7 +56,7 @@ fn ! runTests -> Bool
         (rd (eig 3 dg))
         (id (eig 3 (d/identity 3)))
         (n 7)
-        (h (f64ArrayGenerate 49 (fn [(k Int64)] -> Float64 (/ 1.0 (+ 1.0 (int64ToFloat64 (+ (/ k 7) (mod k 7))))))))
+        (h (f64ArrayGenerate 49 (fn [(k Int64)] -> Float64 (/ 1.0 (+ 1.0 (int64ToFloat64 (+ (/ k 7) (% k 7))))))))
         (rh (eig 7 h))
         (r1 (eig 1 (arr (list 4.5))))]
     (do

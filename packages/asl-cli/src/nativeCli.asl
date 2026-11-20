@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! sweepEntriesWith! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
+  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -21,7 +21,7 @@ fn verbKind args: (List String) -> String
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
                                      "crawler" "crawl" "engine" "mesh" "train" "timeout" "version" "-v" "--version"
-                                     "human" "build" "cache" "audit" "pack" "target" "vcs" "help" "-h" "--help"
+                                     "build" "cache" "audit" "pack" "target" "vcs" "help" "-h" "--help"
                                      "note" "doc" "heal" "lens" "consilium" "browser" "web" "search" "research"
                                      "gateway" "relay" "rla" "mem" "tool" "lint" "gate" "-" "-f") verb)))
         "forms")
@@ -224,7 +224,6 @@ fn under? path: String roots: (List String) -> Bool
   (listAny? (fn [(r String)] -> Bool (or (= path r) (stringStartsWith? path (str r "/")))) roots)
 
 ; (:m :ref MAC-CLI-REBUILD-STALL :do "run tools/remote/vps.asl keeps the current CLI without the lock when every dep that moved since the head lies outside the roots its build wrote: such an edit changes neither what the CLI compiles (the compile cache key) nor its own package; no roots file, no deps, a missing dep or a moved path under a root is not pinned, and the next unpinned call refreshes; aslNativeBuild refresh and the native CLI's own stale gate both ask it")
-; (:m :ref SUSPECT-TIE-ALIGN :do "a dep whose mtime ties the head counts as moved, as in nativeRefresh#depSuspect? and bin/asl#suspect; relayPinned? reads its relay sources the same way")
 fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bool
   (let [(roots (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/roots")) ""))))
         (deps (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString (str dir "/deps")) ""))))
@@ -232,7 +231,7 @@ fn ! pinned? root: String dir: String stampPath: String cmd: (List String) -> Bo
     (and (= (listTake cmd 2) (list "run" "tools/remote/vps.asl"))
       (and (not (listEmpty? roots))
         (and (not (listEmpty? deps))
-          (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (< (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
+          (listAll? (fn [(p String)] -> Bool (and (fileExists? (str root "/" p)) (or (<= (mtimeOf (str root "/" p)) stamp) (not (under? p roots))))) deps)))))
 
 ; (:m :ref RELAY-CLIENT-PINNED :do "run tools/remote/vps.asl also keeps the current CLI when a toolchain root moved, as long as the relay client's own sources (.asl.config.asn :nativeCli :relayPaths, tests directories skipped) are no newer than the head file and :nativeCli :relayPin is true: the relay tool is read from the tree at run time, so a CLI built before the toolchain edit still runs it; a moved relay source, a missing path, an absent head or the knob off is not pinned and the call rebuilds first; nativeGate then starts the new build in the background")
 fn configWord text: String key: String -> String
@@ -266,7 +265,7 @@ fn ! relayPinned? root: String dir: String stampPath: String cmd: (List String) 
         (and (not (listEmpty? paths))
           (and (> stamp 0) (and (fileExists? (str dir "/roots"))
             (and (sys/executable? (str dir "/bin"))
-              (listAll? (fn [(p String)] -> Bool (< (newestSource! (str root "/" p)) stamp)) paths))))))))
+              (listAll? (fn [(p String)] -> Bool (<= (newestSource! (str root "/" p)) stamp)) paths))))))))
 
 fn ! relayRefresh! ctx: sys/Context -> Bool
   (let [(native (str ctx.root "/asl/host/out/aslNativeBuild"))]
@@ -610,7 +609,7 @@ fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
         (freshMark (str ctx.root "/asl/host/out/aslNativeBuild-fresh"))]
     (if (not (nativeBuildReady? ctx native freshMark))
       (do (pathRemove lock) "its build helper is stale and the hostless refresh (sh asl/host/build.sh) did not restore it")
-      (let [(argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh") (listAppend (run/niceWords) (list native ctx.root cache))))
+      (let [(argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh" "nice" "-n" "15") (list native ctx.root cache)))
             (d (match (sys/captureWith! argv (some ctx.root) (list (str "NATIVE_CLI_LOG=" log)))
                  ((ok c) c)
                  ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))))
@@ -752,14 +751,10 @@ fn ! dropEntry! e: StoreEntry -> Bool
   (fold (fn [(acc Bool) (p String)] -> Bool (and (ok? (pathRemove p)) acc)) true e.paths)
 
 fn ! sweepEntries! entries: (List StoreEntry) capBytes: Int64 minAgeNs: Int64 -> (Pair Int64 Int64)
-  (sweepEntriesWith! entries capBytes minAgeNs (fn [(e StoreEntry)] -> Bool e.pinned))
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "pinned is asked again right before an entry is removed, not only when the scan listed it: a lease or hold taken between the scan and the removal keeps the entry")
-fn ! sweepEntriesWith! entries: (List StoreEntry) capBytes: Int64 minAgeNs: Int64 pinnedNow!: (fn [StoreEntry] -> Bool) -> (Pair Int64 Int64)
   (let [(now (nowNs))
         (oldestFirst (listSortBy (fn [(e StoreEntry)] -> Int64 e.stamp) entries))]
     (fold (fn [(acc (Pair Int64 Int64)) (e StoreEntry)] -> (Pair Int64 Int64)
-            (if (and (> (pairFirst acc) capBytes) (and (not e.pinned) (and (> (- now e.stamp) minAgeNs) (and (> (- (nowNs) (pathsStamp! e.paths)) minAgeNs) (not (pinnedNow! e))))))
+            (if (and (> (pairFirst acc) capBytes) (and (not e.pinned) (and (> (- now e.stamp) minAgeNs) (> (- (nowNs) (pathsStamp! e.paths)) minAgeNs))))
               (if (dropEntry! e) (pair (- (pairFirst acc) e.bytes) (+ (pairSecond acc) 1)) acc)
               acc))
           (pair (storeBytes entries) 0) oldestFirst))

@@ -1,7 +1,7 @@
 (module aslGateway/localTime
   :x [Zone PosixRule RuleDate DstRule utcZone zoneLoad! zoneFromTzif zoneFromPosix posixParse localOffset
       daysFromCivil civilFromDays floorSeconds formatLocal formatUtcTouch parseHttpDateEpochSeconds]
-  :i [(asl-utils/civilDate :a cd)])
+  :i [])
 
 (enum RuleDate
   (:c julianNoLeap [(day Int64)])
@@ -28,10 +28,33 @@ fn utcZone -> Zone
   (Zone :transitions (list) :firstOff 0 :rule (some (PosixRule :stdOff 0 :dst (none))))
 
 fn daysFromCivil y: Int64 m: Int64 d: Int64 -> Int64
-  (cd/daysFromCivil y m d)
+  (let [(yy (if (<= m 2) (- y 1) y))
+        (era (/ yy 400))
+        (yoe (- yy (* era 400)))
+        (mp (if (> m 2) (- m 3) (+ m 9)))
+        (doy (+ (/ (+ (* 153 mp) 2) 5) (- d 1)))
+        (doe (+ (* yoe 365) (/ yoe 4) (- 0 (/ yoe 100)) doy))]
+    (+ (* era 146097) doe -719468))
 
-fn civilFromDays z: Int64 -> (List Int64)
-  (cd/civilFromDays z)
+fn civilFromDays z0: Int64 -> (List Int64)
+  (let [(z (+ z0 719468))
+        (era (/ z 146097))
+        (doe (- z (* era 146097)))
+        (yoe (/ (- (+ (- doe (/ doe 1460)) (/ doe 36524)) (/ doe 146096)) 365))
+        (y (+ yoe (* era 400)))
+        (doy (- doe (- (+ (* 365 yoe) (/ yoe 4)) (/ yoe 100))))
+        (mp (/ (+ (* 5 doy) 2) 153))
+        (d (+ (- doy (/ (+ (* 153 mp) 2) 5)) 1))
+        (m (if (< mp 10) (+ mp 3) (- mp 9)))]
+    (list (if (<= m 2) (+ y 1) y) m d))
+
+fn leapYear? y: Int64 -> Bool
+  (and (= (mod y 4) 0) (or (not (= (mod y 100) 0)) (= (mod y 400) 0)))
+
+fn monthLength y: Int64 m: Int64 -> Int64
+  (cond ((= m 2) (if (leapYear? y) 29 28))
+        ((or (= m 4) (= m 6) (= m 9) (= m 11)) 30)
+        (else 31))
 
 fn floorSeconds t: Float64 -> Int64
   (let [(i (optionOr (float64ToInt64 t) 0))]
@@ -302,14 +325,14 @@ fn posixDstTail s: String i: Int64 stdOff: Int64 dstOff: Int64 -> (Result PosixR
 fn ruleDays y: Int64 rd: RuleDate -> Int64
   (let [(jan1 (daysFromCivil y 1 1))]
     (match rd
-      ((julianNoLeap n) (+ jan1 (- n 1) (if (and (cd/leapYear? y) (>= n 60)) 1 0)))
+      ((julianNoLeap n) (+ jan1 (- n 1) (if (and (leapYear? y) (>= n 60)) 1 0)))
       ((julianZero n) (+ jan1 n))
       ((monthWeekDay m w d)
         (let [(first (daysFromCivil y m 1))
               (wd1 (mod (+ first 4) 7))
               (day1 (+ 1 (mod (- d wd1) 7)))
               (dayW (+ day1 (* 7 (- w 1))))
-              (dayOk (if (> dayW (cd/monthLength y m)) (- dayW 7) dayW))]
+              (dayOk (if (> dayW (monthLength y m)) (- dayW 7) dayW))]
           (+ first (- dayOk 1))))))
 
 fn yearOf t: Int64 -> Int64

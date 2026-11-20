@@ -1,4 +1,4 @@
-(module aslAgentCore/onion :x [MiddlewareKind Middleware OnionContext OnionDecision OnionPipeline TopoState StepContext StepDecision makeMiddleware makeOnionContext makeStepContext makeStepDecision makePipeline addMiddleware sortPipeline hasDepEdge? hasPrerequisite? sortMiddlewares executeMiddleware dispatchToolCall dispatchStepHook middlewareKindTag middlewareKindEq? runSanitizer] :i [(core :a core)])
+(module aslAgentCore/onion :x [MiddlewareKind Middleware OnionContext OnionDecision OnionPipeline TopoState StepContext StepDecision makeMiddleware makeOnionContext makeStepContext makeStepDecision makePipeline makeLegacyPipeline addMiddleware sortPipeline hasDepEdge? hasPrerequisite? sortMiddlewares executeMiddleware dispatchToolCall dispatchStepHook middlewareKindTag middlewareKindEq? makeContext executePipeline runSanitizer LegacyOnionContext LegacyOnionPipeline LegacyOnionResult] :i [(core :a core)])
 
 
 (enum MiddlewareKind (:c kindPreCall [] "Pre-call hook interceptor") (:c kindPostCall [] "Post-call hook interceptor") (:c kindFilter [] "Filter hook verifying permission or boundary") (:c kindMutate [] "Mutation hook transforming payload") (:c kindAudit [] "Audit telemetry hook") (:c kindStepPre [] "Step pre-execution hook") (:c kindStepPost [] "Step post-execution hook") (:c kindPromptPre [] "Prompt pre-synthesis hook") (:c kindModelPost [] "Model response post-processing hook"))
@@ -53,6 +53,9 @@ fn sortMiddlewares mws: (List Middleware) -> (List Middleware)
 fn makePipeline -> OnionPipeline
   (OnionPipeline :middlewares (list) :sorted (list))
 
+fn makeLegacyPipeline ctx: Any -> LegacyOnionPipeline
+  (LegacyOnionPipeline :context ctx)
+
 
 fn addMiddleware pipe: OnionPipeline mw: Middleware -> OnionPipeline
   (let [(updatedMws (cons mw pipe.middlewares)) (sortedMws (sortMiddlewares updatedMws))] (OnionPipeline :middlewares updatedMws :sorted sortedMws))
@@ -77,6 +80,18 @@ fn executeStepMiddleware mw: Middleware ctx: StepContext -> StepDecision
 
 fn dispatchStepHook pipe: OnionPipeline kind: MiddlewareKind ctx: StepContext -> StepDecision
   (let [(matchingMws (filter (fn [(mw Middleware)] -> Bool (or (middlewareKindEq? mw.kind kind) (and (middlewareKindEq? mw.kind (kindFilter)) (or (middlewareKindEq? kind (kindStepPre)) (middlewareKindEq? kind (kindPreCall)))))) pipe.sorted)) (initDec (makeStepDecision "proceed" "" ctx))] (fold (fn [(dec StepDecision) (mw Middleware)] -> StepDecision (if (not dec.proceed) dec (let [(res (executeStepMiddleware mw dec.context))] (if (not res.proceed) res (if (or dec.mutate res.mutate) (StepDecision :action "mutate" :proceed true :mutate true :abort false :retry false :reason res.reason :context res.context) res))))) initDec matchingMws))
+
+(schema LegacyOnionResult (:f status Str) (:f payload Str))
+
+(schema LegacyOnionContext (:f toolName Str) (:f targetFile Str) (:f payload Str) (:f tokens I64) (:f budget I64) (:f policyLevel Any))
+
+(schema LegacyOnionPipeline (:f context LegacyOnionContext))
+
+fn makeContext toolName: Str targetFile: Str payload: Str tokens: I64 budget: I64 policyLevel: Any -> LegacyOnionContext
+  (LegacyOnionContext :toolName toolName :targetFile targetFile :payload payload :tokens tokens :budget budget :policyLevel policyLevel)
+
+fn executePipeline pipe: Any -> LegacyOnionResult
+  (let [(ctx pipe.context) (tf ctx.targetFile) (tok ctx.tokens) (bud ctx.budget) (pay ctx.payload)] (if (or (stringContains? tf "../") (stringContains? tf "/etc")) (LegacyOnionResult :status "BLOCKED" :payload "ERROR: Blocked by mw-firewall") (if (> tok bud) (LegacyOnionResult :status "BLOCKED" :payload "ERROR: Blocked by mw-cost-guard (token budget exceeded)") (LegacyOnionResult :status "PROCEED" :payload pay))))
 
 fn runSanitizer text: Str -> Str
   (if (> (stringLength text) 1300) (optionOr (stringSlice text 0 1300) text) text)

@@ -20,8 +20,6 @@ fn ! runTests -> Bool
     (assert (testSections) "camelLexicon additions stay in their section and the closing suffix moves to the last row")
     (assert (testDeleteLast) "deleting the last row of a section moves its closers to the row before")
     (assert (testDeleteVersusChange) "a row theirs changed and ours deleted conflicts")
-    (assert (testTrailingBlank) "a trailing blank line on one side merges rows of both sides with one final newline")
-    (assert (testTrailingBlankConflict) "a trailing blank line does not hide a real same-row conflict")
     true)
 ; (:m :ref FOREIGN-PORT-1 :do "the historical replay is ASL: git show feeds the driver through fr jobs, and the expected merge is recomputed here by a row oracle independent of mergeRows.asl, one textual assert per checkpoint so declared equals executed")
 fn isSpaceChar c: String -> Bool
@@ -431,22 +429,6 @@ fn testDeleteVersusChange -> Bool
         (t (str h "  (:suite \"x.asl\" :cause \"F\")\n  (:suite \"y.asl\" :cause \"E\")\n)\n"))
         (r (m/mergeRows b o t "rows"))]
     (and r.conflict (stringContains? r.text "=======\n  (:suite \"x.asl\" :cause \"F\")\n>>>>>>> theirs")))
-fn testTrailingBlank -> Bool
-  (let [(h "(:knownRed :v 1 :date \"d\"\n")
-        (x "  (:suite \"x.asl\" :cause \"E\")\n")
-        (y "  (:suite \"y.asl\" :cause \"E\")\n")
-        (z "  (:suite \"z.asl\" :cause \"E\")\n")
-        (r (m/mergeRows (str h x ")\n") (str h x y ")\n\n") (str h x z ")\n") "rows"))
-        (r2 (m/mergeRows (str h x ")\n") (str h x y ")\n") (str h x z ")\n\n\n") "rows"))]
-    (and (not r.conflict) (not r2.conflict)
-         (= r.text (str h x y z ")\n")) (= r2.text (str h x y z ")\n"))))
-fn testTrailingBlankConflict -> Bool
-  (let [(h "(:knownRed :v 1 :date \"d\"\n")
-        (x "  (:suite \"x.asl\" :cause \"E\")\n")
-        (xo "  (:suite \"x.asl\" :cause \"O\")\n")
-        (xt "  (:suite \"x.asl\" :cause \"T\")\n")
-        (r (m/mergeRows (str h x ")\n") (str h xo ")\n\n") (str h xt ")\n") "rows"))]
-    (and r.conflict (stringContains? r.text "<<<<<<< ours\n  (:suite \"x.asl\" :cause \"O\")") (= (listLength (stringSplit r.text "<<<<<<<")) 2)))
 fn testTie -> Bool
   (let [(h "(:foreignBaseline :v 1 :owner \"x\" :date \"d\" :doc \"h\"\n")
         (b (str h "(:file :path \"a.c\" :lang :c :lines 9 :py 0)\n)"))

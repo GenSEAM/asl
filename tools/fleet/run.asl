@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [niceWords niceStateRow cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! fleetRunDir sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
+  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! fleetRunDir sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp) (asl-gates/suiteTimes :a st)])
 
 (schema Job
@@ -105,7 +105,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (cache (if (and (listContains? given "HOME") (not (listContains? given "ASL_NATIVE_TEST_CACHE")))
                  (filter (fn [(row String)] -> Bool (= (nameOf row) "ASL_NATIVE_TEST_CACHE")) (cacheEnv!))
                  (list)))
-        (rows (listAppend (if (listContains? given "ASL_NICE_STATE") overrides (cons (jp/niceStateRow) overrides)) cache))
+        (rows (listAppend overrides cache))
         (names (map nameOf rows))]
     (listAppend rows
       (filter (fn [(row String)] -> Bool
@@ -525,14 +525,8 @@ fn ! spawnPooled idx: Int64 j: Job -> (Result Running Done)
   (let [(t (freshTmp j.env))]
     (spawnIn idx j (pairFirst t) (pairSecond t)))
 
-fn ! niceWords -> (List String)
-  (jp/niceWords)
-
-fn ! niceStateRow -> String
-  (jp/niceStateRow)
-
 fn ! spawnIn idx: Int64 j: Job tmp: String env: (List String) -> (Result Running Done)
-  (match (spawnSep (listAppend (jp/niceWords) j.argv) j.cwd env)
+  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd env)
     ((err po) (let [(_ (dropTmp tmp))] (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed"))))
     ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp tmp))))
 
@@ -901,7 +895,7 @@ fn openFds rs: (List Running) -> (List (Pair Int64 Int64))
 fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (List Running) done: (List Done) lastCheck: Int64 admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
   (if (and (< (listLength running) slots) (< next (listLength jobs)))
     (if (not (admit next))
-      (let [(_ (js/dropTicket lim.jsDir lim.class (stringFromInt64 next)))] (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state))
+      (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state)
       (let [(g (js/want lim.jsDir lim.class (stringFromInt64 next) lim.timeoutMs))]
         (cond
           ((= g.state "expired")
@@ -942,7 +936,6 @@ fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (finished (map finish closed))
             (_ (fold (fn [(n Int64) (r Running)] -> Int64 (+ n (js/releasePid lim.jsDir lim.class r.pid))) 0 closed))
             (_ (map (fn [(r Running)] -> Bool (removeLease! r.pid)) closed))
-            (_ (if (listEmpty? closed) () (js/dropTicket lim.jsDir lim.class (stringFromInt64 next))))
             (nextState (fold onDone state finished))]
         ; (:m :ref RUNASL-POOLLOOP-FDPOLL-TYPE-20261017 :do "fix: the two if branches disagreed in type (fdPoll's own (Result (List (Pair Int64 Int64)) String) vs the else branch's bare Unit) -- a latent mismatch only a full native rebuild's whole-program check surfaces, not the normal incremental path; fdPoll's own result was always discarded here (it is called only to block until a socket is ready or the 50ms timeout passes, never consulted), so the true branch now discards it explicitly too, making both branches Unit with no change in runtime behavior")
         (do (if (and (not progress) (listEmpty? closed)) (let [(_ (fdPoll (openFds still) 50))] ()) ())
@@ -1194,13 +1187,6 @@ fn claimed line: String -> String
         ((stringStartsWith? line "FAIL ") (str "(unrecorded) " line))
         (else line))
 
-; (:m :ref GATE-VERDICT-STDERR-ORDER :do "the child's stderr shares the captured stream, so a suite's expected-error child may print after the runner's verdict line; lines after the last verdict are tolerated unless they claim a count or a FAIL (kept neutralised by claimed), the verdict count must still equal the declared files, and the marker names the first offending trailing line")
-fn trailingDirty? l: String -> Bool
-  (or (stringContains? l " assertion(s) executed") (stringStartsWith? l "FAIL "))
-
-fn clip l: String -> String
-  (stringReplace (optionOr (stringSlice (claimed l) 0 (min 120 (stringLength (claimed l)))) "") "\"" "'")
-
 fn gateOut cmd: String out: String -> String
   (gateOutHost "" cmd out)
 
@@ -1209,15 +1195,15 @@ fn gateOutHost host: String cmd: String out: String -> String
         (lines (stringLines out))
         (body (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines))
         (k (listLength files))
+        (tail (listDrop body (max 0 (- (listLength body) k))))
         (isVerdict (fn [(l String)] -> Bool (listAny? (fn [(f String)] -> Bool (verdictFor l f)) files)))
-        (after (fold (fn [(acc (List String)) (l String)] -> (List String) (if (isVerdict l) (list) (listAppend acc (list l)))) (list) body))
-        (dirty (listHead (filter trailingDirty? after)))
+        (isPass (fn [(l String)] -> Bool (and (isVerdict l) (not (stringStartsWith? l "FAIL ")))))
         (all (listLength (filter isVerdict body)))
-        (okShape (and (> k 0) (= all k) (none? dirty)))
+        (okShape (and (> k 0) (= all k) (= (listLength (filter isPass tail)) (listLength (filter isPass body)))))
         (neutral (stringJoin (map claimed lines) "\n"))
         (marker (cond ((= k 0) "(:gateFormUndeclared :want \"./bin/asl test FILE.asl...\")")
                       (okShape "")
-                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) (match dirty ((some l) (str " :trailing \"" (clip l) "\"")) ((none) (match (listHead after) ((some l) (str " :trailing \"" (clip l) "\"")) ((none) "")))) ")"))))]
+                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) ")"))))]
     (if okShape
       (let [(kept (stringJoin (map (fn [(l String)] -> String (if (isVerdict l) l (claimed l))) lines) "\n"))] kept)
       (str neutral (if (stringEndsWith? neutral "\n") "" "\n") marker "\n")))

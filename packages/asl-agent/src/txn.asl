@@ -225,29 +225,6 @@ fn txnLinkedAid err: String text: String -> String
     "; a definition, its uses and its export depend on each other, so one edit alone cannot pass: send them together as ONE (:step :op \"txn\" :owns (\"F\") (:edit ...) (:edit ...) (:edit ...)) with the edit subforms inline in the step, not a :form string; the txn is checked once after all its edits"
     "")
 
-fn openerScan b: Bytes n: Int64 i: Int64 stack: (List Int64) inStr: Bool inComment: Bool -> Int64
-  (if (>= i n)
-    (optionOr (listHead stack) -1)
-    (let [(c (bytesGet b i))]
-      (cond
-        (inComment (openerScan b n (+ i 1) stack inStr (!= c 10)))
-        (inStr (cond ((= c 92) (openerScan b n (+ i 2) stack true false)) ((= c 34) (openerScan b n (+ i 1) stack false false)) (else (openerScan b n (+ i 1) stack true false))))
-        ((= c 34) (openerScan b n (+ i 1) stack true false))
-        ((= c 59) (openerScan b n (+ i 1) stack false true))
-        ((or (= c 40) (= c 91) (= c 123)) (openerScan b n (+ i 1) (cons i stack) false false))
-        ((or (= c 41) (= c 93) (= c 125)) (openerScan b n (+ i 1) (optionOr (listTail stack) (list)) false false))
-        (else (openerScan b n (+ i 1) stack false false)))))
-
-fn lineColAt text: String at: Int64 -> String
-  (let [(bs (stringToBytes text))
-        (n (min at (bytesLength bs)))
-        (nl (fold (fn [(a (Pair Int64 Int64)) (i Int64)] -> (Pair Int64 Int64) (if (= (bytesGet bs i) 10) (pair (+ (pairFirst a) 1) i) a)) (pair 0 -1) (range 0 n)))]
-    (str "line " (stringFromInt64 (+ (pairFirst nl) 1)) " col " (stringFromInt64 (- n (pairSecond nl)))))
-
-fn unbalancedWhere text: String byte: Int64 -> String
-  (let [(open (openerScan (stringToBytes text) (stringLength text) 0 (list) false false))]
-    (lineColAt text (if (< open 0) byte open)))
-
 fn txnRefusal stdout: String stderr: String fallback: String content: (Option String) -> (Pair String String)
   (let [r (txnRefusalBase stdout stderr fallback content)]
     (pair (pairFirst r) (str (pairSecond r) (txnLinkedAid (pairFirst r) (pairSecond r)))))
@@ -263,11 +240,10 @@ fn txnRefusalBase stdout: String stderr: String fallback: String content: (Optio
               bal0)]
     (if (!= bal "")
       (let [at (dropZeros bal)
-            ; (:m :ref LEON-OP-HINTS :do "the refusal names line and column of the first unbalanced bracket, found in the text itself: the innermost opener still open at its end, else the byte the checker named; 27 unbalanced rejects named only a byte offset, which for an unclosed paren is the end of the text")
             where (match content
-                    ((some t) (str (unbalancedWhere t (optionOr (stringToInt64 at) 0)) " of :content"))
+                    ((some t) (str "byte " at " (line " (stringFromInt64 (+ (newlinesBefore t bal) 1)) " of :content)"))
                     (none (str "byte " at " of the file after the change")))]
-      (pair err (str "refused: the delimiters ( ) [ ] { } and quotes do not balance at " where "; nothing was written")))
+        (pair err (str "refused: the delimiters ( ) [ ] { } and quotes do not balance at " where "; nothing was written")))
       (match (messageIn stdout)
         ((some m) (pair err m))
         (none
@@ -711,12 +687,14 @@ fn putEffect acc: (List (Pair String String)) op: String cls: String -> (List (P
     (map (fn [p] (if (= (pairFirst p) op) (pair op cls) p)) acc)
     (listAppend acc (list (pair op cls))))
 
-; (:m :ref asl/packages/asl-agent/src/effects.asn)
+; (:m :ref scripts/agentLoop/effects.asn)
 fn parseEffects text: String -> (List (Pair String String))
   (effectPairs text (stringLength text) 0 (list))
 
 fn ! loadEffects! repoRoot: String -> (Result (List (Pair String String)) String)
-  (let [path (str repoRoot "/asl/packages/asl-agent/src/effects.asn")]
+  (let [selfHostedPath (str repoRoot "/asl/packages/asl-agent/src/effects.asn")
+        legacyPath (str repoRoot "/scripts/agentLoop/effects.asn")
+        path (if (fileExists? selfHostedPath) selfHostedPath legacyPath)]
     (match (fileStat path)
       ((err _) (ok (list)))
       ((ok st)

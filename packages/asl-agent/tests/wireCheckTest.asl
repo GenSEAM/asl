@@ -18,8 +18,6 @@ fn runTests -> Bool
         mainExisting (list (pair "src/a.asl" "fn main -> Int64\n  0\n\nfn extra -> Int64\n  1"))
         mainNewNow (list (pair "src/a.asl" "fn main -> Int64\n  0"))
         mainNewHead (list (pair "src/a.asl" "fn other -> Int64\n  1"))
-        apiNow (list (pair "src/a.asl" "(module a\n  :x [streamOpen! openWriter close]\n  :i [])\n\nfn ! streamOpen! p: String -> Int64\n  1\n\nfn openWriter -> Int64\n  2\n\nfn close -> Int64\n  3\n\nfn main -> Int64\n  0"))
-        privApiNow (list (pair "src/a.asl" "fn ! streamOpen! p: String -> Int64\n  1\n\nfn main -> Int64\n  0"))
         exportedCalledNow (list (pair "src/a.asl" "(module a\n  :x [helper]\n  :i [])\n\nfn helper x: Int64 -> Int64\n  (+ x 1)\n\nfn main -> Int64\n  (helper 1)"))]
     (do
       (assert (listEmpty? (gi/unwiredFns calledNow headA)) "a new helper called by another fn in the same file is wired")
@@ -33,9 +31,4 @@ fn runTests -> Bool
       (assert (= (gi/unwiredFns newModPrivate newModHead) (list "hidden")) "a private new fn in a new module is listed")
       (assert (= (gi/unwiredFns mainExisting headA) (list "extra")) "main is never listed, a new fn in an existing module is")
       (assert (listEmpty? (gi/unwiredFns mainNewNow mainNewHead)) "a new main entry point is never listed")
-      (assert (= (gi/unwiredFnsFor apiNow headA "a.asl gains exported streamOpen! path: String and openWriter") (list "close")) "camelCase and bang exports the unit task names are the API asked for, not unwired; the unnamed close is (PQ-STREAM-WRITER)")
-      (assert (= (gi/unwiredFnsFor apiNow headA "fix where close fails, add (streamOpen!) beside a.asl#openWriter.") (list "close")) "a prose word such as close names nothing, a code-shaped name beside punctuation does")
-      (assert (= (gi/unwiredFnsFor apiNow headA "a.asl gains streamOpen!X and an openWriter-free main") (list "streamOpen!" "openWriter" "close")) "a name only inside a longer word does not name the export")
-      (assert (= (gi/unwiredFnsFor privApiNow headA "add streamOpen!") (list "streamOpen!")) "a private fn the task names stays unwired")
-      (assert (= (gi/unwiredFnsFor apiNow headA "") (list "streamOpen!" "openWriter" "close")) "with no task text every exported new fn stays unwired")
       true))

@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(asl-tools/coord/conductor :a cd)])
 
-; (:m :ref REDBEFORE-SHARE :do "the red-before memo: a genuine red at a sha and gate runs once and is reused by the next gate stage of the unit; another sha or gate, a timeout exit, a base run that did not start and a damaged memo all run afresh; a green base is remembered; the counter file counts real runs")
+; (:m :ref REDBEFORE-SHARE :do "the red-before memo: a genuine red at a sha and gate runs once and is reused by the next gate stage of the unit; another sha or gate, a timeout exit, a green base and a damaged memo all run afresh; the counter file counts real runs")
 fn ! runs counter: String -> Int64
   (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines (resultOr (fileReadString counter) ""))))
 
@@ -29,13 +29,10 @@ fn ! runTests -> Bool
         (_ (assert (= (runs ctr) 5) "a timeout exit is never remembered"))
         (_ (cd/redCached! memo "ddd" "g" (fake ctr (pair 0 4))))
         (_ (cd/redCached! memo "ddd" "g" (fake ctr (pair 0 4))))
-        (_ (assert (= (runs ctr) 6) "a green base is remembered per sha and gate"))
-        (_ (cd/redCached! memo "eee" "g" (fake ctr (pair -1 0))))
-        (_ (cd/redCached! memo "eee" "g" (fake ctr (pair -1 0))))
-        (_ (assert (= (runs ctr) 8) "a base run that did not start is never remembered"))
+        (_ (assert (= (runs ctr) 7) "a green base is never remembered"))
         (_ (fileWrite memo "garbage"))
         (_ (cd/redCached! memo "aaa" "asl test x" (fake ctr red)))
-        (_ (assert (= (runs ctr) 9) "a damaged memo runs afresh"))
+        (_ (assert (= (runs ctr) 8) "a damaged memo runs afresh"))
         (_ (assert (stringContains? (cd/redBaseRow "s" "g \"q\"" red) ":gate \"g \\\"q\\\"\"") "the gate text is quoted in the row"))
         (_ (pathRemove dir))]
     true)

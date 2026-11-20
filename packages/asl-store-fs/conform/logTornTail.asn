@@ -1,7 +1,0 @@
-(:script :id logTornTail :checks 5)
-(:step (:append s "one" 1) (:appended 0))
-(:step (:append s "two" 2) (:appended 1))
-(:fault tearLogTail s)
-(:step (:read s 0 10) (:records ((0 "one" 1) (1 "two" 2)) 2))
-(:step (:append s "three" 3) (:appended 2))
-(:step (:read s 0 10) (:records ((0 "one" 1) (1 "two" 2) (2 "three" 3)) 3))

@@ -1,6 +1,0 @@
-(:script :id kvCasCreateOnce :checks 5)
-(:step (:cas notes k 0 "one" 0 10) (:written 1))
-(:step (:cas notes k 0 "two" 0 10) (:conflict 1))
-(:step (:get notes k 10) (:value 1 "one" 0))
-(:step (:cas notes k 1 "three" 0 10) (:written 2))
-(:step (:get notes k 10) (:value 2 "three" 0))

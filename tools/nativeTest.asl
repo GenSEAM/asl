@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [checkerRejection! format prune closureContext settleLostRace! heldSingle! entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn objectFp objectSeeds nonObjectImports objectClosureIn! objectClosureMemo! headerPrefix fpLinesIn rootCovered? artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareTestMutant! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -20,8 +20,7 @@
       (asl-cli/verify :a verify)
       (asl-compiler/checkCache :a ccache)
       (asl-checker/check :a chk)
-      (asl-checker/checkCached :a ccd)
-      (asl-checker/resolve :a rsv)])
+      (asl-checker/checkCached :a ccd)])
 
 (schema Verdict
   (:f exit Int64)
@@ -205,9 +204,8 @@ fn runnerSwitches -> (List String)
 fn withoutRunnerSwitches rows: (List String) -> (List String)
   (filter (fn [(row String)] -> Bool (not (listContains? (runnerSwitches) (optionOr (listHead (stringSplit row "=")) row)))) rows)
 
-fn ! withEnvOverrides! given: (List String) -> (List String)
-  (let [(overrides (if (listContains? (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) given) "ASL_NICE_STATE") given (cons (fr/niceStateRow) given)))
-        (names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
+fn withEnvOverrides! overrides: (List String) -> (List String)
+  (let [(names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
     (listAppend overrides
                 (withoutRunnerSwitches
                   (filter (fn [(row String)] -> Bool
@@ -250,16 +248,8 @@ fn ! linkedWorktree? root: String -> Bool
     ((ok st) (not st.isDir))
     ((err _) false))
 
-; (:m :ref SANDBOX-NICE-FALLBACK :do "the shared home cache is used only when this process can create it: where a sandbox grants the workspace but not the home, a linked worktree falls back to the workspace .asl/cache/nativeTest (the CLI prints the one (:cache :denied) line); the choice is made in process, no restart")
-fn ! homeWritable? dir: String -> Bool
-  (match (dirCreate dir)
-    ((err _) false)
-    ((ok _) (let [(probe (str dir "/.probe." (stringFromInt64 (procSelf))))]
-              (match (fileWrite probe "") ((err _) false) ((ok _) (do (pathRemove probe) true))))))
-
-; (:m :ref NT-SLOT-PATHFREE :do "the main checkout shares the home store too, so a suite warm in one tree is a hit in every other: slots carry no tree path and lookup revalidates each closure file by content against the asking tree, so only a tree whose closure differs rebuilds")
 fn ! defaultCacheDirFor root: String home: String -> String
-  (if (and (not (stringEmpty? home)) (homeWritable? (str home "/.asl/run/nativeTest"))) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
+  (if (and (not (stringEmpty? home)) (linkedWorktree? root)) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
 
 fn ! cacheDir! -> String
   (let [(c (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (defaultCacheDirFor (toolRoot) (optionOr (envGet "HOME") ""))))]
@@ -550,7 +540,7 @@ fn initPhaseOn -> String
 fn ! judgeInit! bin: String path: String prelude: String ran: Verdict -> Verdict
   (if (!= ran.exit 0)
     ran
-    (let [(probe (runProc (listAppend (fr/niceWords) (list bin)) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOn))))))]
+    (let [(probe (runProc (list "nice" "-n" "15" bin) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOn))))))]
       (optionOr (initVerdict path probe.exitCode probe.stderr) ran)))
 
 fn hostVerdictLine text: String -> String
@@ -609,151 +599,16 @@ fn ! fingerprintOf clangVersion: String targetTriple: String -> String
   (fingerprintIn (toolRoot) clangVersion targetTriple)
 
 ; (:m :ref FPNARROW :do "nativeTest.asl enters the fingerprint as its artifactSlice, not its bytes: a cached object, prelude, suite binary or checker verdict can only come from code the compile paths run, so editing a driver-only body (sweep, suite pool, test runner, verdict parsing, the key itself) or a top-level comment keeps every module warm; every other root still enters by content digest")
-fn ! fpLinesIn root: String -> (List String)
-  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))]
-    (fold (fn [(acc (List String)) (r String)] -> (List String)
+fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
+  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
+        (lines (fold (fn [(acc (List String)) (r String)] -> (List String)
                        (listAppend acc (if (= r (selfSource))
                                          (list (match (fileReadString (under r))
                                                  ((err e) (str r " missing " e))
                                                  ((ok src) (str r " slice " (bytesSha256 (stringToBytes (artifactSlice src)))))))
                                          (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under r))))))
-                     (list) (nb/toolchainRootPaths)))
-
-fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
-  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
-        (lines (fpLinesIn root))
-        (wide (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
-        (objLines (match (objectClosureCached! root lines)
-                    ((none) lines)
-                    ((some rels) (let [(kept (filter (fn [(l String)] -> Bool (let [(p (optionOr (listHead (stringSplit l " ")) ""))] (or (listContains? rels p) (not (stringStartsWith? p "asl/packages/"))))) lines))
-                                       (outside (filter (fn [(p String)] -> Bool (not (rootCovered? p))) rels))]
-                                   (listAppend kept (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under p))))) (list) outside))))))
-        (narrow (bytesSha256 (stringToBytes (stringJoin (cons "objectFp/1" (cons (format) (cons clangVersion (cons targetTriple objLines)))) "\n"))))]
-    (str (optionOr (stringSlice narrow 0 32) narrow) (optionOr (stringSlice wide 0 32) wide)))
-
-; (:m :ref NT-FP-NARROW :do "a 64-char fingerprint is two halves: the object half digests only the sources the compile path imports (objectClosureIn!) plus prelude, overlay, runtime archive and nativeTest's slice, and keys module and prelude objects; the whole fp, whose second half digests every toolchain root, still names slots, the self binary and checker verdicts, so a checker-only edit relinks and rechecks but compiles no module. A label fp (nativeOracle, tests) keys objects whole")
-fn objectFp fp: String -> String
-  (if (= (stringLength fp) 64) (optionOr (stringSlice fp 0 32) fp) fp)
-
-; (:m :ref NT-FP-NARROW :do "nativeTest's imports that reach object bytes: lowering, linking (link imports asl-checker/check for match and script elaboration), LLVM emission and target routing; their resolver closure is the object half's source set")
-fn objectSeeds -> (List String)
-  (list "asl-ir/link" "asl-ir/lower" "asl-ir/types" "asl-target-llvm" "asl-target-llvm/ssa" "asl-target-llvm/libc" "asl-target-llvm/sysRoute"
-        "asl-parser/ast" "asl-parser/reader" "asl-checker/check")
-
-; (:m :ref NT-FP-NARROW :do "nativeTest's imports that only accept, reject, render, schedule or sweep: checker verdicts and their rendering, eval text balance, process guards, the CLI store and config, the resolver this key uses; fingerprintScopeTest fails when an import is in neither list, so a new import is classified before it can shape an object unkeyed")
-fn nonObjectImports -> (List String)
-  (list "asl-tools/corpusNative" "asl-tools/renderTag" "asl-syntax/asl/paren" "asl-tools/fleet/run" "asl-cli/nativeCli"
-        "asl/packages/asl-cli/src/system" "asl/packages/asl-cli/src/asl1Cache" "asl/packages/asl-cli/src/nativeBuild" "asl/packages/asl-cli/src/rcConfig"
-        "asl-cli/verify" "asl-compiler/checkCache" "asl-checker/checkCached" "asl-checker/resolve")
-
-; (:m :ref NT-FP-NARROW :do "the module header of a source: its lines up to the first column-0 form or comment after the module line (a header may hold blank lines, asl-target-llvm/ssa does); none when it does not open with (module or its parens do not balance outside strings, and then the closure memo is not trusted")
-fn headerPrefix src: String -> (Option String)
-  (let [(ls (stringLines src))
-        (rest (optionOr (listTail ls) (list)))
-        (stop (fn [(l String)] -> Bool (or (stringStartsWith? l "(") (or (stringStartsWith? l "fn ") (stringStartsWith? l ";")))))
-        (body (stringJoin (cons (optionOr (listHead ls) "") (pairFirst (fold (fn [(acc (Pair (List String) Bool)) (l String)] -> (Pair (List String) Bool) (if (or (pairSecond acc) (stop l)) (pair (pairFirst acc) true) (pair (listAppend (pairFirst acc) (list l)) false))) (pair (list) false) rest))) "\n"))
-        (bs (stringToBytes body))
-        (depth (fold (fn [(acc (Pair Int64 Bool)) (i Int64)] -> (Pair Int64 Bool)
-                       (let [(c (bytesGet bs i))]
-                         (cond ((= c 34) (pair (pairFirst acc) (not (pairSecond acc))))
-                               ((pairSecond acc) acc)
-                               ((= c 40) (pair (+ (pairFirst acc) 1) false))
-                               ((= c 41) (pair (- (pairFirst acc) 1) false))
-                               (else acc))))
-                     (pair 0 false) (range 0 (bytesLength bs))))]
-    (if (and (stringStartsWith? body "(module") (and (= (pairFirst depth) 0) (not (pairSecond depth)))) (some body) (none)))
-
-; (:m :ref NT-FP-NARROW :do "what can move the closure besides the closure files' headers: the seed list, every path under the roots (a new or removed module), and every config or manifest the resolver can read: the two workspace configs, a .asl.config.asn nested anywhere under a toolchain root, the configs of the directories above the root (the resolver scans up), and the manifest of every package under asl/packages, not only the root packages")
-fn ! configsUnder! dir: String depth: Int64 -> (List String)
-  (if (> depth 8)
-    (list)
-    (match (dirList dir)
-      ((err _) (list))
-      ((ok names)
-       (fold (fn [(acc (List String)) (n String)] -> (List String)
-               (let [(p (str dir "/" n))]
-                 (cond
-                   ((= n ".asl.config.asn") (listAppend acc (list p)))
-                   ((match (fileStat p) ((ok st) st.isDir) ((err _) false)) (listAppend acc (configsUnder! p (+ depth 1))))
-                   (else acc))))
-             (list) (listSort names)))))
-
-fn ! configsAbove! root: String -> (List String)
-  (let [(parts (stringSplit (resultOr (realPath root) root) "/"))
-        (dirs (map (fn [(i Int64)] -> String (stringJoin (listTake parts i) "/")) (range 1 (listLength parts))))]
-    (filter (fn [(p String)] -> Bool (fileExists? p)) (map (fn [(d String)] -> String (str d "/.asl.config.asn")) dirs)))
-
-fn ! closureContext root: String lines: (List String) -> String
-  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
-        (pkgNames (listSort (resultOr (dirList (under "asl/packages")) (list))))
-        (manifests (map (fn [(n String)] -> String (str "asl/packages/" n "/manifest.asn")) pkgNames))
-        (nested (fold (fn [(acc (List String)) (r String)] -> (List String) (listAppend acc (configsUnder! (under r) 0))) (list) (nb/toolchainRootPaths)))
-        (configs (listAppend (list ".asl.config.asn" "asl/.asl.config.asn") manifests))]
-    (bytesSha256 (stringToBytes (stringJoin (listAppend (cons "closureMemo/2" (objectSeeds))
-                                                        (listAppend (map (fn [(c String)] -> String (str c " " (fileDigest (under c)))) configs)
-                                                                    (listAppend (map (fn [(c String)] -> String (str "nested " c " " (fileDigest c))) nested)
-                                                                                (listAppend (map (fn [(c String)] -> String (str "above " c " " (fileDigest c))) (configsAbove! root))
-                                                                                            (map (fn [(l String)] -> String (optionOr (listHead (stringSplit l " ")) "")) lines))))) "\n"))))
-
-fn ! headerDigest root: String rel: String -> String
-  (match (fileReadString (if (= root ".") rel (str root "/" rel)))
-    ((err _) "")
-    ((ok src) (match (headerPrefix src) ((none) "") ((some h) (bytesSha256 (stringToBytes h))))))
-
-fn ! closureMemoPath root: String -> String
-  (str (fingerprintMemoDir) "/closure-" (bytesSha256 (stringToBytes (resultOr (realPath root) root))))
-
-; (:m :ref NT-FP-NARROW :do "a memo hit needs the same context and, for every remembered closure file, the same balanced header: the resolver costs about 2 s a call and only headers decide the closure, so a body edit anywhere keeps the memo and a header edit, new file, manifest or seed change re-resolves")
-fn ! objectClosureMemo! root: String lines: (List String) -> (Option (List String))
-  (match (fileReadString (closureMemoPath root))
-    ((err _) (none))
-    ((ok text) (let [(ls (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text)))
-                     (rows (map (fn [(l String)] -> (List String) (stringSplit l " ")) (optionOr (listTail ls) (list))))]
-                 (if (and (= (optionOr (listHead ls) "") (closureContext root lines))
-                          (and (not (listEmpty? rows))
-                               (listAll? (fn [(r (List String))] -> Bool (let [(d (optionOr (listGet r 1) ""))] (and (not (stringEmpty? d)) (= d (headerDigest root (optionOr (listHead r) "")))))) rows)))
-                   (some (map (fn [(r (List String))] -> String (optionOr (listHead r) "")) rows))
-                   (none)))))
-
-fn ! objectClosureCached! root: String lines: (List String) -> (Option (List String))
-  (match (objectClosureMemo! root lines)
-    ((some rels) (some rels))
-    ((none) (let [(found (objectClosureIn! root))
-                  (_ (match found
-                       ((none) ())
-                       ((some rels) (let [(rows (map (fn [(p String)] -> String (str p " " (headerDigest root p))) rels))]
-                                      (if (listAny? (fn [(r String)] -> Bool (stringEndsWith? r " ")) rows)
-                                        ()
-                                        (do (dirCreate (fingerprintMemoDir))
-                                            (writeAtomic (closureMemoPath root) (str (closureContext root lines) "\n" (stringJoin rows "\n") "\n"))
-                                            ()))))))]
-              found)))
-
-fn rootCovered? rel: String -> Bool
-  (listAny? (fn [(r String)] -> Bool (or (= rel r) (stringStartsWith? rel (str r "/")))) (nb/toolchainRootPaths))
-
-; (:m :ref NT-FP-NARROW :do "root-relative sorted paths of the object seeds and their header-only resolver closure; none when a seed is missing, a closure has an error or unresolved import, or a path leaves the root, and then the object half covers every root")
-fn ! objectClosureIn! root: String -> (Option (List String))
-  (let [(real (resultOr (realPath root) root))
-        (importer (str real "/" (selfSource)))
-        (step (fn [(acc (Option (List String))) (seed String)] -> (Option (List String))
-                (match acc
-                  ((none) (none))
-                  ((some ps) (let [(res (rsv/resolveImport! importer seed (rsv/emptyModIndex)))]
-                               (match res.status
-                                 ((resOk) (if (listContains? ps res.path)
-                                            (some ps)
-                                            (let [(c (rsv/loadModuleClosure! res.path false))]
-                                              (if (and (listEmpty? c.errors) (listEmpty? c.unresolved))
-                                                (some (fold (fn [(a (List String)) (p String)] -> (List String) (if (listContains? a p) a (listAppend a (list p)))) ps (cons res.path c.paths)))
-                                                (none)))))
-                                 (_ (none))))))))
-        (found (fold step (some (list)) (objectSeeds)))]
-    (match found
-      ((none) (none))
-      ((some ps) (let [(rels (map (fn [(p String)] -> String (relativeTo real (resultOr (realPath p) p))) ps))]
-                   (if (listAny? (fn [(p String)] -> Bool (stringStartsWith? p "/")) rels) (none) (some (listSort rels)))))))
-
+                     (list) (nb/toolchainRootPaths)))]
+    (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
 
 ; (:m :ref FPNARROW :do "bodies that cannot shape a cached artifact: entry dispatch, the suite sweep and its pool, the test runner and verdict parsing, and the fingerprint itself; one of them still enters the slice when any other fn names it")
 fn driverOnlyNames -> (List String)
@@ -873,7 +728,7 @@ fn ! fingerprint -> String
         (stamps (fold (fn [(acc (Pair Int64 (List String))) (r String)] -> (Pair Int64 (List String))
                         (let [(t (treeStamps r))] (pair (max (pairFirst acc) (pairFirst t)) (listAppend (pairSecond acc) (pairSecond t)))))
                       (pair 0 (list)) (toolchainRoots)))
-        (memo (str (fingerprintMemoDir) "/" (bytesSha256 (stringToBytes (stringJoin (cons "fp/2" (cons (format) (cons clangVersion (cons targetTriple (pairSecond stamps))))) "\n")))))
+        (memo (str (fingerprintMemoDir) "/" (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple (pairSecond stamps)))) "\n")))))
         (kept (stringTrim (resultOr (fileReadString memo) "")))]
     (if (= (stringLength kept) 64)
       kept
@@ -891,9 +746,8 @@ fn slotKey path: String suiteDigest: String -> String
   (bytesSha256 (stringToBytes (str (format) "\n" (wrapperVersion) "\n" path "\n" suiteDigest)))
 
 ; (:m :ref MODKEY-OPTLEVEL :do "the linked binary carries the opt level its objects were compiled at, so a slot built under another ASL_NATIVE_OPT is another slot")
-; (:m :ref NT-SLOT-PATHFREE :do "tree is accepted for callers and left out of the key: a slot is named by mode, opt, rc, root-relative suite path and suite digest, and the manifest of each closure file's content decides whether it holds in the asking tree, so a worktree reuses a binary another one linked")
 fn suiteSlotKeyIn tree: String mode: String opt: String rc: String logicalPath: String digest: String -> String
-  (slotKey (str mode opt rc ":" (importPathOf logicalPath)) digest)
+  (slotKey (str mode opt rc ":" (importPathOf logicalPath) "@" tree) digest)
 
 fn ! treeOf root: String -> String
   (resultOr (realPath root) root)
@@ -1030,16 +884,8 @@ fn ! manifestFileHolds? root: String path: String text: String -> Bool
         (holds (pairFirst result))
         (freshText (pairSecond result))
         (stillSame (= (match (fileStat path) ((ok st) st.mtimeNs) ((err _) -1)) manifestMtime))]
-    (do (if (and holds (and (!= freshText text) stillSame)) (if (restampOwner? root path) (writeAtomic path freshText) (ok ())) (ok ()))
+    (do (if (and holds (and (!= freshText text) stillSame)) (writeAtomic path freshText) (ok ()))
         holds))
-
-; (:m :ref NT-VARIANT-HOLD-RACE :do "two trees sharing a variant disagree on its entries' mtimes, and each restamp in place made the other's stamps stale again (a ping-pong of manifest rewrites); the first tree to restamp a manifest writes its real root beside it, and a tree that is not that root still validates by digest but leaves the stamps alone")
-fn ! restampOwner? root: String path: String -> Bool
-  (let [(mark (str path ".root"))
-        (mine (resultOr (realPath root) root))]
-    (match (fileReadString mark)
-      ((ok other) (= (stringTrim other) mine))
-      ((err _) (do (writeAtomic mark (str mine "\n")) true))))
 
 fn interfaceDigest forms: (List ast/TopForm) -> String
   (let [(modHead (fold (fn [(acc (Option ast/ModuleNode)) (t ast/TopForm)] -> (Option ast/ModuleNode)
@@ -1244,7 +1090,7 @@ fn ! unitKey fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String)
   (unitKeyIn (selfRoot) fp opt u ifaceMap isEntry inits)
 
 fn ! unitKeyIn root: String fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (moduleCacheKey (objectFp fp) (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
+  (moduleCacheKey fp (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
                   (listAppend (map (fn [(imp (Pair String String))] -> String (str (relativeTo root (pairSecond imp)) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
                               (cons (str "@name " u.name) (cons (str "@opt " opt) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list))))))
 
@@ -1548,7 +1394,7 @@ fn ! dropStale objPath: String metaPath: String -> Unit
 fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: String allPreludeRefs: (List String) prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> PreludeStep
   (let [(preludeFns (map (fn [(n String)] -> String (optionOr (stringSlice n 8 (stringLength n)) n)) allPreludeRefs))
         (preludeKey (bytesSha256 (stringToBytes (str "prelude/2
-" (objectFp fp) "
+" fp "
 " (preludeDigestIn (toolRoot)) "
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
@@ -1572,7 +1418,7 @@ fn ! preludeDigestIn root: String -> String
     (bytesSha256 (stringToBytes (stringJoin (map (fn [(l String)] -> String (relativeTo root l)) (listAppend (treeLines (at (lk/preludePath))) (treeLines (at overlayDir)))) "\n"))))
 
 fn fullPreludeKey fp: String preludeDigest: String opt: String extra: (List String) -> String
-  (bytesSha256 (stringToBytes (str "preludeFull/2\n" (objectFp fp) "\n" preludeDigest "\n" opt "\n" (stringJoin extra " "))))
+  (bytesSha256 (stringToBytes (str "preludeFull/2\n" fp "\n" preludeDigest "\n" opt "\n" (stringJoin extra " "))))
 
 fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> (Option PreludeStep)
   (let [(key (fullPreludeKey fp (preludeDigestIn (toolRoot)) opt extra))
@@ -2006,37 +1852,16 @@ fn entryFor mode: String src: String -> (Option String)
 fn ! checkRootsForNative -> (List String)
   (list "." "asl/packages" "asl")
 
-; (:m :ref NT-CHECK-PORTABLE :do "the verdict key names a suite by its path under the nearest .asl.config.asn (basename when none), the rule checkCache's entryLabel! applies for asl check, so identical suites at a/ and b/ of one tree get two verdicts and the same relative path in two trees shares one")
-fn ! configRootOf! parts: (List String) -> String
-  (let [(dir (stringJoin parts "/"))]
-    (if (listEmpty? parts) ""
-      (if (fileExists? (str dir "/.asl.config.asn")) dir (configRootOf! (listTake parts (- (listLength parts) 1))))))
-
-fn ! entryLabelOf! actualPath: String -> String
-  (let [(real (resultOr (realPath actualPath) actualPath))
-        (root (configRootOf! (stringSplit real "/")))
-        (prefix (str root "/"))]
-    (if (and (not (stringEmpty? root)) (stringStartsWith? real prefix))
-      (optionOr (stringSlice real (stringLength prefix) (stringLength real)) real)
-      (optionOr (listLast (stringSplit real "/")) real)))
-
 ; (:m :ref U4-MARKER-PARITY :do "test and run used to compile straight from AST to IR/SSA/LLVM with no static check at all (compileSeparate! and compileWhole! both lower unconditionally), so a type error only ever surfaced if the VM or the native runtime happened to trap it, in a different format with no line:col, or (when the fixture has no main/runTests, like the sem/invalid corpus) not at all before ERR_NO_ENTRY. checkerRejection! runs asl-checker's own checkFile! once per entry, through the same digest-keyed on-disk Verdict cache asl1's own check subcommand already uses (asl-compiler/checkCache), so a repeat test/run of an unchanged entry (and unchanged checker) replays the cached verdict instead of rechecking; a hit with diagnostics renders them through asl-cli/verify's formatDiags, the exact formatter asl check's own printDiag! uses, so the three subcommands name the same site. actualPath is read (checkFile! does its own fileReadString); logicalPath is only substituted into the rendered text, so a staged or root-relative name still shows the form check would print")
 fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
   (let [(inline (inlineStaged? logicalPath))
         (shown (if inline (inlineName logicalPath) logicalPath))]
-    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) (entryLabelOf! actualPath)) (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
       ((none) (freshRejection! actualPath shown (none)))
       ((some key)
        (match (ccache/lookup! key)
-         ((some v) (if (= v.exitCode 0) (none) (some (replayedBody v.body (ccache/rootPairs! actualPath)))))
+         ((some v) (if (= v.exitCode 0) (none) (some v.body)))
          ((none) (freshRejection! actualPath shown (some key)))))))
-
-; (:m :ref NT-CHECK-PORTABLE :do "a stored rejection names the writing tree's entry directory and working root by placeholder tokens (cc/portable) and a replay substitutes the asking tree's (cc/localize), so a cached rejection never sends the reader to another tree's dependency path")
-fn storedBody body: String roots: (List (Pair String String)) -> String
-  (let [(v (ccache/portable (ccache/Verdict :exitCode 1 :body body) roots))] v.body)
-
-fn replayedBody body: String roots: (List (Pair String String)) -> String
-  (let [(v (ccache/localize (ccache/Verdict :exitCode 1 :body body) roots))] v.body)
 
 ; (:m :ref NT-VERDICT-KEY-COVERS-RENDER :do "the verdict key carries asl-tools/renderTag: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so the key digests verify and its direct imports and a renderer edit misses old bodies")
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
@@ -2047,7 +1872,7 @@ fn ! freshRejection! actualPath: String logicalPath: String key: (Option String)
      (let [(diags verdict.diags)
            (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiagsHinted! diags) actualPath logicalPath)))
            (_ (match key
-                ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body (storedBody body (ccache/rootPairs! actualPath)))) ((ok _) ()) ((err _) ())))
+                ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
                 ((none) ())))]
        (if (listEmpty? diags) (none) (some body)))))
 
@@ -2177,32 +2002,6 @@ fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String 
                 :recompiled recompiled :reused reused
                 :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 tClang0)))))))
 
-fn roWorkspace -> String
-  "nativeTestRo"
-
-fn roConfigSource -> String
-  (str "(:aslConfig :workspace \"" (roWorkspace) "\" :root true)\n")
-
-fn roTargetSource -> String
-  (str "(module " (roWorkspace) "/target :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok 0)\n")
-
-; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "the entry wrapper goes under the tree (wrapperDirIn), where its import of the entry resolves; when the tree cannot be written (a read-only tool root in a jail) it goes under the cache dir as CDIR/roEntries/KEY, a root workspace of its own whose wrapper imports a placeholder module nativeTestRo/target, and an override resolves that placeholder to the entry's real path, so the entry and everything it imports load from the tree by their own locations; returns the wrapper and the overrides to load it with")
-fn ! placeWrapper! cDir: String path: String key: String wrapper: String text: String ovr: (Map String String) -> (Result (Pair String (Map String String)) String)
-  (if (and (ok? (dirCreate (wrapperDirIn cDir))) (ok? (fileWrite wrapper text)))
-    (ok (pair wrapper ovr))
-    (let [(alt (str cDir "/roEntries/" key))
-          (target (str alt "/target.asl"))
-          (aw (str alt "/" key ".asl"))
-          (entry (if (stringStartsWith? path "/") path (toolPath path)))
-          (real (resultOr (realPath entry) entry))
-          (made (and (ok? (dirCreate alt)) (and (ok? (fileWrite (str alt "/.asl.config.asn") (roConfigSource))) (ok? (fileWrite target (roTargetSource))))))]
-      (cond
-        ((not made) (err (str "cannot write " wrapper " nor a wrapper under " alt)))
-        ((not (fileExists? real)) (err (str "cannot find the entry " entry)))
-        (else (match (fileWrite aw (stringReplace text (str "(" (importPathOf path) " :a suite)") (str "(" (roWorkspace) "/target :a suite)")))
-                ((err e) (err (str "cannot write " aw ": " e)))
-                ((ok _) (ok (pair aw (mapSet ovr (resultOr (realPath target) target) real)))))))))
-
 fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) -> Built
   (let [(entry (if (not (stringEmpty? only)) (some only) (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src))))
         (wrapper (if (= mode "eval") path (str (wrapperDirIn cDir) "/" key ".asl")))
@@ -2210,18 +2009,16 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
     (match entry
       ((none) (storeFallback slot (list path) (str "ERR_NO_ENTRY: " path " exports neither runTests nor main") (list)))
       ((some e)
-       (match (if (= mode "eval") (ok (pair wrapper ovr))
-                (placeWrapper! cDir path key wrapper
-                  (if (and (= e "run") (mainReturnsBareInt64 src))
-                    (wrapperSourceRunInt64 (importPathOf path) (mainTakesArgs src))
-                    (wrapperSource (importPathOf path) e (mainTakesArgs src)))
-                  ovr))
-         ((err why) (Built :binary (none) :reason why :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-         ((ok placed) (compileSeparateAt! (if (= (pairFirst placed) wrapper) cap 1) cDir path src slot key fp mode only (pairSecond placed) (pairFirst placed) bin))))))
-
-; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "the part of compileSeparate! after the entry wrapper is placed: wrapper is the file the closure loads and ovr its overrides (the read-only route adds one), cap 1 there keeps workers, which load the wrapper without overrides, off")
-fn ! compileSeparateAt! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) wrapper: String bin: String -> Built
-  (match (dirCreate (modulesDirIn cDir))
+       (match (if (= mode "eval") (ok ()) (dirCreate (wrapperDirIn cDir)))
+         ((err err1) (Built :binary (none) :reason (str "cannot create " (wrapperDirIn cDir) ": " err1) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
+         ((ok _)
+          (match (if (= mode "eval") (ok ())
+                (fileWrite wrapper (if (and (= e "run") (mainReturnsBareInt64 src))
+                                     (wrapperSourceRunInt64 (importPathOf path) (mainTakesArgs src))
+                                     (wrapperSource (importPathOf path) e (mainTakesArgs src)))))
+            ((err err2) (Built :binary (none) :reason (str "cannot write " wrapper ": " err2) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
+            ((ok _)
+             (match (dirCreate (modulesDirIn cDir))
                ((err err3) (Built :binary (none) :reason (str "cannot create " (modulesDirIn cDir) ": " err3) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
                ((ok _)
                 (let [(tA (monotonicNs))
@@ -2284,7 +2081,7 @@ fn ! compileSeparateAt! cap: Int64 cDir: String path: String src: String slot: S
                              (if (not pCompRes.ok)
                                  (storeFallback slot deps (str "prelude compile failed: " pCompRes.err) (list (ms (- t1 t0)) (ms (- t2 t1)) 0))
                                  (let [(_ (telemetry (str "NATIVE-PRELUDE-PHASES :prepareMs " (ms (- preludeEnd preludeStart)))))]
-                                   (linkUnits! slot bin deps pCompRes.obj unitResults darwin facts t0 t1 t2))))))))))))))))
+                                   (linkUnits! slot bin deps pCompRes.obj unitResults darwin facts t0 t1 t2)))))))))))))))))))))))
 
 fn ! lookup slot: String mode: String -> (Option Built)
   (match (fileReadString (str slot "/manifest"))
@@ -2311,24 +2108,7 @@ fn ! slotBusy? path: String -> Bool
   (or (lockLive? (str path "/lock"))
       (< (- (nowNs) (newestMtimeNs path)) 600000000000))
 
-; (:m :ref NT-FP-MEMO-LOWS :do "closure-<root digest> memos are one per tree root that ever fingerprinted and nothing else removed them; prune keeps the closureMemoKeep most recently written and removes the rest")
-fn closureMemoKeep -> Int64
-  8
-
-fn ! pruneClosureMemos! dir: String -> Unit
-  (let [(names (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "closure-") (not (stringContains? n ".tmp.")))) (resultOr (dirList dir) (list))))
-        (stamped (map (fn [(n String)] -> (Pair String Int64) (pair n (match (fileStat (str dir "/" n)) ((ok st) st.mtimeNs) ((err _) 0)))) names))
-        (stale (listDrop (listReverse (listSortBy (fn [(p (Pair String Int64))] -> Int64 (pairSecond p)) stamped)) (closureMemoKeep)))]
-    (fold (fn [(acc Unit) (p (Pair String Int64))] -> Unit
-            (match (pathRemove (str dir "/" (pairFirst p)))
-              ((ok _) acc)
-              ((err e) (eprintln (str "nativeTest: cannot prune " (pairFirst p) ": " e)))))
-          () stale))
-
 fn ! prune dir: String current: String -> Unit
-  (do (pruneClosureMemos! dir) (pruneFingerprints! dir current))
-
-fn ! pruneFingerprints! dir: String current: String -> Unit
   (match (dirList dir)
     ((err _) ())
     ((ok names)
@@ -2390,54 +2170,9 @@ fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
 fn hexKey? n: String -> Bool
   (= (stringLength n) 64)
 
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a build hands its binaries to its runs and init probes after the slot lease is gone, so prepareAllIn records them in cDir/holds/PID and the sweep pins every slot a live pid holds until releaseHold! (a dead pid's hold is removed when seen)")
-fn ! holdsDirIn cDir: String -> String
-  (str cDir "/holds")
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a hold is keyed by its owner's pid and process start, the owner being the process that called prepareAllIn, not the parMap worker that wrote the file (workers exit when parMap returns); a hold whose owner is dead or whose start differs is removed when seen")
-fn ! holdLive? owner: Int64 start: String -> Bool
-  (and (pidAlive? owner) (or (stringEmpty? start) (= start (ncli/startOf! owner))))
-
-fn ! heldPaths! cDir: String -> (List String)
-  (let [(dir (holdsDirIn cDir))]
-    (fold (fn [(acc (List String)) (n String)] -> (List String)
-            (match (stringToInt64 (optionOr (listHead (stringSplit n ".")) n))
-              ((some pid) (let [(lines (stringSplit (resultOr (fileReadString (str dir "/" n)) "") "\n"))
-                                (start (stringReplace (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "start=")) lines)) "") "start=" ""))]
-                            (if (holdLive? pid start)
-                              (listAppend acc (filter (fn [(l String)] -> Bool (not (or (stringEmpty? l) (stringStartsWith? l "start=")))) lines))
-                              (do (pathRemove (str dir "/" n)) acc))))
-              ((none) acc)))
-          (list) (resultOr (dirList dir) (list))))
-
-fn ! holdBuilt! cDir: String owner: Int64 start: String b: Built -> Built
-  (let [(dir (holdsDirIn cDir))
-        (_ (dirCreate dir))
-        (_ (match b.binary
-             ((some bin) (fileWrite (str dir "/" (stringFromInt64 owner) "." (stringFromInt64 (monotonicNs)) "." (bytesSha256 (stringToBytes bin))) (str "start=" start "\n" bin)))
-             ((none) (ok ()))))]
-    b)
-
-fn ! releaseHold! cDir: String -> Bool
-  (let [(prefix (str (stringFromInt64 (procSelf)) "."))]
-    (fold (fn [(acc Bool) (n String)] -> Bool (if (stringStartsWith? n prefix) (and (ok? (pathRemove (str (holdsDirIn cDir) "/" n))) acc) acc))
-          true (resultOr (dirList (holdsDirIn cDir)) (list))))
-
-fn ! releaseHeld! -> Bool
-  (releaseHold! (cacheDir!))
-
-fn ! heldBy? held: (List String) path: String -> Bool
-  (listAny? (fn [(h String)] -> Bool (stringStartsWith? h (str path "/"))) held)
-
-fn ! entryPinnedNow! held: (List String) e: ncli/StoreEntry -> Bool
-  (listAny? (fn [(p String)] -> Bool (or (heldBy? held p) (or (lockLive? (str p "/lock")) (and (stringEndsWith? p ".lock") (lockLive? p))))) e.paths)
-
 fn ! slotEntries! cDir: String -> (List ncli/StoreEntry)
-  (slotEntriesHeld! cDir (heldPaths! cDir))
-
-fn ! slotEntriesHeld! cDir: String held: (List String) -> (List ncli/StoreEntry)
   (fold (fn [(acc (List ncli/StoreEntry)) (f String)] -> (List ncli/StoreEntry)
-          (listAppend acc (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str cDir "/" f "/" n)) (or (lockLive? (str cDir "/" f "/" n "/lock")) (heldBy? held (str cDir "/" f "/" n)))))
+          (listAppend acc (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str cDir "/" f "/" n)) (lockLive? (str cDir "/" f "/" n "/lock"))))
                                (filter hexKey? (resultOr (dirList (str cDir "/" f)) (list))))))
         (list) (filter hexKey? (resultOr (dirList cDir) (list))))
 
@@ -2448,20 +2183,10 @@ fn ! deadEphemeral? name: String -> Bool
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "a sweep walks every file of the store (539 ms on 40000 files, 2026-10-27), so a build sweeps at most once a minute per store, marked by the swept file")
 fn ! sweepStore! cDir: String -> Int64
-  (sweepStoreBounded! cDir (nb/storeCapFor! (toolRoot)) (nb/storeMinAgeNs! (toolRoot)) (nb/storeHardCapFor! (toolRoot)) (nb/storeHardMinAgeNs! (toolRoot)))
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "while a build marker is live only the hard sweep runs, otherwise the soft sweep and then the hard one")
-fn ! sweepStoreBounded! cDir: String cap: Int64 minAgeNs: Int64 hardCap: Int64 hardAgeNs: Int64 -> Int64
-  (if (buildingLive? cDir)
-    (let [(mark (str cDir "/sweptHard"))]
-      (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
-        0
-        (do (fileWrite mark "") (sweepStoreHardWith! cDir hardCap hardAgeNs))))
-    (let [(mark (str cDir "/swept"))]
-      (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
-        0
-        (do (fileWrite mark "")
-            (+ (sweepStoreWith! cDir cap minAgeNs) (sweepStoreHardWith! cDir hardCap hardAgeNs))))))
+  (let [(mark (str cDir "/swept"))]
+    (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
+      0
+      (if (buildingLive? cDir) 0 (do (fileWrite mark "") (sweepStoreNow! cDir)))))
 
 ; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes cDir/building.PID (own marker per builder, name carries the pid) while parMap workers build; any live marker holds off store pruning, a dead pid marker is removed when seen")
 fn ! markerLive? cDir: String name: String -> Bool
@@ -2478,39 +2203,15 @@ fn ! sweepStoreNow! cDir: String -> Int64
   (sweepStoreWith! cDir (nb/storeCapFor! (toolRoot)) (nb/storeMinAgeNs! (toolRoot)))
 
 fn ! sweepStoreWith! cDir: String capBytes: Int64 minAgeNs: Int64 -> Int64
-  (sweepStoreKind! cDir capBytes minAgeNs "soft")
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the hard sweep bounds the store at :storeHardCap even while a build marker is live: slots a build fills hold slot/lock leases and are pinned, anything used within :storeHardMinAge stays, the rest goes oldest first; each sweep that removes something appends one (:sweep ...) row with freed bytes and entries to cDir/sweeps.asn")
-fn ! sweepStoreHardWith! cDir: String capBytes: Int64 minAgeNs: Int64 -> Int64
-  (sweepStoreKind! cDir capBytes minAgeNs "hard")
-
-fn ! sweepStoreKind! cDir: String capBytes: Int64 minAgeNs: Int64 kind: String -> Int64
   (let [(lock (str cDir "/sweep.lock"))]
     (if (not (takeLock! lock 1))
       0
       (let [(eDir (ephemeralDirIn cDir))
             (stale (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "run.") (and (deadEphemeral? n) (ok? (pathRemove (str eDir "/" n)))))) (resultOr (dirList eDir) (list))))
-            (held (heldPaths! cDir))
-            (entries (listAppend (slotEntriesHeld! cDir held) (moduleEntries! (modulesDirIn cDir))))
-            (before (ncli/storeBytes entries))
-            (swept (ncli/sweepEntriesWith! entries capBytes minAgeNs (fn [(e ncli/StoreEntry)] -> Bool (entryPinnedNow! held e))))
-            (_ (if (> (pairSecond swept) 0)
-                 (fileAppend (str cDir "/sweeps.asn") (str "(:sweep :kind " kind " :at " (stringFromInt64 (nowNs)) " :freedBytes " (stringFromInt64 (- before (pairFirst swept))) " :entries " (stringFromInt64 (pairSecond swept)) " :capBytes " (stringFromInt64 capBytes) ")\n"))
-                 (ok ())))
-            (_ (rotateRows! (str cDir "/sweeps.asn") 200))
+            (entries (listAppend (slotEntries! cDir) (moduleEntries! (modulesDirIn cDir))))
+            (swept (ncli/sweepEntries! entries capBytes minAgeNs))
             (_ (pathRemove lock))]
         (+ (listLength stale) (pairSecond swept)))))
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the receipt file keeps its last keep rows")
-fn ! rotateRows! path: String keep: Int64 -> Bool
-  (let [(rows (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit (resultOr (fileReadString path) "") "\n")))]
-    (if (> (listLength rows) keep)
-      (ok? (fileWrite path (str (stringJoin (listDrop rows (- (listLength rows) keep)) "\n") "\n")))
-      true))
-
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a lease lost to a sweep that removed the slot dir between dirCreate and the write is retried once after recreating it")
-fn ! leaseOnce! slot: String -> Bool
-  (or (leaseSlot! slot) (do (dirCreate slot) (leaseSlot! slot)))
 
 fn ! leaseSlot! slot: String -> Bool
   (ok? (fileWrite (str slot "/lock") (stringFromInt64 (procSelf))))
@@ -2539,75 +2240,19 @@ fn ! compile path: String src: String slot: String key: String fp: String -> Bui
   (compileIn (cacheDir!) path path src slot key fp "test")
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "a run/test FILE argument is the caller's own, resolved against the caller's cwd like any other CLI tool (NATIVE-CHDIR: the native CLI never chdirs to the toolchain root first); only the toolchain's own internal lookups (cache dirs, dep manifests) are root-relative, so prepareIn reads and digests path as given, never through resolveIn (toolRoot)")
-; (:m :ref NT-SLOT-PATHFREE :do "a slot name (cDir/fp/KEY) is a directory of variants, one per closure content: each build is made in a temp dir b.PID.NS and renamed to the sha of its manifest's content lines, so a tree whose closure differs from every variant builds a new one and never rewrites a variant another tree runs or links; lookup takes the first variant whose manifest holds for the asking tree; the variants are capped at slotVariantCap, oldest by mtime out unless a live pid holds it")
-fn slotVariantCap -> Int64
-  4
-
-fn ! variantNames keyDir: String -> (List String)
-  (filter hexKey? (resultOr (dirList keyDir) (list)))
-
-fn ! variantLookup keyDir: String mode: String -> (Option Built)
-  (fold (fn [(acc (Option Built)) (n String)] -> (Option Built) (match acc ((some _) acc) ((none) (lookup (str keyDir "/" n) mode))))
-        (none) (variantNames keyDir))
-
-fn ! closureDigestOf manifest: String -> String
-  (bytesSha256 (stringToBytes (stringJoin (map (fn [(e (Option (List String)))] -> String (match e ((some fs) (str (optionOr (listGet fs 0) "") " " (optionOr (listGet fs 3) ""))) ((none) ""))) (manifestEntries manifest)) "\n")))
-
-fn ! rebased b: Built from: String to: String -> Built
-  (Built :binary (match b.binary ((some p) (some (if (stringStartsWith? p from) (str to (optionOr (stringSlice p (stringLength from) (stringLength p)) "")) p))) ((none) (none)))
-         :reason b.reason :cache b.cache :recompiled b.recompiled :reused b.reused :depsMs b.depsMs :asl1Ms b.asl1Ms :clangMs b.clangMs)
-
-fn ! evictVariants! cDir: String keyDir: String -> Unit
-  (let [(names (variantNames keyDir))]
-    (if (<= (listLength names) (slotVariantCap))
-      ()
-      (let [(held (heldPaths! cDir))
-            (oldest (listSortBy (fn [(n String)] -> Int64 (match (fileStat (str keyDir "/" n)) ((ok st) st.mtimeNs) ((err _) 0))) names))
-            (drop (filter (fn [(n String)] -> Bool (not (heldBy? held (str keyDir "/" n)))) (listTake oldest (- (listLength names) (slotVariantCap)))))]
-        (do (fold (fn [(acc Unit) (n String)] -> Unit (match (pathRemove (str keyDir "/" n)) ((ok _) acc) ((err _) acc))) () drop) ()))))
-
-fn ! publishVariant! cDir: String keyDir: String mode: String build: (fn [String] -> Built) -> Built
-  (let [(tmp (str keyDir "/b." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))
-        (_ (dirCreate tmp))
-        (b (build tmp))]
-    (match (fileReadString (str tmp "/manifest"))
-      ((err _) (do (pathRemove tmp) b))
-      ((ok text)
-       (let [(final (str keyDir "/" (closureDigestOf text)))]
-         (match (if (fileExists? (str final "/manifest")) (lookup final mode) (none))
-           ((some held) (do (pathRemove tmp) held))
-           ((none)
-            (match (pathRename tmp final)
-              ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final)))
-              ((err _) (settleLostRace! cDir keyDir mode tmp final b)))))))))
-
-; (:m :ref NT-VARIANT-HOLD-RACE :do "rename onto a non-empty directory fails, so the loser of a publish race never deletes the winner's variant: it re-reads final, uses it when it holds, and replaces it only when it does not (a broken or stale variant, which no run can use)")
-fn ! settleLostRace! cDir: String keyDir: String mode: String tmp: String final: String b: Built -> Built
-  (match (lookup final mode)
-    ((some winner) (do (pathRemove tmp) winner))
-    ((none)
-     (match (do (pathRemove final) (pathRename tmp final))
-       ((err _) (do (pathRemove tmp) b))
-       ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final))))))
-
-; (:m :ref NT-VARIANT-HOLD-RACE :do "a single asl test or run holds its variant like prepareAllIn does (cDir/holds/PID, pinned until the process ends), so variant eviction by another build cannot delete the binary this process is about to exec")
-fn ! heldSingle! cDir: String b: Built -> Built
-  (let [(owner (procSelf))]
-    (holdBuilt! cDir owner (ncli/startOf! owner) b))
-
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
-  (heldSingle! cDir (prepareInWith 0 cDir path fp mode))
+  (prepareInWith 0 cDir path fp mode)
 
 fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String -> Built
   (match (fileReadString path)
     ((err _) (Built :binary (none) :reason (str "cannot read " path) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKey mode path path))
                     (slot (str cDir "/" fp "/" key))]
-                (match (variantLookup slot mode)
+                (match (lookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (publishVariant! cDir slot mode (fn [(tmp String)] -> Built (compileInWith cap cDir path path src tmp key fp mode "" (mapEmpty)))))) (unbuilt (str "cannot lease " slot))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "" (mapEmpty))))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2616,18 +2261,15 @@ fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: Str
 
 ; (:m :ref TEST-RUNNER-SELECT :do "only names the one test function the wrapper calls in place of the entry (asl test FILE --only NAME); its slot key carries the name, so a selected binary never shares a slot, wrapper or cached link with the whole-suite binary of the same file")
 fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String fp: String mode: String only: String -> Built
-  (heldSingle! cDir (prepareSourceSelectRaw cDir actualPath logicalPath fp mode only))
-
-fn ! prepareSourceSelectRaw cDir: String actualPath: String logicalPath: String fp: String mode: String only: String -> Built
   (match (fileReadString actualPath)
     ((err _) (Built :binary (none) :reason (str "cannot read " actualPath) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKeyFor mode only logicalPath actualPath))
                     (slot (str cDir "/" fp "/" key))]
-                (match (variantLookup slot mode)
+                (match (lookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (publishVariant! cDir slot mode (fn [(tmp String)] -> Built (compileInWith 0 cDir logicalPath actualPath src tmp key fp mode only (mapEmpty)))))) (unbuilt (str "cannot lease " slot))))
+                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only (mapEmpty))))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2668,9 +2310,7 @@ fn unstride order: (List Int64) xs: (List Built) -> (List Built)
     (map (fn [(i Int64)] -> Built (optionOr (mapGet byIndex i) (Built :binary (none) :reason "stride lost a result" :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))) (range 0 (listLength order))))
 
 fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
-  (let [(owner (procSelf))
-        (ownerStart (ncli/startOf! owner))
-        (build (fn [(p String)] -> Built (holdBuilt! cDir owner ownerStart (prepareInWith 1 cDir p fp "test"))))
+  (let [(build (fn [(p String)] -> Built (prepareInWith 1 cDir p fp "test")))
         (marker (str cDir "/building." (stringFromInt64 (procSelf))))
         (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
         (_ (fileWrite marker ""))
@@ -2789,7 +2429,7 @@ fn ! runOne path: String fp: String -> Outcome
        (let [(t0 (monotonicNs))
              (prelude (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))
              (wall (suiteWall (resultOr (fileReadString path) "")))
-             (out (fromFr (fr/runGuarded (listAppend (fr/niceWords) (list bin)) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
+             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
              (took (ms (- (monotonicNs) t0)))
              (v (judgeInit! bin path prelude (verdictOf path out.exitCode out.stderr)))]
          (do (emit out v)
@@ -2923,7 +2563,7 @@ fn ! keptRun root: String rel: String fp: String -> (Option String)
     (match (fileReadString (str root "/" rel))
       ((err _) (none))
       ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
-                (match (variantLookup (str (cacheDir!) "/" fp "/" key) "run")
+                (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
                   ((some b) b.binary)
                   ((none) (none)))))))
 
@@ -2991,15 +2631,8 @@ fn ! selfSlotOf cDir: String root: String fp: String -> String
   (:f failure (Option String)))
 
 fn ! selfStateOf cDir: String root: String fp: String -> SelfState
-  (let [(keyDir (selfSlotOf cDir root fp))]
-    (fold (fn [(acc SelfState) (n String)] -> SelfState
-            (match acc.binary
-              ((some _) acc)
-              ((none) (match acc.failure ((some _) acc) ((none) (selfStateAt (str keyDir "/" n) root))))))
-          (SelfState :binary (none) :failure (none)) (variantNames keyDir)))
-
-fn ! selfStateAt slot: String root: String -> SelfState
-  (let [(bin (str slot "/run"))
+  (let [(slot (selfSlotOf cDir root fp))
+        (bin (str slot "/run"))
         (unknown (SelfState :binary (none) :failure (none)))]
     (match (fileReadString (str slot "/manifest"))
       ((err _) unknown)
@@ -3249,7 +2882,7 @@ fn ! testNativeExecution cacheDir: String -> Bool
         (fp (fingerprint))
         (b1 (prepareIn cacheDir fixturePath fp "test"))
         (bin1 (optionOr b1.binary ""))
-        (run1 (if (stringEmpty? bin1) (ProcOut :exitCode 1 :stdout "" :stderr "no bin") (runProc (listAppend (fr/niceWords) (list bin1)) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl"))))))
+        (run1 (if (stringEmpty? bin1) (ProcOut :exitCode 1 :stdout "" :stderr "no bin") (runProc (list "nice" "-n" "15" bin1) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl"))))))
         (v (verdictOf fixturePath run1.exitCode run1.stderr))
         (b2 (prepareIn cacheDir fixturePath fp "test"))]
     (do (assert (some? b1.binary) (str "native compilation of passingSuite succeeds: " b1.reason))

@@ -113,7 +113,7 @@ fn effectRow table: (List (Pair String String)) op: String -> String
 
 fn ! checkEffects kv: (List (Pair String c/KvVal)) base: String -> Bool
   (let [repo (str base "/repo-" (getStr kv "id"))
-        dir (str repo "/asl/packages/asl-agent/src")
+        dir (str repo "/scripts/agentLoop")
         made (and (ok? (dirCreate dir)) (or (getBool kv "missing") (writeOk (str dir "/effects.asn") (getStr kv "text"))))
         loaded (t/loadEffects! repo)]
     (match loaded

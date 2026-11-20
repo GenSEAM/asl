@@ -1,5 +1,5 @@
 (module aslAgent/loopState
-  :x [LoopEnv LoopState GateMemo TurnCtx Step RunResult SpecVerdict ReceiptAdapter execValJson execRecJson
+  :x [LoopEnv LoopState TurnCtx Step RunResult SpecVerdict ReceiptAdapter execValJson execRecJson
       claimsReceiptJson planReceiptJson retryReceiptJson gitRValJson runRValJson txnRValJson
       gateJson gateRecJson gateResult lastGatesJson]
   :i [(aslAgent/providers :a pv) (aslAgent/exec :a x)
@@ -25,10 +25,6 @@ schema LoopEnv
   (:f newId (fn [] -> String)) (:f now (fn [] -> Float64)) (:f sleep (fn [Int64] -> Bool))
   (:f toolRoot String :default "")
 
-; (:m :ref LOOP-BASELINE-STORED-GATE :do "one stored verdict per declared gate from the pass before the first turn (turn 0) and the owned-tree digest it was taken on; a gate step in the first turn on that digest is answered from here instead of a new process")
-schema GateMemo
-  (:f digest String) (:f turn Int64) (:f result g/GateResult)
-
 schema LoopState
   (:f turn Int64) (:f contextTokens (Option Int64)) (:f core j/Json) (:f wallBudget (Option Int64))
   (:f intent (Option String)) (:f plan j/Json) (:f mode String) (:f sizingModel String)
@@ -49,7 +45,7 @@ schema LoopState
   (:f code String) (:f commitRequested Bool) (:f declaredOps (List String)) (:f fetched j/Json)
   (:f header String) (:f history (List j/Json)) (:f lastGates (Map String j/Json))
   (:f missingGateIntro (List String)) (:f patchErr (Option String))
-  (:f placeholderBriefs (Map String Int64)) (:f doneNoWriteStreak Int64) (:f malformedStreak Int64) (:f notFoundStreak Int64) (:f prefetch String) (:f baselineGreen (List String)) (:f gateMemo (List GateMemo) :default (list)) (:f priorIds (List String))
+  (:f placeholderBriefs (Map String Int64)) (:f doneNoWriteStreak Int64) (:f malformedStreak Int64) (:f notFoundStreak Int64) (:f prefetch String) (:f baselineGreen (List String)) (:f priorIds (List String))
   (:f resumePatchPath (Option String)) (:f retries j/Json) (:f runUnbackedClaims (List j/Json))
   (:f specChecksDone Int64) (:f startTurn Int64) (:f taskLines String) (:f unparsable j/Json)
   (:f vendorBounds j/Json) (:f window j/Json) (:f writtenFiles (List String))

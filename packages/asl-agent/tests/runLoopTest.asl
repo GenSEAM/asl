@@ -427,7 +427,6 @@ fn ! finishPathTests tmp: String -> Bool
     (do
       (assert (not (stringEmpty? greenRoot)) "writeGreenGate builds its recorded repo")
       (assert (= (finishRows! greenJournal) (filter finishRow greenFixture)) "writeGreenGate finish rows match the recorded fixture")
-      (assert (and (stringContains? (fileText greenJournal) "(:session ") (not (stringContains? (fileText greenJournal) "(:canon :version"))) "a run journals its session row and no reply-canon version row")
       (assert (= greenResult.patch (some "loop.patch")) "an ok run hands back the patch of its threaded writes")
       (assert (= (fileText (str greenRoot "/subject.txt")) "green\n") "an ok run keeps its writes")
       (assert (= (finishRows! redJournal) (filter finishRow redFixture)) "redGateRetryExhausted finish rows match the recorded fixture")

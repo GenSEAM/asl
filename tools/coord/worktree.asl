@@ -264,7 +264,7 @@ fn protectedUnit? unit: String -> Bool
   (or (= unit "main")
     (or (= unit "train")
       (or (stringEndsWith? unit "-train")
-        (or (stringContains? unit "-train-") (or (stringStartsWith? unit "dev-") (stringStartsWith? unit "vtbot-"))))))
+        (or (stringStartsWith? unit "dev-") (stringStartsWith? unit "vtbot-")))))
 
 fn mtimeOf! p: String -> Int64
   (match (fileStat p) ((ok s) s.mtime) ((err _) 0))

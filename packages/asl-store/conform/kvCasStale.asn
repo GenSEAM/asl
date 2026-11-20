@@ -1,8 +1,0 @@
-(:script :id kvCasStale :checks 7)
-(:step (:put notes k "v1" 0 10) (:written 1))
-(:step (:put notes k "v2" 0 10) (:written 2))
-(:step (:cas notes k 1 "stale" 0 10) (:conflict 2))
-(:step (:get notes k 10) (:value 2 "v2" 0))
-(:step (:cas notes missing 3 "x" 0 10) (:conflict 0))
-(:step (:get notes missing 10) (:absent))
-(:step (:cas notes k 2 "v3" 0 10) (:written 3))

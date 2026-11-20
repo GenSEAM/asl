@@ -1,5 +1,5 @@
 (module aslGateway/chat
-  :x [rowDeadlines stallText ChatRequest upstreamTools parkedHoldMs
+  :x [ChatRequest upstreamTools parkedHoldMs
       sseToChat
       streamBody
       gatewayOriginHeader
@@ -54,8 +54,6 @@
       stepDone
       stepRaised
       modelCascade
-      agyConfigModel
-      agyFallbackLive
       chatStart!
       effectJson
       headJson
@@ -66,8 +64,6 @@
       httpFailed
       raised
       anthropicBody
-      geminiGenerationConfig
-      structuredOutputError
       cacheHints
       credentialKey
       missingKeyWhy
@@ -523,23 +519,12 @@ fn agyFallback cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) ->
           (tell (usageNote "agy-cli" "agyFallback" "skipped-noBinary") (fn [] -> ChatStep (k none)))
           (agyFallbackLive cx prompt k)))))
 
-; (:m :do "the agy model name comes from the gateway config alias agy (then antigravity), so a config-only change moves both the live fallback and cliDispatch; gemini-3.8-flash is only the schema default when no alias resolves")
-fn agyConfigModel cx: Ctx -> String
-  (let [(pick (fn [(tbl c/GatewayTable) (a String)] -> (Option String)
-                (match (c/gatewayV2AliasEntry! tbl a)
-                  ((some (c/entryResolved g)) (if (stringEmpty? g.name) none (some g.name)))
-                  (_ none))))]
-    (match cx.world.table
-      ((err _) "gemini-3.8-flash")
-      ((ok tbl)
-        (optionOr (match (pick tbl "agy") ((some s) (some s)) ((none) (pick tbl "antigravity"))) "gemini-3.8-flash"))))
-
 fn agyFallbackLive cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) -> ChatStep
   (askFloat (effBreakerDown "agy")
       (fn [(left Float64)] -> ChatStep
         (if (!= left 0.0)
           (tell (usageNote "agy-cli" "agyFallback" "skipped-breaker") (fn [] -> ChatStep (k none)))
-          (askCli (effCli "agy" (list (pair "prompt" (j/jstr prompt)) (pair "model" (j/jstr (agyConfigModel cx))) (pair "effort" (j/jstr "low"))
+          (askCli (effCli "agy" (list (pair "prompt" (j/jstr prompt)) (pair "model" (j/jstr "gemini-3.8-flash")) (pair "effort" (j/jstr "low"))
                                       (pair "timeout" (j/jint 300)) (pair "queue_timeout" (j/jint 1200)) (pair "agent" (j/jnull))
                                       (pair "add_dirs" (j/jnull)) (pair "workspace" (j/jstr cx.workspace)) (pair "system_prompt" (j/jnull))
                                       (pair "no_tools" (j/jbool false))))
@@ -754,11 +739,8 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                      (cond ((not (stringEmpty? role)) role) ((not (stringEmpty? intent)) intent) (else "coder"))
                                      (cond ((not (stringEmpty? role)) (str role ":" lens)) ((not (stringEmpty? intent)) (str intent ":" lens)) (else lens))))
                         (explicitModel (if (pt/pyTruthy prepared) (strOr (getOr prepared "model" (j/jstr "")) "") ""))
-                        (profileModel (and (= path "/chat/completions") (not (stringEmpty? explicitModel)) (match world.table ((err _) false) ((ok t) (and (not (mapHas? t.models explicitModel)) (mapHas? t.profiles explicitModel))))))
-                        (routed (and (= path "/chat/completions") (or (or (stringEmpty? explicitModel) (or (= explicitModel "default") (= explicitModel "profile"))) profileModel)))
-                        ; (:m :ref GW-MODEL-AS-PROFILE :do "a model that is no registered model or alias id but is a profile id routes as model default under that profile, so a client that cannot set headers picks a profile by model name; an explicit X-ASL-Profile header still wins and a real model or alias of the same name still alias-routes")
-                        (req2 (if (and profileModel (stringEmpty? (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Profile") "")))) (with req :headers (cons (pair "X-ASL-Profile" explicitModel) req.headers)) req))
-                        (cx (Ctx :req req2 :world world :path path :asn (wantsAsn? hs)
+                        (routed (and (= path "/chat/completions") (or (stringEmpty? explicitModel) (or (= explicitModel "default") (= explicitModel "profile")))))
+                        (cx (Ctx :req req :world world :path path :asn (wantsAsn? hs)
                                  :sanitize (listContains? (list "true" "1") (u/pyLower (optionOr (u/headerGet hs "X-Sanitize-ASN") "")))
                                  :intent intent :role role :workspace ws :explicitModel explicitModel :profileRouted routed
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
@@ -1134,19 +1116,8 @@ fn anthropicBody body: j/Json target: String -> j/Json
         (stopV (getOr body "stop" (j/jnull)))
         (b4 (match stopV ((j/jnull) b3) (_ (pt/jset b3 "stop_sequences" (jsonStopSequencesOf stopV)))))
         (toolsV (getOr body "tools" (j/jnull)))
-        (b5 (match toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))
-        (rf (getOr body "response_format" (j/jnull)))
-        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))
-        (b6 (if (= rfType "json_schema")
-              (let [(js (getOr rf "json_schema" (j/jobj (list))))
-                    (name (let [(n (strOr (getOr js "name" (j/jstr "")) ""))] (if (stringEmpty? n) "output" n)))
-                    (schema (getOr js "schema" (j/jobj (list))))
-                    (tool (j/jobj (list (pair "name" (j/jstr name)) (pair "input_schema" schema))))
-                    (existing (match (getOr b5 "tools" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
-                (pt/jset (pt/jset b5 "tools" (j/jarr (listAppend existing (list tool))))
-                         "tool_choice" (j/jobj (list (pair "type" (j/jstr "tool")) (pair "name" (j/jstr name))))))
-              b5))]
-    b6)
+        (b5 (match toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))]
+    b5)
 
 fn geminiFunctionDeclarationOf t: j/Json -> j/Json
   (let [(fn_ (getOr t "function" (j/jobj (list))))]
@@ -1234,35 +1205,8 @@ fn geminiGenerationConfig body: j/Json -> j/Json
         (tempV (getOr body "temperature" (j/jnull)))
         (c2 (match tempV ((j/jnull) c1) (_ (pt/jset c1 "temperature" tempV))))
         (stopV (getOr body "stop" (j/jnull)))
-        (c3 (match stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))
-        (rf (getOr body "response_format" (j/jnull)))
-        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))
-        (c4 (cond
-              ((= rfType "json_object") (pt/jset c3 "responseMimeType" (j/jstr "application/json")))
-              ((= rfType "json_schema")
-               (let [(js (getOr rf "json_schema" (j/jobj (list))))
-                     (schema (getOr js "schema" (j/jobj (list))))]
-                 (pt/jset (pt/jset c3 "responseMimeType" (j/jstr "application/json")) "responseSchema" schema)))
-              (else c3)))]
-    c4)
-
-; (:m :tags (structured-output) :do "the response_format cases a provider cannot honor: Anthropic has no json_object mode (json_schema becomes a forced tool), Gemini honors both, and any other type is named; none means the format is absent, text, or supported")
-fn structuredOutputError body: j/Json provider: String -> (Option String)
-  (let [(rf (getOr body "response_format" (j/jnull)))
-        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))]
-    (cond
-      ((or (stringEmpty? rfType) (= rfType "text")) none)
-      ((= provider "anthropic")
-       (cond
-         ((= rfType "json_schema") none)
-         ((= rfType "json_object") (some "ERR_STRUCTURED_UNSUPPORTED: anthropic json_object"))
-         (else (some (str "ERR_STRUCTURED_UNSUPPORTED: anthropic " rfType)))))
-      ((= provider "gemini")
-       (cond
-         ((= rfType "json_schema") none)
-         ((= rfType "json_object") none)
-         (else (some (str "ERR_STRUCTURED_UNSUPPORTED: gemini " rfType)))))
-      (else none)))
+        (c3 (match stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))]
+    c3)
 
 fn geminiBody body: j/Json target: String -> j/Json
   (let [(msgs (match (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
@@ -1484,17 +1428,14 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
         (a (pairSecond prepared))
         (l1 (with l :body body))
         (prov a.upstream.provider)
-        (soErr (structuredOutputError body a.api))
-        (overBudget (match soErr ((some why) (some why)) ((none) (overContextBudget a body l.ctxNeed))))]
+        (overBudget (overContextBudget a body l.ctxNeed))]
     (if (some? overBudget)
       (let [(why (optionOr overBudget ""))]
         ; (:m :ref CTX-ROUTE :do "a context skip is not a breaker skip: it counts in ctxFails, never in skipped, so a chain no member of which fits ends in contextTooLarge rather than a circuit-breaker cooldown reply")
-        (if (some? soErr)
-          (sendError cx l.head 400 why true)
-          (tellAll (list (effLog (str "[Gateway Context] skip " a.alias ": " why "\n")) (usageNote prov a.alias "context budget"))
-            (fn [] -> ChatStep
-              (loopStep cx (with l1 :idx (+ l1.idx 1) :lastErr (some why) :retryAfterSec 0
-                                 :ctxFails (+ l1.ctxFails 1) :ctxEst (max l1.ctxEst (promptEstimate body))))))))
+        (tellAll (list (effLog (str "[Gateway Context] skip " a.alias ": " why "\n")) (usageNote prov a.alias "context budget"))
+          (fn [] -> ChatStep
+            (loopStep cx (with l1 :idx (+ l1.idx 1) :lastErr (some why) :retryAfterSec 0
+                               :ctxFails (+ l1.ctxFails 1) :ctxEst (max l1.ctxEst (promptEstimate body)))))))
     (withBreakerPools (list a.providerPool a.pool)
       (fn [(left Float64) (downPool String)] -> ChatStep
         (if (!= left 0.0)
@@ -1513,7 +1454,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                                      :lastErr (some why)
                                      :skipped l1.skipped :emptyRetries l1.emptyRetries
                                      :telBound l1.telBound :head l1.head :retryAfterSec 0 :ctxNeed l1.ctxNeed :ctxFails l1.ctxFails :ctxEst l1.ctxEst)))))
-            ((none) (match (structuredOutputError body a.api) ((some e) (sendError cx l.head 400 e true)) ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))))
+            ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))
 
 ; (:m :ref GW-CONTEXT-BUDGET :do "an entry whose :contextBudget (tokens) is below the prompt estimate (a quarter of the serialized messages, the gateway's usual chars-per-token guess) is skipped for the next loop member instead of being sent a request its window cannot hold; some carries the reason text")
 ; (:m :ref CTX-ROUTE :do "the gateway's prompt token estimate: a quarter of the serialized messages")
@@ -1681,7 +1622,7 @@ fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools:
         (sysJ (if (stringEmpty? system) (j/jnull) (j/jstr system)))
         (plan (cond
                 ((= prov "agy-cli")
-                 (let [(sub (cond ((stringStartsWith? m "agy/") (u/slice m 4 (stringLength m))) ((or (= m "agy") (= m "antigravity")) (agyConfigModel cx)) (else m)))]
+                 (let [(sub (cond ((stringStartsWith? m "agy/") (u/slice m 4 (stringLength m))) ((or (= m "agy") (= m "antigravity")) "gemini-3.8-flash") (else m)))]
                    (pair (pair "agy" (str "agy:" sub))
                          (cliArgs agent (getOr bodyObj "addDirs" (j/jnull)) prompt sub effort execT queueT ws system noTools))))
                 ((= prov "codex-cli")
@@ -1814,26 +1755,21 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
          (httpAttempt cx l a)))
       ((none) (httpAttempt cx l a))))
 
-; (:m :ref TLE-2-PROVIDER-WAIT :do "the attempt's silence limits: :firstByteSec and :idleSec as resolved for the row (model over provider). A row sent as a stream takes defaultStreamFirstByteSec and defaultStreamIdleSec where none is set; a row not sent as a stream has no idle limit and the first-byte limit it names, else defaultNonStreamFirstByteSec (STALL-FIRST-BYTE), since its first byte is its whole answer; a row with no v2 config takes the same default")
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the attempt's silence limits: :firstByteSec and :idleSec as resolved for the row (model over provider). A row sent as a stream takes defaultStreamFirstByteSec and defaultStreamIdleSec where none is set; a row not sent as a stream has no idle limit and a first-byte limit only when one is configured, since its first byte is its whole answer")
 fn httpDeadlines a: Attempt -> u/CallDeadlines
-  (rowDeadlines a.v2 a.api)
-
-; (:m :ref STALL-FIRST-BYTE :do "the limits of a row by its config and wire api; a row with no v2 config is not a stream and takes the non-stream default")
-fn rowDeadlines v2: (Option c/GatewayEntry) api: String -> u/CallDeadlines
-  (match v2
-    ((none) (u/CallDeadlines :firstByteSec (c/defaultNonStreamFirstByteSec) :idleSec 0.0))
+  (match a.v2
+    ((none) (u/noCallDeadlines))
     ((some e)
-      (if (and (rowStream v2) (= api "chat"))
+      (if (and (rowStream a.v2) (= a.api "chat"))
         (u/CallDeadlines :firstByteSec (if (> e.firstByteSec 0.0) e.firstByteSec (c/defaultStreamFirstByteSec))
                          :idleSec (if (> e.idleSec 0.0) e.idleSec (c/defaultStreamIdleSec)))
-        (u/CallDeadlines :firstByteSec (if (> e.firstByteSec 0.0) e.firstByteSec (c/defaultNonStreamFirstByteSec)) :idleSec 0.0))))
+        (u/CallDeadlines :firstByteSec e.firstByteSec :idleSec 0.0))))
 
 ; (:m :ref TLE-2-PROVIDER-WAIT :do "the ledger outcome of an attempt the reactor cut for silence, empty for any other failure text")
 fn deadlineOutcome text: String -> String
   (cond
     ((stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout")
     ((stringContains? text (u/idleDeadlineText)) "idleTimeout")
-    ((stringContains? text (u/stallDeadlinePrefix)) "stall")
     (else ""))
 
 fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
@@ -1939,17 +1875,9 @@ fn retryTransport cx: Ctx l: Loop a: Attempt timeout: Bool text: String policy: 
     (str "retry " (if (not (stringEmpty? (deadlineOutcome text))) (deadlineOutcome text) (if timeout "timeout" "transport")))
     (fn [] -> ChatStep (raisedFinal cx l a timeout text)))
 
-; (:m :ref STALL-FIRST-BYTE :do "a first-byte cut of a row not sent as a stream is a stall: its text names the wait and the provider; a stream row keeps firstByteTimeout whatever its wire api")
-fn stallText v2: (Option c/GatewayEntry) api: String provider: String text: String -> String
-  (if (and (stringContains? text (u/firstByteDeadlineText)) (not (rowStream v2)))
-    (stringReplace text (u/firstByteDeadlineText) (u/stallDeadlineText provider (optionOr (float64ToInt64 (+ (rowDeadlines v2 api).firstByteSec 0.5)) 0)))
-    text)
-
-; (:m :ref STALL-FIRST-BYTE :do "a stall is never retried on the same attempt: the model that sent no byte for its whole first-byte limit goes to the next chain member at once")
-fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text0: String -> ChatStep
-  (let [(text (stallText a.v2 a.api a.upstream.provider text0))
-        (policy (retryPolicyFor cx a))]
-    (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableRaised? timeout text) (not (stringContains? text (u/stallDeadlinePrefix))))
+fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
+  (let [(policy (retryPolicyFor cx a))]
+    (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableRaised? timeout text))
       (retryTransport cx l a timeout text policy)
       (raisedFinal cx l a timeout text)))
 
@@ -2338,19 +2266,11 @@ fn geminiToChat body: String -> (Option String)
              (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
          (some (pt/jsonDumps chat -1))))))
 
-; (:m :ref GW-LENGTH-USAGE :do "the emptyLength note carries the reply's own usage so the ledger counts the output the cap cut off; when the reply counted prompt tokens but no completion tokens, :out is estimated as the row's maxTokens and the usage object says usageEstimated true")
-fn lengthUsage a: Attempt resp: j/Json -> j/Json
-  (let [(use (getOr resp "usage" (j/jnull)))
-        (cap (match a.v2 ((some e) (optionOr e.params.maxTokens 0)) ((none) 0)))]
-    (if (and (= (usageInt use "completion_tokens") 0) (> cap 0))
-      (pt/jset (pt/jset (if (isObj? use) use (j/jobj (list))) "completion_tokens" (j/jint cap)) "usageEstimated" (j/jbool true))
-      use))
-
 ; (:m :ref GW-SYN-EMPTY-CONTENT :do "an empty reply whose finish_reason is length spent its max_tokens before any content (a reasoning model thinking past the cap): it is its own outcome emptyLength with a message naming the cap, never the blind same-model retry an empty reply gets; a cascade moves to the next member, a single member answers 502 ERR_EMPTY_LENGTH")
 fn lengthStopped cx: Ctx l: Loop a: Attempt p: Projection -> ChatStep
   (let [(chars (stringLength (optionOr (reasoningFallbackText (firstMessage p.resp)) "")))
         (why (str "ERR_EMPTY_LENGTH: model " a.model " stopped at its max_tokens (finish_reason length) after " (stringFromInt64 chars) " reasoning chars and no content; raise :maxTokens or lower :effort on its row"))]
-    (tell (effUsageNote a.upstream.provider a.alias "emptyLength" (lengthUsage a p.resp))
+    (tell (usageNote a.upstream.provider a.alias "emptyLength")
       (fn [] -> ChatStep
         (if (> cx.cascadeLen 1)
           (tellAll (list (effUsageFallback a.upstream.provider a.alias) (effLog (str "[Gateway Cascade] " why ". Cascading to next...\n")))

@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build setup! toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! bucketsFor! bucketsValue defaultBuckets storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
   (:f root String)
@@ -12,11 +12,7 @@
   (:f owner String)
   (:f deadlineNs Int64)
   (:f maxDesc Int64)
-  (:f links (List String) :default (list))
-  (:f objs String :default "")
-  (:f buckets Int64 :default 128)
-  (:f upstream String :default "")
-  (:f take (List String) :default (list)))
+  (:f links (List String) :default (list)))
 
 fn seedField row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -94,53 +90,13 @@ fn ! firstLine! b: Build argv: (List String) -> (Result String String)
   (let [(d (child! b argv))]
     (if (passed? d) (ok (stringTrim (optionOr (listHead (stringLines d.out)) ""))) (err (failure (stringJoin argv " ") d))))
 
-; (:m :ref TRAIN-SUITES-COLD-CLI :do "a private native CLI cache may name a read-only upstream store in CACHE/upstream.asn, (:upstream :dir \"/abs\" :take (seed rt asl1 cli)): a test's scratch cache took 13 min on the mac and 26 on node2 to lower seed, runtime, asl1 and cli cold although the run's own store held every entry under the same content keys")
-fn upstreamFile cacheDir: String -> String
-  (str cacheDir "/upstream.asn")
-
-fn unquote word: String -> String
-  (stringTrim (stringReplace word "\"" ""))
-
-fn upstreamOf text: String -> (Pair String (List String))
-  (let [(items (rd/sexprToList (rd/parseSexpr text)))]
-    (if (!= (optionOr (match (listHead items) ((some h) (some (rd/sexprHead h))) ((none) (none))) "") ":upstream")
-      (pair "" (list))
-      (pair (match (valueAfter items ":dir") ((some v) (if (rd/isAtom? v) (unquote (rd/sexprHead v)) "")) ((none) ""))
-            (match (valueAfter items ":take") ((some v) (map (fn [(s rd/SExpr)] -> String (rd/sexprHead s)) (filter rd/isAtom? (rd/sexprToList v)))) ((none) (list))))))
-
-fn ! withUpstream b: Build cacheDir: String -> Build
-  (let [(row (upstreamOf (resultOr (fileReadString (upstreamFile cacheDir)) "")))
-        (dir (pairFirst row))]
-    (if (or (not (stringStartsWith? dir "/")) (= dir cacheDir)) b (with (with b :upstream dir) :take (pairSecond row))))
-
-fn entryKind name: String -> String
-  (optionOr (listHead (stringSplit name "-")) "")
-
-; (:m :ref TRAIN-SUITES-COLD-CLI :do "an entry this cache lacks, of a taken kind, whose needed files all exist upstream is copied in by cp -R into this build's tmp, its needed files checked again in the copy (an upstream sweep may remove them mid-copy), and renamed into place: upstream is only read, never leased or touched; a failed copy leaves nothing and the caller builds as before")
-fn ! adopt! b: Build dir: String needs: (List String) -> Bool
-  (let [(name (sys/baseName dir))
-        (from (str b.upstream "/" name))
-        (part (str b.tmp "/adopt." name))]
-    (cond
-      ((stringEmpty? b.upstream) false)
-      ((fileExists? dir) false)
-      ((not (listContains? b.take (entryKind name))) false)
-      ((not (listAll? (fn [(n String)] -> Bool (fileExists? (str from "/" n))) needs)) false)
-      (else (let [(d (child! b (list "/bin/cp" "-R" from part)))]
-              (if (and (passed? d) (and (listAll? (fn [(n String)] -> Bool (fileExists? (str part "/" n))) needs) (ok? (pathRename part dir))))
-                (say! (str "(:adopt :entry " name " :from upstream)"))
-                (do (child! b (list "/bin/rm" "-rf" part)) false))))))
-
 fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (buckets (bucketsFor! root))
-        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir)) :buckets (resultOr buckets (defaultBuckets))
-                      :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)) cacheDir))]
-    (match buckets
-     ((err e) (err e))
-     ((ok _) (cond
-      ((not (sys/isFile? lib)) (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)"))
-      (else (match (firstLine! start (list (clang!) "-print-target-triple"))
+        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner
+                      :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)))]
+    (if (not (sys/isFile? lib))
+      (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
+      (match (firstLine! start (list (clang!) "-print-target-triple"))
         ((err e) (err e))
         ((ok machine)
           (let [(triple (seedTriple machine))]
@@ -154,7 +110,7 @@ fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build S
                       ((err e) (err e))
                         ((ok libSha) (match (dirCreate start.tmp)
                         ((err e) (err (str "cannot create " start.tmp ": " e)))
-                        ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row))))))))))))))))))
+                        ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row)))))))))))))))
 
 fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List String) String)
   (match (listHead parts)
@@ -252,13 +208,6 @@ fn inlineFor flags: (List String) -> Int64
   (if (listContains? flags "-O1") 0 (ir/inlineLimit))
 
 fn ! linkParts! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
-  (if (stringEmpty? b.objs) (linkPartsPlain! b clang flags ll out n)
-    (match (linkCached! b clang flags ll out (max n 1))
-      ((ok r) (ok (pair (listLength r.objects) "")))
-      ((err e) (if (stringStartsWith? e "cannot split ") (do (say! (str "asl: native build: " e "; linking by size")) (linkPartsPlain! b clang flags ll out n)) (err e)))))
-
-; (:m :ref BUILD-CACHE :do "the parts link without an object store, as before it")
-fn ! linkPartsPlain! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
   (let [(whole (fn [(why String)] -> (Result (Pair Int64 String) String)
                  (match (withSlots! b 1 (fn [(slots Int64)] -> (Result String String) (linkObjs! b clang flags (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (sys/baseName ll) out)))
                    ((err e) (err e))
@@ -362,18 +311,6 @@ fn ageValue word: String -> (Option Int64)
 fn ! storeMinAgeNs! dir: String -> Int64
   (optionOr (match (configured! dir ":storeMinAge") ((some w) (ageValue w)) ((none) (none))) 3600000000000)
 
-; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the soft :storeCap sweep never runs while a build marker is live and spares everything used within :storeMinAge, so a long train grew one node2 store to 17G in 5h; :storeHardCap (8G adopted, 2026-11-23) bounds it: over it the oldest entries go even then, sparing only a leased entry or one used within :storeHardMinAge (10m adopted)")
-fn defaultStoreHardCap -> Int64
-  8589934592
-
-fn ! storeHardCapFor! dir: String -> Int64
-  (match (configured! dir ":storeHardCap")
-    ((some word) (optionOr (capValue word) (defaultStoreHardCap)))
-    ((none) (defaultStoreHardCap)))
-
-fn ! storeHardMinAgeNs! dir: String -> Int64
-  (optionOr (match (configured! dir ":storeHardMinAge") ((some w) (ageValue w)) ((none) (none))) 600000000000)
-
 ; (:m :ref NT-CLAIM-WAIT-CFG :do "how long a nativeTest process waits for another process compiling the same module or prelude key is the :native :claimWaitS row of the nearest .asl.config.asn or ~/.asl/config.asn, whole seconds 1 to 86400; 900 when absent, unreadable or out of range")
 fn defaultClaimWaitS -> Int64
   900
@@ -409,21 +346,6 @@ fn ! suiteWorkersFor! dir: String -> Int64
   (match (configured! dir ":suiteWorkers")
     ((some word) (optionOr (suiteWorkersValue word) (defaultSuiteWorkers)))
     ((none) (defaultSuiteWorkers)))
-
-; (:m :ref CLI-MODULE-OBJECTS :do "the CLI IR splits into this many module buckets; at 16 (about 9 MB of IR each) an edit of irSplit.asl recompiled 6.5 MB and one of system.asl baseName, a small body copied into its callers, 60 MB of 157; at 128 it is 0.8 MB and 27 MB of 170, near one part per module (0.8 and 25 MB of 180), 2026-11-25 on 66c698f7f. :native :buckets N in the nearest config, 0 meaning one part per module")
-fn defaultBuckets -> Int64
-  128
-
-; (:m :ref CLI-BUCKETS-LOWS :do "a row that is not an integer in 0..4096 is a config error the build reports, like :parts and :level, instead of silently building with the default")
-fn bucketsValue word: String -> (Result Int64 String)
-  (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
-    ((some n) (if (and (>= n 0) (<= n 4096)) (ok n) (err (str "ERR_CONFIG: :native :buckets must be 0..4096, got " word))))
-    ((none) (err (str "ERR_CONFIG: :native :buckets must be an integer, got " word))))
-
-fn ! bucketsFor! dir: String -> (Result Int64 String)
-  (match (configured! dir ":buckets")
-    ((some word) (bucketsValue word))
-    ((none) (ok (defaultBuckets))))
 
 fn ! storeCapFor! dir: String -> Int64
   (match (configured! dir ":storeCap")
@@ -499,8 +421,8 @@ fn ! emitObjs! b: Build asl1: String tmp: String specs: (List (Pair (Pair String
             ((err e) (err e))
             ((ok rest) (ok (cons obj rest)))))))))
 
-fn ! asanRuntimeKey! b: Build packagesDir: String asl1: String -> (Result String String)
-  (variantKey! b packagesDir asl1 "asan")
+fn ! asanRuntimeKey! b: Build packagesDir: String -> (Result String String)
+  (variantKey! b packagesDir "asan")
 
 ; (:m :ref VARIANTKEY-CLOSURE-20261025 :do "the variant runtime key hashes the source closure of its three root modules (the same resolver asl1Cache walks), not only the root files: an edit to gcAsl.asl or rc.asl, imported by gcRoute.asl, kept a stale libaslrt-notrace.a under .asl/cache/rcRuntime")
 fn distinctSorted xs: (List String) -> (List String)
@@ -532,17 +454,13 @@ fn ! allClosureFiles! files: (List String) root: String acc: (List String) -> (R
       ((err e) (err e))
       ((ok found) (allClosureFiles! (optionOr (listTail files) (list)) root (listAppend acc found))))))
 
-; (:m :ref SUITE-BIMODAL-COLD :do "the key holds the sha of the asl1 binary that lowers the runtime: a worktree with a codegen change outside the gcRoute/rtAbi/rtFloor closure must not adopt a runtime another compiler lowered, now that entries cross worktrees")
-fn ! variantKey! b: Build packagesDir: String asl1: String variant: String -> (Result String String)
+fn ! variantKey! b: Build packagesDir: String variant: String -> (Result String String)
   (let [(src (str packagesDir "/asl-target-llvm/src"))]
-    (match (shaOf asl1)
+    (match (allClosureFiles! (list (str src "/gcRoute.asl") (str src "/rtAbi.asl") (str src "/rtFloor.asl")) b.root (list))
       ((err e) (err e))
-      ((ok compiler)
-        (match (allClosureFiles! (list (str src "/gcRoute.asl") (str src "/rtAbi.asl") (str src "/rtFloor.asl")) b.root (list))
-          ((err e) (err e))
-          ((ok files) (match (hashFiles! files "")
-            ((err e) (err e))
-            ((ok hashes) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" compiler "\n" hashes)))))))))))
+      ((ok files) (match (hashFiles! files "")
+        ((err e) (err e))
+        ((ok hashes) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" hashes)))))))))
 
 fn ! asanRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
   (variantRuntime! b asl1 packagesDir "asan" (list) (list "asan"))
@@ -576,30 +494,11 @@ fn ! packVariant! b: Build asl1: String tmp: String specs: (List (Pair (Pair Str
           ((err e) (err (str "cannot install " lib ": " e)))
           ((ok _) (ok lib)))))))))
 
-; (:m :ref SUITE-BIMODAL-COLD :do "the main checkout a linked worktree belongs to, from the text of the worktree's .git file (gitdir: MAIN/.git/worktrees/NAME); empty for a main checkout, a bare name or anything else")
-fn mainRootOfGit text: String -> String
-  (let [(line (stringTrim (optionOr (listHead (stringLines text)) "")))
-        (parts (stringSplit (stringTrim (optionOr (stringSlice line 7 (stringLength line)) "")) "/.git/worktrees/"))]
-    (if (and (stringStartsWith? line "gitdir:") (and (= (listLength parts) 2) (stringStartsWith? (optionOr (listHead parts) "") "/"))) (optionOr (listHead parts) "") ""))
-
-; (:m :ref SUITE-BIMODAL-COLD :do "a worktree's own variant-runtime cache (.asl/cache/rcRuntime) starts empty, so every suite that links an asan, notrace or counted runtime lowered and compiled all three cold: recordUnboxTest 272 s against 32 s warm on the mac, 15 s to 13 min on node2. The entries are content-keyed, so the cache names the main checkout's rcRuntime as read-only upstream (kind rt) unless it already has an upstream.asn; no main cache, no linked worktree or a failed write leaves the build as before")
-fn ! seedRcUpstream! b: Build -> Bool
-  (let [(main (mainRootOfGit (resultOr (fileReadString (str b.root "/.git")) "")))
-        (up (str main "/.asl/cache/rcRuntime"))]
-    (if (and (stringEndsWith? b.cache "/rcRuntime") (and (not (stringEmpty? main)) (and (not (= up b.cache)) (and (not (fileExists? (upstreamFile b.cache))) (fileExists? up)))))
-      (and (ok? (dirCreate b.cache)) (ok? (fileWrite (upstreamFile b.cache) (str "(:upstream :dir \"" up "\" :take (rt))\n"))))
-      false))
-
-fn ! variantRuntime! b0: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
-  (let [(_ (seedRcUpstream! b0))
-        (b (withUpstream b0 b0.cache))]
-    (variantRuntime2! b asl1 packagesDir variant gcExtra abiExtra))
-
-fn ! variantRuntime2! b: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
-  (match (variantKey! b packagesDir asl1 variant)
+fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
+  (match (variantKey! b packagesDir variant)
     ((err e) (err e))
     ((ok key)
-      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (adopt! b dir (list (str "libaslrt-" variant ".a")))) (_ (useEntry! b dir))]
+      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (useEntry! b dir))]
         (if (sys/isFile? lib) (ok lib)
           (let [(tmp (str b.tmp "/rt-" variant "." (stringFromInt64 (procSelf))))
                 (specs (list (pair (pair (str packagesDir "/asl-target-llvm/src/gcRoute.asl") "gcAsl") gcExtra)
@@ -619,15 +518,11 @@ fn ! useEntry! b: Build dir: String -> Unit
       (fileUtime dir (nowNs))
       ())
 
-fn seedDirOf b: Build row: String -> String
-  (str b.cache "/seed-" (optionOr (seedField row "llSha256") "") "-" (optionOr (stringSlice b.base 0 16) b.base))
-
 fn ! seed! b: Build row: String -> (Result String String)
   (let [(file (optionOr (seedField row "file") ""))
         (llSha (optionOr (seedField row "llSha256") ""))
-        (dir (seedDirOf b row))
+        (dir (str b.cache "/seed-" llSha "-" (optionOr (stringSlice b.base 0 16) b.base)))
         (ll (str b.tmp "/seed.ll"))
-        (_ (adopt! b dir (list "bin")))
         (_ (useEntry! b dir))]
     (cond
       ((or (stringEmpty? file) (!= (stringLength llSha) 64)) (err "the seed row lacks :file or :llSha256"))
@@ -719,20 +614,12 @@ fn ! compile! b: Build name: String compiler: String tag: String entry: String d
       (else (err (failure (str compiler " build " entry) built)))))
 
 ; (:m :ref NATIVECLI-STICKY-FAIL-20261018 :do "a .failed marker written before this fix (or by another process) can itself carry a transient-shaped message; a marker whose own stored text is transient is read as absent, not replayed, and is removed so it is not re-parsed on every later call")
-fn ! stageKey! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result (Pair String (List String)) String)
+fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
   (match (depsOf! b compiler entry extra)
     ((err e) (err e))
     ((ok deps) (match (keyOf! b b.root (str tag "+notrace") entry deps)
       ((err e) (err e))
-      ((ok key) (ok (pair key deps))))))
-
-fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
-  (match (stageKey! b name compiler tag entry extra)
-    ((err e) (err e))
-    ((ok found) (let [(key (pairFirst found))
-                      (deps (pairSecond found))]
-      (let [(dir (str b.cache "/" name "-" key))
-                       (_ (adopt! b dir (list "bin" "deps")))
+      ((ok key) (let [(dir (str b.cache "/" name "-" key))
                        (_ (useEntry! b dir))
                        (marker (str dir ".failed"))
                        (markerPresent (sys/isFile? marker))
@@ -743,34 +630,7 @@ fn ! stage! b: Build name: String compiler: String tag: String entry: String ext
                     ((sys/executable? (str dir "/bin")) (ok dir))
                     ((and markerPresent (not stuckTransient)) (err (str "an earlier build of " entry " with key " key " failed: " markerText)))
                     (else (do (say! (str "asl: native build: " entry " with " (sys/baseName (sys/parentOf compiler))))
-                              (compile! b name compiler (str tag "+notrace") entry dir deps key))))))))
-
-; (:m :ref CLI-STALE-BY-CONTENT :do "lookup! is the lock-free half of a refresh: the keys build! would compute (seed dir, asl1 and cli stage keys from the deps the stage compilers list) without building, leasing or touching; a complete cli-KEY (bin and deps, installed by one rename) is the hit, and the name of the deepest entry it reached (cli-KEY, asl1-KEY or seed-...) names the build lock, so builds of different keys never wait on each other and two roots with the same key take the same lock; anything it cannot compute is a miss with an empty name, the shared lock")
-fn entryComplete? dir: String -> Bool
-  (and (sys/executable? (str dir "/bin")) (sys/isFile? (str dir "/deps")))
-
-fn ! lookupWith! b: Build row: String -> (Pair String String)
-  (let [(seedDir (seedDirOf b row))]
-    (if (not (sys/executable? (str seedDir "/bin")))
-      (pair "" (sys/baseName seedDir))
-      (match (stageKey! b "asl1" (str seedDir "/bin") (sys/baseName seedDir) "asl/packages/asl-compiler/src/asl1.asl" (list))
-        ((err _) (pair "" (sys/baseName seedDir)))
-        ((ok k1) (let [(dir1 (str b.cache "/asl1-" (pairFirst k1)))]
-          (if (not (entryComplete? dir1))
-            (pair "" (sys/baseName dir1))
-            (match (stageKey! b "cli" (str dir1 "/bin") (sys/baseName dir1) "asl/packages/asl-cli/src/native.asl"
-                     (listAppend (stringLines (stringTrim (resultOr (fileReadString (str dir1 "/deps")) ""))) (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
-              ((err _) (pair "" (sys/baseName dir1)))
-              ((ok k2) (let [(dir2 (str b.cache "/cli-" (pairFirst k2)))]
-                (pair (if (entryComplete? dir2) dir2 "") (sys/baseName dir2)))))))))))
-
-fn ! lookup! root: String cacheDir: String -> (Pair String String)
-  (match (setup! root cacheDir "")
-    ((err _) (pair "" ""))
-    ((ok ready) (let [(b (pairFirst ready))
-                      (found (lookupWith! b (pairSecond ready)))
-                      (_ (pathRemove b.tmp))]
-                  found)))
+                              (compile! b name compiler (str tag "+notrace") entry dir deps key)))))))))
 
 fn ! writeHead! b: Build dir: String -> (Result String String)
   (let [(head (nc/headPath b.cache b.root))
@@ -816,8 +676,7 @@ fn ! buildCode! root: String cacheDir: String owner: String -> Int64
         (_ (say! (str "asl: native build pid " pid " started for " root)))
         (code (match (build! root cacheDir owner)
                 ((ok dir) (do (say! (str "asl: native build: " dir))
-                               (if (sweepOn? root) (do (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries"))
-                                                     (say! (str "asl: native build swept " (stringFromInt64 (sweepObjects! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " objects"))) true)
+                               (if (sweepOn? root) (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries")) true)
                                0))
                 ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
         (_ (pathRemove (str cacheDir "/tmp." pid)))
@@ -836,9 +695,7 @@ fn ! main args: (List String) -> (Result Int64 String)
         (pid (stringFromInt64 (procSelf)))]
     (cond
       ((= root "guard") (ok (nr/guard! (optionOr (listGet args 1) ""))))
-      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (lookup! r c)) (fn [r c] (coldCode! r c)))))
-      ((= root "key") (let [(found (lookup! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!))))]
-                        (do (println (str "(:nativeKey :hit \"" (pairFirst found) "\" :lock \"" (pairSecond found) "\")")) (ok 0))))
+      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (coldCode! r c)))))
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
       ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
       ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))
@@ -847,166 +704,3 @@ fn ! main args: (List String) -> (Result Int64 String)
               (_ (releaseLock! cacheDir owner))]
           (do (say! (str "asl: native build pid " pid " exit " (stringFromInt64 code)))
               (ok code))))))
-
-; (:m :ref BUILD-CACHE :do "the content-addressed object store: a part's object is keyed by the digest of the format word, clang's version line and target triple, the clang flags and the part's IR text, so the same part under the same clang is compiled once for every worktree, version and build that reaches it; the store is the obj directory of the native CLI cache (shared across worktrees), or the :native :objStore row of the nearest config for bin/asl build, absent meaning no object cache")
-(schema ObjLink
-  (:f objects (List String))
-  (:f compiled (List String))
-  (:f reused (List String))
-  (:f corrupt (List String)))
-
-fn objFormat -> String
-  "obj/1"
-
-; (:m :ref BUILD-CACHE :do "the object cache of CLI builds is on unless :native :objCache is false in the nearest config")
-fn ! objCacheOff? dir: String -> Bool
-  (= (configured! dir ":objCache") (some "false"))
-
-fn objDirOf cache: String -> String
-  (str cache "/obj")
-
-; (:m :ref BUILD-CACHE :do "the object store of asl build is the :native :objStore row, off when absent; a relative row is taken against the directory of the config that holds it (or ~/.asl for the home config), so every cwd and worktree reaches the same store")
-fn ! objStoreFor! dir: String -> String
-  (match (configured! dir ":objStore")
-    ((none) "")
-    ((some w) (let [(p (stringTrim (stringReplace w "\"" "")))]
-                (cond ((stringEmpty? p) "")
-                      ((stringStartsWith? p "/") p)
-                      (else (str (configDirOf! dir ":objStore") "/" p))))))
-
-fn ! configDirOf! dir: String key: String -> String
-  (cond
-    ((fileExists? (str dir "/.asl.config.asn")) (if (some? (nativeKey (resultOr (fileReadString (str dir "/.asl.config.asn")) "") key)) dir (str (optionOr (envGet "HOME") "") "/.asl")))
-    ((or (stringEmpty? dir) (= dir "/")) (str (optionOr (envGet "HOME") "") "/.asl"))
-    (else (configDirOf! (parentDir dir) key)))
-
-fn objKey ident: String flags: (List String) text: String -> String
-  (sh/bytesSha256 (stringToBytes (str (objFormat) "\n" ident "\n" (stringJoin flags " ") "\n" text)))
-
-fn objCompileArgv clang: String flags: (List String) ll: String out: String -> (List String)
-  (listAppend (cons clang flags) (list "-Wno-override-module" "-x" "ir" ll "-c" "-o" out))
-
-; (:m :ref BUILD-CACHE :do "the toolchain identity in every object key: clang version line, target triple, and the SDKROOT and MACOSX_DEPLOYMENT_TARGET a build runs with, since both change the object clang writes; the values only enter the key and are never printed")
-fn ! clangIdent! b: Build clang: String -> String
-  (str (resultOr (firstLine! b (list clang "--version")) clang) " " (resultOr (firstLine! b (list clang "-print-target-triple")) "")
-       " SDKROOT=" (optionOr (envGet "SDKROOT") "") " MACOSX_DEPLOYMENT_TARGET=" (optionOr (envGet "MACOSX_DEPLOYMENT_TARGET") ""))
-
-(schema Keyed (:f name String) (:f key String) (:f text String))
-
-fn kOf p: (Pair Int64 Keyed) -> Keyed
-  (pairSecond p)
-
-fn kName p: (Pair Int64 Keyed) -> String
-  (let [(k (kOf p))] k.name)
-
-fn kKey p: (Pair Int64 Keyed) -> String
-  (let [(k (kOf p))] k.key)
-
-fn kText p: (Pair Int64 Keyed) -> String
-  (let [(k (kOf p))] k.text)
-
-fn ! compileMisses! b: Build clang: String flags: (List String) objs: String misses: (List (Pair Int64 Keyed)) n: Int64 -> (Result (List String) String)
-  (match (collect! (map (fn [(p (Pair Int64 Keyed))] -> (Result String String)
-                          (let [(ll (str b.tmp "/mp" (stringFromInt64 (pairFirst p)) ".ll"))]
-                            (match (fileWrite ll (kText p)) ((err e) (err (str "cannot write " ll ": " e))) ((ok _) (ok ll)))))
-                        misses))
-    ((err e) (err e))
-    ((ok lls) (let [(tmps (map (fn [(p (Pair Int64 Keyed))] -> String (os/objTmpPath objs (kKey p) (procSelf))) misses))
-                    (jobs (map (fn [(q (Pair String String))] -> run/Job (run/job (objCompileArgv clang flags (pairFirst q) (pairSecond q)) b.root (run/childEnv (list)))) (zip lls tmps)))
-                    (done (if (or (listEmpty? jobs) (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b)))) (list)
-                            (withSlots! b (max 1 (min n (listLength jobs))) (fn [(slots Int64)] -> (List run/Done) (run/runPoolLimited jobs slots (ownedLimits b))))))
-                    (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))
-                    (_ (map (fn [(l String)] -> Bool (ok? (pathRemove l))) lls))]
-                (cond
-                  ((!= (listLength done) (listLength jobs)) (do (map (fn [(t String)] -> Bool (ok? (pathRemove t))) tmps) (err (str "clang -c of the module parts did not run: " (if (ownerAlive? b) "deadline" "owner-gone")))))
-                  ((not (listEmpty? bad)) (do (keepPassed! objs misses tmps done)
-                                              (err (match (listHead bad) ((some d) (failure (str "clang -c of part " (match (listGet misses d.idx) ((some p) (kName p)) ((none) "?"))) d)) ((none) "clang -c of a module part failed")))))
-                  (else (collect! (map (fn [(p (Pair (Pair Int64 Keyed) String))] -> (Result String String) (os/installObj! objs (kKey (pairFirst p)) (pairSecond p))) (zip misses tmps))))))))
-
-; (:m :ref BUILD-CACHE :do "when some parts fail to compile, the ones that compiled still land in the store, so the next build after a fix compiles only what failed")
-fn ! keepPassed! objs: String misses: (List (Pair Int64 Keyed)) tmps: (List String) done: (List run/Done) -> Int64
-  (fold (fn [(acc Int64) (d run/Done)] -> Int64
-          (let [(tmp (optionOr (listGet tmps d.idx) ""))]
-            (if (passed? d)
-              (match (listGet misses d.idx) ((some p) (if (ok? (os/installObj! objs (kKey p) tmp)) (+ acc 1) acc)) ((none) acc))
-              (do (pathRemove tmp) acc))))
-        0 done)
-
-fn collectFrom xs: (List (Result String String)) acc: (List String) -> (Result (List String) String)
-  (match (listHead xs)
-    ((none) (ok (listReverse acc)))
-    ((some r) (match r ((err e) (err e)) ((ok s) (collectFrom (optionOr (listTail xs) (list)) (cons s acc))))))
-
-fn ! collect! xs: (List (Result String String)) -> (Result (List String) String)
-  (collectFrom xs (list))
-
-fn receiptLine r: ObjLink -> String
-  (str "(:build :objects " (stringFromInt64 (listLength r.objects)) " :compiled " (stringFromInt64 (listLength r.compiled)) " :reused " (stringFromInt64 (listLength r.reused))
-       " :corrupt " (stringFromInt64 (listLength r.corrupt)) " :parts (" (stringJoin (map (fn [(n String)] -> String (str "\"" n "\"")) (listTake r.compiled 12)) " ") "))")
-
-; (:m :ref BUILD-CACHE :do "misses are compiled largest part first, so with the two tokens of the build pool the biggest bucket never starts last and leaves one token idle")
-; (:m :ref BUILD-CACHE :do "the cached link: split the program's IR into module parts, take every part whose key the store holds verified, compile only the others through the build pool straight into the store, then link the objects in part order (the same IR always links the same objects in the same order). Returns the receipt: objects linked and which parts were compiled, reused or found corrupt")
-fn ! linkCached! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result ObjLink String)
-  (match (fileReadString ll)
-    ((err e) (err (str "cannot read " ll ": " e)))
-    ((ok text) (match (ir/splitBuckets text (inlineFor flags) b.buckets)
-      ((err e) (err (str "cannot split " ll " by module: " e)))
-      ((ok parts) (match (dirCreate b.objs)
-        ((err e) (err (str "cannot create " b.objs ": " e)))
-        ((ok _) (let [(ident (clangIdent! b clang))
-                      (keyed (map (fn [(p ir/Named)] -> Keyed (Keyed :name p.name :key (objKey ident flags p.text) :text p.text)) parts))
-                      (state (map (fn [(k Keyed)] -> Int64 (os/partState! b.objs k.key)) keyed))
-                      (tagged (zip state keyed))
-                      (misses (filter (fn [(p (Pair Int64 (Pair Int64 Keyed)))] -> Bool (> (pairFirst (pairSecond p)) 0)) (enumerate tagged)))
-                      (missKeyed (listSortBy (fn [(p (Pair Int64 Keyed))] -> Int64 (- 0 (stringLength (kText p))))
-                                             (map (fn [(p (Pair Int64 (Pair Int64 Keyed)))] -> (Pair Int64 Keyed) (pair (pairFirst p) (pairSecond (pairSecond p)))) misses)))]
-                  (match (compileMisses! b clang flags b.objs missKeyed n)
-                    ((err e) (err e))
-                    ((ok _) (let [(objects (map (fn [(k Keyed)] -> String (os/objPath b.objs k.key)) keyed))
-                                  (r (ObjLink :objects objects
-                                              :compiled (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) missKeyed)
-                                              :reused (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) (filter (fn [(p (Pair Int64 Keyed))] -> Bool (= (pairFirst p) 0)) tagged))
-                                              :corrupt (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) (filter (fn [(p (Pair Int64 Keyed))] -> Bool (= (pairFirst p) 2)) tagged))))
-                                  (_ (say! (receiptLine r)))]
-                              (match (withSlots! b 1 (fn [(slots Int64)] -> (Result String String) (linkObjs! b clang flags objects (sys/baseName ll) out)))
-                                ((err e) (err e))
-                                ((ok _) (ok r)))))))))))))
-
-fn tmpOwner name: String -> Int64
-  (optionOr (stringToInt64 (optionOr (listLast (stringSplit name ".tmp.")) "")) 0)
-
-; (:m :ref BUILD-CACHE :do "another build is in flight when a lease of a live pid other than self is held, or a live tmp.PID build dir of another pid exists; it may hold any object, so then the sweep removes nothing but tmp files of dead pids")
-fn ! othersBuilding? cache: String self: Int64 -> Bool
-  (or (listAny? (fn [(n String)] -> Bool (let [(pid (optionOr (stringToInt64 (optionOr (listLast (stringSplit n "@")) "")) 0))] (and (!= pid self) (nc/alive? pid))))
-                (resultOr (dirList (str cache "/leases")) (list)))
-      (listAny? (fn [(n String)] -> Bool (let [(pid (if (stringStartsWith? n "tmp.") (optionOr (stringToInt64 (optionOr (stringSlice n 4 (stringLength n)) "")) 0) 0))] (and (!= pid self) (nc/alive? pid))))
-                (resultOr (dirList cache) (list))))
-
-fn metaKey name: String -> String
-  (optionOr (stringSlice name 0 (- (stringLength name) 5)) "")
-
-; (:m :ref BUILD-CACHE :do "the object store is held under capBytes by last use (the meta file's mtime, touched at every hit): oldest first, an entry goes only when it is older than minAgeNs and no other build is in flight; a tmp object whose pid is dead always goes. Returns the count of entries and tmp files removed")
-fn ! sweepObjectsAs! cache: String objs: String capBytes: Int64 minAgeNs: Int64 self: Int64 -> Int64
-  (let [(names (resultOr (dirList objs) (list)))
-        (deadTmp (listLength (filter (fn [(n String)] -> Bool (and (stringContains? n ".tmp.") (and (not (nc/alive? (tmpOwner n))) (ok? (pathRemove (str objs "/" n)))))) names)))]
-    (if (othersBuilding? cache self)
-      deadTmp
-      (let [(now (nowNs))
-            (metas (filter (fn [(n String)] -> Bool (stringEndsWith? n ".meta")) names))
-            (entries (map (fn [(n String)] -> (Pair String (Pair Int64 Int64))
-                            (let [(k (metaKey n))
-                                  (m (os/statOf (os/metaPath objs k)))
-                                  (o (os/statOf (os/objPath objs k)))]
-                              (pair k (pair (pairSecond m) (+ (max 0 (pairFirst m)) (max 0 (pairFirst o)))))))
-                          metas))
-            (total (fold (fn [(acc Int64) (e (Pair String (Pair Int64 Int64)))] -> Int64 (+ acc (pairSecond (pairSecond e)))) 0 entries))
-            (oldestFirst (listSortBy (fn [(e (Pair String (Pair Int64 Int64)))] -> Int64 (pairFirst (pairSecond e))) entries))
-            (swept (fold (fn [(acc (Pair Int64 Int64)) (e (Pair String (Pair Int64 Int64)))] -> (Pair Int64 Int64)
-                           (if (and (> (pairFirst acc) capBytes) (> (- now (pairFirst (pairSecond e))) minAgeNs))
-                             (do (os/dropObj! objs (pairFirst e)) (pair (- (pairFirst acc) (pairSecond (pairSecond e))) (+ (pairSecond acc) 1)))
-                             acc))
-                         (pair total 0) oldestFirst))]
-        (+ deadTmp (pairSecond swept)))))
-
-fn ! sweepObjects! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
-  (sweepObjectsAs! cache (objDirOf cache) capBytes minAgeNs (procSelf))

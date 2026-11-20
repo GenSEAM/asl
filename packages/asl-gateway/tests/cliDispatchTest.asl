@@ -191,10 +191,10 @@ fn testBuildCmdParity! -> Bool
       (assert (listContains? claudeCmd "claude-3-5") "claude cmd has model")
       (assert (listContains? claudeCmd "high") "claude cmd has effort"))
 
-    (let [(agyCmd (cli/agyBuildCmd! "agy" "/tmp/ws" "/tmp/tmpDir" "/tmp/root" 120 (some "opus-medium") (some "low") none (list) "Prompt" false))]
+    (let [(agyCmd (cli/agyBuildCmd! "agy" "/tmp/ws" "/tmp/tmpDir" "/tmp/root" 120 (some "opus-high") (some "low") none (list) "Prompt" false))]
       (assert (= (optionOr (listHead agyCmd) "") "agy") "agy cmd starts with binary")
       (assert (listContains? agyCmd "--output-format") "agy cmd has --output-format")
-      (assert (listContains? agyCmd "claude-opus-5-5-medium") "agy cmd maps opus to claude-opus-5-5-medium")
+      (assert (listContains? agyCmd "claude-opus-4-6-thinking") "agy cmd mapped opus to thinking")
       (assert (listContains? agyCmd "aslGateway") "agy cmd has default agent")
       (assert (listContains? agyCmd "/tmp/ws") "agy cmd has --add-dir ws"))
     true)

@@ -843,7 +843,9 @@ fn effectsLoop s: String n: Int64 i: Int64 acc: (List (Pair String String)) -> (
       ((none) (effectsLoop s n (+ i 1) acc))))
 
 fn ! loadEffects repoRoot: String -> (List (Pair String String))
-  (let [path (pathJoin repoRoot "asl/packages/asl-agent/src/effects.asn")]
+  (let [current (pathJoin repoRoot "asl/packages/asl-agent/src/effects.asn")
+        legacy (pathJoin repoRoot "scripts/agentLoop/effects.asn")
+        path (if (isFile? current) current legacy)]
     (if (not (isFile? path))
       (list)
       (let [text (resultOr (fileReadString path) "")]
@@ -853,7 +855,6 @@ fn ! loadEffects repoRoot: String -> (List (Pair String String))
 fn opShapes -> (List (Pair String String))
   (list (pair "write" "(:step :op \"write\" :file f :content :raw)")
         (pair "edit" "(:step :op \"edit\" :file f :old s :new s)")
-        (pair "replaceDef" "(:step :op \"replaceDef\" :file f :symbol s :content :raw)")
         (pair "read" "(:step :op \"read\" :file f)")
         (pair "query" "(:step :op \"query\" :query s)")
         (pair "outline" "(:step :op \"outline\" :file f)")
@@ -956,7 +957,7 @@ fn dropIds drop: (List String) -> (List String)
     (list) drop)
 
 fn leanOp? op: String -> Bool
-  (listContains? (list "read" "query" "write" "edit" "replaceDef" "check" "test" "outline" "gate" "run" "note" "done" "escalate") op)
+  (listContains? (list "read" "query" "write" "edit" "check" "test" "outline" "gate" "run" "note" "done" "escalate") op)
 
 fn ! buildSystemPrompt repoRoot: String task: String rootDir: String base: String gates: (List String) contextTokens: (Option Int64) plan: Bool -> (Result String String)
   (buildSystemPromptDrop repoRoot task rootDir base gates contextTokens plan (list))
@@ -1001,7 +1002,7 @@ fn ! buildSystemPromptDrop repoRoot: String task: String rootDir: String base: S
 
 ; (:m :ref PAREN-LEON-JOURNAL :do "the receipts of a turn's edit-family ops (write edit txn flush fix discard delete), whole and one per line, for the journal's (:turn N :observation ...) row: ok, repaired and rejected edits stay measurable per model while read and query bodies stay out of the journal")
 fn editReceiptOps -> (List String)
-  (list "write" "edit" "replaceDef" "txn" "flush" "fix" "discard" "delete")
+  (list "write" "edit" "txn" "flush" "fix" "discard" "delete")
 
 fn editReceipt? line: String -> Bool
   (and (stringStartsWith? line "(:receipt ")

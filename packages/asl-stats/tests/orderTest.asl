@@ -15,7 +15,7 @@ fn errHas? r: (Result Float64 String) key: String -> Bool
   (match r ((err e) (stringContains? e key)) ((ok v) false))
 
 fn pseudo n: Int64 md: Int64 -> F64Array
-  (f64ArrayGenerate n (fn [(k Int64)] -> Float64 (int64ToFloat64 (mod (+ (* k 7919) (* (mod (* k k) 104729) 31)) md))))
+  (f64ArrayGenerate n (fn [(k Int64)] -> Float64 (int64ToFloat64 (% (+ (* k 7919) (* (% (* k k) 104729) 31)) md))))
 
 fn ! ascending! a: F64Array i: Int64 -> Bool
   (if (>= (+ i 1) (f64ArrayLen a)) true

@@ -1,2 +1,3 @@
 (:session :id "h8empty" :task "plan EMPTY stub")
 not a row
+(:canon :version "3 fixture")

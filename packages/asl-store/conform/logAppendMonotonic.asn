@@ -1,7 +1,0 @@
-(:script :id logAppendMonotonic :checks 6)
-(:step (:append s1 "a" 10) (:appended 0))
-(:step (:append s1 "b" 11) (:appended 1))
-(:step (:append s1 "c" 12) (:appended 2))
-(:step (:append s2 "x" 13) (:appended 0))
-(:step (:read s1 0 10) (:records ((0 "a" 10) (1 "b" 11) (2 "c" 12)) 3))
-(:step (:append "a b" "x" 1) (:err keyInvalid _))

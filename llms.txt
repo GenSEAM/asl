@@ -4,7 +4,7 @@
 
 AgentSlang is two things.
 
-- ASL, the language: source files (.asl) and data files (.asn) are S-expressions with balanced parentheses. `asl check <file>` checks an .asl file on the stage-0 host and any other file for delimiter balance, `asl test <file>` runs a test suite, and `asl human help` lists the shell commands; the language section below says which engine enforces what.
+- ASL, the language: source files (.asl) and data files (.asn) are S-expressions with balanced parentheses. `asl check <file>` checks an .asl file on the stage-0 host and any other file for delimiter balance, `asl test <file>` runs a test suite, and `asl help` lists the shell commands; the language section below says which engine enforces what.
 - asl, the toolbelt: `asl '<form> <form> ...'` runs file operations on the git repository that holds the working directory; the forms of one call run as one batch.
 
 ## The language

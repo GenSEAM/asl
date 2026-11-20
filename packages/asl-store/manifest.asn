@@ -1,7 +1,0 @@
-(:package asl-store
- :version "0.1.0"
- :entry "src/types.asl"
- :description "Storage contract of the shared vault: Key, Op and Reply rows for kv and log, pure decision rules, the memStep adapter, the single-line wire form and the conformance runner, pure AgentSlang"
- :aslFirst true
- :modules ["asl-store/types" "asl-store/kv" "asl-store/wire" "asl-store/mem" "asl-store/conform"]
- :dependencies [])

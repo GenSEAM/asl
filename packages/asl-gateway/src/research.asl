@@ -5,12 +5,10 @@
       researchPrompt researchEntryLabel researchEntryProvider researchCall! breakerDownFor
       researchDebracket researchParse researchNorm researchWords researchQuoteFound researchVerify researchAuditPrompt researchAudit!
       auditVerdicts researchRelation researchExtract! executeResearchHub! researchRelationAsn formatResearchAsn
-      researchModeOf researchParts subQueries executeResearchPlan! stageSeconds stageEntry wallLeftMs
-      searchKeyNames withSearchKeys! researchEntryJson researchRoutesFor! researchGatewayRoutes! resolveResearchEntry! routeUpstream researchDepth researchModeAt! researchPipeline!]
+      researchModeOf researchParts subQueries executeResearchPlan! stageSeconds stageEntry wallLeftMs]
   :i [(asl-json/json :a j)
       (pyText :a pt)
-      (search :a srch)
-      (config :a cfg)])
+      (search :a srch)])
 
 fn asnAtom s: String -> j/Json
   (j/jobj (list (pair "atom" (j/jstr s))))
@@ -1023,24 +1021,6 @@ fn breakerSkip st: srch/HubState prov: j/Json alias: j/Json name: j/Json -> (Pai
               (srch/hubNote (srch/hubStderr st1 (str "[Gateway Breaker] skip " (pt/pyStr prov) " for " secs "s\n")) prov alias (str "breaker " secs "s") (j/jnull))))
       (pair (none) st1)))
 
-fn badAliasKey alias: j/Json -> String
-  (str "alias400:" (pt/pyStr alias))
-
-; (:m :ref RESEARCH-KEEP-FACTS :do "an alias that answered HTTP 400 is not called again for the next 10 minutes, so later sub-questions of one run skip it; the mark lives in the hub breaker map under its own key")
-fn markBadAlias st: srch/HubState alias: j/Json e: pt/PyErr -> srch/HubState
-  (if (stringStartsWith? (errWord e) "HTTP 400")
-    (srch/hubWithBreaker st (mapSet st.breakerUntil (badAliasKey alias) (+ st.nowMs 600000)) st.count503)
-    st)
-
-fn badAliasRow st: srch/HubState alias: j/Json name: j/Json -> (Option j/Json)
-  (match (mapGet st.breakerUntil (badAliasKey alias))
-    ((some until) (if (> until st.nowMs) (some (triedRow alias name "skipped: HTTP 400 earlier in this run")) (none)))
-    ((none) (none)))
-
-; (:m :ref RESEARCH-KEEP-FACTS :do "a fact kept without an audit is stamped :verificationStatus unverified and :audit unaudited, so no reader takes it for corroborated")
-fn unaudited facts: (List j/Json) -> (List j/Json)
-  (map (fn [(f j/Json)] -> j/Json (pt/jset (pt/jset f "verificationStatus" (j/jstr "unverified")) "audit" (j/jstr "unaudited"))) facts)
-
 (schema Attempt (:f tried (List j/Json)) (:f won (Option j/Json)))
 
 ; (:m :ref RESEARCH-DEPTH :do "what one stage may take: its own timeout, cut to the wall that is left, never below one second")
@@ -1074,9 +1054,7 @@ fn ! chainUntil! entries: (List j/Json) st: srch/HubState tried: (List j/Json) p
             (match (researchEntryProvider entry up)
               ((err e) (pair (err e) st))
               ((ok prov)
-                (let [(sk (match (badAliasRow st (pairFirst lab) (pairSecond lab))
-                            ((some row) (pair (some row) st))
-                            ((none) (breakerSkip st prov (pairFirst lab) (pairSecond lab)))))]
+                (let [(sk (breakerSkip st prov (pairFirst lab) (pairSecond lab)))]
                   (match (pairFirst sk)
                     ((some row) (chainUntil! rest (pairSecond sk) (listAppend tried (list row)) prompt up dispatch finish leftMs))
                     ((none)
@@ -1085,7 +1063,7 @@ fn ! chainUntil! entries: (List j/Json) st: srch/HubState tried: (List j/Json) p
                           (pair (ok (Attempt :tried (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) "no wall left"))) :won (none))) (pairSecond sk))
                           (let [(call (researchCall! (pairSecond sk) (stageEntry entry left) prompt up dispatch)) (st2 (pairSecond call))]
                             (match (pairFirst call)
-                              ((err e) (chainUntil! rest (markBadAlias st2 (pairFirst lab) e) (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish leftMs))
+                              ((err e) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish leftMs))
                               ((ok text)
                                 (match (finish text)
                                   ((err why) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) why))) prompt up dispatch finish leftMs))
@@ -1297,7 +1275,7 @@ fn ! auditStage! st: srch/HubState rep: j/Json props: j/Json evidence: (List j/J
               (rep1 (pt/jset rep "auditTried" atried))]
           (match (pt/jget aud "verdicts")
             ((none)
-              (done (pt/jset rep1 "facts" (j/jarr (unaudited passed))) "unverified"
+              (done (pt/jset rep1 "facts" (j/jarr (list))) "unverified"
                     (str "auditor unavailable after " (stringFromInt64 (listLength (listOf atried))) " model(s); " (stringFromInt64 (listLength passed)) " fact(s) not audited") st1))
             ((some verdicts)
               (let [(rep2 (pt/jset rep1 "auditor" (j/jobj (list (pair "alias" (optionOr (pt/jget aud "alias") (j/jnull))) (pair "model" (optionOr (pt/jget aud "model") (j/jnull)))))))
@@ -1884,7 +1862,7 @@ fn ! planAudit! ps: PlanState rep: j/Json mode: j/Json origin: String subs: (Lis
         (let [(rep1 (pt/jset rep "auditTried" (optionOr (pt/jget aud "tried") (j/jarr (list)))))]
           (match (pt/jget aud "verdicts")
             ((none)
-              (let [(r (planReport rep1 mode origin subs ps1 (unaudited facts) rejected evidence))]
+              (let [(r (planReport rep1 mode origin subs ps1 (list) rejected evidence))]
                 (pair (ok (pt/jset (pt/jset r "status" (j/jstr "unverified")) "reason"
                                    (j/jstr (str "auditor unavailable after " (stringFromInt64 (listLength (listOf (optionOr (pt/jget aud "tried") (j/jarr (list)))))) " model(s); " (stringFromInt64 (listLength facts)) " fact(s) not audited"))))
                       ps1.st)))
@@ -1922,7 +1900,7 @@ fn ! executeResearchPlan! st: srch/HubState topic: String mode: j/Json entries: 
                       (cond
                         ((or (listEmpty? facts) (listEmpty? audits)) (pair (ok (planReport rep0 mode origin subs ps2 facts rejected evidence)) ps2.st))
                         ((= (budgetStop ps2 mode false 0 startMs clock) "wall")
-                          (pair (ok (pt/jset (pt/jset (planReport rep0 mode origin subs (noteStop ps2 "wall") (unaudited facts) rejected evidence) "status" (j/jstr "unverified")) "reason" (j/jstr "the wall budget was spent before the audit stage; the facts are not audited"))) ps2.st))
+                          (pair (ok (pt/jset (pt/jset (planReport rep0 mode origin subs (noteStop ps2 "wall") facts rejected evidence) "status" (j/jstr "unverified")) "reason" (j/jstr "the wall budget was spent before the audit stage; the facts are not audited"))) ps2.st))
                         (else (planAudit! ps2 rep0 mode origin subs facts rejected evidence audits up dispatch (fn [(u Int64)] -> Int64 (wallLeftMs mode startMs clock)))))))))))))))
 
 fn planLines rep: j/Json -> (List String)
@@ -1944,119 +1922,3 @@ fn planLines rep: j/Json -> (List String)
                                      (listOf (repGet rep "coverage"))))
                    ")")
               (str "  :uncovered (" (pt/joinSep (map (fn [(q j/Json)] -> String (str "\"" (esc q) "\"")) (listOf (repGet rep "uncovered"))) " ") ")")))))
-
-; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see SYNTHETIC/TAVILY/BRAVE/SERPER without exporting them")
-fn searchKeyNames -> (List String)
-  (list "SYNTHETIC_API_KEY" "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
-
-fn ! withSearchKeys! env: (Map String String) paths: (List String) -> (Map String String)
-  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
-          (if (stringEmpty? (optionOr (mapGet m k) ""))
-            (match (cfg/keyFileLookup! paths k) ((some v) (mapSet m k v)) ((none) m))
-            m))
-        env (searchKeyNames))
-
-fn researchTemp p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.temperature ((some v) (list (pair "temperature" (j/jfloat v)))) ((none) (list)))
-
-fn researchEffort p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.effort ((some v) (list (pair "effort" (j/jstr v)))) ((none) (list)))
-
-fn researchMaxTokens p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.maxTokens ((some v) (list (pair "maxTokens" (j/jint v)))) ((none) (list)))
-
-fn researchParams p: cfg/GatewayParams -> j/Json
-  (j/jobj (listAppend (listAppend (researchTemp p) (researchEffort p)) (researchMaxTokens p)))
-
-fn researchEntryJson e: cfg/GatewayEntry -> j/Json
-  (let [(u e.upstream)]
-    (j/jobj (list (pair "alias" (j/jstr e.alias))
-      (pair "dispatch" (j/jstr e.dispatch))
-      (pair "upstream" (j/jobj (list
-        (pair "provider" (j/jstr u.provider))
-        (pair "url" (j/jstr u.url))
-        (pair "key" (j/jstr u.key)))))
-      (pair "params" (researchParams e.params))
-      (pair "timeoutSec" (j/jfloat e.timeoutSec))
-      (pair "rpm" (match e.rpm ((some v) (j/jfloat v)) ((none) (j/jnull)))))))
-
-fn resolvedResearchEntry r: cfg/GatewayResolvedEntry -> (Result j/Json pt/PyErr)
-  (match r
-    ((cfg/entryResolved e) (ok (researchEntryJson e)))
-    ((cfg/entryUnresolved a) (err (pt/pyErr "ValueError" (str "unresolved research route " a)))))
-
-fn resolvedResearchEntries entries: (List cfg/GatewayResolvedEntry) -> (Result (List j/Json) pt/PyErr)
-  (match (listHead entries)
-    ((none) (ok (list)))
-    ((some entry)
-      (match (resolvedResearchEntry entry)
-        ((err e) (err e))
-        ((ok json)
-          (match (resolvedResearchEntries (optionOr (listTail entries) (list)))
-            ((err e) (err e))
-            ((ok rest) (ok (cons json rest))))))))
-
-fn researchLabelMatches entry: j/Json model: String -> Bool
-  (or (stringContains? (pt/pyStr (optionOr (pt/jget entry "alias") (j/jstr ""))) model)
-      (stringContains? (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))) model))
-
-fn researchRoutesFor! table: cfg/GatewayTable profile: (Option String) intent: String model: String -> (Result (Pair String (List j/Json)) pt/PyErr)
-  (match (cfg/gatewayRouteEntries! table (list) profile intent)
-    ((err message) (err (pt/pyErr "ValueError" message)))
-    ((ok routes)
-      (match (resolvedResearchEntries routes.entries)
-        ((err e) (err e))
-        ((ok entries)
-          (let [(selected (if (stringEmpty? model) entries (filter (fn [(e j/Json)] -> Bool (researchLabelMatches e model)) entries)))]
-            (if (and (listEmpty? selected) (!= intent "audit"))
-              (err (pt/pyErr "ValueError" (if (stringEmpty? model) (str "gateway profile has no " intent " route") (str "model " model " is not in the " intent " route of profile " routes.name))))
-              (ok (pair routes.name selected))))))))
-
-fn researchGatewayRoutes! table: cfg/GatewayTable profile: (Option String) model: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
-  (match (researchRoutesFor! table profile "research" model)
-    ((err e) (err e))
-    ((ok research)
-      (match (researchRoutesFor! table (some (pairFirst research)) "audit" "")
-        ((err e) (err e))
-        ((ok audit) (ok (pair (pairFirst research) (pair (pairSecond research) (pairSecond audit))))))))
-
-fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option String) -> (Result j/Json pt/PyErr)
-  (match (researchRoutesFor! table profile "research" model)
-    ((err e) (err e))
-    ((ok routes) (match (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
-
-fn routeUpstream entries: (List j/Json) name: String -> j/Json
-  (match (listHead entries)
-    ((none) (j/jnull))
-    ((some entry)
-      (if (or (= name (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))))
-              (= name (pt/pyStr (optionOr (pt/jget entry "alias") (j/jstr "")))))
-        (optionOr (pt/jget entry "upstream") (j/jnull))
-        (routeUpstream (optionOr (listTail entries) (list)) name))))
-
-; (:m :ref RESEARCH-DEPTH :do "the depth names; what each one spends is a (:mode ...) row of researchModes.asn, read by researchStep")
-fn researchDepth depth: String -> String
-  (cond ((= depth "flash") "flash") ((= depth "deep") "targeted") ((= depth "exhaustive") "matrix") (else ""))
-
-; (:m :ref RESEARCH-DEPTH :do "the mode row of a depth: the workspace table when it exists, else the package table; an unreadable table is an error for every depth but :flash, which then runs the single pipeline; a readable table with a missing or invalid row is an error for every depth")
-fn ! researchModeAt! wsTable: String pkgTable: String depth: String -> (Result j/Json pt/PyErr)
-  (let [(tablePath (if (fileExists? wsTable) wsTable pkgTable))]
-    (match (fileReadString tablePath)
-      ((err _) (if (= depth "flash")
-                 (ok (j/jobj (list (pair "pipeline" (j/jstr "single")) (pair "depth" (j/jstr "flash")))))
-                 (err (pt/pyErr "ValueError" (str "research mode table is unreadable: " tablePath)))))
-      ((ok text) (researchModeOf text depth))))
-
-; (:m :ref HUB-GETROUTES-WIRING :do "the one research pipeline both callers run: the (:research) op of the agent plane and the hub's POST /api/asl/research hand it the routes of the active profile, the mode row and their model dispatchers; a :pipeline plan row runs executeResearchPlan!, every other row the single-pass executeResearchHub!, and the profile name is stamped on the report")
-fn ! researchPipeline! topic: String dTarget: String mode: j/Json triage: Bool routes: (Pair String (Pair (List j/Json) (List j/Json))) env: (Map String String) disp: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) planDisp: (fn [String j/Json j/Json String] -> (Result j/Json pt/PyErr)) nowMs: Int64 clock: (fn [Int64] -> Int64) -> (Result j/Json pt/PyErr)
-  (let [(st (srch/newHubState env nowMs 0 (mapEmpty) (mapEmpty)))
-        (entries (pairFirst (pairSecond routes)))
-        (auditEntries (pairSecond (pairSecond routes)))
-        (up (fn [(m String)] -> j/Json (routeUpstream (listAppend entries auditEntries) m)))
-        (auditOpt (if (listEmpty? auditEntries) (none) (some auditEntries)))
-        (resPair (if (= (pt/pyStr (optionOr (pt/jget mode "pipeline") (j/jstr ""))) "plan")
-                   (executeResearchPlan! st topic mode entries triage auditOpt up planDisp nowMs clock)
-                   (executeResearchHub! st topic (pt/pyStr (optionOr (pt/jget mode "depth") (j/jstr dTarget))) entries (j/jstr "auto") triage auditOpt up disp)))]
-    (match (pairFirst resPair)
-      ((err e) (err e))
-      ((ok rawRep) (ok (pt/jset rawRep "profile" (j/jstr (pairFirst routes)))))))

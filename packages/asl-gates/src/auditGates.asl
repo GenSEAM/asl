@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [importsOutsideAsl? boundaryCheck! suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -14,8 +14,7 @@
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
       (asl-tools/agentSurfaceAudit :a asa)
-      (asl-tools/coverageRatchet :a cov)
-      (asl-gates/metaAudit :a ma)])
+      (asl-tools/coverageRatchet :a cov)])
 
 (schema Check
   (:f id String)
@@ -338,23 +337,6 @@ fn conflictMarkerCheck! root: String -> (List Check)
                    files))]
     (perItem "conflictMarkers" bad "ERR_CONFLICT_MARKER" (some (listLength files))))
 
-; (:m :ref RED-AT-GATE :do "a package source under asl/packages/PKG/src imports only modules that ship with asl/ (GenSEAM/asl is a git archive of asl/ alone, so an import rooted at tools/, tests/, harness/ or bench/ does not resolve there); pre-existing importers are frozen in boundaryAllowed and a row whose file no longer imports outside leaves the list")
-fn boundaryAllowed -> (List String)
-  (list)
-
-fn importsOutsideAsl? text: String -> Bool
-  (let [(header (optionOr (listHead (stringSplit text "\n\n")) text))]
-    (listAny? (fn [(m String)] -> Bool (stringContains? header m)) (list "(tools/" "(tests/" "(harness/" "(bench/")))
-
-fn boundaryCheck! root: String -> (List Check)
-  (let [(files (trackedRoot! root (list "asl/packages/*/src/*.asl")))
-        (outside (filter (fn [(p String)] -> Bool (importsOutsideAsl? (optionOr (readText! (str root "/" p)) ""))) files))
-        (bad (filter (fn [(p String)] -> Bool (not (listContains? (boundaryAllowed) p))) outside))
-        (stale (filter (fn [(p String)] -> Bool (and (listContains? files p) (not (listContains? outside p)))) (boundaryAllowed)))
-        (found (listAppend (map (fn [(p String)] -> String (str "package source imports a module outside asl/: " p)) bad)
-                           (map (fn [(p String)] -> String (str "boundaryAllowed row no longer imports outside asl/, remove it: " p)) stale)))]
-    (perItem "packageBoundary" found "ERR_PACKAGE_BOUNDARY" (some (listLength files))))
-
 ; (:m :do "bin/asl-core is a committed Mach-O binary; a host of another format cannot run it, so the check is not computed there with that reason, and a Mach-O core on a Darwin host still runs and fails on a real inconsistency")
 fn machOCore? bs: Bytes -> Bool
   (and (= (bytesGet bs 0) 207) (= (bytesGet bs 1) 250) (= (bytesGet bs 2) 237) (= (bytesGet bs 3) 254))
@@ -369,43 +351,7 @@ fn foreignCore! root: String corePath: String -> Bool
     ((ok bs) (and (machOCore? bs) (!= (hostKernel! root) "Darwin")))
     ((err _) false))
 
-fn isMetaArgs? args: (List String) -> Bool
-  (match (listHead args)
-    ((none) false)
-    ((some a)
-      (if (= a "audit")
-        (match (listHead (optionOr (listTail args) (list)))
-          ((none) false)
-          ((some b) (= b "meta")))
-        false)))
-
-fn metaCheck! root: String paths: (List String) -> Check
-  (match (fileReadString (str root "/asl/grammar/meta.asn"))
-    ((err _) (failCheck "meta" "ERR_META_SPEC" "cannot read asl/grammar/meta.asn" (none) (none)))
-    ((ok metaText)
-      (match (ma/loadSpec metaText)
-        ((err e) (failCheck "meta" "ERR_META_SPEC" (esc e 400) (none) (none)))
-        ((ok spec)
-          (let [(ctx (ma/loadCtx! root spec (list)))
-                (rows (match (fileReadString (str root "/scripts/audit/metaBaseline.asn"))
-                        ((ok t) (resultOr (ma/parseBaseline t) (list)))
-                        ((err _) (list))))
-                (audit (ma/auditPaths! ctx rows paths))
-                (n (listLength audit.violations))]
-            (if (= n 0)
-              (passCheck "meta" (some 0) (none))
-              (failCheck "meta" "ERR_META_VIOLATION" (esc (ma/receipt audit) 400) (some n) (none))))))))
-
-fn cmdMeta! root: String argv: (List String) -> AuditRun
-  (let [(check (metaCheck! root argv))]
-    (emit "meta" (list check) "" "" false))
-
 fn coreCheck! root: String cid: String args: (List String) -> Check
-  (if (isMetaArgs? args)
-    (metaCheck! root (optionOr (listTail (optionOr (listTail args) (list))) (list)))
-    (coreSpawnCheck! root cid args))
-
-fn coreSpawnCheck! root: String cid: String args: (List String) -> Check
   (let [(corePath (str root "/bin/asl-core"))]
     (if (not (isFile! corePath))
       (notComputedCheck cid "bin/asl-core absent")
@@ -870,7 +816,7 @@ fn cmdConsistency! root: String argv: (List String) -> AuditRun
   (let [(c1 (syntaxCheck! root "syntax"))
         (c2 (list (remoteCheck! root) (ssotCheck! root)))
         (c3 (emojiCheck! root))
-        (c4 (listAppend (conflictMarkerCheck! root) (boundaryCheck! root)))
+        (c4 (conflictMarkerCheck! root))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
         (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheckIn! root (cacheMode argv))))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]

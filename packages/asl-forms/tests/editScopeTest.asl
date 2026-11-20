@@ -26,7 +26,7 @@ fn layout! base: String body: String -> Bool
 fn formsRun! base: String cwd: String envRoot: String payload: String -> fr/Done
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "HOME=" base) (str "ASL_VFS_DIR=" (k/joinPath base "vfs")) (str "ASL_ROOT=" envRoot)))]
+        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" (k/joinPath base "vfs")) (str "ASL_ROOT=" envRoot)))]
     (fr/runOneLimited (fr/job (list host payload) cwd env) (fr/limits 60 16)))
 
 fn editForm old: String new: String -> String

@@ -102,34 +102,6 @@ fn ! scenarios root: String base: String -> Bool
       (assert (stringContains? st4.text "?? stray.txt") (str "an unnamed untracked file is never staged: " st4.text))
       true))
 
-; (:m :ref DEP-BASE-STALE :do "baseMerge! with the row driver settings: both sides appended a row to doc.asn at the same place, a file merge=asnRows; without settings merge-tree conflicts and no ref is written, with -c merge.asnRows.driver the base branch holds both rows; settings that are not -c merge.* are refused")
-fn ! baseMergeRows root: String base: String -> Bool
-  (let [(d (repoAt base "bmRows"))
-        (_a (put (str d "/.gitattributes") "doc.asn merge=asnRows\n"))
-        (_b (put (str d "/doc.asn") "(:r 1)\n(:r 2)\n"))
-        (_c (git d (list "add" "-A")))
-        (_d (git d (list "commit" "-q" "-m" "rows")))
-        (b0 (stringTrim (git d (list "rev-parse" "HEAD")).out))
-        (_e (git d (list "checkout" "-q" "-B" "sideA" b0)))
-        (_f (put (str d "/doc.asn") "(:r 1)\n(:r 2)\n(:r a)\n"))
-        (_g (git d (list "add" "doc.asn")))
-        (_h (git d (list "commit" "-q" "-m" "a")))
-        (_i (git d (list "checkout" "-q" "-B" "sideB" b0)))
-        (_j (put (str d "/doc.asn") "(:r 1)\n(:r 2)\n(:r b)\n"))
-        (_k (git d (list "add" "doc.asn")))
-        (_l (git d (list "commit" "-q" "-m" "b")))
-        (plain (v/baseMerge! d "shBase/X" "sideA" "sideB" "m" (list)))
-        (plainRef (git d (list "rev-parse" "--verify" "--quiet" "refs/heads/shBase/X")))
-        (cfg (list "-c" "merge.asnRows.driver=git merge-file --union %A %O %B" "-c" "merge.asnRows.name=rows"))
-        (driven (v/baseMerge! d "shBase/X" "sideA" "sideB" "m" cfg))
-        (text (stringTrim (git d (list "show" "shBase/X:doc.asn")).out))
-        (odd (v/baseMerge! d "shBase/Y" "sideA" "sideB" "m" (list "-c" "core.editor=x")))
-        (oddRef (git d (list "rev-parse" "--verify" "--quiet" "refs/heads/shBase/Y")))]
-    (do (assert (and (!= plain.code 0) (!= plainRef.exit 0)) (str "without the row driver the same-place appends conflict and no ref is written: " plain.text))
-        (assert (and (= driven.code 0) (stringContains? text "(:r a)") (stringContains? text "(:r b)")) (str "with the row driver the base holds both rows: " text " " driven.text))
-        (assert (and (!= odd.code 0) (!= oddRef.exit 0)) (str "settings other than merge.* are refused: " odd.text))
-        true))
-
 fn ! runTests -> Bool
   (let [(base (scratch))
         (root (resultOr (realPath ".") "."))]
@@ -140,7 +112,6 @@ fn ! runTests -> Bool
         (assert (refProbes root base) "ref probes")
         (assert (hardening root base) "hardening")
         (assert (warnGate root base) "warn record")
-        (assert (baseMergeRows root base) "baseMerge with the row driver")
         (assert (listEmpty? (leftoverIdx)) (str "private index dirs are removed: " (stringJoin (leftoverIdx) ",")))
         (assert (= (sh "." (list "rm" "-rf" base)).exit 0) "private base removed")
         true))

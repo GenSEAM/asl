@@ -1,6 +1,6 @@
 (module asl-tools/coord/store
   :x [Task Lease Req q qList rowFields textField intField opt intOpt defaultDir! clashPath sharedPath? cardsDir missingFile unitsDir leasesDir unitPath leasePath renderUnit renderLease parseUnit parseLease
-      live? fenced? ownsClash readUnits! readLeases! put! claim! claimNext! heartbeat! release! commit! markDone! list! apply! main]
+      live? fenced? ownsClash readUnits! readLeases! put! claim! claimNext! heartbeat! release! commit! list! apply! main]
   :i [(asl-syntax/asl/asn :a asn) (asl-coord/claims :a cl)])
 
 ; (:m :ref FK-STORE :do "row-keyed unit queue with fenced leases: one row per unit under <dir>/units, one lease per held unit under <dir>/leases, every mutation under the <dir>/.lock flock (the asl-coord/claims pattern) and written by tmp+rename; the epoch lives in the unit row so it stays monotonic across expiry, and heartbeat, release and commit are refused unless they carry the current epoch")
@@ -171,23 +171,10 @@ fn sharedPath? f: String -> Bool
           (let [(name (optionOr (listGet (stringSplit f "/") 2) ""))]
             (and (not (stringEmpty? name)) (= f (str "asl/packages/" name "/doc.asn"))))))
 
-; (:m :ref OWNS-SYMBOL-GRAIN :do "an owns entry is path or path#symbol: the file part decides sharedPath? and the prefix overlap, the symbol part narrows a same-file clash")
-fn entryFile e: String -> String
-  (optionOr (listHead (stringSplit e "#")) e)
-
-fn entrySymbol e: String -> String
-  (if (stringContains? e "#") (stringJoin (optionOr (listTail (stringSplit e "#")) (list)) "#") "")
-
-; (:m :ref OWNS-SYMBOL-GRAIN :do "two owns entries clash when their files overlap (cl/pathsOverlap?) and, if both name a symbol of the same file, it is the same symbol; a whole-file entry clashes with any symbol of that file, directory entries keep the prefix rule")
-fn entriesClash a: String b: String -> Bool
-  (let [(fa (entryFile a)) (fb (entryFile b)) (sa (entrySymbol a)) (sb (entrySymbol b))]
-    (and (cl/pathsOverlap? fa fb)
-         (or (!= fa fb) (or (stringEmpty? sa) (or (stringEmpty? sb) (= sa sb))))))
-
 ; (:m :ref COND-DOC-CLAIM-SHARED :do "the first of mine overlapping one of theirs, shared paths left out on both sides: a doc.asn the claimant's row declares, one the conductor added, and one an old lease or an old stored row still lists all count for nothing, so 110 of 202 node rows stored with the doc.asn and 47 of 88 ledger rows declaring it no longer refuse each other")
 fn ownsHit mine: (List String) theirs: (List String) -> String
-  (let [(held (filter (fn [(o String)] -> Bool (not (sharedPath? (entryFile o)))) theirs))]
-    (match (listFind (fn [(p String)] -> Bool (and (not (sharedPath? (entryFile p))) (listAny? (fn [(o String)] -> Bool (entriesClash p o)) held))) mine)
+  (let [(held (filter (fn [(o String)] -> Bool (not (sharedPath? o))) theirs))]
+    (match (listFind (fn [(p String)] -> Bool (and (not (sharedPath? p)) (listAny? (fn [(o String)] -> Bool (cl/pathsOverlap? p o)) held))) mine)
       ((some p) p)
       ((none) "")))
 
@@ -275,16 +262,6 @@ fn ! beat! dir: String prior: Lease now: Int64 -> (Result String String)
       ((err e) (err e))
       ((ok _) (ok (renderLease lease)))))
 
-; (:m :ref STORE-DONE-OP :do "mark a unit done without a lease epoch, for a unit the conductor merged outside the store: refused while a live lease holds it (an expired one is dropped), idempotent on a done unit, one (:markedDone ...) log row as receipt, so its :after dependents become claimable")
-fn ! applyMarkDone! dir: String req: Req units: (List Task) leases: (List Lease) held: (List Lease) now: Int64 -> (Result String String)
-  (match (unitOf units req.id)
-    ((none) (err (refusal req.id "missing" "")))
-    ((some u)
-      (cond
-        ((some? (leaseOf held u.id)) (err (refusal u.id "held" (match (leaseOf held u.id) ((some l) (str " :holder " (q l.holder))) ((none) "")))))
-        ((= u.st "done") (ok (str "(:markedDone :unit " (q u.id) " :already true)")))
-        (else (closeLease! dir u "done" req.receipt "markedDone" now)))))
-
 fn ! applyFenced! dir: String req: Req units: (List Task) leases: (List Lease) now: Int64 -> (Result String String)
   (match (unitOf units req.id)
     ((none) (err (refusal req.id "missing" "")))
@@ -311,7 +288,6 @@ fn ! applyLocked! dir: String req: Req -> (Result String String)
             (cond
               ((= req.op "put") (applyPut! dir req.unit units held))
               ((= req.op "claim") (applyClaim! dir req units held now))
-              ((= req.op "markDone") (applyMarkDone! dir req units leases held now))
               ((= req.op "list") (ok (str "(:store " (stringJoin (map renderUnit units) " ") " " (stringJoin (map renderLease held) " ") ")")))
               (else (applyFenced! dir req units leases now))))))))
 
@@ -348,10 +324,6 @@ fn ! heartbeat! dir: String id: String epoch: Int64 -> (Result String String)
 fn ! release! dir: String id: String epoch: Int64 -> (Result String String)
   (apply! dir (with (req "release" id) :epoch epoch))
 
-; (:m :ref STORE-DONE-OP :do "done without a lease: see applyMarkDone!")
-fn ! markDone! dir: String id: String receipt: String -> (Result String String)
-  (apply! dir (with (req "markDone" id) :receipt receipt))
-
 fn ! commit! dir: String id: String epoch: Int64 receipt: String -> (Result String String)
   (apply! dir (with (req "commit" id) :epoch epoch :receipt receipt))
 
@@ -370,7 +342,7 @@ fn intOpt args: (List String) key: String fallback: Int64 -> Int64
   (optionOr (stringToInt64 (opt args key "")) fallback)
 
 fn usage -> String
-  "usage: store (put --id ID [--owns a,b] [--reads c,d] [--after X,Y] [--gate G] [--channel C] [--model M] [--base B] | claim --holder H [--id ID] [--ttl MS] [--hold MS] [--drain MS] | heartbeat|release --id ID --epoch N | commit --id ID --epoch N [--receipt R] | mark-done --id ID [--receipt R] | list) [--dir D]"
+  "usage: store (put --id ID [--owns a,b] [--reads c,d] [--after X,Y] [--gate G] [--channel C] [--model M] [--base B] | claim --holder H [--id ID] [--ttl MS] [--hold MS] [--drain MS] | heartbeat|release --id ID --epoch N | commit --id ID --epoch N [--receipt R] | list) [--dir D]"
 
 fn leaseEpoch text: String -> Int64
   (match (parseLease text) ((ok l) l.epoch) ((err _) 0))
@@ -427,6 +399,5 @@ fn ! main args: (List String) -> (Result Int64 String)
       ((= cmd "heartbeat") (ok (report! (heartbeat! dir id epoch))))
       ((= cmd "release") (ok (report! (release! dir id epoch))))
       ((= cmd "commit") (ok (report! (commit! dir id epoch (opt args "receipt" "")))))
-      ((= cmd "mark-done") (ok (report! (markDone! dir id (opt args "receipt" "")))))
       ((= cmd "list") (ok (report! (list! dir))))
       (else (do (eprintln (usage)) (ok 2)))))

@@ -479,13 +479,8 @@ fn unknownNames! ctx: Ctx text: String -> (List String)
         (listAppend forms (map (fn [n] (str "asl " n)) (filter (fn [n] (not (listContains? cmds n))) (sortUnique (commandNames text))))))
       forms))
 
-; (:m :ref CLI-AGENT-HELP :do "the command list is the human usage: asl human help, and asl help on a CLI that predates it")
 fn helpCommands! entry: String -> (List String)
-  (let [(human (helpCommandsOf! (list entry "human" "help")))]
-    (if (listEmpty? human) (helpCommandsOf! (list entry "help")) human))
-
-fn helpCommandsOf! argv: (List String) -> (List String)
-  (let [(outText (match (dist/runArgv! argv (none) (none) 120000) ((ok r) r.out) ((err _) "")))]
+  (let [(outText (match (dist/runArgv! (list entry "help") (none) (none) 120000) ((ok r) r.out) ((err _) "")))]
     (listReverse (pairSecond (fold (fn [(acc (Pair Bool (List String))) (l String)] -> (Pair Bool (List String))
                                      (let [(c (pairFirst acc)) (out (pairSecond acc))]
                                        (cond

@@ -63,7 +63,7 @@ fn ! handleLine! s: Serve line: String d: T open: (fn [T String String String St
           ((not (validId? id)) (pair (pair s d) (reply (str "(:refused :unit " (asnQuote id) " :why \"bad id\")"))))
           ((or (sp/poolKnown? s.pool id) (fileExists? (receiptPath s.receiptDir id))) (pair (pair s d) (reply (str "(:refused :unit " (asnQuote id) " :why \"duplicate\")"))))
           (else (runOpened! s id d (open d id (optionOr (quotedAfter line ":form") "") (optionOr (quotedAfter line ":repo") "") (optionOr (quotedAfter line ":root") "")))))))
-    (let [(r (handleControlLine! s line))]
+    (let [(r (handleOld! s line))]
       (pair (pair (pairFirst r) d) (pairSecond r))))
 
 fn ! runOpened! s: Serve id: String d: T opened: (Pair T (Option (Pair Int64 String))) -> (Pair (Pair Serve T) String)
@@ -77,7 +77,7 @@ fn ! runOpened! s: Serve id: String d: T opened: (Pair T (Option (Pair Int64 Str
 fn receiptRow id: String exit: Int64 text: String -> String
   (str "(:receipt :unit " (asnQuote id) " :state \"done\" :exit " (stringFromInt64 exit) " :result " (asnQuote text) ")\n")
 
-fn ! handleControlLine! s: Serve line: String -> (Pair Serve String)
+fn ! handleOld! s: Serve line: String -> (Pair Serve String)
   (cond
     ((stringStartsWith? line "(:submit ")
       (match (quotedAfter line ":unit")

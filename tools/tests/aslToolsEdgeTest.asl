@@ -55,7 +55,19 @@ fn toolsImports header: String -> (List String)
 
 
 fn allowed -> (List String)
-  (list)
+  (list
+    "asl/packages/asl-agent/src/remoteOps.asl|tools/remote/form"
+    "asl/packages/asl-agent/src/remoteOps.asl|tools/remote/transport"
+    "asl/packages/asl-agent/src/remoteOps.asl|tools/remote/vps"
+    "asl/packages/asl-agent/tests/leonRemoteToolsTest.asl|tools/remote/transport"
+    "asl/packages/asl-agent/tests/poolServeFormTest.asl|tools/fleet/freePool"
+    "asl/packages/asl-agent/tests/poolServeFormTest.asl|tools/fleet/leonClient"
+    "asl/tools/coord/conductor.asl|tools/fleet/freePool"
+    "asl/tools/coord/conductor.asl|tools/fleet/leonClient"
+    "asl/tools/coord/janitor.asl|tools/remote/form"
+    "asl/tools/coord/tests/condRestartTest.asl|tools/remote/coordDeps"
+    "asl/tools/coord/tests/condRestartTest.asl|tools/remote/vps"
+    "asl/tools/coord/tests/gateGuardTest.asl|tools/fleet/freePool")
 
 fn ! edgesOf! path: String -> (List String)
   (map (fn [(m String)] -> String (str path "|tools/" m))

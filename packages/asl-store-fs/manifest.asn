@@ -1,7 +1,0 @@
-(:package asl-store-fs
- :version "0.1.0"
- :entry "src/fs.asl"
- :description "Filesystem adapter of the asl-store contract: one row file per key written by tmp and rename under a per-collection flock, log segments of checksummed frames with torn-tail recovery"
- :aslFirst true
- :modules ["asl-store-fs/wal" "asl-store-fs/log" "asl-store-fs/fs"]
- :dependencies ["asl-store" "asl-text" "asl-transpile"])

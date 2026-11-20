@@ -76,7 +76,6 @@ fn ! runTests -> Bool
         (base (resultOr (realPath (optionOr (listHead (filter (fn [(x String)] -> Bool (not (stringEmpty? x))) (list (optionOr (envGet "ASL_RUN_TMP") "") (optionOr (envGet "TMPDIR") "")))) "/tmp")) "/tmp"))
         (scratch (str base "/formsPin-" (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
         (cache (str scratch "-cache"))
-        (upstream (nf/adoptFrom! cache (list "seed" "rt" "asl1" "cli")))
         (log (str scratch "-stub.log"))
         (added (sh! (str "git worktree add --detach --quiet \"" scratch "\" HEAD && d=$(mktemp) && git diff --binary HEAD > \"$d\" && { [ ! -s \"$d\" ] || (cd \"" scratch "\" && git apply \"$d\"); } && rm -f \"$d\"") here 120 cache))
         (cold (sh! "ASL_NATIVE_BUILD_WAIT=3600 env -u ASL_ROOT -u ASL_PRELUDE ./bin/asl run tools/remote/vps.asl" scratch (nf/coldBuildS) cache))
@@ -98,8 +97,6 @@ fn ! runTests -> Bool
         (_ (sh! (str "rm -rf \"" cache "\" \"" log "\"") here 120 cache))
         (_ (sh! (str "git worktree remove --force \"" scratch "\"; git worktree prune") here 120 cache))]
     (do (assert (= added.exit 0) (str "the scratch checkout is made: " added.out))
-        (assert upstream "the scratch cache names the run's native CLI store as read-only upstream, so its CLI is copied, not lowered cold")
-        (assert (nf/adopted? cold.out "cli") (str "the scratch CLI was copied from the run store, not lowered cold: " (optionOr (stringSlice cold.out 0 600) "")))
         (assert (not (stringEmpty? dir0)) (str "the scratch checkout has a native CLI head: " (str "exit " (stringFromInt64 cold.exit) " head " head " tail " (optionOr (stringSlice cold.out (max 0 (- (stringLength cold.out) 700)) (stringLength cold.out)) ""))))
         (assert (and (not (stringEmpty? dep)) stubbed moved) "a CLI dependency moved and the builder is a stub")
         (assert (and (not (stringContains? forms.out "ERR_NATIVE_STALE")) (= forms.exit 0)) (str "a forms-only argv runs on the stale CLI: " (optionOr (stringSlice forms.out 0 300) "")))

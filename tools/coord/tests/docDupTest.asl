@@ -7,21 +7,17 @@ fn fakeTool -> String
   "#!/bin/sh\necho \"$@\" >> \"$ASL_ROOT/.fakeLog\"\nif [ \"$1\" = check ]; then exit 0; fi\nif [ -f \"$ASL_ROOT/.fakeRows\" ]; then cat \"$ASL_ROOT/.fakeRows\"; else echo \"(:know :missing :new 0)\"; fi\nif [ -f \"$ASL_ROOT/.fakeFail\" ]; then exit 7; fi\n"
 
 fn srcBase -> String
-  "(module asl-utils/duration\n  :x [zero old other]\n  :i [])\n\nfn zero -> Int64\n  0\n\nfn old -> Int64\n  0\n\nfn other -> Int64\n  0\n"
+  "(module asl-utils/duration\n  :x [zero]\n  :i [])\n\nfn zero -> Int64\n  0\n"
 
 fn srcNew -> String
-  "(module asl-utils/duration\n  :x [zero old other parseDuration]\n  :i [])\n\nfn zero -> Int64\n  0\n\nfn old -> Int64\n  0\n\nfn other -> Int64\n  0\n\nfn parseDuration s: String -> Int64\n  1\n"
-
-; (:m :ref DOC-THIN :do "another package uses every export of duration, so a row on any of them may exist under rule docs and only the duplicate check decides")
-fn userSrc -> String
-  "(module asl-other/user\n  :x [go]\n  :i [(asl-utils/duration :a dur)])\n\nfn go -> Int64\n  (+ (dur/zero) (+ (dur/old) (+ (dur/other) (dur/parseDuration \"1h\"))))\n"
+  "(module asl-utils/duration\n  :x [zero parseDuration]\n  :i [])\n\nfn zero -> Int64\n  0\n\nfn parseDuration s: String -> Int64\n  1\n"
 
 fn row name: String text: String -> String
   (str "(:doc :symbol \"asl/packages/asl-utils/src/duration.asl#" name "\" :text \"" text "\")\n")
 
 ; (:m :do "the base ledger: one row for zero and a duplicate pair for old that no unit of the test touches")
 fn docBase -> String
-  (str (row "zero" "Shared start value so that sums never begin from a stale clock") (row "old" "first") (row "old" "second"))
+  (str (row "zero" "the zero duration") (row "old" "first") (row "old" "second"))
 
 fn docPath -> String
   "asl/packages/asl-utils/doc.asn"
@@ -38,8 +34,6 @@ fn ! repoOf! root: String -> String
         (_ (g repo "init -q -b main"))
         (_ (fileWrite (str repo "/bin/asl") (fakeTool)))
         (_ (fileWrite (str repo "/asl/packages/asl-utils/src/duration.asl") (srcBase)))
-        (_ (sh (str "mkdir -p " repo "/asl/packages/asl-other/src")))
-        (_ (fileWrite (str repo "/asl/packages/asl-other/src/user.asl") (userSrc)))
         (_ (fileWrite (str repo "/" (docPath)) (docBase)))
         (_ (sh (str "chmod +x " repo "/bin/asl")))
         (a (g repo "add -A"))
