@@ -5043,9 +5043,24 @@ fn cardOf root: String -> String
 
 fn docOwns owns: (List String) -> (List String)
   (let [(pkgs (ownsPackages owns))
-        (docs (filter (fn [(d String)] -> Bool (not (listContains? owns d))) (map (fn [(r String)] -> String (str r "/doc.asn")) pkgs)))]
-    (if (listEmpty? pkgs) owns
-      (listAppend (listAppend owns docs) (filter (fn [(c String)] -> Bool (not (listContains? owns c))) (map cardOf pkgs)))))
+        (docs (filter (fn [(d String)] -> Bool (not (listContains? owns d))) (map (fn [(r String)] -> String (str r "/doc.asn")) pkgs)))
+        (base (if (listEmpty? pkgs) owns
+                (listAppend (listAppend owns docs) (filter (fn [(c String)] -> Bool (not (listContains? owns c))) (map cardOf pkgs)))))]
+    (fold (fn [(acc (List String)) (o String)] -> (List String)
+            (let [(h (ledgerPathOf o))]
+              (if (or (stringEmpty? h) (listContains? acc h)) acc (listAppend acc (list h)))))
+          base owns))
+
+; (:m :ref DOC-OWNS-AREA-LEDGER :do "the ledger the gate judges a path against (ledgerHomeOf without the file check): a package path of any kind, tests included, maps to its doc.asn, and asl/AREA/... to asl/doc/AREA.asn; the writer owns it so a docRows refusal on a tests or tools export can be fixed inside its owns")
+fn ledgerPathOf p: String -> String
+  (let [(parts (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit p "/")))
+        (s0 (optionOr (listGet parts 0) ""))
+        (s1 (optionOr (listGet parts 1) ""))]
+    (cond
+      ((or (not (= s0 "asl")) (< (listLength parts) 3)) "")
+      ((= s1 "packages") (str "asl/packages/" (optionOr (listGet parts 2) "") "/doc.asn"))
+      ((= s1 "doc") "")
+      (else (str "asl/doc/" s1 ".asn"))))
 
 ; (:m :ref REVIEW-DEFER :do "the base a unit branch is measured against inside its worktree: planImport stores :base HEAD by default (80 of 170 node2 units), and HEAD in a unit worktree is the branch itself, so HEAD..HEAD read every write as noEdit and every ahead branch as not ahead; HEAD and empty both mean main")
 fn baseRef u: st/Task -> String
