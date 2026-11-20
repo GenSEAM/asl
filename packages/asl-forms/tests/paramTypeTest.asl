@@ -26,11 +26,18 @@ fn ! testDispatch -> Bool
   (let [(bad (line! "(:eval :code \"(+ 1 2)\" :timeoutMs abc)"))
         (good (line! "(:eval :code \"(+ 1 2)\" :timeoutMs 5000)"))
         (boolBad (line! "(:agent :task x :plan maybe :dryRun true)"))
+        (fullHelp (line! "(:help :op agent :full true)"))
+        (shortHelp (line! "(:help :op agent)"))
+        (queueBad (line! "(:agent :task x :queueTimeout x :wallBudget y :dryRun true)"))
         (root (line! (str "(:agent :task x :toolRoot " (root!) "/nowhere-toolroot :dryRun true)")))]
     (do (assert (stringContains? bad "ERR_PARAM_TYPE") (str "a wrong-typed int is refused: " bad))
         (assert (stringContains? bad ":timeoutMs :type int :got \"abc\"") (str "the receipt names key, type and value: " bad))
         (assert (not (stringContains? good "ERR_PARAM_TYPE")) (str "a well-typed int passes: " good))
         (assert (stringContains? boolBad "ERR_PARAM_TYPE") (str "a wrong-typed bool is refused: " boolBad))
+        ; (:m :ref NODE-BASE-REDS-3 :do "agent keys that help leaves out of the short entry stay declared with their types: a bad :queueTimeout or :wallBudget is still refused")
+        (assert (and (not (stringContains? fullHelp "ERR_UNKNOWN_KEY")) (stringContains? fullHelp ":form \"(:agent :task") (stringContains? fullHelp "seconds, outside timeout")) (str ":full true prints the whole agent entry: " fullHelp))
+        (assert (and (stringContains? shortHelp ":more \":full true\"") (stringContains? shortHelp ":accepts (role)") (stringContains? shortHelp ":queueTimeout")) (str "the short agent help names :full, :accepts and every key: " shortHelp))
+        (assert (and (stringContains? queueBad ":queueTimeout :type int :got \"x\"") (stringContains? queueBad ":wallBudget :type int :got \"y\"")) (str "bad :queueTimeout and :wallBudget are refused: " queueBad))
         (assert (not (stringContains? root "ERR_PARAM_TYPE")) (str "a path for :toolRoot (declared str) is not a type error: " root))
         true))
 

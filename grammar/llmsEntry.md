@@ -22,7 +22,7 @@ AgentSlang is two things.
 ## Registry and help
 
 - `asl '(:tools)'` prints the live operation registry.
-- `asl '(:help :op read)'` shows an op's form, parameters, defaults, errors and related ops.
+- `asl '(:help :op read)'` shows an op's form (or only its parameters when the entry is long; `:full true` prints the whole entry), defaults, errors and related ops.
 - `asl '(:help :topic staging)'` explains a topic; topics: {{TOPICS}}.
 
 ## Operations

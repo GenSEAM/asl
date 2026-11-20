@@ -144,7 +144,7 @@ fn reqTrue? t: String -> Bool
   (let [(b (stringToBytes t)) (n (stringLength t))]
     (>= (pairFirst (searchFrom t b n 0 (fn [(i Int64)] -> Int64 (let [(v (keyThenWs b n i ":req"))] (if (and (>= v 0) (startsAt? b n v "true") (not (wordB? (byteAt b n (+ v 4))))) (+ v 4) -1))))) 0))
 
-(schema Param (:f name String) (:f req Bool) (:f ptype String) (:f compact String))
+(schema Param (:f name String) (:f req Bool) (:f ptype String) (:f compact String) (:f bare String) (:f short String))
 
 fn paramOf pbody: String name: String -> Param
   (let [(req (reqTrue? pbody))
@@ -152,6 +152,8 @@ fn paramOf pbody: String name: String -> Param
         (rd (if req "req" (let [(d (defaultToken pbody))] (if (stringEmpty? d) "\"\"" d))))
         (note (optionOr (keyString pbody ":note") ""))]
     (Param :name name :req req :ptype pt
+           :short (cond ((and (not (stringEmpty? note)) (<= (stringLength note) 40)) (str "(:" name " " pt " " rd " \"" (k/escapeAsnVal note) "\")")) ((= rd "\"\"") (str "(:" name " " pt ")")) (else (str "(:" name " " pt " " rd ")")))
+           :bare (cond ((= rd "\"\"") (str "(:" name " " pt ")")) (else (str "(:" name " " pt " " rd ")")))
            :compact (cond
                       ((not (stringEmpty? note)) (str "(:" name " " pt " " rd " \"" (k/escapeAsnVal note) "\")"))
                       ((= rd "\"\"") (str "(:" name " " pt ")"))
@@ -355,17 +357,33 @@ fn visibleOps! reg: Registry ctx: s/KnowCtx scopeAll: Bool -> (List ToolOp)
                 (else false)))
             (map (fn [(nm String)] -> ToolOp (optionOr (mapGet reg.ops nm) (ToolOp :name nm :scope "" :public "" :doc "" :form "" :paramsRaw "" :paramsCompact "" :paramsSummary "" :examples (list) :errors (list) :related (list) :accepts (list)))) reg.order)))
 
+; (:m :ref NODE-BASE-REDS-3 :do "help stays within 250 tokens (4 chars each, less the step wrapper): an entry that fits prints whole; a longer one with :params leaves :form out (:params names every key, :accepts is printed in its place), then keeps only notes up to 40 chars (units), then none, and points at :full true, which prints the whole entry")
+fn helpEntry o: ToolOp full: Bool -> String
+  (let [(hasParams (and (not (stringEmpty? o.paramsCompact)) (not (= o.paramsCompact "()"))))
+        (more ":more \":full true\"")
+        (whole (t2Entry o true true))
+        (tiers (list (t2EntryWith o true true false 0 more) (t2EntryWith o true true false 1 more)))]
+    (cond
+      ((or full (or (not hasParams) (<= (stringLength whole) 960))) whole)
+      (else (optionOr (listFind (fn [(e String)] -> Bool (<= (stringLength e) 940)) tiers) (t2EntryWith o true true false 2 more)))))
+
 fn t2Entry o: ToolOp withPublic: Bool withDoc: Bool -> String
+  (t2EntryWith o withPublic withDoc true 0 "")
+
+fn t2EntryWith o: ToolOp withPublic: Bool withDoc: Bool withForm: Bool notes: Int64 more: String -> String
   (stringJoin
     (filter (fn [(x String)] -> Bool (not (stringEmpty? x)))
             (list (str "(:op :" o.name)
                   (if (and withPublic (not (stringEmpty? o.public))) (str ":public " (s/quoted o.public)) "")
                   (if (and withDoc (not (stringEmpty? o.doc))) (str ":doc " (s/quoted o.doc)) "")
-                  (if (stringEmpty? o.form) "" (str ":form " (s/quoted o.form)))
-                  (cond ((not (stringEmpty? o.paramsCompact)) (str ":params " o.paramsCompact)) ((not (stringEmpty? o.paramsRaw)) (str ":params " o.paramsRaw)) (else ""))
+                  (if (or (not withForm) (stringEmpty? o.form)) "" (str ":form " (s/quoted o.form)))
+                  (cond ((> notes 0) (str ":params (" (stringJoin (map (fn [(p Param)] -> String (if (= notes 1) p.short p.bare)) (paramItems o.paramsRaw (stringToBytes o.paramsRaw) (stringLength o.paramsRaw) 0 (list))) " ") ")"))
+                        ((not (stringEmpty? o.paramsCompact)) (str ":params " o.paramsCompact)) ((not (stringEmpty? o.paramsRaw)) (str ":params " o.paramsRaw)) (else ""))
                   (if (listEmpty? o.examples) "" (str ":examples (" (stringJoin (map s/quoted o.examples) " ") ")"))
                   (if (listEmpty? o.errors) "" (str ":errors (" (stringJoin o.errors " ") ")"))
                   (if (listEmpty? o.related) "" (str ":related (" (stringJoin o.related " ") ")"))
+                  (if (or withForm (listEmpty? o.accepts)) "" (str ":accepts (" (stringJoin o.accepts " ") ")"))
+                  more
                   ")"))
     " ")
 
@@ -553,5 +571,5 @@ fn helpStep! ctx: s/KnowCtx id: Int64 kw: (Map String String) args: (List String
               ((none) (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_UNKNOWN_TOPIC\" :message \"Unknown topic\"" (nearTail (listSort (map pairFirst reg.topics)) topic true) ")")))))
           (else
             (match (mapGet known op)
-              ((some o) (s/okLine (str (s/stepHead id "help") " :status \"ok\" :op " (t2Entry o true true) ")")))
+              ((some o) (s/okLine (str (s/stepHead id "help") " :status \"ok\" :op " (helpEntry o (= (optionOr (mapGet kw "full") "") "true")) ")")))
               ((none) (s/badLine (str (s/stepHead id "help") " :status \"rejected\" :error-code \":ERR_UNKNOWN_OP\" :message \"Unknown operation\"" (nearTail (listSort (mapKeys known)) op false) ")")))))))))

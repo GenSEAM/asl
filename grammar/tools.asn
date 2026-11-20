@@ -37,7 +37,7 @@
     (:op :help
       :scope any
       :public "Show help for an op, a topic, or the ASL builtins whose name contains a text."
-      :form "(:help :op <name>) | (:help :topic <topic>) | (:help :builtin <text>) | (:tools :op <name>)"
+      :form "(:help :op <name>) | (:help :topic <topic>) | (:help :builtin <text>) | (:help :op <name> :full true) | (:tools :op <name>)"
       :params (
         (:op :type sym :default :read :note "operation name to describe")
         (:topic :type sym :default :staging :note "topic name to explain")
@@ -47,6 +47,7 @@
         "(:tools :op \"read\")"
         "(:help :builtin \"stringTo\")"
       )
+      :accepts (full)
       :errors (ERR_UNKNOWN_SYMBOL ERR_UNIMPLEMENTED)
       :related (tools)
       :doc "Display documentation, signatures, parameters, examples, and error codes for ops and topics.")
@@ -372,10 +373,10 @@
       :public "Propose or stage minimal delimiter repair."
       :form "(:fix :file <path> [:apply <sym>] [:by <sym>] [:scope <sym>])"
       :params (
-        (:file :type str :req true :note "path to ASL or ASN file to balance")
-        (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
-        (:by :type sym :default :minimal :note ":indent takes every closer from indentation: a line at column x closes the frames opened at column x or right of it and reopens a frame the previous line closed at column x - 2 or left of it; each edit names its opener and the deciding line")
-        (:scope :type sym :default :broken :note "with :by :indent, :broken changes only top-level forms whose delimiters do not balance and lists the rest as :skipped; :all also moves closers in balanced forms whose indentation disagrees")
+        (:file :type str :req true :note "ASL or ASN file to balance")
+        (:apply :type sym :default :none :note "stage the repair (:true, :indentation, :heuristic)")
+        (:by :type sym :default :minimal :note ":indent closes by indentation: column x closes frames opened at x or right, reopens one closed at x - 2 or left")
+        (:scope :type sym :default :broken :note "with :by :indent, :broken edits only unbalanced forms, :all balanced ones too")
       )
       :accepts (path)
       :examples (
@@ -384,7 +385,7 @@
       )
       :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_UNSUPPORTED_LANGUAGE ERR_AMBIGUOUS_REPAIR ERR_UNREPAIRABLE)
       :related (check test edit)
-      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation. With :by :indent the closers follow the indentation instead, which repairs a missing or extra closer at the line where it was lost; a rejected minimal repair carries the :indent edits as a hint.")
+      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when unique; an indentation tie-break needs :apply :indentation. :by :indent repairs a lost closer at its line.")
 
     (:op :txn
       :scope any
