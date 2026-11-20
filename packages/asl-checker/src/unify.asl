@@ -3,7 +3,7 @@
 (enum UnifyOutcome (:c uOk [(subst (Map Int64 ty/Type))] "Unification succeeded with updated substitution") (:c uErr [(msg String) (numeric Bool)] "Unification failed with message and numeric mismatch flag"))
 
 fn resolveVarSubstRec subst: (Map Int64 ty/Type) cur: ty/Type fuel: Int64 -> ty/Type
-  (if (<= fuel 0) cur (match cur ((ty/tyVar id _) (match (mapGet subst id) ((some nxt) (match nxt ((ty/tyVar nid _) (if (= nid id) cur (resolveVarSubstRec subst nxt (- fuel 1)))) (_ nxt))) ((none) cur))) (_ cur)))
+  (if (<= fuel 0) cur (match cur ((ty/tyVar id _) (match (mapGet subst id) ((some nxt) (match nxt ((ty/tyVar nid _) (if (= nid id) nxt (resolveVarSubstRec subst nxt (- fuel 1)))) (_ nxt))) ((none) cur))) (_ cur)))
 
 fn resolveVarSubst subst: (Map Int64 ty/Type) cur: ty/Type -> ty/Type
   (resolveVarSubstRec subst cur 100)
