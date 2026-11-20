@@ -67,8 +67,9 @@ fn consultStep id: Int64 kw: (Map String String) args: (List String) -> StepOutc
                 (str " :role \"" (k/escapeAsnVal role) "\" :prompt \"" (k/escapeAsnVal prompt) "\" :target \"" (k/escapeAsnVal target)
                      "\" :message \"no critic model is wired to this op; route external consultation through asl-relay\""))))
 
+; (:m :ref FORMS-SOCKET-TREE-LINUX :do "the engine state dir .asl is skipped like .git: a subprocess form run writes caches under the request root, which the socket path never does, so counting them made the same (:tree :path \".\") answer differ by transport on Linux")
 fn excludedTreeDir? name: String -> Bool
-  (or (= name ".git") (= name "node_modules") (= name "__pycache__"))
+  (or (= name ".git") (= name ".asl") (= name "node_modules") (= name "__pycache__"))
 
 fn relJoin relDir: String name: String -> String
   (if (stringEmpty? relDir) name (str relDir "/" name))
