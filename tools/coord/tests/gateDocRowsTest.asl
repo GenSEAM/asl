@@ -47,6 +47,13 @@ fn ! unitWith! root: String id: String file: String text: String rows: String ->
         (c (g wt "-c user.email=t@example.invalid -c user.name=t commit -qm unit"))]
     (if (and (= made.exit 0) (and (= a.exit 0) (= c.exit 0))) (pf/cuIn id "gating" wt (str "sh/" id)) (pf/cuIn id "gating" "" "")))
 
+; (:m :ref DOC-ROWS-AT-GATE :do "the unit also adds the insert row to its package doc.asn, so the ledger check passes and the know tool stays the judge of the case")
+fn ! withRow! c: cd/CUnit -> Bool
+  (let [(_ (fileAppend (str c.wt "/asl/packages/asl-utils/doc.asn") "(:doc :symbol \"asl/packages/asl-utils/src/trie.asl#insert\" :text \"inserts\")\n"))
+        (a (g c.wt "add -A"))
+        (m (g c.wt "-c user.email=t@example.invalid -c user.name=t commit -q --amend --no-edit"))]
+    (= m.exit 0))
+
 fn unitOf id: String -> st/Task
   (with (pf/unitIn id "echo '(:gate :asserts 1 :failed 0)'") :owns (list "asl/packages/asl-utils/src/trie.asl"))
 
@@ -79,6 +86,7 @@ fn ! runTests -> Bool
         (rA (cd/gatesResN 60 60 "" (unitOf "A") cA))
         (cB (unitWith! root "B" "asl/packages/asl-utils/src/trie.asl" (trieNew) ""))
         (_ (fileAppend (str cB.wt "/.fakeRows") "(:know :missing :new 0)\n"))
+        (_ (withRow! cB))
         (rB (cd/gatesResN 60 60 "" (unitOf "B") cB))
         (cC (unitWith! root "C" "docs/a.txt" "x\n" (rowsBoth)))
         (rC (cd/gatesResN 60 60 "" (unitOf "C") cC))
@@ -86,6 +94,7 @@ fn ! runTests -> Bool
         (rD (cd/gatesResN 60 60 "" (unitOf "D") cD))
         (cE (unitWith! root "E" "asl/packages/asl-utils/src/trie.asl" (trieNew) (rowsBoth)))
         (_ (fileWrite (str cE.wt "/.fakeFail") "1"))
+        (_ (withRow! cE))
         (rE (cd/gatesResN 60 60 "" (unitOf "E") cE))
         (lA (logOf cA.wt)) (lB (logOf cB.wt)) (lC (logOf cC.wt)) (lD (logOf cD.wt)) (lE (logOf cE.wt))
         (gA (dg/main (list cA.wt "main")))
@@ -105,11 +114,11 @@ fn ! runTests -> Bool
         (assert (and (not (stringEmpty? cA.wt)) (and (not (stringEmpty? cB.wt)) (and (not (stringEmpty? cC.wt)) (and (not (stringEmpty? cD.wt)) (not (stringEmpty? cE.wt)))))) "five unit worktrees exist")
         (assert (pureParts) "pure parts")
         (assert (= (pairFirst rA).exit 3) (str "A: a new exported fn without a doc row is red: " (pairFirst rA).sig))
-        (assert (stringContains? (pairFirst rA).sig "asl-utils/trie/insert") "A: the symbol is named")
+        (assert (stringContains? (pairFirst rA).sig "trie.asl#insert") "A: the symbol is named")
         (assert (stringContains? (pairFirst rA).sig "(:doc :symbol \"asl/packages/asl-utils/src/trie.asl#insert\" :text \"one sentence: what it returns and when it fails\")") (str "A: the literal row form: " (pairFirst rA).sig))
         (assert (stringContains? (pairFirst rA).sig "asl/packages/asl-utils/doc.asn") "A: the doc.asn path")
         (assert (not (stringContains? (pairFirst rA).sig "trie/empty")) "A: the base's own miss is not charged")
-        (assert (= (toolRuns lA) 1) (str "A: the tool ran once: " lA))
+        (assert (= (toolRuns lA) 0) (str "A: the ledger check answers before the tool starts (DOC-ROWS-AT-GATE): " lA))
         (assert (= (pairFirst rB).exit 0) (str "B: with the row the gate is green: " (pairFirst rB).sig))
         (assert (stringContains? (pairSecond rB) ":ran true :charged 0") (str "B: the note says ran and charged 0: " (pairSecond rB)))
         (assert (= (toolRuns lB) 1) "B: the tool ran")
