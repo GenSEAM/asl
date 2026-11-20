@@ -2,6 +2,7 @@
   :x [runTests]
   :i [(aslAgent/jail :a jl) (aslAgent/core :a c) (asl-tools/fleet/run :a fr)])
 
+; (:m :ref LEON-JAIL-SHARED-CLI :do "the real entry is cloned into the shared cache only after the first seed: with it present the first seed would already pick it by content (scanFits!), and this part shows the head following a later deploy")
 ; (:m :ref LEON-JAIL-CLI-CACHE :do "the private native CLI cache of a jail home follows the shared one: the decision as data, the re-seed on fake shared caches (a deploy moves the pointer, a second call is a no-op, a child's own newer build stays, a worktree without a shared pointer borrows the tool root's with the verify stamp), JAIL-SEED-SYMLINK refusals (a symlink at the private cache, a private head, a private cli directory, a shared head or cli directory, the jail home itself), and one real jailed bin/asl check after a deploy that must run without a native build. Fixtures under one <tmp>/leonjailcli-<ns> directory removed at the end; where this test already runs inside a sandbox the tool probe is empty and the real jailed call is skipped by name")
 fn ! tmpBase! -> String
   (match (fileStat "/private/tmp") ((ok st) (if st.isDir "/private/tmp" "/tmp")) ((err _) "/tmp"))
@@ -226,8 +227,7 @@ fn ! jailedGates! base: String -> Bool
         root (str base "/root")
         shared (str base "/shared")
         made (and (ok? (dirCreate root)) (and (ok? (dirCreate shared)) (ok? (fileWrite (str root "/a.asl") "(module fx/a\n  :x [one])\n\nfn one -> Int64\n  1\n"))))
-        clonedNew (and (stringStartsWith? key "cli-") (clone! realDir (str shared "/" key)))
-        clonedOld (and clonedNew (clone! realDir (str shared "/cli-stale")))
+        clonedOld (and (stringStartsWith? key "cli-") (clone! realDir (str shared "/cli-stale")))
         dep (firstLine (readText! (str shared "/cli-stale/deps")))
         altered (ok? (fileWrite (str shared "/cli-stale/src/" dep) (str (readText! (str shared "/cli-stale/src/" dep)) "\n; stale\n")))
         headFile (str shared "/" (jl/cliHeadName toolRoot))
@@ -238,6 +238,7 @@ fn ! jailedGates! base: String -> Bool
         home (jl/jailHome root)
         cli (str home "/.asl/run/nativeCli")
         before (readText! (str cli "/" (jl/cliHeadName toolRoot)))
+        clonedNew (and (stringStartsWith? key "cli-") (clone! realDir (str shared "/" key)))
         deployed (ok? (fileWrite headFile (str shared "/" key "\n")))
         rows (jl/childEnvIn! root inherited (list) fakeHome true)
         after (readText! (str cli "/" (jl/cliHeadName toolRoot)))

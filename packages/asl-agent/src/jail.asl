@@ -269,6 +269,16 @@ fn ! pointHead! dst: String head: String dir: String stamp: Int64 -> Bool
       (and (ok? (fileWrite part (str dst "/" (lastSeg dir) "\n")))
         (and (ok? (fileUtime part stamp)) (ok? (pathRename part (str dst "/" head)))))))
 
+; (:m :ref LEON-JAIL-SHARED-CLI :do "the shared store is keyed by content, cli-<digest>, and its head pointers name only the newest entry per root: a writer branched from an older base has sources equal to an older entry no head names, and it rebuilt the CLI. When no head candidate fits, every other cli-* directory of the shared store (plain directories, at most scanCap, read-only) is checked against the root with sourceMatches! and the fitting ones become candidates, stamped with their directory mtime; the store is never written, the chosen entry is copied into the private cache as before and a root that fits none still builds privately")
+fn scanCap -> Int64
+  64
+
+fn ! scanFits! src: String here: String skip: (List String) -> (List CliSource)
+  (let [names (listTake (filter (fn [n] (stringStartsWith? n "cli-")) (resultOr (dirList src) (list))) (scanCap))
+        dirs (filter (fn [d] (and (not (listContains? skip d)) (and (linkFree! src d) (match (fileLstat d) ((ok st) (and st.isDir (not st.isSymlink))) ((err _) false))))) (map (fn [n] (str src "/" n)) names))
+        fit (filter (fn [d] (sourceMatches! here d)) dirs)]
+    (map (fn [d] (CliSource :dir d :stamp (match (fileLstat d) ((ok st) st.mtimeNs) ((err _) -1)) :own false :fits true)) fit))
+
 ; (:m :ref LEON-JAIL-CLI-CACHE :do "one private head: the shared pointers it may follow are its own and, for the first head (the unit's own root, currentHeads), the tool root's; the private entry counts only when it is a plain cli directory inside the private cache. Returns resync when it moved the head, failed: <why>, or empty when nothing changed or the private entry was only restamped")
 ; (:m :ref LEON-STEP-BODY-LOST :do "root may name several roots, one per line: each head is checked against the root it is named after (head_X against the sources of X) and may borrow any other head's fitting entry, so a jail seeds both the tool root's head, which the jailed tool bin/asl reads, and a task root's own head where it has a bin/asl, which its gates and runs read (grader 2026-11-18 on 9424129aa: a worktree without its own shared head went to a cold build). A head no root is named after keeps the old rule: the first head is checked against the first root")
 fn ! resyncHead! src: String dst: String heads: (List String) head: String root: String -> String
@@ -288,7 +298,9 @@ fn ! resyncHead! src: String dst: String heads: (List String) head: String root:
       ((not (resyncNeeded? privStamp privSuspect cands)) "")
       (else
         (let [privFits (and (not (stringEmpty? privDir)) (sourceMatches! here privDir))
-              pick (pickSource privFits (map (fn [(c CliSource)] -> CliSource (with c :fits (sourceMatches! here c.dir))) cands) (nowNs))
+              fitted (map (fn [(c CliSource)] -> CliSource (with c :fits (sourceMatches! here c.dir))) cands)
+              more (if (or privFits (or (stringEmpty? here) (listAny? (fn [(c CliSource)] -> Bool c.fits) fitted))) (list) (scanFits! src here (map (fn [(c CliSource)] -> String c.dir) cands)))
+              pick (pickSource privFits (listAppend fitted more) (nowNs))
               dir (pairFirst pick)
               stamp (pairSecond pick)]
           (cond
