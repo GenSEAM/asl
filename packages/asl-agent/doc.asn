@@ -1414,3 +1414,8 @@
 (:doc :symbol "asl/packages/asl-agent/src/jail.asl#scanCap" :text "the most cli-* entries of the shared store one re-seed examines when no head names a fitting one (LEON-JAIL-SHARED-CLI)")
 (:doc :symbol "asl/packages/asl-agent/tests/jailSharedCliTest.asl#" :text "Gate LEON-JAIL-SHARED-CLI: a writer whose CLI sources equal an older shared cli-<digest> entry no head names copies it and does not build, sources that fit no entry do not take a foreign one, and the shared store is not writable from the jail")
 (:doc :symbol "asl/packages/asl-agent/tests/jailSharedCliTest.asl#runTests" :text "runs the shared CLI store gate")
+(:doc :symbol "asl/packages/asl-agent/tests/jailToolSharedTest.asl#" :text "Gate NODE-CLI-REBUILD-PER-TREE: an edit of a file outside the entry deps keeps the main entry, an edit of a file the deps name (gateway or tool) leaves the head behind so the unit builds its own CLI, a failed build is not answered by the main entry")
+(:doc :symbol "asl/packages/asl-agent/tests/jailToolSharedTest.asl#runTests" :text "runs the per-tree CLI gate")
+(:doc :symbol "asl/packages/asl-agent/tests/runOpsTest.asl#plainFileMode!" :text "the mode a plainly created file gets under the test process's umask, probed beside the journal log (NODE-AGENT-BASE-REDS)")
+(:doc :symbol "asl/packages/asl-agent/tests/runOpsTest.asl#canonMode!" :text "a recorded file mode as the fixture's 420 when it is the plain created mode of this machine, else itself, so the recorded originals hold under any umask without hiding a wrong mode")
+(:doc :symbol "asl/packages/asl-agent/tests/gateKillTreeTest.asl#ownGroup" :text "the launcher that puts the fixture child in its own process group: setsid where it exists, empty (case skipped) otherwise")

@@ -98,6 +98,7 @@ fn ! replayStepTimeoutCase form: String -> Bool
 fn ! darwin? -> Bool
   (match (platformInfo) ((ok p) (= p.os "Darwin")) ((err _) false))
 
+; (:m :ref NODE-AGENT-BASE-REDS :do "the errno of connecting to a regular file is the platform's: Darwin answers ENOTSOCK (38), Linux answers ECONNREFUSED (111); the transport text table of asl-engine transport names both, so the case asserts the platform's own text and still fails for any other")
 fn ! replayTransportCase form: String real: String root: String -> Bool
   (let [kv (c/parseKv form)
         id (getStr kv "id")
@@ -116,7 +117,7 @@ fn ! replayTransportCase form: String real: String root: String -> Bool
         (assert (= gotMode wantMode) (str id ": mode matches"))
         (if exists
           (do (assert (stringStartsWith? gotWhy (str "no ping answer at " sockPath ": [Errno ")) (str id ": why says the ping at this path got no answer, with the errno"))
-              (assert (stringEndsWith? gotWhy "] Socket operation on non-socket") (str id ": connecting to a file that is not a socket fails with ENOTSOCK"))
+              (assert (stringEndsWith? gotWhy (if (darwin?) "] Socket operation on non-socket" "] Connection refused")) (str id ": connecting to a file that is not a socket fails with ENOTSOCK on Darwin and with ECONNREFUSED on Linux, whose connect() reports a path that holds no listener that way: " gotWhy))
               (assert (or (!= id "pingRefused") (not (darwin?)) (= gotWhy wantWhy)) (str id ": on Darwin, where the fixture was recorded, why equals the original"))
               (assert (stringContains? wantWhy sockPath) (str id ": the original fell back on the same path"))
               (assert (= gotField (str ":transport :" wantMode " :transportWhy \"" (c/escapeAsn gotWhy) "\"")) (str id ": field matches the fallback")))

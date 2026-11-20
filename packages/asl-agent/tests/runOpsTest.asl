@@ -73,8 +73,20 @@ fn treeText! root: String -> String
 fn readOr! path: String -> String
   (resultOr (fileReadString path) "")
 
-fn journalAdd! logPath: String rel: String bytes: (Option String) mode: Int64 -> Bool
-  (let [entry (str (c/serString rel) "\t(j " (c/serString rel) " " (match bytes ((some b) (c/serString b)) ((none) "nil")) " " (stringFromInt64 mode) ")\n")]
+; (:m :ref NODE-AGENT-BASE-REDS :do "the recorded originals hold 420 (0644), the mode a file gets under umask 022; a file made under another umask (an ssh session on the Linux node had 0002, its services 0022) has another mode and the case failed for that alone. The test names no umask of its own, so it asks the machine what a plain created file gets and compares the recorded mode as 420 when it is that mode and as itself otherwise: a harness that recorded a wrong mode still differs")
+fn ! plainFileMode! logPath: String -> Int64
+  (let [probe (str logPath ".umaskProbe")
+        wrote (fileWrite probe "x")
+        mode (match (fileStat probe) ((ok st) (mod st.mode 4096)) ((err _) -1))
+        gone (pathRemove probe)]
+    mode)
+
+fn ! canonMode! logPath: String mode: Int64 -> Int64
+  (if (= mode (plainFileMode! logPath)) 420 mode)
+
+fn journalAdd! logPath: String rel: String bytes: (Option String) rawMode: Int64 -> Bool
+  (let [mode (canonMode! logPath rawMode)
+        entry (str (c/serString rel) "\t(j " (c/serString rel) " " (match bytes ((some b) (c/serString b)) ((none) "nil")) " " (stringFromInt64 mode) ")\n")]
     (ok? (fileWrite logPath (str (readOr! logPath) entry))))
 
 fn journalText! logPath: String -> String
