@@ -739,8 +739,11 @@ fn identify! req: ChatRequest world: ChatWorld path: String body: j/Json ws: Str
                                      (cond ((not (stringEmpty? role)) role) ((not (stringEmpty? intent)) intent) (else "coder"))
                                      (cond ((not (stringEmpty? role)) (str role ":" lens)) ((not (stringEmpty? intent)) (str intent ":" lens)) (else lens))))
                         (explicitModel (if (pt/pyTruthy prepared) (strOr (getOr prepared "model" (j/jstr "")) "") ""))
-                        (routed (and (= path "/chat/completions") (or (stringEmpty? explicitModel) (or (= explicitModel "default") (= explicitModel "profile")))))
-                        (cx (Ctx :req req :world world :path path :asn (wantsAsn? hs)
+                        (profileModel (and (= path "/chat/completions") (not (stringEmpty? explicitModel)) (match world.table ((err _) false) ((ok t) (and (not (mapHas? t.models explicitModel)) (mapHas? t.profiles explicitModel))))))
+                        (routed (and (= path "/chat/completions") (or (or (stringEmpty? explicitModel) (or (= explicitModel "default") (= explicitModel "profile"))) profileModel)))
+                        ; (:m :ref GW-MODEL-AS-PROFILE :do "a model that is no registered model or alias id but is a profile id routes as model default under that profile, so a client that cannot set headers picks a profile by model name; an explicit X-ASL-Profile header still wins and a real model or alias of the same name still alias-routes")
+                        (req2 (if (and profileModel (stringEmpty? (u/pyStrip (optionOr (u/headerGet hs "X-ASL-Profile") "")))) (with req :headers (cons (pair "X-ASL-Profile" explicitModel) req.headers)) req))
+                        (cx (Ctx :req req2 :world world :path path :asn (wantsAsn? hs)
                                  :sanitize (listContains? (list "true" "1") (u/pyLower (optionOr (u/headerGet hs "X-Sanitize-ASN") "")))
                                  :intent intent :role role :workspace ws :explicitModel explicitModel :profileRouted routed
                                  :profileName "" :table (match world.table ((ok t) (some t)) ((err _) none)) :reqKeys reqKeys
