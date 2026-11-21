@@ -8,6 +8,7 @@
       GatewayParams
       emptyGatewayParams
       defaultStreamFirstByteSec
+      defaultNonStreamFirstByteSec
       defaultStreamIdleSec
       mergeParams
       GatewayRoute
@@ -158,6 +159,10 @@ fn defaultStreamFirstByteSec -> Float64
 
 fn defaultStreamIdleSec -> Float64
   60.0
+
+; (:m :ref STALL-FIRST-BYTE :do "adopted 2026-11-21: what a row not sent as a stream gets when neither it nor its provider names :firstByteSec. Measured on node2, successful non-stream calls in ~/.asl/run/usage/gatewayCalls.asn* over the 72 h to 2026-11-21 (:ms, one model per sample): synGlm53 p50 236 s, p99 533 s, max 540 s with 35 of 91 calls over 300 s, every other model at most 225 s. 900 s is about 1.67 times that max and below the conductor stalledMin of 20 min, so a call that accepts and never answers ends as a stall the cascade handles before the writer wall budget; a row that needs longer names :firstByteSec")
+fn defaultNonStreamFirstByteSec -> Float64
+  900.0
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams

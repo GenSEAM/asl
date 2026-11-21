@@ -1,5 +1,5 @@
 (module aslGateway/chat
-  :x [ChatRequest upstreamTools parkedHoldMs
+  :x [rowDeadlines stallText ChatRequest upstreamTools parkedHoldMs
       sseToChat
       streamBody
       gatewayOriginHeader
@@ -1801,21 +1801,26 @@ fn rateAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
          (httpAttempt cx l a)))
       ((none) (httpAttempt cx l a))))
 
-; (:m :ref TLE-2-PROVIDER-WAIT :do "the attempt's silence limits: :firstByteSec and :idleSec as resolved for the row (model over provider). A row sent as a stream takes defaultStreamFirstByteSec and defaultStreamIdleSec where none is set; a row not sent as a stream has no idle limit and a first-byte limit only when one is configured, since its first byte is its whole answer")
+; (:m :ref TLE-2-PROVIDER-WAIT :do "the attempt's silence limits: :firstByteSec and :idleSec as resolved for the row (model over provider). A row sent as a stream takes defaultStreamFirstByteSec and defaultStreamIdleSec where none is set; a row not sent as a stream has no idle limit and the first-byte limit it names, else defaultNonStreamFirstByteSec (STALL-FIRST-BYTE), since its first byte is its whole answer; a row with no v2 config takes the same default")
 fn httpDeadlines a: Attempt -> u/CallDeadlines
-  (match a.v2
-    ((none) (u/noCallDeadlines))
+  (rowDeadlines a.v2 a.api)
+
+; (:m :ref STALL-FIRST-BYTE :do "the limits of a row by its config and wire api; a row with no v2 config is not a stream and takes the non-stream default")
+fn rowDeadlines v2: (Option c/GatewayEntry) api: String -> u/CallDeadlines
+  (match v2
+    ((none) (u/CallDeadlines :firstByteSec (c/defaultNonStreamFirstByteSec) :idleSec 0.0))
     ((some e)
-      (if (and (rowStream a.v2) (= a.api "chat"))
+      (if (and (rowStream v2) (= api "chat"))
         (u/CallDeadlines :firstByteSec (if (> e.firstByteSec 0.0) e.firstByteSec (c/defaultStreamFirstByteSec))
                          :idleSec (if (> e.idleSec 0.0) e.idleSec (c/defaultStreamIdleSec)))
-        (u/CallDeadlines :firstByteSec e.firstByteSec :idleSec 0.0))))
+        (u/CallDeadlines :firstByteSec (if (> e.firstByteSec 0.0) e.firstByteSec (c/defaultNonStreamFirstByteSec)) :idleSec 0.0))))
 
 ; (:m :ref TLE-2-PROVIDER-WAIT :do "the ledger outcome of an attempt the reactor cut for silence, empty for any other failure text")
 fn deadlineOutcome text: String -> String
   (cond
     ((stringContains? text (u/firstByteDeadlineText)) "firstByteTimeout")
     ((stringContains? text (u/idleDeadlineText)) "idleTimeout")
+    ((stringContains? text (u/stallDeadlinePrefix)) "stall")
     (else ""))
 
 fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
@@ -1921,9 +1926,17 @@ fn retryTransport cx: Ctx l: Loop a: Attempt timeout: Bool text: String policy: 
     (str "retry " (if (not (stringEmpty? (deadlineOutcome text))) (deadlineOutcome text) (if timeout "timeout" "transport")))
     (fn [] -> ChatStep (raisedFinal cx l a timeout text)))
 
-fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text: String -> ChatStep
-  (let [(policy (retryPolicyFor cx a))]
-    (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableRaised? timeout text))
+; (:m :ref STALL-FIRST-BYTE :do "a first-byte cut of a row not sent as a stream is a stall: its text names the wait and the provider; a stream row keeps firstByteTimeout whatever its wire api")
+fn stallText v2: (Option c/GatewayEntry) api: String provider: String text: String -> String
+  (if (and (stringContains? text (u/firstByteDeadlineText)) (not (rowStream v2)))
+    (stringReplace text (u/firstByteDeadlineText) (u/stallDeadlineText provider (optionOr (float64ToInt64 (+ (rowDeadlines v2 api).firstByteSec 0.5)) 0)))
+    text)
+
+; (:m :ref STALL-FIRST-BYTE :do "a stall is never retried on the same attempt: the model that sent no byte for its whole first-byte limit goes to the next chain member at once")
+fn raised cx: Ctx l: Loop a: Attempt timeout: Bool text0: String -> ChatStep
+  (let [(text (stallText a.v2 a.api a.upstream.provider text0))
+        (policy (retryPolicyFor cx a))]
+    (if (and (> policy.maxAttempts 0) (< a.retryUsed policy.maxAttempts) (u/retryableRaised? timeout text) (not (stringContains? text (u/stallDeadlinePrefix))))
       (retryTransport cx l a timeout text policy)
       (raisedFinal cx l a timeout text)))
 

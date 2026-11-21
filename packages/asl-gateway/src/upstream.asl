@@ -106,6 +106,8 @@
       CallDeadlines
       noCallDeadlines
       idleDeadlineText
+      stallDeadlineText
+      stallDeadlinePrefix
       idleExpired?
       idleWaitMs
       upstreamCallWithDeadlines
@@ -1359,6 +1361,13 @@ fn noCallDeadlines -> CallDeadlines
 ; (:m :ref TLE-2-PROVIDER-WAIT :do "the reactor's stream stall guard: a call that gave bytes and then none for idleMs is aborted with this text, which chat.asl matches to note the attempt idleTimeout")
 fn idleDeadlineText -> String
   "idleTimeout: the response stream gave no bytes within the idle deadline"
+
+; (:m :ref STALL-FIRST-BYTE :do "the text of a non-stream call cut for sending no byte within its first-byte limit: stall: no first byte in Ns from <provider>; stallDeadlinePrefix is what chat.asl matches to note the attempt stall, a class distinct from the stream rows firstByteTimeout")
+fn stallDeadlinePrefix -> String
+  "stall: no first byte in "
+
+fn stallDeadlineText provider: String sec: Int64 -> String
+  (str (stallDeadlinePrefix) (stringFromInt64 sec) "s from " provider)
 
 fn idleExpired? idleMs: Int64 lastByteMs: Int64 gotBytes: Bool nowMs: Int64 -> Bool
   (and (> idleMs 0) (and gotBytes (>= nowMs (+ lastByteMs idleMs))))
