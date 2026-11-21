@@ -1,6 +1,6 @@
 (module asl-coord/claims
   :x [ClaimsStore Lease claimsStore! claimsAt leaseContent parseLease parseOwns
-      pathsOverlap? claims! claim! release! pathAllowed!]
+      pathsOverlap? pathWithin? claims! claim! release! pathAllowed!]
   :i [])
 
 (schema ClaimsStore (:f workspace String) (:f root String) (:f retired String) (:f lock String))
@@ -129,12 +129,16 @@ fn trimPath path: String -> String
       (trimPath (optionOr (stringSlice path 0 (- (stringLength path) 1)) "")))
     (else path))
 
+; (:m :ref OWNS-SYMBOL-CLAIMS :do "an :owns entry may be path#symbol (asl-tools/coord/store decides same-file clashes by symbol); a path check here is by file, so the symbol part is cut before the compare and a writer owning f.asl#sym may edit f.asl while f.asl and f.asl#B overlap")
+fn entryFile e: String -> String
+  (optionOr (listHead (stringSplit e "#")) e)
+
 fn pathsOverlap? left: String right: String -> Bool
-  (let [(a (trimPath left)) (b (trimPath right))]
+  (let [(a (trimPath (entryFile left))) (b (trimPath (entryFile right)))]
     (or (= a b) (stringStartsWith? a (str b "/")) (stringStartsWith? b (str a "/"))))
 
 fn pathWithin? path: String root: String -> Bool
-  (let [(p (trimPath path)) (r (trimPath root))]
+  (let [(p (trimPath (entryFile path))) (r (trimPath (entryFile root)))]
     (or (= p r) (stringStartsWith? p (str r "/"))))
 
 fn pathUnderOwns? path: String owns: (List String) -> Bool

@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf exportsOf newExports? docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerHomeOf ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf exportsOf newExports? docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerHomeOf ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -1575,6 +1575,29 @@ fn ! applyPassengers! ctx: Ctx c: CUnit -> Int64
                       ordered))]
     (listLength (filter (fn [(b Bool)] -> Bool b) applied)))
 
+; (:m :ref OWNS-HELD-WHILE-MERGING :do "a claim refused on :owns by H means wait for H: while H is in a stage up to merging (writing, gating, awaitReview, reviewing, merging) the wait is no stall, so it does not count toward maxWait and the unit is not blocked; it stays ready and the claim is tried again each tick until H merges, is closed or fails and its lease ends")
+fn ownsHeldByActive? why: String cus: (List CUnit) -> Bool
+  (and (stringContains? why " :why owns ")
+       (let [(by (quotedAfter why ":by \""))]
+         (and (not (stringEmpty? by))
+              (match (listFind (fn [(x CUnit)] -> Bool (= x.id by)) cus)
+                ((some h) (active? h))
+                ((none) false)))))
+
+; (:m :ref OWNS-HELD-WHILE-MERGING :do "units whose :owns clash with a live lease of another unit and that are ready go behind the rest in the step order (stable), so free slots go to work that can be claimed; every other unit keeps its place")
+fn ! ownsFreeFirst! ctx: Ctx units: (List st/Task) -> (List st/Task)
+  (match (st/readLeases! ctx.dir)
+    ((err _) units)
+    ((ok ls)
+      (let [(now (nowNs))
+            (held (filter (fn [(l st/Lease)] -> Bool (st/live? l now)) ls))
+            (cus (readCUnits! ctx.dir))
+            (blocked (fn [(u st/Task)] -> Bool
+                       (and (match (cuOf cus u.id) ((some c) (= c.st "ready")) ((none) false))
+                            (not (stringEmpty? (st/ownsClash u held))))))]
+        (listAppend (filter (fn [(u st/Task)] -> Bool (not (blocked u))) units)
+                    (filter blocked units)))))
+
 ; (:m :do "returns the in-flight capacity left for the rest of this tick")
 fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
   (let [(ctx (with ctx0 :hold (or ctx0.hold (= (sc/levelRead! ctx0.dir) "stop"))))
@@ -1597,7 +1620,7 @@ fn ! step! ctx0: Ctx u: st/Task cap: Int64 -> Int64
               (if (not (stringEmpty? why))
                 (let [(_ (refuseImpossible! ctx u c why))] cap)
                 (if (writeBound! ctx c) cap (match (st/claim! ctx.dir c.id ctx.holder ctx.ttlMs)
-                  ((err e) (let [(_ (waitMore! ctx c e))] cap))
+                  ((err e) (let [(_ (if (ownsHeldByActive? e cus) c (waitMore! ctx c e)))] cap))
                   ((ok text)
                     (let [(epoch (match (st/parseLease text) ((ok l) l.epoch) ((err _) 0)))
                           (_ (pathRemove (idlePath ctx.dir)))
@@ -1865,7 +1888,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
             (flying (listLength (filter slotHolder? (readCUnits! ctx.dir))))
             (_ (offerBacklog! ctx.dir (/ (nowNs) 1000000)))
             (_ (bpNote! ctx (readCUnits! ctx.dir)))
-            (_ (let [(flow (flowRowOf ctx.dir))] (if (flowOn? flow) (flowStep! ctx (mergeFair! ctx units) flow) (stepAll! ctx (mergeFair! ctx units) (- (tokensOf) flying)))))
+            (_ (let [(flow (flowRowOf ctx.dir))] (if (flowOn? flow) (flowStep! ctx (ownsFreeFirst! ctx (mergeFair! ctx units)) flow) (stepAll! ctx (ownsFreeFirst! ctx (mergeFair! ctx units)) (- (tokensOf) flying)))))
             (_ (rootRelease! ctx units))
             (_ (dwellNote! ctx))
             (_ (idleNote! ctx))
@@ -2029,12 +2052,19 @@ fn ! requestClose! dir: String ids: (List String) -> Bool
   (if (listEmpty? ids) true
     (ok? (fileAppend (closePath dir) (str (stringJoin (map (fn [(id String)] -> String (str "(:close :unit " (st/q id) ")")) ids) "\n") "\n"))))
 
+; (:m :ref CLOSE-STORE-DONE :do "a closed unit is merged in cond/ and must be done in the store too: a row left queued refuses every :after dependent for good (claimRefusal after); markDone! runs after the lease is dropped and a refusal is one (:closeStoreRefused) journal row")
+fn ! closeStoreDone! ctx: Ctx id: String -> Bool
+  (match (st/markDone! ctx.dir id "closed")
+    ((ok _) true)
+    ((err e) (ok? (fileAppend (journalPath ctx.dir) (str "(:closeStoreRefused :unit " (st/q id) " :why " (st/q e) " :at " (n (nowMs)) ")\n")))))
+
 fn ! closeOne! ctx: Ctx id: String -> Bool
   (match (cuOf (readCUnits! ctx.dir) id)
     ((none) false)
     ((some c)
       (if (not (or (listContains? (list "blocked" "failed" "queued" "ready" "needsPlan" "done") c.st) (baseAwait? c))) false
         (let [(_ (dropLease! ctx c))
+              (_ (closeStoreDone! ctx c.id))
               (_ (pwReset! ctx.dir c.id))
               (_ (dropTrains! ctx.dir c.id))
               (_ (deadlineForget! ctx.dir c.id))
@@ -2486,8 +2516,9 @@ fn afterSettled? u: st/Task cus: (List CUnit) -> Bool
 
 ; (:m :ref FLOW-DRAIN :do "a defective task waits for a plan, not a writer: with (:conductor :needsPlan true) a blocked unit whose signature is vacuousGate and that no blocked retry takes (no commit past its base), and a queued or ready unit whose :owns names a path that neither exists in the repo nor has its directory there (staleOwns) once every unit it names in :after is merged or closed (an unmerged :after unit may create the directory), move to state needsPlan with the reason as signature and one journal row; nothing steps a needsPlan unit, status counts it, its dependants show it as their root, and reload is its way out; without the key nothing moves")
 ; (:m :ref FLOW-DRAIN :do "an owns path is stale only on evidence that it used to exist: absent from the base tree, absent from the unit's own branch sh/ID, and removed or renamed away in the base history (git log --no-renames --diff-filter=D, read-only); a path that never existed is a file the unit creates and is live")
-fn ! ownsGone! repo: String base: String id: String p: String -> Bool
-  (let [(pre (stringTrim (optionOr (listHead (stringSplit p "*")) "")))
+fn ! ownsGone! repo: String base: String id: String p0: String -> Bool
+  (let [(p (entryFile p0))
+        (pre (stringTrim (optionOr (listHead (stringSplit p "*")) "")))
         (bare (if (stringEndsWith? pre "/") (optionOr (stringSlice pre 0 (- (stringLength pre) 1)) "") pre))]
     (and (and (not (stringEmpty? bare)) (not (fileExists? (str repo "/" bare))))
       (and (!= (gitOut repo (list "cat-file" "-e" (str base ":" bare))).exit 0)
@@ -2664,10 +2695,10 @@ fn ! impossibleWhy! ctx: Ctx u0: st/Task -> String
             (task (taskText ctx.dir u))
             (onBase (fn [(path String)] -> Bool (= (gitOut repo (list "cat-file" "-e" (str base ":" path))).exit 0)))
             (hadOnBase (fn [(path String)] -> Bool (let [(r (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" path)))] (and (= r.exit 0) (not (stringEmpty? (stringTrim r.out)))))))
-            (plain (filter (fn [(p String)] -> Bool (and (not (stringContains? p "*")) (not (stringEndsWith? p "/")))) u.owns))
-            (declared (fn [(d String)] -> Bool (or (stringContains? task d) (listAny? (fn [(o String)] -> Bool (and (stringEndsWith? o "/") (stringStartsWith? (str d "/") o))) u.owns))))
-            (ownedDirs (listAppend (map dirOf plain) (map (fn [(o String)] -> String (optionOr (stringSlice o 0 (- (stringLength o) 1)) o)) (filter (fn [(o String)] -> Bool (stringEndsWith? o "/")) u.owns))))
-            (createsGate (fn [(f String)] -> Bool (or (listContains? u.owns f) (or (stringContains? task f) (listAny? (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (stringStartsWith? f (str d "/")))) ownedDirs)))))
+            (plain (filter (fn [(p String)] -> Bool (and (not (stringContains? p "*")) (not (stringEndsWith? p "/")))) (entryFiles u.owns)))
+            (declared (fn [(d String)] -> Bool (or (stringContains? task d) (listAny? (fn [(o String)] -> Bool (and (stringEndsWith? o "/") (stringStartsWith? (str d "/") o))) (entryFiles u.owns)))))
+            (ownedDirs (listAppend (map dirOf plain) (map (fn [(o String)] -> String (optionOr (stringSlice o 0 (- (stringLength o) 1)) o)) (filter (fn [(o String)] -> Bool (stringEndsWith? o "/")) (entryFiles u.owns)))))
+            (createsGate (fn [(f String)] -> Bool (or (listContains? (entryFiles u.owns) f) (or (stringContains? task f) (listAny? (fn [(d String)] -> Bool (and (not (stringEmpty? d)) (stringStartsWith? f (str d "/")))) ownedDirs)))))
             (badDir (listFind (fn [(p String)] -> Bool (let [(d (dirOf p))] (and (not (stringEmpty? d)) (and (not (onBase d)) (and (not (declared d)) (hadOnBase d)))))) plain))
             (badGate (listFind (fn [(f String)] -> Bool (and (not (onBase f)) (and (not (createsGate f)) (hadOnBase f)))) (gateFiles u.gate)))
             (branches (filter (fn [(b String)] -> Bool (not (stringEmpty? b))) (handoffBranches task)))
@@ -2705,7 +2736,7 @@ fn ! ownsRemap! ctx: Ctx u: st/Task why: String -> String
             (gone (stringTrim (gitOut repo (list "log" "-1" "--format=%H" "--diff-filter=D" base "--" dir)).out))]
         (if (stringEmpty? gone) ""
           (let [(pairs (renamePairs (gitOut repo (list "show" "-M" "--name-status" "--format=" gone)).out))
-                (hits (filter (fn [(p String)] -> Bool (listAny? (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs)) u.owns))]
+                (hits (filter (fn [(p String)] -> Bool (listAny? (fn [(r (Pair String String))] -> Bool (= (pairFirst r) (entryFile p))) pairs)) u.owns))]
             (stringJoin (map (fn [(p String)] -> String (str p "=>" (pairSecond (optionOr (listFind (fn [(r (Pair String String))] -> Bool (= (pairFirst r) p)) pairs) (pair p p))))) hits) " "))))))
 
 fn ! refuseImpossible! ctx: Ctx u: st/Task c: CUnit why: String -> Unit
@@ -2875,6 +2906,22 @@ fn ! topHold! dir: String counts: (List (Pair String Int64)) -> String
       ((fileExists? (flowHeldPath dir)) "flow")
       (else "claim")))
 
+; (:m :ref OWNS-HELD-WHILE-MERGING :do "the reason a ready unit waits on a holder: one (:ownsHeld :by H :ready N) per live lease holder whose :owns clash with N ready units, empty when none")
+fn ! ownsHeldText! ctx: Ctx -> String
+  (match (st/readLeases! ctx.dir)
+    ((err _) "")
+    ((ok ls)
+      (match (st/readUnits! ctx.dir)
+        ((err _) "")
+        ((ok us)
+          (let [(now (nowNs))
+                (held (filter (fn [(l st/Lease)] -> Bool (st/live? l now)) ls))
+                (cus (readCUnits! ctx.dir))
+                (ready (filter (fn [(u st/Task)] -> Bool (match (cuOf cus u.id) ((some c) (= c.st "ready")) ((none) false))) us))
+                (byOf (fn [(u st/Task)] -> String (quotedAfter (st/ownsClash u held) ":by \"")))
+                (holders (uniq (filter (fn [(b String)] -> Bool (not (stringEmpty? b))) (map byOf ready))))]
+            (stringJoin (map (fn [(h String)] -> String (str " (:ownsHeld :by " (st/q h) " :ready " (n (listLength (filter (fn [(u st/Task)] -> Bool (= (byOf u) h)) ready))) ")")) holders) ""))))))
+
 ; (:m :ref WRITER-ADMIT-DECOUPLE :do "the status row of the ready class: (:readyHold :ready N :slots S :free F :admit A :cap .. :lane .. :draining .. :provider .. :merge .. :memory .. :token .. :warm .. :disk LEVEL [:base B :cut N]), counts from readyHoldCounts!, the disk cut from the scheduler's slots.asn")
 fn ! readyHoldText! ctx: Ctx -> String
   (let [(counts (readyHoldCounts! ctx))
@@ -2884,7 +2931,7 @@ fn ! readyHoldText! ctx: Ctx -> String
         (cus (readCUnits! ctx.dir))]
     (str "(:readyHold :ready " (n (listLength (filter (fn [(c CUnit)] -> Bool (= c.st "ready")) cus))) " :slots " (n slots) " :free " (n (freeSlots slots cus))
          (stringJoin (map (fn [(p (Pair String Int64))] -> String (str " :" (pairFirst p) " " (n (pairSecond p)))) counts) "")
-         (sc/diskCutText! ctx.dir) ")"))
+         (sc/diskCutText! ctx.dir) (ownsHeldText! ctx) ")"))
 
 fn idlePath dir: String -> String
   (str dir "/idle.asn")
@@ -3317,8 +3364,8 @@ fn ! batchableNow! dir: String c: CUnit -> Bool
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the passengers of one train: candidates in order, each kept when its changed files share none with the leader's or an earlier pick's, at most k - 1 of them; a candidate whose files are unknown (none) never rides")
 ; (:m :ref COND-OWNS-DOC-SERIALISES :do "files two branches of one train may both change: a package doc.asn (rows merge by the row driver, trn/rowDriverArgs) and the generated asl-know cards and missing.asn (the train's derived step rewrites them on the merged tree); they never keep a unit out of a batch, every other shared file still does")
 ; (:m :ref MERGE-BATCH-GRADES :do "grades.asn takes one LANDED-AUDIT row per reviewed branch and merges by row (asnRows driver), so it never keeps two branches apart; without it no batch ever formed on node2")
-fn mergeShared? f: String -> Bool
-  (or (st/sharedPath? f) (= f ".asl/mem/grades.asn"))
+fn mergeShared? f0: String -> Bool
+  (let [(f (entryFile f0))] (or (st/sharedPath? f) (= f ".asl/mem/grades.asn")))
 
 fn batchPick k: Int64 leaderFiles: (List String) cands: (List (Pair String (Option (List String)))) -> (List String)
   (pairFirst (fold (fn [(acc (Pair (List String) (List String))) (cd (Pair String (Option (List String))))] -> (Pair (List String) (List String))
@@ -3629,7 +3676,7 @@ fn ! nowLinesOf wt: String path: String -> Int64
 ; (:m :ref CONDHARDEN :do "an owned file that existed on the base and lost more than half its lines is refused unless the task text says rewrite; empty when every owned file is fine")
 fn ! shrinkRefusal! wt: String u: st/Task task: String -> String
   (optionOr (listHead (filter (fn [(s String)] -> Bool (not (stringEmpty? s)))
-    (map (fn [(p String)] -> String (gg/shrinkSig p (baseLinesOf wt (baseRef u) p) (nowLinesOf wt p) task)) u.owns))) "")
+    (map (fn [(p String)] -> String (gg/shrinkSig p (baseLinesOf wt (baseRef u) p) (nowLinesOf wt p) task)) (entryFiles u.owns)))) "")
 
 ; (:m :ref CONDHARDEN :do "files in the worktree that import an owned module, found by a literal grep for the module name and confirmed by the import-position check")
 fn ! importerFiles! wt: String owned: (List String) -> (List String)
@@ -3847,7 +3894,7 @@ fn ! gateRunRetry! gate: String wt: String gateSec: Int64 -> fr/Done
 
 fn ! gatesResN gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit -> (Pair Res String)
   (let [(refused (if (stringEmpty? u.gate) "" (shrinkRefusal! c.wt u task)))
-        (broken (if (or (stringEmpty? u.gate) (not (stringEmpty? refused))) "" (checkSig! c.wt u.owns checkSec)))
+        (broken (if (or (stringEmpty? u.gate) (not (stringEmpty? refused))) "" (checkSig! c.wt (entryFiles u.owns) checkSec)))
         (docs (if (or (stringEmpty? u.gate) (or (not (stringEmpty? refused)) (not (stringEmpty? broken)))) (pair "" "") (docRowsCheck! c.wt u (docCheckSec))))
         (bad (fn [(sig String)] -> Res (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig sig :ms 0 :exit 3 :asserts 0 :verdict "")))]
     (cond
@@ -4037,11 +4084,18 @@ fn vacuousSig gate: String -> String
 fn vacuousSig? sig: String -> Bool
   (stringStartsWith? sig "vacuousGate: ")
 
+; (:m :ref OWNS-SYMBOL-CONDUCTOR :do "an :owns entry is path or path#symbol (store.asl decides clashes with the symbol); everywhere the conductor compares changed files with :owns, hands :owns to git as a pathspec or to a writer as its allowed paths, the entry means its file, so a writer owning f.asl#a may change f.asl")
+fn entryFile e: String -> String
+  (optionOr (listHead (stringSplit e "#")) e)
+
+fn entryFiles owns: (List String) -> (List String)
+  (uniq (map entryFile owns))
+
 ; (:m :ref CONDUCTOR-ZERO-MERGE :do "the changed paths inside the unit's :owns, untracked ones included; driver debris outside :owns (.asl/gatewayProfilePin.asn) is no edit, and an owned path the writer never created is simply absent, where git add -- owns failed on it and committed nothing")
 fn ! ownedChanges! p: String owns: (List String) -> (List String)
   (if (listEmpty? owns)
     (if (fp/gitDirty? p) (list ".") (list))
-    (let [(r (gitOut p (listAppend (list "status" "--porcelain" "--untracked-files=all" "--") owns)))]
+    (let [(r (gitOut p (listAppend (list "status" "--porcelain" "--untracked-files=all" "--") (entryFiles owns))))]
       (if (!= r.exit 0) (list)
         (map (fn [(l String)] -> String
                (let [(path (optionOr (stringSlice l 3 (stringLength l)) ""))]
@@ -4112,7 +4166,7 @@ fn ! outsideOwned! p: String mb: String owns: (List String) -> (List String)
   (if (listEmpty? owns) (list)
     (let [(names (fn [(d fr/Done)] -> (List String) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out)))))
           (all (names (gitOut p (list "diff" "--name-only" "--no-renames" mb "HEAD"))))
-          (owned (names (gitOut p (listAppend (list "diff" "--name-only" "--no-renames" mb "HEAD" "--") owns))))]
+          (owned (names (gitOut p (listAppend (list "diff" "--name-only" "--no-renames" mb "HEAD" "--") (entryFiles owns)))))]
       (filter (fn [(f String)] -> Bool (and (not (listContains? owned f)) (not (harnessPath? f)))) all)))
 
 ; (:m :ref TLE-1-BASE-GREEN-ISSUED :do "paths the harness itself commits on a unit branch are not the writer's work outside :owns: the grade ledger, the gateway profile pin (worktree.asl wipCommitOwned! stages it with every wip rescue commit), and the know cards and missing.asn cardsRegen! commits. node2 2026-11-19: 27 of 59 unfinished units ahead of main held the pin as their only path outside :owns, 3 more only cards, missing.asn or a package doc.asn, so aheadGreen! returned none before it ran the gate and every claim started a writer on finished work")
@@ -4220,7 +4274,7 @@ fn ! aheadRedTask! dir: String id: String p: String -> String
 
 ; (:m :ref TLE-1-BASE-GREEN-ISSUED :do "owned edits an earlier writer run left uncommitted are work: the write stage commits them through the vcs layer before the ahead check, as commitWrite! does after a writer run, so a branch whose work sits in the tree reaches its gate and gating instead of another writer; a debt recorded at the old head moves with the commit, one (:aheadCommit ...) journal row; a refused commit changes nothing")
 fn ! aheadDirtyCommit! rc: RealCfg dir: String u: st/Task p: String -> Bool
-  (let [(changed (if (listEmpty? u.owns) (list) (ownedChanges! p u.owns)))]
+  (let [(changed (if (listEmpty? (entryFiles u.owns)) (list) (ownedChanges! p (entryFiles u.owns))))]
     (if (listEmpty? changed) false
       (let [(before (headOf! p))
             (r (vcs/commitWith! p p rc.repo changed (str "(:c :a coord :do \"unit " u.id ": owned edits an earlier writer run left uncommitted, committed before the ahead check\" :g none :ev (" u.id "))") "commit"))
@@ -4268,7 +4322,7 @@ fn baseGreenGateSig executed: Int64 base: Int64 -> String
   (str "baseGreen: the gate executed " (n executed) " assertions, not more than the " (n base) " it executed green on the base before the write; add an assertion on the required behaviour to the gate test")
 
 fn ! baseGreen! rc: RealCfg dir: String u: st/Task p: String -> (Option Res)
-  (if (or (stringEmpty? u.gate) (or (not (baseGreenOn! dir)) (or (not (blankSlate? p (baseRef u) u.owns)) (regressionGuard? (taskText dir u))))) none
+  (if (or (stringEmpty? u.gate) (or (not (baseGreenOn! dir)) (or (not (blankSlate? p (baseRef u) (entryFiles u.owns))) (regressionGuard? (taskText dir u))))) none
     (let [(head (headOf! p))]
       (if (stringEmpty? head) none
         (let [(t0 (nowMs))
@@ -4634,7 +4688,7 @@ fn ! ownedStates! wt: String owns: (List String) -> (List (Pair String Int64))
 ; (:m :ref COND-TASK-SPEC :do "the brief the writer gets: the stored task text (never rewritten in the store) with the owned paths' states at claim added, then the prior note when there is one")
 fn ! briefTask! wt: String dir: String u: st/Task prior: String -> String
   (let [(raw (taskText dir u))
-        (text (str (bf/briefFor raw (ownedStates! wt u.owns)) (bf/outlineFor! wt u.owns raw)))]
+        (text (str (bf/briefFor raw (ownedStates! wt (entryFiles u.owns))) (bf/outlineFor! wt (entryFiles u.owns) raw)))]
     (if (stringEmpty? prior) text (str text "\n\n" prior)))
 
 ; (:m :ref COND-MODEL-ESCALATE :do "the :stop of Leon's receipt: read from the final receipt row, and from the (:agentReceipt ...) form nested in an (:agent ... :receipt ...) wrapper when the row is the wrapper")
@@ -4773,27 +4827,27 @@ fn ! writeResWith run: (fn ! [RealCfg String String String String String (List S
         (let [(owed (workFixOwed? dir u.id p))
               (gfail (gatesFailureAt! dir u.id p))
               (prior (withMergeRed (priorNote! dir u.id) (mergeRedNote! dir u.id)))
-              (weakN (if (blankSlate? p (baseRef u) u.owns) (baseGreenNoteN dir u.id u.gate) 0))
+              (weakN (if (blankSlate? p (baseRef u) (entryFiles u.owns)) (baseGreenNoteN dir u.id u.gate) 0))
               (ared (aheadRedTask! dir u.id p))
               (task (str (handoffTaskText (fixRoundTask (briefTask! p dir u prior) gfail)) ared (baseGreenTask weakN) (docOwnsNote p u)))
               (gates (writerGates rc p u (str gfail ared)))
               (prof (writeProfileFor rc dir u.id c.lane))
               (arm (writeArm rc u.id))
               (_ (fileAppend (journalPath dir) (str "(:profile :unit " (st/q u.id) " :lane " (st/q c.lane) " :profile " (st/q prof) (if (stringEmpty? arm) "" (str " :arm " (st/q arm))) (if (stringEmpty? rc.writerModel) "" (str " :pin " (st/q rc.writerModel))) " :at " (n (/ (nowNs) 1000000)) ")\n")))
-              (pv (vacuousAround! p (baseRef u) u.owns u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task u.owns gates (withToolRoot! (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u)) rc.repo)))))))
+              (pv (vacuousAround! p (baseRef u) (entryFiles u.owns) u.gate task (fn [] -> fr/Done (onBaseRun! dir p (baseRef u) u.id (fn [] -> fr/Done (run rc c.lane u.id prof p task (entryFiles u.owns) gates (withToolRoot! (fp/withBase (pinExtra rc (armExtra arm)) (baseRef u)) rc.repo)))))))
               (d (pairFirst pv))
               (_ (leonReceiptSave! dir u.id d.out))
               (model (dispatchedModel (servedModel d.out) rc.writerModel prof))
               ; (:m :ref COND-RECOVER-C1 :do "a commit landed past the base during the run (the free pool's driver commit of a gate-passed row) is progress the gating stage can test, so a vacuous receipt does not block it: 21 of 30 vacuousGate units on node2 held such a commit and 16 of those were test-only diffs")
               ; (:m :ref TLE-1-BASE-GREEN-ISSUED :do "on a weak gate the verdict is the tree, not Leon's :vacuousGates list, which names the gate whatever the writer then added: a run that ended by itself and left no commit and no owned change is vacuous, any edit goes on to gating and its executed bound")
               (vacuous (if (> weakN 0)
-                         (and (noEdits? p (baseRef u) u.owns) (or (= d.exit 0) (listContains? (list "noChange" "needsReview") (stopOf d.out))))
+                         (and (noEdits? p (baseRef u) (entryFiles u.owns)) (or (= d.exit 0) (listContains? (list "noChange" "needsReview") (stopOf d.out))))
                          (and (pairSecond pv) (not (commitsPast? p (baseRef u))))))
               (stop (stopOf d.out))
               ; (:m :ref COND-WORK-PRESENT :do "a write that ends noChange on a branch already ahead of its base, with no fix owed (no gates or review failure since the last writer run), is written: the work is present and gating tests it; with a fix owed noChange stays a failure")
               (noChangeOk (and (= stop "noChange") (and (!= d.exit 0) (and (not owed) (commitsPast? p (baseRef u))))))
               (modelEsc (and (= stop "modelEscalated") (not vacuous)))
-              (_ (if vacuous false (commitWrite! p u.owns u.id model rc.repo)))
+              (_ (if vacuous false (commitWrite! p (entryFiles u.owns) u.id model rc.repo)))
               (_ (if vacuous false (cardsRegen! dir p u model rc.repo)))
               (reviewOk (and (!= d.exit 0) (and (not owed) (and (needsReviewGreen? d.out) (commitsPast? p (baseRef u))))))
               (softOk (or noChangeOk reviewOk))
@@ -5204,7 +5258,7 @@ fn pkgRootOf o: String -> String
 
 fn ownsPackages owns: (List String) -> (List String)
   (fold (fn [(acc (List String)) (o String)] -> (List String)
-          (let [(r (pkgRootOf o))]
+          (let [(r (pkgRootOf (entryFile o)))]
             (if (or (stringEmpty? r) (listContains? acc r)) acc (listAppend acc (list r)))))
         (list) owns)
 
@@ -5224,7 +5278,7 @@ fn docOwns owns: (List String) -> (List String)
         (base (if (listEmpty? pkgs) owns
                 (listAppend (listAppend owns docs) (filter (fn [(c String)] -> Bool (not (listContains? owns c))) (map cardOf pkgs)))))]
     (fold (fn [(acc (List String)) (o String)] -> (List String)
-            (let [(h (ledgerPathOf o))]
+            (let [(h (ledgerPathOf (entryFile o)))]
               (if (or (stringEmpty? h) (listContains? acc h)) acc (listAppend acc (list h)))))
           base owns))
 
