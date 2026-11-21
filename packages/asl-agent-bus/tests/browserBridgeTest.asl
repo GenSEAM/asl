@@ -13,7 +13,20 @@ fn testBridgeCompleteCommand -> Bool
   (let [(st0 (bb/bridgeInit 8765)) (cmd (bb/BridgeCommand :id "c1" :tabId "tab-1" :action "browser_click" :payload "{}" :status "pending" :result "")) (st1 (bb/bridgeEnqueueCommand st0 cmd)) (st2 (bb/bridgeCompleteCommand st1 "c1" "completed" "clicked element"))] (match (listGet st2.commands 0) ((some updatedCmd) (do (assert (= updatedCmd.status "completed") "cmd status completed") (assert (= updatedCmd.result "clicked element") "cmd result match") true)) (none false)))
 
 fn testFormatCorsHttpResponse -> Bool
-  (let [(resp200 (bb/formatCorsHttpResponse 200 "application/json" "{\"status\":\"ok\"}")) (resp204 (bb/formatCorsHttpResponse 204 "" ""))] (do (assert (not (= resp200 "")) "200 ok") (assert (stringContains? resp200 "Access-Control-Allow-Origin: http://localhost") "cors 200 allow origin") (assert (stringContains? resp200 "Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE") "cors 200 allow methods") (assert (stringContains? resp200 "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With") "cors 200 allow headers") (assert (not (= resp204 "")) "204 ok") (assert (stringContains? resp204 "Access-Control-Allow-Origin: http://localhost") "cors 204") true))
+  (let [
+        (resp200Allowed (bb/formatCorsHttpResponse 200 "application/json" "{\"status\":\"ok\"}" "http://localhost:5173"))
+        (resp204Allowed (bb/formatCorsHttpResponse 204 "" "" "http://localhost:5173"))
+        (resp200NotAllowed (bb/formatCorsHttpResponse 200 "application/json" "{\"status\":\"ok\"}" "http://evil.com"))
+        (resp204NotAllowed (bb/formatCorsHttpResponse 204 "" "" "http://evil.com"))]
+    (do (assert (not (= resp200Allowed "")) "200 ok")
+        (assert (stringContains? resp200Allowed "Access-Control-Allow-Origin: http://localhost:5173") "cors 200 allow origin")
+        (assert (stringContains? resp200Allowed "Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE") "cors 200 allow methods")
+        (assert (stringContains? resp200Allowed "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With") "cors 200 allow headers")
+        (assert (not (= resp204Allowed "")) "204 ok")
+        (assert (stringContains? resp204Allowed "Access-Control-Allow-Origin: http://localhost:5173") "cors 204")
+        (assert (not (stringContains? resp200NotAllowed "Access-Control-Allow-Origin:")) "cors 200 no header for disallowed")
+        (assert (not (stringContains? resp204NotAllowed "Access-Control-Allow-Origin:")) "cors 204 no header for disallowed")
+        true))
 
 fn runTests -> Bool
   (do (testBridgeInit) (testBridgeRegisterTab) (testBridgeEnqueueAndPollFifo) (testBridgeCompleteCommand) (testFormatCorsHttpResponse) true)
