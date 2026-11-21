@@ -51,4 +51,4 @@
    "aslAgent/txn"
    "aslAgent/unbiasedContext"
  ]
- :dependencies ["asl-text" "asl-json" "asl-proc" "asl-forms" "asl-gateway" "asl-harness" "asl-engine" "asl-checker"])
+ :dependencies ["asl-text" "asl-json" "asl-proc" "asl-forms" "asl-gateway" "asl-harness" "asl-engine" "asl-checker" "asl-gates"])

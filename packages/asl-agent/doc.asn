@@ -1913,3 +1913,4 @@
 (:doc :symbol "asl/packages/asl-agent/src/unbiasedContext.asl#sanitizeObservation" :text "strips filler openers like Here is the output and Certainly from an observation and trims it")
 (:doc :symbol "asl/packages/asl-agent/src/unbiasedContext.asl#buildUnbiasedContextFrame" :text "assembles an UnbiasedContextFrame from intent, symbols, sanitized observations, attractor vectors and owns")
 (:doc :symbol "asl/packages/asl-agent/src/unbiasedContext.asl#formatUnbiasedContextFrame" :text "renders an UnbiasedContextFrame as an (:unbiased-context-frame ...) ASN form")
+(:doc :symbol "asl/packages/asl-agent/tests/gateNoSelfHostChangedTest.asl#runTests" :text "RED-AT-GATE: gateIntegrityWithChanged! refuses a changed test file with a new bare child start with noSelfHostTest's message, passes a clean test file and a non-test source, and the check takes under a second")

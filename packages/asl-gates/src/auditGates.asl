@@ -1,5 +1,5 @@
 (module asl-gates/auditGates
-  :x [suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
+  :x [importsOutsideAsl? boundaryCheck! suiteGateChecks! vcsDirectCheck! vcsDirectCheckIn! cacheMode vcsErrCode allowAbsentCheck! coreSweepArgv Check AuditRun fmtCheck emit passCheck failCheck notComputedCheck skippedCheck perItem
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
@@ -336,6 +336,23 @@ fn conflictMarkerCheck! root: String -> (List Check)
                    (list)
                    files))]
     (perItem "conflictMarkers" bad "ERR_CONFLICT_MARKER" (some (listLength files))))
+
+; (:m :ref RED-AT-GATE :do "a package source under asl/packages/PKG/src imports only modules that ship with asl/ (GenSEAM/asl is a git archive of asl/ alone, so an import rooted at tools/, tests/, harness/ or bench/ does not resolve there); pre-existing importers are frozen in boundaryAllowed and a row whose file no longer imports outside leaves the list")
+fn boundaryAllowed -> (List String)
+  (list "asl/packages/asl-agent/src/remoteOps.asl")
+
+fn importsOutsideAsl? text: String -> Bool
+  (let [(header (optionOr (listHead (stringSplit text "\n\n")) text))]
+    (listAny? (fn [(m String)] -> Bool (stringContains? header m)) (list "(tools/" "(tests/" "(harness/" "(bench/")))
+
+fn boundaryCheck! root: String -> (List Check)
+  (let [(files (trackedRoot! root (list "asl/packages/*/src/*.asl")))
+        (outside (filter (fn [(p String)] -> Bool (importsOutsideAsl? (optionOr (readText! (str root "/" p)) ""))) files))
+        (bad (filter (fn [(p String)] -> Bool (not (listContains? (boundaryAllowed) p))) outside))
+        (stale (filter (fn [(p String)] -> Bool (and (listContains? files p) (not (listContains? outside p)))) (boundaryAllowed)))
+        (found (listAppend (map (fn [(p String)] -> String (str "package source imports a module outside asl/: " p)) bad)
+                           (map (fn [(p String)] -> String (str "boundaryAllowed row no longer imports outside asl/, remove it: " p)) stale)))]
+    (perItem "packageBoundary" found "ERR_PACKAGE_BOUNDARY" (some (listLength files))))
 
 ; (:m :do "bin/asl-core is a committed Mach-O binary; a host of another format cannot run it, so the check is not computed there with that reason, and a Mach-O core on a Darwin host still runs and fails on a real inconsistency")
 fn machOCore? bs: Bytes -> Bool
@@ -816,7 +833,7 @@ fn cmdConsistency! root: String argv: (List String) -> AuditRun
   (let [(c1 (syntaxCheck! root "syntax"))
         (c2 (list (remoteCheck! root) (ssotCheck! root)))
         (c3 (emojiCheck! root))
-        (c4 (conflictMarkerCheck! root))
+        (c4 (listAppend (conflictMarkerCheck! root) (boundaryCheck! root)))
         (c5 (list (coreCheck! root "coreConsistency" (list "audit" "consistency"))))
         (c6 (list (agentSurfaceCheck! root) (coverageCheck! root) (vcsDirectCheckIn! root (cacheMode argv))))
         (checks (listAppend c1 (listAppend c2 (listAppend c3 (listAppend c4 (listAppend c5 c6))))))]

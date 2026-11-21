@@ -12,6 +12,8 @@
    "asl-gates/lexiconGate"
    "asl-gates/manifestGate"
    "asl-gates/metaAudit"
+   "asl-gates/noSelfHostBaseline"
+   "asl-gates/noSelfHostScan"
    "asl-gates/polarity"
    "asl-gates/ruleCheckers"
    "asl-gates/shebangAudit"

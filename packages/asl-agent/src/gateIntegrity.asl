@@ -1,6 +1,6 @@
 (module aslAgent/gateIntegrity
   :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout revertTimeoutWithin gateIntegrityWithin! gateIntegrityWithChanged! cutExports]
-  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt)])
+  :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt) (asl-gates/noSelfHostScan :a nsh)])
 
 enum Claim
   (claimOf text: (Option String) receipt: (Option String) cmd: (Option String) exit: (Option Int64) backed: Bool)
@@ -195,7 +195,9 @@ fn vacuousForm integrity: (Pair Bool String) -> (Option String)
     (if (pairFirst integrity)
       none
       (match (stringIndexOf msg "\n(:gateVacuous ")
-        ((none) (match (stringIndexOf msg "\n(:gateUnwired") ((none) none) ((some at) (stringSlice msg (+ at 1) (stringLength msg)))))
+        ((none) (match (stringIndexOf msg "\n(:gateUnwired")
+                  ((none) (match (stringIndexOf msg "\n(:noSelfHost ") ((none) none) ((some at) (stringSlice msg (+ at 1) (stringLength msg)))))
+                  ((some at) (stringSlice msg (+ at 1) (stringLength msg)))))
         ((some at) (stringSlice msg (+ at 1) (stringLength msg))))))
 
 fn defaultGateVacuousRounds -> Int64
@@ -382,10 +384,14 @@ fn ! mutantCheck! gates: (List String) root: String timeout: Int64 env: (Option 
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String deadline: (Option Int64) -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
+        ; (:m :ref RED-AT-GATE :do "noSelfHostTest scans the whole tree (31 s) and is run at done only when a unit lists it, so a new bare child start in a changed test reached the merge train red (9 of 38 reds on node2 in 48 h); the same per-file rules run here on the changed files, well under a second")
+        nshFound (nsh/changedFindings! root changed)
         vac (g/gateVacuousMessage gateResults verdicts)]
     (match vac
       ((some msg) (pair false msg))
       ((none)
+       (if (not (listEmpty? nshFound))
+         (pair false (str (nsh/findingsMessage nshFound) "\n(:noSelfHost :found \"" (c/escapeAsn (stringJoin nshFound "; ")) "\")"))
         (if (listEmpty? impl)
           (pair true "revertCheck skipped: the change is only the gate files")
           (let [saved (map (fn [f] (pair f (match (fileReadBytes (str root "/" f)) ((ok b) (some b)) ((err _) (none))))) impl)
@@ -415,4 +421,4 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))
                 ((none) (removeNames! root (list (pairFirst p))))))) true saved)]
-          (if restored finalAnswer (pair false "restore failed")))))))
+          (if restored finalAnswer (pair false "restore failed"))))))))
