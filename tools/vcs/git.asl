@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeBase! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -164,6 +164,31 @@ fn ! branchCreate! repo: String name: String base: String -> Out
       ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
       ((!= b.exit 0) (Out :exit 1 :out (str "unknown base " base)))
       (else (gitRun! repo (list "branch" name b.out) 20))))
+
+; (:m :ref DEP-BASE-STALE :do "branch name at a commit that holds both a and b, built without a worktree, an index or any ref of the repo but name: merge-tree --write-tree a b gives the merged tree (a conflict is exit 1 and nothing is written), commit-tree makes a merge commit with parents a and b, update-ref points name at it; a already contains b or b contains a needs no commit; the out is the sha")
+fn ! mergeBase! repo: String name: String a: String b: String msg: String cfg: (List String) -> Out
+  (let [(ck (if (refOk? name) (gitRun! repo (list "check-ref-format" "--branch" name) 20) (Out :exit 1 :out "name not accepted")))
+        (ra (resolve! repo a))
+        (rb (resolve! repo b))]
+    (cond
+      ((!= ck.exit 0) (Out :exit 1 :out (str "branch name not accepted: " name)))
+      ((not (listAll? (fn [(k String)] -> Bool (or (= k "-c") (stringStartsWith? k "merge."))) cfg)) (Out :exit 1 :out "only -c merge.* settings are accepted"))
+      ((or (!= ra.exit 0) (!= rb.exit 0)) (Out :exit 1 :out "unknown commit"))
+      (else
+        (let [(sa (clean ra.out))
+              (sb (clean rb.out))
+              (ba (gitRun! repo (list "merge-base" "--is-ancestor" sb sa) 30))
+              (bb (gitRun! repo (list "merge-base" "--is-ancestor" sa sb) 30))
+              (mt (if (or (= ba.exit 0) (= bb.exit 0)) (Out :exit 0 :out "") (gitRun! repo (listAppend cfg (list "merge-tree" "--write-tree" sa sb)) 120)))
+              (tree (optionOr (listHead (stringLines (clean mt.out))) ""))
+              (made (cond ((= ba.exit 0) (Out :exit 0 :out sa))
+                          ((= bb.exit 0) (Out :exit 0 :out sb))
+                          ((or (!= mt.exit 0) (stringEmpty? tree)) (Out :exit 1 :out (str "merge conflict: " (clean mt.out))))
+                          (else (gitRun! repo (list "-c" "user.name=asl" "-c" "user.email=asl@localhost" "commit-tree" tree "-p" sa "-p" sb "-m" msg) 60))))
+              (sha (clean made.out))]
+          (if (!= made.exit 0) made
+            (let [(u (gitRun! repo (list "update-ref" (str "refs/heads/" name) sha) 20))]
+              (if (= u.exit 0) (Out :exit 0 :out sha) u)))))))
 
 ; (:m :ref VCS-DIRECT :do "check out branch name at base, creating it or resetting it there (checkout -q -B); the name must be a branch git accepts and the base is resolved to a sha first, so no ref text reaches git as an option; base = name re-checks out a branch where it is")
 fn ! switch! repo: String name: String base: String -> Out

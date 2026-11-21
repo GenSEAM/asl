@@ -1,8 +1,8 @@
 (module asl-tools/coord/conductor
-  :x [ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf exportsOf newExports? docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerHomeOf ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf exportsOf newExports? docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerHomeOf ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
       main]
@@ -117,7 +117,8 @@ fn ! moveA! ctx: Ctx c: CUnit to: String stage: String model: String alias: Stri
   (let [(next (with c :since (if (= to c.st) c.since (/ (nowNs) 1000000)) :launched 0 :st to :tokens (+ c.tokens tokens) :costMicro (+ c.costMicro (max 0 cost)) :model (if (or (stringEmpty? model) (!= stage "write")) c.model model)
                     :sig (if (and (= to "blocked") (stringEmpty? c.sig)) (blockSig stage verdict) c.sig)))
         (_ (journalA! ctx c to stage model alias tokens cost verdict ms))
-        (_ (writeCUnit! ctx.dir next))]
+        (_ (writeCUnit! ctx.dir next))
+        (_ (if (and (!= to c.st) (= to "merged")) (dropShBase! ctx c.id) false))]
     next)
 
 ; (:m :ref SERVED-ALIAS-JOURNAL :do "the model a write is journalled under comes from Leon's receipt: :servedAlias A, else :servedModel M, else the older literal :model tag (modelOf, unknown when absent); the alias alone is also journalled as :alias; review's writer exclusion (reviewWriter) reads the unit's model, so it sees the served alias and never an unknown family when the receipt named one")
@@ -703,6 +704,26 @@ fn baseRedSig? sig: String -> Bool
 ; (:m :ref N2-TRAIN-RED-VANISH :do "the hold is keyed on the head the train runs onto: the dev repo's HEAD when the store names a dev repo (devRepo.path, written by the conductor from --dev-repo), else the source base; the hold text lives in await (baseRed:HEAD SIG) so the unit's own real-red sig and count survive it")
 fn devRepoPath dir: String -> String
   (str dir "/devRepo.path")
+
+
+; (:m :ref DEP-BASE-STALE :do "the base the merge check compares a unit branch against: the unit's shBase/ID (main merged into the dev head), fetched into the dev repo, when it is an ancestor of the branch, since the merge-base with dev may then be two commits and the check would count the dev files as the unit's; else the merge-base given")
+fn ! checkBaseFor! rc: RealCfg id: String branch: String mb: String -> String
+  (if (= rc.devRepo rc.repo) mb
+    (let [(f (gitOut rc.devRepo (list "fetch" "--quiet" rc.repo (str "+refs/heads/shBase/" id ":refs/heads/shBase/" id))))
+          (r (gitOut rc.devRepo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/shBase/" id "^{commit}"))))
+          (anc (gitOut rc.devRepo (list "merge-base" "--is-ancestor" (stringTrim r.out) branch)))]
+      (if (and (= f.exit 0) (and (= r.exit 0) (= anc.exit 0))) (stringTrim r.out) mb)))
+
+; (:m :ref MERGE-LANES-DROPPED :do "(:train :lanes N) with N above 1 is read and ignored: one merge stage at a time, one scratch, train --commit. Why parallel merge lanes were dropped (evaluator, node2 journal, 96 trains): a green train has p50 7.3 min and p90 46 min; a lane may only advance dev by fast-forward, since a merge of two lanes results is a combination no train checked, so after the other lane advanced the result is retried onto the new head at 5 to 8 min without cache; on a typical train two lanes gain nothing and cost twice the CPU. A lane running the CLI of its scratch brings back the cold builds of the row driver and the commit guard inside a merge, and a retry of dev moved without a count starves a long train for ever. Revisit only with a measured gain")
+fn ! lanesIgnored! dir: String -> Bool
+  (let [(row (trainRowOf dir))
+        (n (if (or (stringEmpty? row) (not (listEmpty? (trainErrors row))) (not (stringContains? row ":lanes"))) 1 (optionOr (stringToInt64 (sp/tokAfter row ":lanes")) 1)))
+        (mark (str (runsDir dir) "/lanes.ignored"))]
+    (if (or (<= n 1) (fileExists? mark)) false
+      (let [(_ (dirCreate (runsDir dir)))
+            (_ (fileWrite mark "1\n"))
+            (_ (fileAppend (journalPath dir) (str "(:lanesIgnored :n " (stringFromInt64 n) " :why \"merge lanes are not supported, one merge stage runs at a time\")\n")))]
+        true)))
 
 fn ! trainHead! ctx: Ctx u: st/Task -> String
   (let [(dev (stringTrim (readOr (devRepoPath ctx.dir))))]
@@ -3308,15 +3329,15 @@ fn trainRowOf dir: String -> String
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the row carries :jobs, :batch or both; a key it names must hold a whole number in range (:jobs 1..64, :batch 1..16), a row naming neither is a problem")
 fn trainErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":train" ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice") k))) keys))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":train" ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes") k))) keys))
         (range (fn [(k String) (lo Int64) (hi Int64)] -> (List String)
                  (if (not (listContains? keys k)) (list)
                    (match (stringToInt64 (sp/tokAfter row k))
                      ((none) (list (str k " missing or not a whole number")))
                      ((some v) (if (or (< v lo) (> v hi)) (list (str k " " (n v) " outside " (n lo) ".." (n hi))) (list)))))))]
     (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
-                (if (listAny? (fn [(k String)] -> Bool (listContains? keys k)) (list ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice"))
-                  (listAppend (listAppend (range ":jobs" 1 64) (range ":batch" 1 16))
+                (if (listAny? (fn [(k String)] -> Bool (listContains? keys k)) (list ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes"))
+                  (listAppend (listAppend (range ":jobs" 1 64) (listAppend (range ":lanes" 1 4) (range ":batch" 1 16)))
                               (listAppend (range ":limitS" 60 21600) (listAppend (range ":limitFactorPct" 100 1000) (listAppend (range ":limitFloorS" 60 21600) (range ":writerNice" 1 19)))))
                   (list ":jobs missing or not a whole number"))))
 
@@ -3383,12 +3404,13 @@ fn passPath dir: String id: String -> String
 
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the files a unit branch changes against its base in the conductor's source repo, none when git cannot say")
 fn ! branchFiles! repo: String u: st/Task c: CUnit -> (Option (List String))
-  (let [(d (fr/runOneLimited (fr/job (list "git" "-C" repo "diff" "--name-only" (str (baseRef u) "..." c.branch)) repo (fr/childEnv (list))) (fr/limits 60 0)))]
+  (let [(d (fr/runOneLimited (fr/job (list "git" "-C" repo "diff" "--name-only" (str (baseRef (resolved! repo u)) "..." c.branch)) repo (fr/childEnv (list))) (fr/limits 60 0)))]
     (if (!= d.exit 0) (none) (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out))))))
 
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "before a merge child starts, the leader's batch file names the passengers batchPick chooses among the batchable units of the store; with a batch of 1, a leader that is not batchable itself, no source repo or no passenger, no file is left and the child merges the leader alone as before")
 fn ! batchPlan! ctx: Ctx u: st/Task c: CUnit -> (List String)
-  (let [(k (trainBatchOf (trainRowOf ctx.dir)))
+  (let [(_ (lanesIgnored! ctx.dir))
+        (k (trainBatchOf (trainRowOf ctx.dir)))
         (repo (stringTrim (readOr (repoPath ctx.dir))))
         (_ (pathRemove (batchPath ctx.dir c.id)))
         (_ (pathRemove (passPath ctx.dir c.id)))]
@@ -5065,7 +5087,7 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
               (mb (if (= fetched.exit 0) (gitOut rc.devRepo (list "merge-base" "HEAD" c.branch)) fetched))
               ; (:m :ref MERGECHECK-CLAMP :do "a failed fetch skips the check (the train below fails on the same cause with its own signature); a good fetch with no merge base is not a pass: the unit holds as unverified exit 3, so a branch unrelated to dev is never merged unchecked")
               (verdict (cond
-                         ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check (with rc :mergeCheckSec (checkBudgetFit rc (trainLimitFit! rc store u.id))) c (stringTrim mb.out))))
+                         ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store u (check (with rc :mergeCheckSec (checkBudgetFit rc (trainLimitFit! rc store u.id))) c (checkBaseFor! rc u.id c.branch (stringTrim mb.out)))))
                          ((= fetched.exit 0) (mergeVerdictRes! store u (pair 3 "(:mergeCheck :verdict unverified :unverified (\"noMergeBase\") :structure () :regressions ())")))
                          (else (none))))]
           (match verdict
@@ -5073,7 +5095,8 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
             ((none)
               (let [(d (fr/runOneLimited (fr/job (trainArgv rc.devRepo c.branch (trainRowOf store)) rc.devRepo (mergeEnv))
                                          (fr/limits (trainLimitFit! rc store u.id) 200)))
-                    (merged (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError")))))
+                    (green (and (= fetched.exit 0) (and (= d.exit 0) (not (stringContains? d.out ":commitError")))))
+                    (merged green)
                     (_ (keepTrain! rc store u.id c.branch d (if merged "" (gateSig d.out))))]
                 (if merged
                   (let [(_ (w/removeWt! rc.wt u.id true))]
@@ -5189,7 +5212,7 @@ fn ! batchRun! rc: RealCfg store: String lead: (Pair st/Task CUnit) pass: (List 
                               (cond
                                 ((listAny? (fn [(o (Option Res))] -> Bool (match o ((some r) (timeoutRes? r)) ((none) false))) acc) (some (batchRes "rebatch" "batch: an earlier merge check timed out" 0)))
                                 ((<= left 0) (some (batchRes "rebatch" "batch: no merge-check budget left" 0)))
-                                ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store mu (check (with rc :mergeCheckSec left) mc (stringTrim mb.out))))
+                                ((and (= mb.exit 0) (not (stringEmpty? (stringTrim mb.out)))) (mergeVerdictRes! store mu (check (with rc :mergeCheckSec left) mc (checkBaseFor! rc mu.id mc.branch (stringTrim mb.out)))))
                                 ((= fetched.exit 0) (mergeVerdictRes! store mu (pair 3 "(:mergeCheck :verdict unverified :unverified (\"noMergeBase\") :structure () :regressions ())")))
                                 (else (some (failRes (str "fetch failed: " (utf8Clip (stringTrim fetched.out) 160)))))))
                           ))) (list) members))
@@ -5246,8 +5269,70 @@ fn ! repoBase! repo: String -> String
 fn ! resolved! repo: String u0: st/Task -> st/Task
   (let [(u (with u0 :owns (docOwns u0.owns)))]
     (if (or (stringEmpty? u.base) (= u.base "HEAD"))
-      (let [(b (repoBase! repo))] (if (stringEmpty? b) u (with u :base b)))
+      (let [(b (repoBase! repo))
+            (dep (if (stringEmpty? repo) false (= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/shBase/" u.id "^{commit}"))).exit 0)))]
+        (cond ((stringEmpty? b) u) (dep (with u :base (str "shBase/" u.id))) (else (with u :base b))))
       u))
+
+fn ! dropBaseRef! rc: RealCfg ref: String -> Bool
+  (let [(_ (gitOut rc.repo (list "branch" "-D" "--quiet" ref)))] false)
+
+; (:m :ref DEP-BASE-STALE :do "a unit has a base of its own only when :base is set and is neither empty, HEAD nor the conductor repo's checked-out branch (resolved! turns empty and HEAD into that branch, so the composition depBase! of resolved! must still take the dev base)")
+fn ! ownBase? rc: RealCfg u: st/Task -> Bool
+  (and (not (stringEmpty? u.base)) (and (!= u.base "HEAD") (and (!= u.base (repoBase! rc.repo)) (!= u.base (str "shBase/" u.id)))))
+
+; (:m :ref DEP-BASE-STALE :do "the dev repo is usable as a base only when it differs from the conductor repo and is on its dev branch (not main, master or a detached HEAD)")
+fn ! devBaseOk? rc: RealCfg -> Bool
+  (and (!= rc.devRepo rc.repo) (and (!= rc.devBranch "main") (and (!= rc.devBranch "master") (= (currentBranch rc.devRepo) rc.devBranch))))
+
+fn ! baseNoteRow! dir: String id: String why: String -> Bool
+  (if (stringEmpty? dir) false
+    (ok? (fileAppend (journalPath dir) (str "(:depBase :unit " (st/q id) " :why " (st/q why) " :at " (n (nowMs)) ")\n"))))
+
+; (:m :ref DEP-BASE-STALE :do "the unit with base resolved, and the base set to the ref shBase/ID when that ref exists and the unit has no base of its own (a base already resolved to the branch name must still take it)")
+fn ! baseWithRef! rc: RealCfg u0: st/Task -> st/Task
+  (let [(u (resolved! rc.repo u0))
+        (ref (str "shBase/" u0.id))
+        (have (= (gitOut rc.repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/" ref "^{commit}"))).exit 0))]
+    (if (and have (not (ownBase? rc u0))) (with u :base ref) u))
+
+; (:m :ref DEP-BASE-STALE :do "depBase! rc u: a unit with no base of its own and no commits of its own on sh/ID starts from the dev branch head plus main, kept as the ref shBase/ID in the conductor repo and renewed at every attempt; the dev repo is only read (a fetch of refs/heads/<dev branch> into the ref, rev-parse), never moved: a promote or merge there races the train, which needs the dev HEAD at its integration head. Main reaches the base by a merge commit built in the conductor repo (vcs baseMerge!: merge-tree, commit-tree, update-ref on the ref alone); a conflict, a dev head that main contains, a failed fetch and a dev repo that is detached or off its dev branch leave the unit on main with the reason in the journal and the ref dropped. Own commits are those of sh/ID that neither main, the dev head nor the previous ref holds")
+fn ! depBaseIn! dir: String rc: RealCfg u0: st/Task -> st/Task
+  (let [(ref (str "shBase/" u0.id))
+        (br (str "sh/" u0.id))
+        (main (repoBase! rc.repo))]
+    (if (or (= rc.devRepo rc.repo) (or (stringEmpty? main) (ownBase? rc u0))) (resolved! rc.repo u0)
+      (if (not (devBaseOk? rc))
+        (let [(_ (dropBaseRef! rc ref)) (_ (baseNoteRow! dir u0.id "devNotOnBranch"))] (baseWithRef! rc u0))
+        (let [(dh (stringTrim (gitOut rc.devRepo (list "rev-parse" (str "refs/heads/" rc.devBranch))).out))
+              (_ (gitOut rc.repo (list "fetch" "--quiet" rc.devRepo (str "+refs/heads/" rc.devBranch ":refs/asex/devHead"))))
+              (old (= (gitOut rc.repo (list "rev-parse" "--verify" "--quiet" (str "refs/heads/" ref "^{commit}"))).exit 0))
+              (excl (listAppend (list (str "^" main) "^refs/asex/devHead") (if old (list (str "^refs/heads/" ref)) (list))))
+              (c (gitOut rc.repo (listAppend (list "rev-list" "--count" br) excl)))
+              (own (and (= c.exit 0) (and (not (stringEmpty? dh)) (!= (stringTrim c.out) "0"))))]
+          (if own (baseWithRef! rc u0)
+            (let [(f (gitOut rc.repo (list "fetch" "--quiet" rc.devRepo (str "+refs/heads/" rc.devBranch ":refs/heads/" ref))))]
+              (if (!= f.exit 0)
+                (let [(_ (dropBaseRef! rc ref)) (_ (baseNoteRow! dir u0.id (str "fetch failed: " (utf8Clip f.out 120))))] (baseWithRef! rc u0))
+                (let [(d (stringTrim (gitOut rc.repo (list "rev-parse" (str "refs/heads/" ref))).out))
+                      (m (stringTrim (gitOut rc.repo (list "rev-parse" main)).out))
+                      (_ (cond
+                           ((or (stringEmpty? d) (= d m)) (dropBaseRef! rc ref))
+                           ((= (gitOut rc.repo (list "merge-base" "--is-ancestor" d m)).exit 0) (dropBaseRef! rc ref))
+                           ((= (gitOut rc.repo (list "merge-base" "--is-ancestor" m d)).exit 0) true)
+                           (else (let [(r (vcs/baseMerge! rc.repo ref m d (str "(:c :a coord :do \"dev base of " u0.id ": main merged into the dev head\" :ev (DEP-BASE-STALE))") (trn/rowDriverArgs rc.repo (resultOr (realPath rc.repo) rc.repo))))]
+                                   (if (= r.code 0) true
+                                     (let [(_ (dropBaseRef! rc ref))] (baseNoteRow! dir u0.id "merge conflict, unit stays on main")))))))]
+                  (baseWithRef! rc u0)))))))))
+
+fn ! depBase! rc: RealCfg u0: st/Task -> st/Task
+  (depBaseIn! "" rc u0)
+
+; (:m :ref DEP-BASE-STALE :do "the ref shBase/ID goes with the unit: merged and closed units drop it; a failed unit keeps it, because a requeue reads the dev commits of the branch as the base and not as the unit's own")
+fn ! dropShBase! ctx: Ctx id: String -> Bool
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (stringEmpty? repo) false
+      (let [(_ (gitOut repo (list "branch" "-D" "--quiet" (str "shBase/" id)))) (dev (stringTrim (readOr (devRepoPath ctx.dir)))) (_ (if (or (stringEmpty? dev) (= dev repo)) false (= (gitOut dev (list "branch" "-D" "--quiet" (str "shBase/" id))).exit 0)))] true)))
 
 ; (:m :ref COND-OWNS-DOC :do "a unit that owns the src of a package owns its contract rows too: asl/packages/X/src/... in :owns adds asl/packages/X/doc.asn, and the asl-know cards dir for the card the conductor regenerates after the write; the writer cannot add an export without the contract row the docRows gate demands, and was refused as leftOutside before")
 fn pkgRootOf o: String -> String
@@ -5812,7 +5897,7 @@ fn ! runLoop! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refresh
       0))
 
 fn ! realRes rc: RealCfg dir: String stage: String u0: st/Task c: CUnit -> Res
-  (let [(u (resolved! rc.repo u0))]
+  (let [(u (if (= stage "write") (depBaseIn! dir rc u0) (resolved! rc.repo u0)))]
   (cond
     ((= stage "write") (writeRes rc dir u c))
     ((= stage "gates") (gatesStage rc dir u c))
