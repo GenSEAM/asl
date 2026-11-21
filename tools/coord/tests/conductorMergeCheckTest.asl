@@ -19,7 +19,7 @@ fn ! seedGrowth! root: String u: st/Task -> String
     (if (stringContains? made "madeOk") wt ""))
 
 fn stubUnverified rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
-  (pair 3 "(:mergeCheck :verdict unverified :unverified (\"gates:deadline\") :structure () :regressions ())")
+  (pair 3 "(:mergeCheck :verdict unverified :unverified (\"gates:unverified\") :structure () :regressions ())")
 
 ; (:m :ref CONDUCTOR-MERGE-CHECK-FIX :do "exit 2 is a check that could not run (checkout failed), never a pass: it holds like exit 3; the recording stub writes the base it was given so the test can compare it with the fork point")
 fn stubCannotRun rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
@@ -149,7 +149,7 @@ fn ! runTests -> Bool
         (assert wtKept "a blocked check keeps the unit worktree")
         (assert (and (= rHold.ok 0) (= rHold.verdict "hold") (stringContains? rHold.sig "mergeCheck unverified exit 3")) (str "an audit with no receipt is unverified and holds the unit: " rHold.verdict " " rHold.sig))
         (assert (= headHold head0) "a held unit leaves dev where it was")
-        (assert (and (= rStub.verdict "hold") (stringContains? rStub.sig "gates:deadline") (= headStub head0)) (str "a stubbed unverified check holds with its unverified step in the signature: " rStub.sig))
+        (assert (and (= rStub.verdict "hold") (stringContains? rStub.sig "gates:unverified") (= headStub head0)) (str "a stubbed unverified check holds with its unverified step in the signature: " rStub.sig))
         (assert (and (= rFetch.ok 0) (= rFetch.verdict "fail") (stringStartsWith? rFetch.sig "merge: ") (stringContains? rFetch.sig "sh/NOBRANCH") (not (stringContains? rFetch.sig "mergeCheck")) (= nF1 0)) (str "a failed branch fetch (the branch is not in the source repo) skips the check: no hold, no lead row, the train fails with its own signature: " rFetch.verdict " " rFetch.sig))
         (assert (and (= rOrph.verdict "hold") (stringContains? rOrph.sig "noMergeBase") (= headOrph head2a) (not (stringContains? argsOrph "O1"))) (str "a good fetch with no merge base holds as unverified, no train, dev unchanged: " rOrph.verdict " " rOrph.sig))
         (assert (and (= nHold 4) (and (= nH1 1) (and (= nH2 1) (and (= nH3 1) (= nO1 1))))) (str "one lead-stream row per held unit: " (stringFromInt64 nHold)))

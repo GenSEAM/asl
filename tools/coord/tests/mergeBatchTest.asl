@@ -349,6 +349,54 @@ fn ! testApply root: String -> Bool
         (refute q1Batch "Q1's next train carries no passenger: Q2 merged before Q1 was relaunched")
         true))
 
+; (:m :ref MERGECHECK-HOLD-TIMEOUT :do "a check stub that records the member and answers a timeout-only unverified receipt")
+fn ! timeoutCheck rc: cd/RealCfg c: cd/CUnit base: String -> (Pair Int64 String)
+  (let [(_ (fileAppend (str rc.home "/checks") (str c.id "\n")))]
+    (pair 3 "(:mergeCheck :verdict unverified :head \"h1\" :unverified (\"consistencyHead:timeout consistency\" \"gatesHead:deadline\") :structure () :regressions ())"))
+
+; (:m :ref MERGECHECK-HOLD-TIMEOUT :do "four members, the leader's check times out: it is called once, the three others are rebatch without a check, the leader is a recheck, and the train carries nobody")
+fn ! testTimeoutBatch root: String -> Bool
+  (let [(fx (twoMembers! root "T1" "T2" (list)))
+        (store (str root "/store"))
+        (rc (pairFirst fx)) (lead (pairFirst (pairSecond fx)))
+        (u3 (with (pf/unitIn "T3" "true") :owns (list "T3.txt")))
+        (u4 (with (pf/unitIn "T4" "true") :owns (list "T4.txt")))
+        (w3 (pf/seedUnit! root u3 "merging" "T3.txt"))
+        (w4 (pf/seedUnit! root u4 "merging" "T4.txt"))
+        (_ (claimed! store "T3" w3 0))
+        (_ (claimed! store "T4" w4 0))
+        (_ (fileWrite (cd/batchPath store "T1") "(:batch :leader \"T1\" :units (\"T2\" \"T3\" \"T4\"))\n"))
+        (r (cd/mergeBatchWith rc store (pairFirst lead) (pairSecond lead) timeoutCheck))
+        (checks (resultOr (fileReadString (str rc.home "/checks")) ""))
+        (pass (resultOr (fileReadString (cd/passPath store "T1")) ""))
+        (nRebatch (listLength (filter (fn [(l String)] -> Bool (stringContains? l ":verdict \"rebatch\"")) (stringLines pass))))
+        (args (resultOr (fileReadString (str rc.devRepo "/.git/trainArgs")) ""))]
+    (do (assert (= checks "T1\n") (str "only the leader's check ran: " checks))
+        (assert (= r.verdict "recheck") (str "the leader's timeout is a recheck: " r.verdict))
+        (assert (= nRebatch 3) (str "the three others are rebatch: " (stringFromInt64 nRebatch)))
+        (assert (stringEmpty? args) (str "no train ran: " args))
+        true))
+
+; (:m :ref MERGECHECK-HOLD-TIMEOUT :do "applyPassengers! orders a recheck verdict with the retries: a recheck passenger is applied after a merged one, so its next train never carries the merged member")
+fn ! testApplyRecheck root: String -> Bool
+  (let [(fx (twoMembers! root "W1" "W2" (list)))
+        (store (str root "/store"))
+        (ctx (ctxOf store))
+        (_ (fileWrite (str store "/ladder.asn") "(:train :batch 2)\n"))
+        (q1 (unitRow (pairFirst (pairSecond fx))))
+        (q2 (unitRow (pairSecond (pairSecond fx))))
+        (_ (cd/writeCUnit! store (with q1 :launched 0)))
+        (_ (fileWrite (cd/passPath store "L0") (str (cd/passRow "W1" q1.epoch (with (cd/batchRes "rebatch" "x" 1) :verdict "recheck")) "\n" (cd/passRow "W2" q2.epoch (cd/batchRes "merged" "" 1)) "\n")))
+        (napp (cd/applyPassengers! ctx (pf/cuIn "L0" "merging" "" "")))
+        (w2 (cuOf store "W2"))
+        (w1 (cuOf store "W1"))
+        (carry (fileExists? (cd/batchPath store "W1")))]
+    (do (assert (= napp 2) (str "both applied: " (stringFromInt64 napp)))
+        (assert (= w2.st "merged") (str "W2 merges: " w2.st))
+        (assert (and (= w1.st "merging") (= w1.launched 1)) (str "W1 is rechecked: " w1.st))
+        (refute carry "the recheck unit's next train carries no passenger: it was applied last")
+        true))
+
 fn ! runTests -> Bool
   (let [(root (pf/scratch "mergeBatch" "w"))
         (_ (pf/cleanup root))
@@ -360,6 +408,8 @@ fn ! runTests -> Bool
         (kill (testKillSolo (str root "/kill")))
         (apply (testApply (str root "/apply")))
         (redFixed (testRedFixed (str root "/redFixed")))
+        (tmoBatch (testTimeoutBatch (str root "/tmoBatch")))
+        (applyRe (testApplyRecheck (str root "/applyRe")))
         (_ (pf/cleanup root))
         (stubGone (fr/stubRemove!))]
     (do (assert (testRows) "batch rows and train argv")
@@ -373,5 +423,7 @@ fn ! runTests -> Bool
         (assert kill "a killed batch goes solo without a count")
         (assert apply "applyPassengers! guards and order")
         (assert redFixed "a unit fixed since its red rides again")
+        (assert tmoBatch "a timed-out check ends the batch checks")
+        (assert applyRe "a recheck passenger is applied last")
         (assert stubGone "the stand-in host dir of this run is removed")
         true))
