@@ -1914,3 +1914,7 @@
 (:doc :symbol "asl/packages/asl-agent/src/unbiasedContext.asl#buildUnbiasedContextFrame" :text "assembles an UnbiasedContextFrame from intent, symbols, sanitized observations, attractor vectors and owns")
 (:doc :symbol "asl/packages/asl-agent/src/unbiasedContext.asl#formatUnbiasedContextFrame" :text "renders an UnbiasedContextFrame as an (:unbiased-context-frame ...) ASN form")
 (:doc :symbol "asl/packages/asl-agent/tests/gateNoSelfHostChangedTest.asl#runTests" :text "RED-AT-GATE: gateIntegrityWithChanged! refuses a changed test file with a new bare child start with noSelfHostTest's message, passes a clean test file and a non-test source, and the check takes under a second")
+(:doc :symbol "asl/packages/asl-agent/src/gateLimit.asl#gateLimitSec" :text "the Leon gate step limit, 300 seconds, the one value aslOps#gateTimeoutSec and every gate that bounds its own work derive from")
+(:doc :symbol "asl/packages/asl-agent/src/gateLimit.asl#gateMarginSec" :text "seconds held back from the gate limit for process start, compile and output, 40")
+(:doc :symbol "asl/packages/asl-agent/src/gateLimit.asl#innerBudgetSec" :text "the budget a gate may spend on its own work under a limit: the limit less gateMarginSec, at least 1, strictly below the limit")
+(:doc :symbol "asl/packages/asl-agent/tests/gateLimitDefaultTest.asl#runTests" :text "WALL-SLOW-GATES: runArgsOf defaults gateTimeout to gateLimit#gateLimitSec and keeps an explicit one; a gate child gets ASL_GATE_LIMIT_SEC equal to the run timeout")

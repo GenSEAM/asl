@@ -5,6 +5,7 @@
       formatDryRun MainResult supportedBackends defaultModel liveAdvisor liveReviewer liveHooks! liveOwnsItems liveUsage livePlan
       providerUsageLine liveJournalUsage! liveProviderRetry! liveProviderWait! providerWaitSleep! liveBody! attractorProvider validPrefix? prefixDrop focusTail parentWatch! parentUnwatch! loopResultOf toolRootOr resumed runArgsOf toolRootUsable? nextReadStreakOf opKey stalledTurnCapIn readOnlyTurnCapIn readOnlyOps worktreeDigest! reuseGateDigest? readOnlyEntry? refusedWriteEntry? readOnlyTail redBefore? baselineRan? baselineVerdicts? baselineRanWith? heldRounds rereadEntry? opRowText dedupeReadOps modelEscalationReason modelEscalationReceipt escalateUnread escalateRefusal writeAttempt? servedAlias servedLine servedIn Checked Valid valid invalid checkInvocation liveTurn! appendRetryLines! paramHas LiveAsk LiveSession LivePrep prepared prepRejected liveSetup! liveResult liveAsk! liveApply! liveGone! parentGone? wallLeft graderWall runArgsOf main mainCli mainWithRoots]
   :i [(aslAgent/core :a c) (asl-text/string :a ts)
+      (aslAgent/gateLimit :a gl)
       (aslAgent/diff :a diff)
       (aslAgent/providers :a pv)
       (aslAgent/attractor :a at) (aslAgent/nativeTools :a nt)
@@ -2911,7 +2912,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                     :timeout timeout :timeoutSet (paramHas ps "timeout") :queueTimeout queueTimeout
                     :budget (optionOr (intValue (paramOr ps "budget" (j/jint 3000))) 3000)
                     :inputTokenBudget (optionOr (intValue (paramOr ps "inputTokenBudget" (j/jint 0))) 0)
-                    :gateTimeout (optionOr (intValue (paramOr ps "gateTimeout" (j/jint 300))) 300)
+                    :gateTimeout (optionOr (intValue (paramOr ps "gateTimeout" (j/jint (gl/gateLimitSec)))) (gl/gateLimitSec))
                     :gateParallelism (max 1 (min 16 (optionOr (intValue (paramOr ps "gateParallelism" (j/jint 3))) 3)))
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
@@ -2985,7 +2986,7 @@ fn ! checkBounds ps: (List (Pair String j/Json)) repoRoot: String rootDir: Strin
   (cond
     ((and (paramHas ps "contextTokens") (not (inRange (intValue (paramOr ps "contextTokens" (j/jnull))) 4000 2000000)))
       (rejectValid ":error ERR_INVALID_ARG :key \"contextTokens\" :message \"contextTokens must be an integer from 4000 to 2000000\"" 2))
-    ((not (inRange (intValue (paramOr ps "gateTimeout" (j/jint 300))) 1 86400))
+    ((not (inRange (intValue (paramOr ps "gateTimeout" (j/jint (gl/gateLimitSec)))) 1 86400))
       (rejectValid ":error ERR_INVALID_ARG :key \"gateTimeout\" :message \"gateTimeout must be an integer of seconds from 1 to 86400\"" 2))
     (else (checkWall ps repoRoot rootDir)))
 

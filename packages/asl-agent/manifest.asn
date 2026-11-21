@@ -19,6 +19,7 @@
    "aslAgent/frame"
    "aslAgent/frontAgent"
    "aslAgent/gateIntegrity"
+   "aslAgent/gateLimit"
    "aslAgent/gates"
    "aslAgent/gitOps"
    "aslAgent/grounding"

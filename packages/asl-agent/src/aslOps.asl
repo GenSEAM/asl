@@ -6,6 +6,7 @@
       memoRunId memoSessionOk? memoRunBegin! memoRunBeginIfOn! memoRunEnd! memoRunDir! memoPrune! toolMemoIn toolMemoOn! memoKey memoGet! memoPut! execAslOp! execAslOpCustom! execAslOpMemo! readOutlineBytes readOutlineBytesIn readOutlineBytesFor! serReceipt serValue
       runExit runStdout runStderr runTimedOut runSeconds runFellBack chooseTransportFor toolRootRows!]
   :i [(aslAgent/core :a c)
+      (aslAgent/gateLimit :a gl)
       (aslAgent/agentConfig :a ac)
       (aslAgent/jail :a jl)
       (aslAgent/diff :a diff)
@@ -79,7 +80,7 @@ fn serReceipt r: (List (Pair String RVal)) -> String
   (str "(receipt" (stringJoin (map (fn [p] (str " (" (pairFirst p) " " (serValue (pairSecond p)) ")")) r) "") ")")
 
 fn gateTimeoutSec -> Int64
-  300
+  (gl/gateLimitSec)
 
 fn ! nowMono -> Float64
   (/ (int64ToFloat64 (monotonicNs)) 1000000000.0)
