@@ -1,5 +1,5 @@
 (module asl-tools/coord/risk
-  :x [RiskInput Signal Risk packageOf signalsOf tierOf assess]
+  :x [RiskInput Signal Risk packageOf signalsOf tierOf assess deletionRefusal]
   :i [])
 
 (schema RiskInput
@@ -100,3 +100,11 @@ fn assess input: RiskInput -> Risk
   (let [(sigs (signalsOf input))
         (score (fold (fn [(a Int) (s Signal)] -> Int (+ a s.weight)) 0 sigs))]
     (Risk :score score :tier (tierOf score) :signals sigs))
+
+; (:m :ref DELETION-REFUSAL-RATIO :do "2*deletedLines > oldLines stands in for deletedLines/oldLines > 0.5 since integer division would truncate the ratio to 0")
+fn deletionRefusal path: String oldLines: Int64 deletedLines: Int64 task: String -> (Option String)
+  (if (and (>= oldLines 40)
+           (> (* 2 deletedLines) oldLines)
+           (not (stringContains? (stringLower task) "rewrite")))
+      (some (str "refusing to delete " (stringFromInt64 deletedLines) " of " (stringFromInt64 oldLines) " lines from " path ": over half the file and the task does not say rewrite"))
+      (none))

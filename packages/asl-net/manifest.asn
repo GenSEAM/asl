@@ -8,5 +8,6 @@
    "asl-net/unix"
    "asl-net/handoff"
    "asl-net/reactor"
+   "asl-net/proxy"
  ]
  :dependencies ["asl-http"])

@@ -53,3 +53,5 @@
 (:doc :symbol "asl/examples/stringExample.asl#words" :text "the string split on single spaces into a list")
 (:doc :symbol "asl/examples/tests/examplesATest.asl#runTests" :text "examples gate A: option, result, record, enum and fold examples on present and absent values (listHead, mapGet, parsePositive ok and err, cart total, label and clear, shape areas, sum, product, map, filter)")
 (:doc :symbol "asl/examples/tests/examplesBTest.asl#runTests" :text "examples gate B: module imports (double, cube, quad), file roundTrip, lineCount and readOr present and missing after removing a temp file, string words, csv, hasTarget, prefix, shout, and map counts, getOr, bump, sortedKeys")
+(:doc :symbol "asl/examples/greet.asl#greet" :text "the string 'hello, ' followed by name, for example 'hello, asl'; it never fails, any String input yields a greeting")
+(:doc :symbol "asl/examples/tests/greetTest.asl#runTests" :text "asserts that greet \"asl\" is \"hello, asl\" and returns true; it fails when that assertion fails")

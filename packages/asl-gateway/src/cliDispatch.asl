@@ -1092,7 +1092,7 @@ fn codexBuildCmd codexBin: String ws: String promptPath: String noTools: Bool ef
 
 fn mapAgyModelAndEffort model: (Option String) effort: (Option String) -> (Pair String String)
   (let [(rawModel (optionOr model "gemini-3.8-flash"))
-        (rawEff (optionOr effort "low"))
+        (rawEff (optionOr effort ""))
         (pair1 (if (stringContains? rawModel "-high")
                  (pair (stringReplace rawModel "-high" "") "high")
                  (if (stringContains? rawModel "-medium")
@@ -1102,11 +1102,18 @@ fn mapAgyModelAndEffort model: (Option String) effort: (Option String) -> (Pair 
                      (pair rawModel rawEff)))))
         (cleanM (pairFirst pair1))
         (eff (pairSecond pair1))
-        (mappedM (cond
-                   ((or (= cleanM "opus") (or (= cleanM "claude-opus") (or (= cleanM "agy/opus") (= cleanM "agy-opus")))) "claude-opus-4-6-thinking")
-                   ((or (= cleanM "sonnet") (or (= cleanM "claude-sonnet") (or (= cleanM "agy/sonnet") (= cleanM "agy-sonnet")))) "claude-sonnet-4-6")
-                   (else cleanM)))]
-    (pair mappedM eff))
+        (isOpus (or (= cleanM "opus") (or (= cleanM "claude-opus") (or (= cleanM "agy/opus") (or (= cleanM "agy-opus") (= cleanM "agy"))))))
+        (isSonnet (or (= cleanM "sonnet") (or (= cleanM "claude-sonnet") (or (= cleanM "agy/sonnet") (= cleanM "agy-sonnet")))))
+        (claudeEff (if (or (= eff "low") (or (= eff "medium") (= eff "high"))) eff "medium"))
+        (mappedM (if isOpus
+                   (stringConcat "claude-opus-5-5-" claudeEff)
+                   (if isSonnet
+                     (stringConcat "claude-sonnet-5-5-" claudeEff)
+                     cleanM)))]
+    (pair mappedM
+          (if (or isOpus isSonnet)
+            claudeEff
+            (if (stringEmpty? eff) "low" eff))))
 
 fn agyBuildCmd! agyBin: String ws: String tmpDir: String rootDir: String timeout: Int64 model: (Option String) effort: (Option String) agent: (Option String) addDirs: (List String) prompt: String noTools: Bool -> (List String)
   (let [(unsafeFlag (optionOr (envGet "ASL_AGENT_UNSAFE") "0"))

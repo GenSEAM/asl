@@ -1,0 +1,50 @@
+(module asl-utils/tests/durationTest :x [runTests] :i [(asl-utils/duration :a du)])
+
+fn testParse -> Bool
+  (do (assert (= (du/parseDuration "1h30m15s") (ok 5415000)) "1h30m15s is 5415000ms")
+      (assert (= (du/parseDuration "PT1H30M15S") (ok 5415000)) "ISO PT1H30M15S is 5415000ms")
+      (assert (= (du/parseDuration "500ms") (ok 500)) "500ms is 500")
+      (assert (= (du/parseDuration "2d") (ok 172800000)) "2d is 172800000")
+      (assert (= (du/parseDuration "PT2M") (ok 120000)) "PT2M is 120000")
+      (assert (= (du/parseDuration "P1DT1H") (ok 90000000)) "P1DT1H is 90000000")
+      (assert (= (du/parseDuration "1h30m") (ok 5400000)) "1h30m is 5400000")
+      (assert (err? (du/parseDuration "12")) "number without unit is an err")
+      (assert (err? (du/parseDuration "1x")) "unknown unit is an err")
+      (assert (err? (du/parseDuration "")) "empty is an err")
+      (assert (err? (du/parseDuration "PT")) "PT alone is an err")
+      (assert (err? (du/parseDuration "1hx")) "trailing x after unit is an err")
+      (assert (err? (du/parseDuration "1h30m15sx")) "trailing x after ms is an err")
+      (assert (err? (du/parseDuration "1t2h")) "t in simple form is an err")
+      (assert (err? (du/parseDuration "1t2s")) "t in simple form is an err")
+      (assert (err? (du/parseDuration "P1D2H")) "ISO without T separator is an err")
+      (assert (= (du/parseDuration "0s") (ok 0)) "0s is zero")
+      (assert (= (du/parseDuration "0m") (ok 0)) "0m is zero")
+      (assert (= (du/parseDuration "PT0S") (ok 0)) "PT0S is zero")
+      (assert (= (du/parseDuration "P0DT0S") (ok 0)) "P0DT0S is zero")
+      (assert (= (du/parseDuration "P0D") (ok 0)) "P0D is zero")
+      (assert (err? (du/parseDuration "P1DT")) "trailing T is an err")
+      (assert (= (du/parseDuration (du/formatDuration 0)) (ok 0)) "round trip zero")
+
+      true)
+
+fn testFormat -> Bool
+  (do (assert (= (du/formatDuration 5415000) "1h30m15s") "5415000 formats to 1h30m15s")
+      (assert (= (du/formatDuration 0) "0s") "0 formats to 0s")
+      (assert (= (du/formatDuration 1000) "1s") "1000 formats to 1s")
+      (assert (= (du/formatDuration 1500) "1s500ms") "1500 formats to 1s500ms")
+      (assert (= (du/formatDuration 7200000) "2h") "7200000 formats to 2h")
+      (assert (= (du/formatDuration 90000) "1m30s") "90000 formats to 1m30s")
+      (assert (= (du/formatDuration 5400000) "1h30m") "5400000 formats to 1h30m")
+      (assert (= (du/formatDuration -1500) "-1s500ms") "negative formats with minus prefix")
+      (assert (= (du/formatDuration -9223372036854775808) "-106751991167d7h12m55s808ms") "min Int64 does not overflow")
+      true)
+
+fn testRoundTrip -> Bool
+  (match (du/parseDuration "PT2H30M")
+    ((ok v) (do (assert (= v 9000000) "PT2H30M is 9000000")
+                (assert (= (du/formatDuration v) "2h30m") "round trip 2h30m")
+                true))
+    ((err e) (do (assert false e) false)))
+
+fn runTests -> Bool
+  (and (testParse) (testFormat) (testRoundTrip))

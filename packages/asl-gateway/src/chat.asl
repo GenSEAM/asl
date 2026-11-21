@@ -64,6 +64,8 @@
       httpFailed
       raised
       anthropicBody
+      geminiGenerationConfig
+      structuredOutputError
       cacheHints
       credentialKey
       missingKeyWhy
@@ -1119,8 +1121,19 @@ fn anthropicBody body: j/Json target: String -> j/Json
         (stopV (getOr body "stop" (j/jnull)))
         (b4 (match stopV ((j/jnull) b3) (_ (pt/jset b3 "stop_sequences" (jsonStopSequencesOf stopV)))))
         (toolsV (getOr body "tools" (j/jnull)))
-        (b5 (match toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))]
-    b5)
+        (b5 (match toolsV ((j/jarr xs) (pt/jset b4 "tools" (j/jarr (map anthropicToolOf xs)))) (_ b4)))
+        (rf (getOr body "response_format" (j/jnull)))
+        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))
+        (b6 (if (= rfType "json_schema")
+              (let [(js (getOr rf "json_schema" (j/jobj (list))))
+                    (name (let [(n (strOr (getOr js "name" (j/jstr "")) ""))] (if (stringEmpty? n) "output" n)))
+                    (schema (getOr js "schema" (j/jobj (list))))
+                    (tool (j/jobj (list (pair "name" (j/jstr name)) (pair "input_schema" schema))))
+                    (existing (match (getOr b5 "tools" (j/jnull)) ((j/jarr xs) xs) (_ (list))))]
+                (pt/jset (pt/jset b5 "tools" (j/jarr (listAppend existing (list tool))))
+                         "tool_choice" (j/jobj (list (pair "type" (j/jstr "tool")) (pair "name" (j/jstr name))))))
+              b5))]
+    b6)
 
 fn geminiFunctionDeclarationOf t: j/Json -> j/Json
   (let [(fn_ (getOr t "function" (j/jobj (list))))]
@@ -1208,8 +1221,35 @@ fn geminiGenerationConfig body: j/Json -> j/Json
         (tempV (getOr body "temperature" (j/jnull)))
         (c2 (match tempV ((j/jnull) c1) (_ (pt/jset c1 "temperature" tempV))))
         (stopV (getOr body "stop" (j/jnull)))
-        (c3 (match stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))]
-    c3)
+        (c3 (match stopV ((j/jnull) c2) (_ (pt/jset c2 "stopSequences" (jsonStopSequencesOf stopV)))))
+        (rf (getOr body "response_format" (j/jnull)))
+        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))
+        (c4 (cond
+              ((= rfType "json_object") (pt/jset c3 "responseMimeType" (j/jstr "application/json")))
+              ((= rfType "json_schema")
+               (let [(js (getOr rf "json_schema" (j/jobj (list))))
+                     (schema (getOr js "schema" (j/jobj (list))))]
+                 (pt/jset (pt/jset c3 "responseMimeType" (j/jstr "application/json")) "responseSchema" schema)))
+              (else c3)))]
+    c4)
+
+; (:m :tags (structured-output) :do "the response_format cases a provider cannot honor: Anthropic has no json_object mode (json_schema becomes a forced tool), Gemini honors both, and any other type is named; none means the format is absent, text, or supported")
+fn structuredOutputError body: j/Json provider: String -> (Option String)
+  (let [(rf (getOr body "response_format" (j/jnull)))
+        (rfType (if (isObj? rf) (strOr (getOr rf "type" (j/jstr "")) "") ""))]
+    (cond
+      ((or (stringEmpty? rfType) (= rfType "text")) none)
+      ((= provider "anthropic")
+       (cond
+         ((= rfType "json_schema") none)
+         ((= rfType "json_object") (some "ERR_STRUCTURED_UNSUPPORTED: anthropic json_object"))
+         (else (some (str "ERR_STRUCTURED_UNSUPPORTED: anthropic " rfType)))))
+      ((= provider "gemini")
+       (cond
+         ((= rfType "json_schema") none)
+         ((= rfType "json_object") none)
+         (else (some (str "ERR_STRUCTURED_UNSUPPORTED: gemini " rfType)))))
+      (else none)))
 
 fn geminiBody body: j/Json target: String -> j/Json
   (let [(msgs (match (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
@@ -1431,14 +1471,17 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
         (a (pairSecond prepared))
         (l1 (with l :body body))
         (prov a.upstream.provider)
-        (overBudget (overContextBudget a body l.ctxNeed))]
+        (soErr (structuredOutputError body a.api))
+        (overBudget (match soErr ((some why) (some why)) ((none) (overContextBudget a body l.ctxNeed))))]
     (if (some? overBudget)
       (let [(why (optionOr overBudget ""))]
         ; (:m :ref CTX-ROUTE :do "a context skip is not a breaker skip: it counts in ctxFails, never in skipped, so a chain no member of which fits ends in contextTooLarge rather than a circuit-breaker cooldown reply")
-        (tellAll (list (effLog (str "[Gateway Context] skip " a.alias ": " why "\n")) (usageNote prov a.alias "context budget"))
-          (fn [] -> ChatStep
-            (loopStep cx (with l1 :idx (+ l1.idx 1) :lastErr (some why) :retryAfterSec 0
-                               :ctxFails (+ l1.ctxFails 1) :ctxEst (max l1.ctxEst (promptEstimate body)))))))
+        (if (some? soErr)
+          (sendError cx l.head 400 why true)
+          (tellAll (list (effLog (str "[Gateway Context] skip " a.alias ": " why "\n")) (usageNote prov a.alias "context budget"))
+            (fn [] -> ChatStep
+              (loopStep cx (with l1 :idx (+ l1.idx 1) :lastErr (some why) :retryAfterSec 0
+                                 :ctxFails (+ l1.ctxFails 1) :ctxEst (max l1.ctxEst (promptEstimate body))))))))
     (withBreakerPools (list a.providerPool a.pool)
       (fn [(left Float64) (downPool String)] -> ChatStep
         (if (!= left 0.0)
@@ -1457,7 +1500,7 @@ fn attempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> ChatStep
                                      :lastErr (some why)
                                      :skipped l1.skipped :emptyRetries l1.emptyRetries
                                      :telBound l1.telBound :head l1.head :retryAfterSec 0 :ctxNeed l1.ctxNeed :ctxFails l1.ctxFails :ctxEst l1.ctxEst)))))
-            ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))
+            ((none) (match (structuredOutputError body a.api) ((some e) (sendError cx l.head 400 e true)) ((none) (if (cliProvider? prov) (cliAttempt cx l1 a) (rateAttempt cx l1 a)))))))))))
 
 ; (:m :ref GW-CONTEXT-BUDGET :do "an entry whose :contextBudget (tokens) is below the prompt estimate (a quarter of the serialized messages, the gateway's usual chars-per-token guess) is skipped for the next loop member instead of being sent a request its window cannot hold; some carries the reason text")
 ; (:m :ref CTX-ROUTE :do "the gateway's prompt token estimate: a quarter of the serialized messages")

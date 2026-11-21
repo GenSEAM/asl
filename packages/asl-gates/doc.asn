@@ -620,3 +620,4 @@
 (:doc :symbol "asl/packages/asl-gates/tests/vcsAuditWireTest.asl#runTests" :text "vcsDirect wired into audit consistency on fixture repos: a clean tree passes, a seeded site fails ERR_VCS_DIRECT, a deleted allowlist ERR_VCS_ALLOW_DELETED, no main ERR_VCS_NO_MAIN, a tracked cache ERR_VCS_CACHE_TRACKED")
 (:doc :symbol "asl/packages/asl-gates/tests/vcsDirectAuditTest.asl#runTests" :text "vcsDirectAudit on in-memory trees: new, allowed and stale sites, patterns, allowlist parsing, helpers by data, shell shapes and occurrence counts")
 (:doc :symbol "asl/packages/asl-gates/tests/landedClipTest.asl#runTests" :text "auditLanded subjectOf cuts a CJK subject back to its character start instead of mid-character")
+(:doc :symbol "asl/packages/asl-gates/tests/docGapBench01Test.asl#runTests" :text "doc gap bench: the five attentionProsthesis exports have (:doc) rows in asl/doc/bench.asn and their (:gap) rows left docCoverageBaseline.asn")

@@ -20,3 +20,4 @@
 (:doc :symbol "asl/packages/asl-html/src/convert.asl#" :text "convertSource kind source for kind svg, html or css; the toolbelt's (:target :name svg|html|css :file F [:out O]) calls it.")
 (:doc :symbol "asl/packages/asl-html/tests/asnTest.asl#" :text "A page with a style element, boolean attributes, a button and an svg drawing; a fragment; html errors; every css rule kind from ASN; css errors.")
 (:doc :symbol "asl/packages/asl-html/tests/html2CoverTest.asl#runTests" :text "html cover 2: textarea, tfoot, varEl and the svg elements symbol, use, mask, pattern, marker, filter, foreignObject, desc and image, each with kids, attributes, none, flag attributes and escaping")
+(:doc :symbol "asl/packages/asl-html/tests/html1CoverTest.asl#runTests" :text "html cover 1: img, br and div elements and attribute rendering")
