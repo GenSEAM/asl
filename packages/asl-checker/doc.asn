@@ -387,6 +387,7 @@
 (:doc :symbol "asl/packages/asl-checker/src/hints.asl#hintFor" :text "a hint for an unbound name: its single exporting module to import, several exporters to choose from, or the nearest known name; otherwise the table hint for the code")
 (:doc :symbol "asl/packages/asl-checker/src/hints.asl#headerExports" :text "the names listed in the :x export list of a module header text")
 (:doc :symbol "asl/packages/asl-checker/src/hints.asl#exportersOf!" :text "map from each given name to the modules under root, tests excluded, whose :x list exports it")
+(:doc :symbol "asl/packages/asl-checker/src/hints.asl#moduleText!" :text "root name: the text of the module named name found through the package index of root, empty when none carries that name; a refused edit lists that module's exports and signatures from it")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#ensureIndex!" :text "the module index for a root, reused when already built for that root and otherwise built by walking the directory")
 (:doc :symbol "asl/packages/asl-checker/src/hints.asl#Hint" :text "one fixed repair hint: the diagnostic code it answers, the message text it applies to (empty for any) and the advice line")
 (:doc :symbol "asl/packages/asl-checker/src/resolve.asl#IdxMod" :text "one module of the module index: its name and the path of its source file")

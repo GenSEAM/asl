@@ -1,7 +1,7 @@
 (module aslAgent/exec
   :x [Val Receipt ExecEnv ExecOut
       vStr vInt vBool vStrs vPair vNone vRecs
-      makeExecEnv withNet withGateSame execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
+      makeExecEnv aliasedOp fileFormHeads opSynonymNames withNet withGateSame execOp! execGateOp! sweepRevertBackups! intentReceipt execNoteOp hideHarnessEntries hiddenTouched harnessTouched opWords
       formatOpReceipt formatGateRun gateTail gateOutcome escapeAsn pyStr truthyVal
       opShapes acceptedOpsForMode terminalForms undeclaredAnswer collectProseStrings moduleMismatch!
       recGet recSet serVal serRec kvToVal aslRunner! hiddenEnv! rawRequiredBytes noteMaxChars deliverables]
@@ -885,11 +885,27 @@ fn rawPlaceAdjacent? op: (List (Pair String c/KvVal)) opName: String -> Bool
 fn withRawPlace op: (List (Pair String c/KvVal)) opName: String rec: (List (Pair String Val)) -> (List (Pair String Val))
   (if (rawPlaceAdjacent? op opName) (recSet rec "rawPlace" (vStr "adjacent")) rec)
 
-fn blockedKey op: (List (Pair String c/KvVal)) opName: String -> String
-  (str "blocked:" opName "|" (opFirst op (list "file" "path") ""))
+; (:m :ref LEON-OP-HINTS :do "HARNESS_PATH_REPEAT counted 62 refusals of the same blocked path written as ./p, p and the absolute p inside :root; the repeat key is the root-relative path so the three spellings are one path")
+fn blockedKey op: (List (Pair String c/KvVal)) opName: String root: String -> String
+  (let [p (opFirst op (list "file" "path") "")
+        rootParts (pathSegs (absRoot! root))
+        parts (pathSegs p)
+        rel (if (and (stringStartsWith? p "/") (listAny? (fn [x] true) rootParts) (= (optionOr (listSlice parts 0 (listLength rootParts)) (list)) rootParts))
+              (optionOr (listSlice parts (listLength rootParts) (listLength parts)) (list))
+              parts)]
+    (str "blocked:" opName "|" (c/joinSep rel "/")))
 
-fn blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String -> Bool
-  (listContains? procs.blocked (blockedKey op opName))
+fn pathSegs p: String -> (List String)
+  (listReverse
+    (fold (fn [acc x]
+            (cond
+              ((or (= x "") (= x ".")) acc)
+              ((= x "..") (if (listEmpty? acc) acc (c/restOf acc)))
+              (else (cons x acc))))
+      (list) (stringSplit p "/")))
+
+fn ! blockedRepeat? procs: r/Procs op: (List (Pair String c/KvVal)) opName: String root: String -> Bool
+  (listContains? procs.blocked (blockedKey op opName root))
 
 fn blockedBump procs: r/Procs key: String -> r/Procs
   (if (listContains? procs.blocked key) procs (with procs :blocked (cons key procs.blocked)))
@@ -904,8 +920,89 @@ fn fileFormHead? op: (List (Pair String c/KvVal)) opName: String -> Bool
 fn fileFormMessage opName: String -> String
   (str "(:" opName " ...) is text from a source file, not a step; to put it in a file send (:step :op \"write\" :file \"PATH\" :content :raw) and the whole file in a ``` block after it")
 
-fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
-  (let [opType (opStr op "type" "raw")
+; (:m :ref LEON-OP-HINTS :do "OP-ALIASES, node2 48h: ~190 turns lost on tool misuse; an op name a cheap model writes for a registered op (tests, ls, open, man) and the argument key it writes for the file or topic (:path, :target, :about) are read as the registered op and key, the receipt carries :canonical with the exact step form; a step naming no op answers ERR_NO_OP with the form its keys imply")
+fn opSynonymTable -> (List (Pair String (List String)))
+  (list
+    (pair "test" (list "tests" "runtest" "runtests" "unittest" "testfile" "asltest"))
+    (pair "tree" (list "ls" "list" "listdir" "dir" "listfiles" "listdirectory"))
+    (pair "read" (list "open" "view" "readfile" "head" "type"))
+    (pair "help" (list "man" "usage" "info" "?"))
+    (pair "write" (list "writefile" "savefile" "newfile" "createfile"))
+    (pair "edit" (list "editfile" "update"))
+    (pair "check" (list "checkfile" "lint" "verify"))
+    (pair "run" (list "exec" "shell" "bash" "sh" "cmd" "command")))
+
+; (:m :ref LEON-OP-HINTS :do "a synonym never names a form head the loop reads as text or data (fileFormHeads, patch, txn, findings...), or a pasted (:doc ...) would run as help")
+fn opSynonymNames -> (List String)
+  (listFlatMap (fn [p] (pairSecond p)) (opSynonymTable))
+
+fn opSynonym name: String -> String
+  (let [n (stringLower name)]
+    (match (listFind (fn [p] (listContains? (pairSecond p) n)) (opSynonymTable))
+      ((some p) (pairFirst p))
+      ((none) "")))
+
+fn opKeyAliases opName: String -> (Pair String (List String))
+  (cond
+    ((listContains? (list "test" "check" "fix") opName) (pair "file" (list "path" "target" "filename" "spec" "suite" "name")))
+    ((= opName "help") (pair "name" (list "about" "command" "cmd" "for" "what" "of" "subject" "tool" "target")))
+    ((= opName "tree") (pair "path" (list "dir" "directory" "folder" "file" "target")))
+    ((listContains? (list "read" "write" "edit") opName) (pair "file" (list "path" "filename" "target")))
+    (else (pair "" (list))))
+
+fn opSetStr op: (List (Pair String c/KvVal)) k: String v: String -> (List (Pair String c/KvVal))
+  (listAppend (filter (fn [p] (!= (pairFirst p) k)) op) (list (pair k (c/kvStr v))))
+
+fn withKeyAlias op: (List (Pair String c/KvVal)) opName: String -> (List (Pair String c/KvVal))
+  (match (opKeyAliases opName)
+    ((pair key aliases)
+      (if (or (stringEmpty? key) (opTruthy op key))
+        op
+        (match (listFind (fn [k] (opTruthy op k)) aliases)
+          ((some k) (opSetStr op key (opStr op k "")))
+          ((none) op)))))
+
+fn canonicalForm opName: String op: (List (Pair String c/KvVal)) -> String
+  (let [arg (match (opKeyAliases opName) ((pair key _) key))
+        v (if (stringEmpty? arg) "" (opStr op arg ""))]
+    (if (stringEmpty? arg)
+      (str "(:step :op \"" opName "\")")
+      (str "(:step :op \"" opName "\" :" arg " \"" (c/escapeAsn v) "\")")))
+
+fn aliasedOp op: (List (Pair String c/KvVal)) env: ExecEnv -> (List (Pair String c/KvVal))
+  (let [isStep (= (opStr op "type" "raw") "step")
+        opName (opStr op "op" "")
+        syn (if (stringEmpty? opName) "" (opSynonym opName))
+        undeclared (and (!= opName "") (match (t/checkEffect env.effects opName) ((t/effectUndeclared) true) (_ false)))
+        renamed (if (and isStep (and undeclared (!= syn ""))) (opSetStr op "op" syn) op)
+        name (opStr renamed "op" "")
+        keyed (if isStep (withKeyAlias renamed name) renamed)]
+    (if (and isStep (and (!= name "") (or (!= name opName) (!= (listLength keyed) (listLength renamed)))))
+      (opSetStr keyed "aliased" (canonicalForm name keyed))
+      keyed))
+
+fn inferStepForm op: (List (Pair String c/KvVal)) -> String
+  (let [f (opFirst op (list "file" "path") "")]
+    (cond
+      ((and (!= f "") (opTruthy op "content")) (str "(:step :op \"write\" :file \"" (c/escapeAsn f) "\" :content :raw)"))
+      ((and (!= f "") (and (opTruthy op "old") (opTruthy op "new"))) (str "(:step :op \"edit\" :file \"" (c/escapeAsn f) "\" :old :raw :new :raw)"))
+      ((opTruthy op "query") (str "(:step :op \"query\" :query \"" (c/escapeAsn (opStr op "query" "")) "\")"))
+      ((opTruthy op "argv") (str "(:step :op \"run\" :argv \"" (c/escapeAsn (opStr op "argv" "")) "\")"))
+      ((opTruthy op "cmd") (str "(:step :op \"run\" :argv \"" (c/escapeAsn (opStr op "cmd" "")) "\")"))
+      ((!= f "") (str "(:step :op \"read\" :file \"" (c/escapeAsn f) "\")"))
+      ((opTruthy op "dir") (str "(:step :op \"tree\" :path \"" (c/escapeAsn (opStr op "dir" "")) "\")"))
+      (else "")))
+
+fn noOpReceipt op: (List (Pair String c/KvVal)) rid: String -> (List (Pair String Val))
+  (let [fix (inferStepForm op)]
+    (listAppend
+      (list (vs "id" rid) (vs "op" "") (vs "status" "rejected") (vs "error" "ERR_NO_OP")
+        (vs "message" "this step names no op; the op is a double-quoted name right after :op"))
+      (if (stringEmpty? fix) (list) (list (vs "fix" fix)))))
+
+fn ! execOp! opIn: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId: (fn [] -> String) snap: (fn [String] -> Bool) onKeep: (fn [String (Option String) Int64] -> Bool) run: (fn [String String] -> t/AslRun) -> ExecOut
+  (let [op (aliasedOp opIn env)
+        opType (opStr op "type" "raw")
         opName (opStr op "op" opType)
         step (= opType "step")
         effect (if (and step (and (!= opName "intent") (not (stringEmpty? opName)))) (t/checkEffect env.effects opName) (t/effectAllowed))
@@ -934,7 +1031,7 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HIDDEN_PATH")
               (vs "message" "that path belongs to the evaluation, not the task; it is not read; declared gates run with (:step :op \"gate\") and after each write"))
           procs))
-      ((and step (blockedRepeat? procs op opName))
+      ((and step (blockedRepeat? procs op opName env.root))
         (eo (list (vs "id" (newId)) (vs "op" opName) (vs "status" "rejected") (vs "error" "ERR_HARNESS_PATH_REPEAT")
               (vs "file" (opFirst op (list "file" "path") ""))
               (vs "message" "this exact op on this blocked path was already refused; it is not checked or run again"))
@@ -946,7 +1043,7 @@ fn ! execOp! op: (List (Pair String c/KvVal)) env: ExecEnv procs: r/Procs newId:
               (pair "owns" (vStrs env.owns))
               (vs "hint" (str "task inputs live under .asl/mem/work; the allowed roots are :root \"" env.root "\" and :owns (" (stringJoin (map (fn [o] (str "\"" o "\"")) env.owns) " ") "); .asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
               (vs "message" ".asl/run holds this loop's own journals, agent files and patches, not the task; it is not read"))
-          (blockedBump procs (blockedKey op opName))))
+          (blockedBump procs (blockedKey op opName env.root))))
       ((and step (and (= opName "run") (opTruthy op "readHint")))
         (eo (list (vs "id" (newId)) (vs "op" "run") (vs "status" "rejected") (vs "error" "ERR_RUN_READ") (pair "cmd" (opVal op "argv" (vStr "")))
               (pair "message" (opVal op "message" (vNone))))
@@ -971,6 +1068,7 @@ fn ! execRest! op: (List (Pair String c/KvVal)) opType: String opName: String en
       ((some? refused) (optionOr refused (list)))
       ((and step (= opName "txn"))
         (mapRec (t/execTxn! (opStr op "form" "") env.owns env.root env.effects newId snap run) fromTxn))
+      ((and step (or (stringEmpty? opName) (= opName "step"))) (noOpReceipt op (newId)))
       ((and step (and (= opName "flush") env.writesPersisted))
         (list (vs "id" (newId)) (vs "op" "flush") (vs "status" "ok") (pair "exit" (vInt 0)) (vs "message" "no-op: writes already persisted")))
       ((and step (listContains? (gitOpNames) opName))

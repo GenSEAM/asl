@@ -1,4 +1,4 @@
-(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! flushCheckedStep! flushCheckDeadlineMs flushLimit discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h)])
+(module asl-forms/edit :x [SyntaxResult Checkers Verdict DelimDiag delimDiag delimError validateStaged! unifiedDiff! fnmatch parseOwns linesFailed stepReadOnly writeStep! editStep! diffStep! preflushStep! flushStep! flushCheckedStep! flushCheckDeadlineMs flushLimit discardStep! txnStep! editOp!] :i [(asl-forms/kernel :a k) (asl-forms/vfs :a v) (asl-forms/repair :a rep) (asl-coord/claims :a coord) (asl-forms/heal :a h) (asl-checker/hints :a hn)])
 
 
 (schema SyntaxResult (:f status String) (:f message String) (:f before String) (:f host String))
@@ -170,7 +170,87 @@ fn aslFile? path: String -> Bool
 fn preOrForced pre: Bool -> String
   (if pre " :preexisting true" " :forced true")
 
-fn validateAsl ch: Checkers path: String lang: String before: (Option String) after: String force: Bool -> Verdict
+; (:m :ref LEON-OP-HINTS :do "node2 48h: 63 UNKNOWN_SYMBOL, 44 UNDEFINED_EXPORT, 35 NOT_EXPORTED and 27 unbalanced txn rejects named no candidate and no position; a refused ASL check now ends its message with one short (:near ...) form, the module exports plus up to 3 closest names by edit distance with their signatures; the near tail is capped at nearCap characters")
+fn nearCap -> Int64
+  400
+
+fn nonEmpty s: String -> Bool
+  (not (stringEmpty? s))
+
+fn wordsOf s: String -> (List String)
+  (filter nonEmpty (stringSplit (stringReplace s "\n" " ") " "))
+
+fn cleanWord w: String -> String
+  (stringTrim (stringReplace (stringReplace (stringReplace w ";" "") ":" "") "," ""))
+
+fn wordBefore diag: String marker: String -> String
+  (match (stringIndexOf diag marker)
+    ((none) "")
+    ((some i) (cleanWord (optionOr (listLast (wordsOf (optionOr (stringSlice diag 0 i) ""))) ""))))
+
+fn wordAfter diag: String marker: String -> String
+  (match (stringIndexOf diag marker)
+    ((none) "")
+    ((some i) (cleanWord (optionOr (listHead (wordsOf (optionOr (stringSlice diag (+ i (stringLength marker)) (stringLength diag)) ""))) ""))))
+
+fn fnSigs text: String -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (l String)] -> (List (Pair String String))
+          (if (stringStartsWith? l "fn ")
+            (let [(ws (wordsOf l))
+                  (i0 (if (= (optionOr (listGet ws 1) "") "!") 2 1))
+                  (i1 (if (= (optionOr (listGet ws i0) "") "tailrec") (+ i0 1) i0))
+                  (name (optionOr (listGet ws i1) ""))
+                  (sig (stringJoin (optionOr (listSlice ws (+ i1 1) (listLength ws)) (list)) " "))]
+              (if (stringEmpty? name) acc (listAppend acc (list (pair name (if (> (stringLength sig) 60) (optionOr (stringSlice sig 0 60) sig) sig))))))
+            acc))
+        (list) (stringSplit text "\n"))
+
+fn closestOf name: String cands: (List String) -> (List String)
+  (let [(lim (max 3 (/ (stringLength name) 2)))
+        (uniq (fold (fn [(a (List String)) (c String)] -> (List String) (if (listContains? a c) a (listAppend a (list c)))) (list) cands))
+        (near (filter (fn [(c String)] -> Bool (and (!= c name) (<= (h/editDistance name c) lim))) uniq))
+        (sorted (listSortBy (fn [(c String)] -> Int64 (h/editDistance name c)) near))]
+    (optionOr (listSlice sorted 0 (min 3 (listLength sorted))) (list)))
+
+fn sigText name: String sigs: (List (Pair String String)) -> String
+  (match (listFind (fn [(p (Pair String String))] -> Bool (= (pairFirst p) name)) sigs)
+    ((some p) (str "(" name " " (pairSecond p) ")"))
+    ((none) (str "(" name ")")))
+
+fn nearForm mod: String exports: (List String) closest: (List String) sigs: (List (Pair String String)) -> String
+  (str " (:near" (if (stringEmpty? mod) "" (str " :in " mod))
+       (if (listEmpty? exports) "" (str " :exports " (stringJoin (optionOr (listSlice exports 0 (min 12 (listLength exports))) (list)) " ")))
+       (if (listEmpty? closest) "" (str " :closest " (stringJoin (map (fn [(c String)] -> String (sigText c sigs)) closest) " ")))
+       ")")
+
+fn capNear s: String -> String
+  (if (> (stringLength s) (nearCap)) (str (optionOr (stringSlice s 0 (- (nearCap) 1)) s) ")") s)
+
+fn ! nearTail! text: String diag: String -> String
+  (cond
+    ((stringContains? diag " is not exported by ")
+      (let [(name (wordBefore diag " is not exported by "))
+            (mod (wordAfter diag " is not exported by "))
+            (mt (hn/moduleText! "." mod))
+            (exports (hn/headerExports mt))
+            (sigs (fnSigs mt))]
+        (if (or (stringEmpty? name) (stringEmpty? mt)) "" (capNear (nearForm mod exports (closestOf name (listAppend exports (map pairFirst sigs))) sigs)))))
+    ((stringContains? diag "unbound symbol: ")
+      (let [(name (wordAfter diag "unbound symbol: "))
+            (pt (resultOr (fileReadString "asl/prelude/prelude.asl") ""))
+            (sigs (listAppend (fnSigs text) (fnSigs pt)))
+            (vocab (h/vocabFromSource text (h/preludeVocab! "asl/prelude/prelude.asl")))
+            (cand (listAppend (h/symbolCandidates name none (list)) (closestOf name vocab)))
+            (uniq (fold (fn [(a (List String)) (c String)] -> (List String) (if (listContains? a c) a (listAppend a (list c)))) (list) cand))
+            (own (optionOr (mapGet (hn/exportersOf! "." (list name)) name) (list)))]
+        (if (stringEmpty? name) "" (capNear (nearForm (optionOr (listHead own) "") (list) (optionOr (listSlice uniq 0 (min 3 (listLength uniq))) (list)) sigs)))))
+    ((stringContains? diag " is exported but not defined in this module")
+      (let [(name (wordBefore diag " is exported but not defined in this module"))
+            (sigs (fnSigs text))]
+        (if (stringEmpty? name) "" (capNear (nearForm "" (list) (closestOf name (map pairFirst sigs)) sigs)))))
+    (else ""))
+
+fn ! validateAsl! ch: Checkers path: String lang: String before: (Option String) after: String force: Bool -> Verdict
   (match (delimDiag after)
     ((none)
       (if (= lang "asn")
@@ -183,7 +263,7 @@ fn validateAsl ch: Checkers path: String lang: String before: (Option String) af
           (cond
             ((= st "ok") (Verdict :code "" :message "" :fields (str " :balanced true :syntax :ok" chk)))
             ((or pre force) (Verdict :code "" :message "" :fields (str " :balanced true :syntax :error" chk (preOrForced pre) " :syntaxMessage " (quoted diag))))
-            (else (Verdict :code ":ERR_CHECK_FAILED" :message (if (stringEmpty? diag) (str "native check " st) diag) :fields (str " :balanced true :syntax :error" chk)))))))
+            (else (Verdict :code ":ERR_CHECK_FAILED" :message (if (stringEmpty? diag) (str "native check " st) (str diag (nearTail! after diag))) :fields (str " :balanced true :syntax :error" chk)))))))
     ((some d)
       (let [(pre (match before ((some b) (some? (delimDiag b))) ((none) false)))
             (detail (str " :byte " (stringFromInt64 d.byte) (if (stringEmpty? d.expected) "" (str " :expected " (quoted d.expected)))))]
@@ -199,7 +279,7 @@ fn foreignOf ch: Checkers path: String lang: String content: String -> SyntaxRes
 fn validateStaged! ch: Checkers path: String before: (Option String) after: String force: Bool -> Verdict
   (let [(lang (syntaxLang! path after))]
     (if (or (= lang "asl") (= lang "asn"))
-      (validateAsl ch path lang before after force)
+      (validateAsl! ch path lang before after force)
       (let [(r (foreignOf ch path lang after))
             (st r.status)
             (msg r.message)

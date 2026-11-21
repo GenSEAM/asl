@@ -80,6 +80,7 @@
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#languageOf!" :text "language_of: extension, else the shebang on disk")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#diagScan" :text "asl_delimiter_diag: strings and ; comments opaque")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#validateStaged!" :text "validate_staged: reject only what was fine before")
+(:doc :symbol "asl/packages/asl-forms/tests/editNearTest.asl#runTests" :text "run the reject-hint cases: a refused edit carries a near tail with the module exports and the closest names with signatures for not-exported, unbound and undefined-export refusals, none for other codes, capped at 400 characters")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#repairRun" :text "asl_repair_via_host without the host: same repair module")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#unrepairable" :text "AGENTLOOP-forceMessage: no 'or pass :force true' here. flushOne! refuses genuinely unbalanced delimiters as a Tier-0 floor independent of :force, so staging past an unrepairable item would only defer the same rejection to flush")
 (:doc :symbol "asl/packages/asl-forms/src/edit.asl#writeStep!" :text "(:write) stages whole content; only flush touches disk")

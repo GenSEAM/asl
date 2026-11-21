@@ -1,5 +1,5 @@
 (module asl-checker/hints
-  :x [Hint hintTable unboundName diagKind hintFor headerExports exportersOf! Prior priorTable priorFor priorNames priorFix headerFixes]
+  :x [Hint hintTable unboundName diagKind hintFor headerExports exportersOf! moduleText! Prior priorTable priorFor priorNames priorFix headerFixes]
   :i [(asl-checker/types :a ty) (asl-checker/resolve :a r)])
 
 ; (:m :do "STATICHINT 2026-10-28: one short ASN hint per checker diagnostic, chosen by a data table (code plus a message fragment); the two context hints, nearest known name and exporting module, are built by the caller from heal symbolCandidates and exportersOf! and passed in, so no name-matching logic is copied here")
@@ -115,6 +115,13 @@ fn ! readModule! root: String path: String -> String
   (match (fileReadString path)
     ((ok s) s)
     ((err _) (resultOr (fileReadString (str root "/" path)) "")))
+
+; (:m :ref LEON-OP-HINTS :do "the text of the module named name, found through the package index of root; empty when no module carries that name, so a reject receipt can list that module's exports and signatures")
+fn ! moduleText! root: String name: String -> String
+  (let [(ix (r/ensureIndex! root (r/emptyModIndex)))]
+    (match (listHead (filter (fn [(m r/IdxMod)] -> Bool (= m.name name)) ix.mods))
+      ((some m) (readModule! root m.path))
+      ((none) "")))
 
 ; (:m :do "name -> modules whose header :x lists it, over the package index of root (tests dirs skipped); one read per module, built only when a caller has unbound names to place")
 fn ! exportersOf! root: String names: (List String) -> (Map String (List String))

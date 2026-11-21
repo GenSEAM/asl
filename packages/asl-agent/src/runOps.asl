@@ -1243,6 +1243,27 @@ fn ! outsideRootVerdict! cmd: String root: String -> (Option String)
     ((err _) (none))
     ((ok ws) (jailWords! ws (pyAbspath! (rootOrDot root)) (optionOr (envGet "HOME") ""))))
 
+; (:m :ref LEON-OP-HINTS :do "RUN_OUTSIDE_ROOT drew 17 refusals, mostly an absolute path of another checkout of the same repo; when the longest tail of the offending absolute path exists under :root the receipt carries :fix, the same run with that path rewritten root-relative, and :root")
+fn ! existingTail! parts: (List String) root: String -> String
+  (if (listEmpty? parts)
+    ""
+    (let [rel (c/joinSep parts "/")]
+      (if (fileExists? (str root "/" rel)) rel (existingTail! (c/restOf parts) root))))
+
+fn ! outsideFixFields! cmd: String why: String root: String -> (List (Pair String RVal))
+  (match (shellWords cmd)
+    ((err _) (list))
+    ((ok ws)
+      (match (listFind (fn [w] (and (stringStartsWith? w "/") (stringContains? why w))) ws)
+        ((none) (list))
+        ((some w)
+          (let [parts (listReverse (fold (fn [acc x] (cond ((or (stringEmpty? x) (= x ".")) acc) ((= x "..") (if (listEmpty? acc) acc (c/restOf acc))) (else (cons x acc)))) (list) (stringSplit w "/")))
+                rel (existingTail! (c/restOf parts) (rootOrDot root))]
+            (if (stringEmpty? rel)
+              (list)
+              (list (rs "root" (rootOrDot root))
+                (rs "fix" (str "(:step :op \"run\" :argv \"" (c/escapeAsn (stringReplace cmd w rel)) "\")")))))))))
+
 fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: String onKeep: (fn [String (Option String) Int64] -> Bool) -> OpResult
   (let [cmd (firstTruthy op (list "argv" "cmd"))]
     (if (stringEmpty? (g/pyStrip cmd))
@@ -1255,7 +1276,8 @@ fn execRunOp! op: (List (Pair String c/KvVal)) ctx: RunCtx procs: Procs rid: Str
         ((none)
           (match (outsideRootVerdict! cmd ctx.root)
             ((some why)
-              (OpResult :rec (runReject rid "ERR_RUN_OUTSIDE_ROOT" cmd (str "not run: " why "; a run may only touch paths inside :root")) :procs procs))
+              (OpResult :rec (listAppend (runReject rid "ERR_RUN_OUTSIDE_ROOT" cmd (str "not run: " why "; a run may only touch paths inside :root"))
+                               (outsideFixFields! cmd why ctx.root)) :procs procs))
             ((none)
           (match (runOutward cmd ctx.owns ctx.root)
             ((err e)
