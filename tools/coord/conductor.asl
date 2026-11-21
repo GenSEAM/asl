@@ -5262,7 +5262,7 @@ fn ! redCached! path: String sha: String gate: String run: (fn [] -> (Pair Int64
     ((some r) r)
     ((none)
       (let [(r (run))
-            (_ (if (and (>= (pairFirst r) 0) (< (pairFirst r) 124))
+            (_ (if (and (>= (pairFirst r) 0) (and (< (pairFirst r) 124) (not (and (= (pairFirst r) 0) (= (pairSecond r) 0)))))
                  (match (fileWrite path (str (redBaseRow sha gate r) "\n"))
                    ((ok _) true)
                    ((err e) (do (eprintln (str "(:redBaseMemo :path " (st/q path) " :err " (st/q e) ")")) false)))
