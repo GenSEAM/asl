@@ -3,6 +3,10 @@
   :i [(asl-tools/coord/conductor :a cd) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (asl-tools/coord/tests/fixtures/pipeFix :a pf)])
 
 ; (:m :ref PIPE-E2E-HERMETIC :do "the whole conductor cycle in a temp world: tick! drives one unit through the real stage children (bin/asl run conductor.asl stage ...: writeRes with the real Leon loop on a scripted reply fixture, gatesStage, realReview against the stand-in hub, mergeRes onto a dev clone); the only stand-ins are the Leon replies, the hub verdicts and the dev clone's train; three scenarios: a write that lands and merges, a write that changes nothing, a review that fails")
+; (:m :ref TRAIN-RED-SUITES :do "five scenarios each drive the unit up to 600 s through real stage children (cold stage builds under load): past the 1800 s default wall, node2 trains killed the suite at 1800 s six times 2026-11-19..20 while greens took up to 1345 s; the wall covers its own bounds")
+fn suiteWallS -> Int64
+  3600
+
 (schema Out
   (:f ready Bool) (:f why String) (:f tos (List String)) (:f st String) (:f sig String) (:f fails Int64) (:f devBefore String) (:f devAfter String) (:f unitSha String)
   (:f inDev Bool) (:f devImpl String) (:f wtGone Bool) (:f hubSeen String) (:f prior String) (:f trainArgs String) (:f journal String) (:f ticks Int64) (:f agentForm String) (:f repoReal String))
