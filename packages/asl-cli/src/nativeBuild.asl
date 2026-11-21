@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -518,10 +518,13 @@ fn ! useEntry! b: Build dir: String -> Unit
       (fileUtime dir (nowNs))
       ())
 
+fn seedDirOf b: Build row: String -> String
+  (str b.cache "/seed-" (optionOr (seedField row "llSha256") "") "-" (optionOr (stringSlice b.base 0 16) b.base))
+
 fn ! seed! b: Build row: String -> (Result String String)
   (let [(file (optionOr (seedField row "file") ""))
         (llSha (optionOr (seedField row "llSha256") ""))
-        (dir (str b.cache "/seed-" llSha "-" (optionOr (stringSlice b.base 0 16) b.base)))
+        (dir (seedDirOf b row))
         (ll (str b.tmp "/seed.ll"))
         (_ (useEntry! b dir))]
     (cond
@@ -614,12 +617,19 @@ fn ! compile! b: Build name: String compiler: String tag: String entry: String d
       (else (err (failure (str compiler " build " entry) built)))))
 
 ; (:m :ref NATIVECLI-STICKY-FAIL-20261018 :do "a .failed marker written before this fix (or by another process) can itself carry a transient-shaped message; a marker whose own stored text is transient is read as absent, not replayed, and is removed so it is not re-parsed on every later call")
-fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
+fn ! stageKey! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result (Pair String (List String)) String)
   (match (depsOf! b compiler entry extra)
     ((err e) (err e))
     ((ok deps) (match (keyOf! b b.root (str tag "+notrace") entry deps)
       ((err e) (err e))
-      ((ok key) (let [(dir (str b.cache "/" name "-" key))
+      ((ok key) (ok (pair key deps))))))
+
+fn ! stage! b: Build name: String compiler: String tag: String entry: String extra: (List String) -> (Result String String)
+  (match (stageKey! b name compiler tag entry extra)
+    ((err e) (err e))
+    ((ok found) (let [(key (pairFirst found))
+                      (deps (pairSecond found))]
+      (let [(dir (str b.cache "/" name "-" key))
                        (_ (useEntry! b dir))
                        (marker (str dir ".failed"))
                        (markerPresent (sys/isFile? marker))
@@ -630,7 +640,34 @@ fn ! stage! b: Build name: String compiler: String tag: String entry: String ext
                     ((sys/executable? (str dir "/bin")) (ok dir))
                     ((and markerPresent (not stuckTransient)) (err (str "an earlier build of " entry " with key " key " failed: " markerText)))
                     (else (do (say! (str "asl: native build: " entry " with " (sys/baseName (sys/parentOf compiler))))
-                              (compile! b name compiler (str tag "+notrace") entry dir deps key)))))))))
+                              (compile! b name compiler (str tag "+notrace") entry dir deps key))))))))
+
+; (:m :ref CLI-STALE-BY-CONTENT :do "lookup! is the lock-free half of a refresh: the keys build! would compute (seed dir, asl1 and cli stage keys from the deps the stage compilers list) without building, leasing or touching; a complete cli-KEY (bin and deps, installed by one rename) is the hit, and the name of the deepest entry it reached (cli-KEY, asl1-KEY or seed-...) names the build lock, so builds of different keys never wait on each other and two roots with the same key take the same lock; anything it cannot compute is a miss with an empty name, the shared lock")
+fn entryComplete? dir: String -> Bool
+  (and (sys/executable? (str dir "/bin")) (sys/isFile? (str dir "/deps")))
+
+fn ! lookupWith! b: Build row: String -> (Pair String String)
+  (let [(seedDir (seedDirOf b row))]
+    (if (not (sys/executable? (str seedDir "/bin")))
+      (pair "" (sys/baseName seedDir))
+      (match (stageKey! b "asl1" (str seedDir "/bin") (sys/baseName seedDir) "asl/packages/asl-compiler/src/asl1.asl" (list))
+        ((err _) (pair "" (sys/baseName seedDir)))
+        ((ok k1) (let [(dir1 (str b.cache "/asl1-" (pairFirst k1)))]
+          (if (not (entryComplete? dir1))
+            (pair "" (sys/baseName dir1))
+            (match (stageKey! b "cli" (str dir1 "/bin") (sys/baseName dir1) "asl/packages/asl-cli/src/native.asl"
+                     (listAppend (stringLines (stringTrim (resultOr (fileReadString (str dir1 "/deps")) ""))) (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
+              ((err _) (pair "" (sys/baseName dir1)))
+              ((ok k2) (let [(dir2 (str b.cache "/cli-" (pairFirst k2)))]
+                (pair (if (entryComplete? dir2) dir2 "") (sys/baseName dir2)))))))))))
+
+fn ! lookup! root: String cacheDir: String -> (Pair String String)
+  (match (setup! root cacheDir "")
+    ((err _) (pair "" ""))
+    ((ok ready) (let [(b (pairFirst ready))
+                      (found (lookupWith! b (pairSecond ready)))
+                      (_ (pathRemove b.tmp))]
+                  found)))
 
 fn ! writeHead! b: Build dir: String -> (Result String String)
   (let [(head (nc/headPath b.cache b.root))
@@ -695,7 +732,9 @@ fn ! main args: (List String) -> (Result Int64 String)
         (pid (stringFromInt64 (procSelf)))]
     (cond
       ((= root "guard") (ok (nr/guard! (optionOr (listGet args 1) ""))))
-      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (coldCode! r c)))))
+      ((= root "refresh") (ok (nr/refresh! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!)) (if (= (optionOr (listGet args 3) "") "--") (listDrop args 4) (list)) (fn [r c] (lookup! r c)) (fn [r c] (coldCode! r c)))))
+      ((= root "key") (let [(found (lookup! (optionOr (listGet args 1) "") (optionOr (listGet args 2) (nc/cacheDir!))))]
+                        (do (println (str "(:nativeKey :hit \"" (pairFirst found) "\" :lock \"" (pairSecond found) "\")")) (ok 0))))
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
       ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileReadString (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
       ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))

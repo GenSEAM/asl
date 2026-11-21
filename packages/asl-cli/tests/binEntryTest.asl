@@ -49,6 +49,16 @@ fn ! otherLive! -> Int64
   (let [(skip (cons (procSelf) (nc/ancestorsOf! (procSelf) 64)))]
     (optionOr (listHead (filter (fn [(p Int64)] -> Bool (and (nc/alive? p) (not (listContains? skip p)))) (map (fn [(q (Pair Int64 Int64))] -> Int64 (pairFirst q)) (run/psSnapshot)))) 0))
 
+; (:m :ref CLI-STALE-BY-CONTENT :do "the lock a refresh of ROOT in CACHE takes is the one aslNativeBuild key names: CACHE/lock-NAME, the shared CACHE/lock when no name; a private cache holds no seed, so the name is the seed entry's and the refresh misses")
+fn ! keyLock! root: String cache: String -> (Pair Bool String)
+  (let [(d (run/runOneLimited (run/job (list (str root "/asl/host/out/aslNativeBuild") "key" root cache) root (envFor (list))) (run/limits 120 16)))
+        (marker ":lock \"")
+        (name (match (stringIndexOf d.out marker)
+                ((none) "")
+                ((some i) (let [(rest (optionOr (stringSlice d.out (+ i (stringLength marker)) (stringLength d.out)) ""))]
+                            (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "\"") 0)) "")))))]
+    (pair (and (= d.exit 0) (stringContains? d.out "(:nativeKey :hit \"\"")) (nr/lockPath cache name)))
+
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (built (headDirOf root))
@@ -56,7 +66,8 @@ fn ! runTests -> Bool
         (head (nc/headPath cache root))
         (madeCache (dirCreate cache))
         (pointed (put! head (str built "\n")))
-        (heldLock (str cache "/lock"))
+        (keyed (keyLock! root cache))
+        (heldLock (pairSecond keyed))
         (heldMade (dirCreate heldLock))
         (holder (otherLive!))
         (heldPid (and (> holder 1) (and (put! (str heldLock "/pid") (str (stringFromInt64 holder) "\n")) (put! (str heldLock "/id." (stringFromInt64 holder)) (str "ns=" (nc/nsId!) "\nstart=" (nc/startOf! holder) "\ncreated=" (stringFromInt64 (nowNs)) "\n")))))
@@ -84,7 +95,7 @@ fn ! runTests -> Bool
         (entryLines (listLength (stringLines entry)))
         (race (raceBuilds! root))
         (cleaned (pathRemove cache))]
-    (do (assert (and (ok? madeCache) pointed (ok? heldMade) heldPid) "the private cache, its head and a live lock holder were made")
+    (do (assert (and (ok? madeCache) pointed (pairFirst keyed) (stringStartsWith? heldLock (str cache "/lock-seed-")) (ok? heldMade) heldPid) (str "the private cache, its head and a live holder of the lock the refresh takes were made: " heldLock))
         (assert (= held.exit 2) (str "a live lock holder that outlasts ASL_NATIVE_BUILD_WAIT fails the refresh: " held.out))
         (assert (stringContains? held.out "ERR_NATIVE_STALE") (str "the held-lock failure is ERR_NATIVE_STALE on stdout: " held.out))
         (assert (stringContains? held.out (str "the build lock stayed held by pid " (stringFromInt64 holder))) (str "the failure names the holder: " held.out))
@@ -99,7 +110,7 @@ fn ! runTests -> Bool
         (assert (and okDeps (not okAfterStamp)) "a source older than the stamp does not")
         (assert (and emptyDeps empty) "an empty deps list is suspect")
         (assert (and (ok? noDeps) absent) "a missing deps file is suspect")
-        (assert (and (<= entryLines 52) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic (cap 52: 29 plus the 2-line no-builder guard, bootstrap debt WT-MAIN-HOME-REBUILD-SH, plus the 21 lines of the AGENTEFF-03 read-class path, which holds only its own single-flight pid file): " (stringFromInt64 entryLines) " lines"))
+        (assert (and (<= entryLines 69) (not (stringContains? entry "lock/pid")) (not (stringContains? entry "native_refresh")) (stringContains? entry "aslNativeBuild\" refresh")) (str "bin/asl is a stub that calls the ASL refresh and holds no lock logic (cap 52: 29 plus the 2-line no-builder guard, bootstrap debt WT-MAIN-HOME-REBUILD-SH, plus the 21 lines of the AGENTEFF-03 read-class path, which holds only its own single-flight pid file, plus the 17 lines of the CLI-STALE-BY-CONTENT stored builder, bootstrap debt like build.sh): " (stringFromInt64 entryLines) " lines"))
         (assert (ok? cleaned) "the private cache was removed")
         (assert (and (listContains? (pairFirst race) "s") (alternates? (pairFirst race)) (listAll? (fn [(o String)] -> Bool (= o "0:served")) (pairSecond race))) (str "two stubs racing on a stale builder build one at a time and both serve: " (stringJoin (pairFirst race) ",") " " (stringJoin (pairSecond race) ",")))
         true))

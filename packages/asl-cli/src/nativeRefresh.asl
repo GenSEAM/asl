@@ -1,5 +1,5 @@
 (module asl-cli/nativeRefresh
-  :x [refresh! refreshBody! acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
+  :x [refresh! refreshBody! refreshKeyed! lockPath acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
   :i [(asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref BIN-ASL-ASL :do "the slow half of bin/asl, moved out of the shell: a native CLI whose deps list names a source that is missing or newer than the head is suspect and never runs before this refresh has taken the shared build lock (lock/pid, created exclusively, dead holders cleared), verified the binary byte for byte or rebuilt it through the builder closure, rewritten the head and checked the sources did not move again; a failure is one ERR_NATIVE_STALE line on stdout and exit 2, progress goes to stderr")
@@ -83,16 +83,32 @@ fn ! guard! root: String -> Int64
       0
       (do (println (refusalReceipt rootReal homeReal)) 2)))
 
+; (:m :ref CLI-STALE-BY-CONTENT :do "the build lock is per key: CACHE/lock-KEY for the entry lookup names, the shared CACHE/lock only when no key could be computed")
+fn lockPath cache: String key: String -> String
+  (if (stringEmpty? key) (str cache "/lock") (str cache "/lock-" key))
+
+fn ! adopt! cache: String root: String dir: String -> Int64
+  (if (installHead! cache root dir)
+    (do (eprintln (str "(:cli contentHit :dir \"" dir "\")")) 0)
+    (staleFail cache dir (str "cannot rewrite " (nc/headPath cache root))))
+
 ; (:m :ref BIN-ASL-ASL :do "build is the in-process verify-or-rebuild of the builder (exit code); the caller holds no lock")
 fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
+  (refreshKeyed! root cache cmd (fn [(r String) (c String)] -> (Pair String String) (pair "" "")) build)
+
+; (:m :ref CLI-STALE-BY-CONTENT :do "a suspect head is judged by content before any lock: lookup gives (HIT NAME); a hit repoints the head and returns, so a tree whose mtimes moved but whose sources match a built CLI neither builds nor waits; a miss takes lock-NAME, looks again under it (a same-key build that just finished is a hit) and only then verifies the head by mtime or builds")
+fn ! refreshKeyed! root: String cache: String cmd: (List String) lookup: (fn [String String] -> (Pair String String)) build: (fn [String String] -> Int64) -> Int64
   (if (or (nc/kept? root (headDir cache root) (nc/headPath cache root) cmd) (nc/relayPinned? root (headDir cache root) (nc/headPath cache root) cmd))
     (do (eprintln "asl: native CLI pinned: kept for this command") 0)
+  (let [found (lookup root cache)]
+   (if (not (stringEmpty? (pairFirst found)))
+    (adopt! cache root (pairFirst found))
   (let [head (nc/headPath cache root)
         dir0 (headDir cache root)
         waitS (envInt "ASL_NATIVE_BUILD_WAIT" 3600)
         reportS (envInt "ASL_NATIVE_WAIT_REPORT_S" 30)
         beganNs (monotonicNs)
-        lock (str cache "/lock")
+        lock (lockPath cache (pairSecond found))
         _say (eprintln (str "asl: native CLI " dir0 " predates its sources; verifying or rebuilding it (waiting up to ASL_NATIVE_BUILD_WAIT=" (stringFromInt64 waitS) "s)"))
         made (dirCreate lock)]
     (if (not (ok? made))
@@ -101,9 +117,13 @@ fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [Stri
         ((err why) (staleFail cache dir0 why))
         ((ok waited)
           (let [_got (if (> waited 0) (do (eprintln (str "(:wait :nativeCli :ms " (stringFromInt64 (* waited 1000)) " :lock got)")) true) false)
+                again (pairFirst (lookup root cache))
                 dir1 (headDir cache root)]
-            (if (and (fileExists? (str dir1 "/bin")) (not (suspect? root dir1 head)))
-              (do (installHead! cache root dir1) (pathRemove lock) 0)
+            (cond
+              ((not (stringEmpty? again)) (let [rc (adopt! cache root again)] (do (pathRemove lock) rc)))
+              ((and (fileExists? (str dir1 "/bin")) (not (suspect? root dir1 head)))
+                (do (installHead! cache root dir1) (pathRemove lock) 0))
+              (else
               (let [rc (build root cache)]
                 (if (!= rc 0)
                   (do (pathRemove lock) (staleFail cache dir1 (str "its rebuild exited " (stringFromInt64 rc))))
@@ -112,10 +132,10 @@ fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [Stri
                       ((not (fileExists? (str dir2 "/bin"))) (do (pathRemove lock) (staleFail cache dir2 (str "the rebuild left no head at " head))))
                       ((not (installHead! cache root dir2)) (do (pathRemove lock) (staleFail cache dir2 (str "cannot rewrite " head))))
                       ((suspect? root dir2 head) (do (pathRemove lock) (staleFail cache dir2 "its sources moved again during the rebuild")))
-                      (else (do (pathRemove lock) 0)))))))))))))
-fn ! refresh! root: String cache: String cmd: (List String) build: (fn [String String] -> Int64) -> Int64
+                      (else (do (pathRemove lock) 0))))))))))))))))
+
+fn ! refresh! root: String cache: String cmd: (List String) lookup: (fn [String String] -> (Pair String String)) build: (fn [String String] -> Int64) -> Int64
   (let [(head (nc/headPath cache root))
         (pinned (or (nc/pinned? root (headDir cache root) head cmd) (or (nc/relayPinned? root (headDir cache root) head cmd) (nc/testPinned? root (headDir cache root) head cmd))))
         (refused (if pinned 0 (guard! root)))]
-    (if (!= refused 0) refused (refreshBody! root cache cmd build)))
-
+    (if (!= refused 0) refused (refreshKeyed! root cache cmd lookup build)))
