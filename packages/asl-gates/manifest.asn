@@ -20,6 +20,7 @@
    "asl-gates/stratification"
    "asl-gates/suiteRunner"
    "asl-gates/vacuity"
+   "asl-gates/auditDeps"
    "asl-gates/auditForeign"
    "asl-gates/auditGates"
    "asl-gates/auditLanded"
