@@ -1,4 +1,4 @@
-(module asl-forms/evalOp :x [evalStep! nativeEntry!]
+(module asl-forms/evalOp :x [evalStep! nativeEntry! nativeModule!]
   :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-tools/nativeTest :a nt)])
 
 fn outputLine id: Int64 status: String fields: String -> String
@@ -70,12 +70,25 @@ fn entrySource importPath: String intMain: Bool -> String
   (str "(module nativeEval :x [main] :i [(" importPath " :a entry)])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  "
        (if intMain "(ok (entry/main args))" "(entry/main args)") "\n")
 
+; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "the wrapper is written only when its bytes differ, so a tree made read-only after its first (:observe) still runs it from the cached binary; a cold build on a read-only tree still writes there (nativeTest keeps its entry wrappers under the tree), see NODE-CLI-READONLY-COLD")
 fn ! nativeEntry! workspace: String importPath: String intMain: Bool -> (Result String String)
   (let [(src (entrySource importPath intMain))
+        (cDir (cacheDir! workspace (mapEmpty)))
         (path (sourcePath workspace "runs" src))
-        (made (written! path src))]
+        (made (if (= (resultOr (fileReadString path) "") src) "" (written! path src)))]
     (if (not (stringEmpty? made))
       (err (str "cannot write " path ": " made))
-      (match (built! workspace (cacheDir! workspace (mapEmpty)) path)
+      (match (built! workspace cDir path)
         ((ok bin) (ok bin))
         ((err reason) (err (str importPath " does not build natively: " reason))))))
+
+; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "builds the tree module at workspace/rel (its own main: args -> (Result Int64 String)) as asl run does, into the compile cache dir (ASL_NATIVE_TEST_CACHE when set); it writes no source of its own, and nativeTest places its entry wrapper under the cache when the tree cannot be written, so a read-only tool root (a jail) still runs it; rel is passed as is when the cwd is the workspace, where its import name resolves, else as an absolute path")
+fn ! nativeModule! workspace: String rel: String -> (Result String String)
+  (let [(abs (k/joinPath workspace rel))
+        (here (= (resultOr (realPath ".") ".") (resultOr (realPath workspace) workspace)))]
+    (if (not (fileExists? abs))
+      (err (str rel " is absent under " workspace))
+      (let [(b (nt/prepareRunIn (cacheDir! workspace (mapEmpty)) (if here rel abs) (nt/fingerprint)))]
+        (match b.binary
+          ((some bin) (ok (absolute workspace bin)))
+          ((none) (err (str rel " does not build natively: " b.reason)))))))

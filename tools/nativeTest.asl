@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareTestMutant! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -2002,6 +2002,32 @@ fn ! linkUnits! slot: String bin: String deps: (List String) preludeObj: String 
                 :recompiled recompiled :reused reused
                 :depsMs (ms (- t1 t0)) :asl1Ms (ms (- t2 t1)) :clangMs (ms (- t3 tClang0)))))))
 
+fn roWorkspace -> String
+  "nativeTestRo"
+
+fn roConfigSource -> String
+  (str "(:aslConfig :workspace \"" (roWorkspace) "\" :root true)\n")
+
+fn roTargetSource -> String
+  (str "(module " (roWorkspace) "/target :x [main] :i [])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok 0)\n")
+
+; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "the entry wrapper goes under the tree (wrapperDirIn), where its import of the entry resolves; when the tree cannot be written (a read-only tool root in a jail) it goes under the cache dir as CDIR/roEntries/KEY, a root workspace of its own whose wrapper imports a placeholder module nativeTestRo/target, and an override resolves that placeholder to the entry's real path, so the entry and everything it imports load from the tree by their own locations; returns the wrapper and the overrides to load it with")
+fn ! placeWrapper! cDir: String path: String key: String wrapper: String text: String ovr: (Map String String) -> (Result (Pair String (Map String String)) String)
+  (if (and (ok? (dirCreate (wrapperDirIn cDir))) (ok? (fileWrite wrapper text)))
+    (ok (pair wrapper ovr))
+    (let [(alt (str cDir "/roEntries/" key))
+          (target (str alt "/target.asl"))
+          (aw (str alt "/" key ".asl"))
+          (entry (if (stringStartsWith? path "/") path (toolPath path)))
+          (real (resultOr (realPath entry) entry))
+          (made (and (ok? (dirCreate alt)) (and (ok? (fileWrite (str alt "/.asl.config.asn") (roConfigSource))) (ok? (fileWrite target (roTargetSource))))))]
+      (cond
+        ((not made) (err (str "cannot write " wrapper " nor a wrapper under " alt)))
+        ((not (fileExists? real)) (err (str "cannot find the entry " entry)))
+        (else (match (fileWrite aw (stringReplace text (str "(" (importPathOf path) " :a suite)") (str "(" (roWorkspace) "/target :a suite)")))
+                ((err e) (err (str "cannot write " aw ": " e)))
+                ((ok _) (ok (pair aw (mapSet ovr (resultOr (realPath target) target) real)))))))))
+
 fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) -> Built
   (let [(entry (if (not (stringEmpty? only)) (some only) (if (or (= mode "run") (= mode "eval")) (if (listContains? (exportsOf src) "main") (some (if (= mode "eval") "main" "run")) (none)) (entryOf src))))
         (wrapper (if (= mode "eval") path (str (wrapperDirIn cDir) "/" key ".asl")))
@@ -2009,16 +2035,18 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
     (match entry
       ((none) (storeFallback slot (list path) (str "ERR_NO_ENTRY: " path " exports neither runTests nor main") (list)))
       ((some e)
-       (match (if (= mode "eval") (ok ()) (dirCreate (wrapperDirIn cDir)))
-         ((err err1) (Built :binary (none) :reason (str "cannot create " (wrapperDirIn cDir) ": " err1) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-         ((ok _)
-          (match (if (= mode "eval") (ok ())
-                (fileWrite wrapper (if (and (= e "run") (mainReturnsBareInt64 src))
-                                     (wrapperSourceRunInt64 (importPathOf path) (mainTakesArgs src))
-                                     (wrapperSource (importPathOf path) e (mainTakesArgs src)))))
-            ((err err2) (Built :binary (none) :reason (str "cannot write " wrapper ": " err2) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-            ((ok _)
-             (match (dirCreate (modulesDirIn cDir))
+       (match (if (= mode "eval") (ok (pair wrapper ovr))
+                (placeWrapper! cDir path key wrapper
+                  (if (and (= e "run") (mainReturnsBareInt64 src))
+                    (wrapperSourceRunInt64 (importPathOf path) (mainTakesArgs src))
+                    (wrapperSource (importPathOf path) e (mainTakesArgs src)))
+                  ovr))
+         ((err why) (Built :binary (none) :reason why :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
+         ((ok placed) (compileSeparateAt! (if (= (pairFirst placed) wrapper) cap 1) cDir path src slot key fp mode only (pairSecond placed) (pairFirst placed) bin))))))
+
+; (:m :ref NODE-CLI-REBUILD-PER-TREE :do "the part of compileSeparate! after the entry wrapper is placed: wrapper is the file the closure loads and ovr its overrides (the read-only route adds one), cap 1 there keeps workers, which load the wrapper without overrides, off")
+fn ! compileSeparateAt! cap: Int64 cDir: String path: String src: String slot: String key: String fp: String mode: String only: String ovr: (Map String String) wrapper: String bin: String -> Built
+  (match (dirCreate (modulesDirIn cDir))
                ((err err3) (Built :binary (none) :reason (str "cannot create " (modulesDirIn cDir) ": " err3) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
                ((ok _)
                 (let [(tA (monotonicNs))
@@ -2081,7 +2109,7 @@ fn ! compileSeparate! cap: Int64 cDir: String path: String src: String slot: Str
                              (if (not pCompRes.ok)
                                  (storeFallback slot deps (str "prelude compile failed: " pCompRes.err) (list (ms (- t1 t0)) (ms (- t2 t1)) 0))
                                  (let [(_ (telemetry (str "NATIVE-PRELUDE-PHASES :prepareMs " (ms (- preludeEnd preludeStart)))))]
-                                   (linkUnits! slot bin deps pCompRes.obj unitResults darwin facts t0 t1 t2)))))))))))))))))))))))
+                                   (linkUnits! slot bin deps pCompRes.obj unitResults darwin facts t0 t1 t2))))))))))))))))
 
 fn ! lookup slot: String mode: String -> (Option Built)
   (match (fileReadString (str slot "/manifest"))

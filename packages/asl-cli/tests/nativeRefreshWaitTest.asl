@@ -121,6 +121,7 @@ fn ! launcherCase root: String base: String launcher: String -> Bool
                     (exe! (str r "/asl/host/out/aslNativeBuild") (builderText r cache))
                     (exe! (str r "/asl/host/build.sh") "exit 0\n")
                     (put! head (str cache "/cli-old\n"))))
+        (aged (ok? (fileUtime (str r "/src/in.asl") (- (nowNs) 10000000000))))
         (movedOut (more! (str r "/tests/out.asl")))
         (outside (call! r launcher cache (list "(:read :file \"x\")")))
         (logOutside (slurp (str r "/builder.log")))
@@ -160,7 +161,7 @@ fn ! launcherCase root: String base: String launcher: String -> Bool
         (cleaned (pathRemove r0))
         (tag (str launcher ": "))]
     (do (assert (and made0 made wrote) (str tag "the scratch root, its fake CLIs and its fake builder were made"))
-        (assert (and movedOut (= (stringTrim outside.out) "served old (:read :file \"x\")") (= outside.exit 0)) (str tag "an edit outside the deps list serves with no notice: " outside.out))
+        (assert (and movedOut aged (= (stringTrim outside.out) "served old (:read :file \"x\")") (= outside.exit 0)) (str tag "an edit outside the deps list serves with no notice: " outside.out))
         (assert (stringEmpty? logOutside) (str tag "an edit outside the deps list calls no builder: " logOutside))
         (assert movedIn (str tag "a source the CLI was built from moved"))
         (assert (listAll? (fn [(d run/Done)] -> Bool (and (served? d "old") (noticed? d "true"))) reads)

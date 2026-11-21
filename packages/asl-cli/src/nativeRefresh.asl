@@ -1,18 +1,19 @@
 (module asl-cli/nativeRefresh
-  :x [refresh! acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
+  :x [refresh! refreshBody! acquire! guard! under? rebuildAllowed? refusalReceipt suspect? staleFail]
   :i [(asl/packages/asl-cli/src/nativeCli :a nc)])
 
 ; (:m :ref BIN-ASL-ASL :do "the slow half of bin/asl, moved out of the shell: a native CLI whose deps list names a source that is missing or newer than the head is suspect and never runs before this refresh has taken the shared build lock (lock/pid, created exclusively, dead holders cleared), verified the binary byte for byte or rebuilt it through the builder closure, rewritten the head and checked the sources did not move again; a failure is one ERR_NATIVE_STALE line on stdout and exit 2, progress goes to stderr")
 fn ! mtime path: String -> Int64
   (match (fileStat path) ((ok st) st.mtimeNs) ((err _) 0))
 
+; (:m :ref SUSPECT-TIE-ALIGN :do "a dep not older than the stamp is suspect: a tie is stale, as in tools/fleet/train.asl#suspect? and bin/asl#suspect, so a same-tick edit never keeps the old CLI")
 fn ! depSuspect? root: String stamp: Int64 deps: (List String) n: Int64 -> Bool
   (match (listHead deps)
     ((none) (= n 0))
     ((some p) (cond
       ((stringEmpty? p) (depSuspect? root stamp (optionOr (listTail deps) (list)) n))
       ((not (fileExists? (str root "/" p))) true)
-      ((> (mtime (str root "/" p)) stamp) true)
+      ((>= (mtime (str root "/" p)) stamp) true)
       (else (depSuspect? root stamp (optionOr (listTail deps) (list)) (+ n 1))))))
 
 fn ! suspect? root: String dir: String stampPath: String -> Bool
@@ -102,7 +103,7 @@ fn ! refreshBody! root: String cache: String cmd: (List String) build: (fn [Stri
           (let [_got (if (> waited 0) (do (eprintln (str "(:wait :nativeCli :ms " (stringFromInt64 (* waited 1000)) " :lock got)")) true) false)
                 dir1 (headDir cache root)]
             (if (and (fileExists? (str dir1 "/bin")) (not (suspect? root dir1 head)))
-              (do (pathRemove lock) 0)
+              (do (installHead! cache root dir1) (pathRemove lock) 0)
               (let [rc (build root cache)]
                 (if (!= rc 0)
                   (do (pathRemove lock) (staleFail cache dir1 (str "its rebuild exited " (stringFromInt64 rc))))
