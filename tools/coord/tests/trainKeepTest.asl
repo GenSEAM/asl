@@ -13,7 +13,7 @@ fn preRow -> String
   "(\"asl/b/bTest.asl\" \"base\" 1 0 :kind suite :why preexisting)"
 
 fn stubText -> String
-  (str "#!/bin/sh\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\nN=$(( $(cat \"$D/.git/trainCalls\" 2>/dev/null || echo 0) + 1 ))\necho $N > \"$D/.git/trainCalls\"\n"
+  (str "#!/bin/sh\nD=$(cd \"$(dirname \"$0\")/..\" && pwd)\nif [ \"$1\" != train ]; then M=$(( $(cat \"$D/.git/testCalls\" 2>/dev/null || echo 0) + 1 )); echo $M > \"$D/.git/testCalls\"; exit 1; fi\nN=$(( $(cat \"$D/.git/trainCalls\" 2>/dev/null || echo 0) + 1 ))\necho $N > \"$D/.git/trainCalls\"\n"
        "echo '(:redLive \"asl/b/bTest.asl\" 1 0 :kind suite)'\necho \"attempt $N line\"\ncat \"$D/.git/trainReceipt\"\nexit 1\n")
 
 fn ! devClone! root: String -> String
@@ -60,6 +60,7 @@ fn ! runTests -> Bool
         (r3 (cd/mergeResWith rc store u1 c1 stubPass))
         (after3 (filesOf store "T1"))
         (last (resultOr (fileReadString (str (cd/trainsDir store "T1") "/000003.out")) ""))
+        (confirms (stringTrim (resultOr (fileReadString (str dev "/.git/testCalls")) "0")))
         (times (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trainTimes :unit \"T1\" ")) (pf/journalLines store)))
         (gone (pathRemove (str root "/repo/.asl.config.asn")))
         (pinned (pf/sh (str "cd " wt2 " && mkdir -p .asl && printf pin > .asl/gatewayProfilePin.asn && git add -A && git -c user.email=t@example.invalid -c user.name=t commit -qm pin && echo pinOk")))
@@ -101,6 +102,7 @@ fn ! runTests -> Bool
         (assert (and (stringContains? last " :exit 1 ") (stringContains? last " :sig \"train baseRed: asl/b/bTest.asl\")")) (str "the row carries exit and signature: " (cd/utf8Clip last 300)))
         (assert (and (stringContains? last "attempt 3 line") (stringContains? last "(:redLive \"asl/b/bTest.asl\" 1 0 :kind suite)")) "the whole train output follows, streamed rows included")
         (assert (and (stringContains? last " :suites (\"asl/b/bTest.asl\") :cachedSuites () :ranSuites (\"asl/b/bTest.asl\")") (stringContains? last " :preexisting ((\"asl/b/bTest.asl\" \"base\" ")) "and the receipt with its selected, cached and run lists and the base red")
+        (assert (and (not (stringEmpty? confirms)) (!= confirms "0")) (str "the base-red confirm run of baseRedFlaky! reached the stand-in as a test call: " confirms))
         (assert (and (= (listLength times) 3) (stringContains? (optionOr (listLast times) "") " :n 3 :exit 1 ")) (str "each attempt leaves its (:trainTimes ...) row in the journal: " (stringJoin times "|")))
         (assert (and (ok? gone) (and (= q1.ok 0) (and (= q2.ok 0) (= q3.ok 0)))) "the second unit runs three attempts without the config row")
         (assert (and (stringContains? pinned "pinOk") (and (= (listLength dropRows) 1) (and (stringContains? netT2 "impl.txt") (not (stringContains? netT2 "gatewayProfilePin"))))) (str "a branch that carries the gateway profile pin loses it before its first train, one commit and one journal row over three merges: rows " (stringFromInt64 (listLength dropRows)) " diff " netT2))
