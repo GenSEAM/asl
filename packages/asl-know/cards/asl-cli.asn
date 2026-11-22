@@ -163,7 +163,7 @@
 (:sym "pruneStaleStaged!" :mod "asl-cli/native" :kind fn! :sig "pruneStaleStaged! mirrorDir: String expected: (List String) -> Int64" :pit (effect))
 (:sym "Build" :mod "asl-cli/nativeBuild" :kind type :sig "(schema Build (:f root String) (:f cache String) (:f tmp String) (:f lib String) (:f base String) (:f clangVersion String) (:f owner String) (:f deadlineNs Int64) (:f maxDesc Int64) (:f links (List String) :default (list)) (:f objs String :default \"\") (:f buckets Int64 :default 16) (:f upstream Stri ..." :pit (record))
 (:sym "toolchainRootPaths" :mod "asl-cli/nativeBuild" :sig "toolchainRootPaths -> (List String)")
-(:sym "variantKey!" :mod "asl-cli/nativeBuild" :kind fn! :sig "variantKey! b: Build packagesDir: String variant: String -> (Result String String)" :pit (result effect))
+(:sym "variantKey!" :mod "asl-cli/nativeBuild" :kind fn! :sig "variantKey! b: Build packagesDir: String asl1: String variant: String -> (Result String String)" :pit (result effect))
 (:sym "suiteWorkersFor!" :mod "asl-cli/nativeBuild" :kind fn! :sig "suiteWorkersFor! dir: String -> Int64" :pit (effect))
 (:sym "suiteWorkersValue" :mod "asl-cli/nativeBuild" :sig "suiteWorkersValue word: String -> (Option Int64)" :pit (option))
 (:sym "defaultSuiteWorkers" :mod "asl-cli/nativeBuild" :sig "defaultSuiteWorkers -> Int64")

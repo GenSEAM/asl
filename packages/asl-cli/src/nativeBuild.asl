@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt!]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -469,8 +469,8 @@ fn ! emitObjs! b: Build asl1: String tmp: String specs: (List (Pair (Pair String
             ((err e) (err e))
             ((ok rest) (ok (cons obj rest)))))))))
 
-fn ! asanRuntimeKey! b: Build packagesDir: String -> (Result String String)
-  (variantKey! b packagesDir "asan")
+fn ! asanRuntimeKey! b: Build packagesDir: String asl1: String -> (Result String String)
+  (variantKey! b packagesDir asl1 "asan")
 
 ; (:m :ref VARIANTKEY-CLOSURE-20261025 :do "the variant runtime key hashes the source closure of its three root modules (the same resolver asl1Cache walks), not only the root files: an edit to gcAsl.asl or rc.asl, imported by gcRoute.asl, kept a stale libaslrt-notrace.a under .asl/cache/rcRuntime")
 fn distinctSorted xs: (List String) -> (List String)
@@ -502,13 +502,17 @@ fn ! allClosureFiles! files: (List String) root: String acc: (List String) -> (R
       ((err e) (err e))
       ((ok found) (allClosureFiles! (optionOr (listTail files) (list)) root (listAppend acc found))))))
 
-fn ! variantKey! b: Build packagesDir: String variant: String -> (Result String String)
+; (:m :ref SUITE-BIMODAL-COLD :do "the key holds the sha of the asl1 binary that lowers the runtime: a worktree with a codegen change outside the gcRoute/rtAbi/rtFloor closure must not adopt a runtime another compiler lowered, now that entries cross worktrees")
+fn ! variantKey! b: Build packagesDir: String asl1: String variant: String -> (Result String String)
   (let [(src (str packagesDir "/asl-target-llvm/src"))]
-    (match (allClosureFiles! (list (str src "/gcRoute.asl") (str src "/rtAbi.asl") (str src "/rtFloor.asl")) b.root (list))
+    (match (shaOf asl1)
       ((err e) (err e))
-      ((ok files) (match (hashFiles! files "")
-        ((err e) (err e))
-        ((ok hashes) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" hashes)))))))))
+      ((ok compiler)
+        (match (allClosureFiles! (list (str src "/gcRoute.asl") (str src "/rtAbi.asl") (str src "/rtFloor.asl")) b.root (list))
+          ((err e) (err e))
+          ((ok files) (match (hashFiles! files "")
+            ((err e) (err e))
+            ((ok hashes) (ok (sh/bytesSha256 (stringToBytes (str b.clangVersion "\n" variant "\n" compiler "\n" hashes)))))))))))
 
 fn ! asanRuntime! b: Build asl1: String packagesDir: String -> (Result String String)
   (variantRuntime! b asl1 packagesDir "asan" (list) (list "asan"))
@@ -542,8 +546,27 @@ fn ! packVariant! b: Build asl1: String tmp: String specs: (List (Pair (Pair Str
           ((err e) (err (str "cannot install " lib ": " e)))
           ((ok _) (ok lib)))))))))
 
-fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
-  (match (variantKey! b packagesDir variant)
+; (:m :ref SUITE-BIMODAL-COLD :do "the main checkout a linked worktree belongs to, from the text of the worktree's .git file (gitdir: MAIN/.git/worktrees/NAME); empty for a main checkout, a bare name or anything else")
+fn mainRootOfGit text: String -> String
+  (let [(line (stringTrim (optionOr (listHead (stringLines text)) "")))
+        (parts (stringSplit (stringTrim (optionOr (stringSlice line 7 (stringLength line)) "")) "/.git/worktrees/"))]
+    (if (and (stringStartsWith? line "gitdir:") (and (= (listLength parts) 2) (stringStartsWith? (optionOr (listHead parts) "") "/"))) (optionOr (listHead parts) "") ""))
+
+; (:m :ref SUITE-BIMODAL-COLD :do "a worktree's own variant-runtime cache (.asl/cache/rcRuntime) starts empty, so every suite that links an asan, notrace or counted runtime lowered and compiled all three cold: recordUnboxTest 272 s against 32 s warm on the mac, 15 s to 13 min on node2. The entries are content-keyed, so the cache names the main checkout's rcRuntime as read-only upstream (kind rt) unless it already has an upstream.asn; no main cache, no linked worktree or a failed write leaves the build as before")
+fn ! seedRcUpstream! b: Build -> Bool
+  (let [(main (mainRootOfGit (resultOr (fileReadString (str b.root "/.git")) "")))
+        (up (str main "/.asl/cache/rcRuntime"))]
+    (if (and (stringEndsWith? b.cache "/rcRuntime") (and (not (stringEmpty? main)) (and (not (= up b.cache)) (and (not (fileExists? (upstreamFile b.cache))) (fileExists? up)))))
+      (and (ok? (dirCreate b.cache)) (ok? (fileWrite (upstreamFile b.cache) (str "(:upstream :dir \"" up "\" :take (rt))\n"))))
+      false))
+
+fn ! variantRuntime! b0: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
+  (let [(_ (seedRcUpstream! b0))
+        (b (withUpstream b0 b0.cache))]
+    (variantRuntime2! b asl1 packagesDir variant gcExtra abiExtra))
+
+fn ! variantRuntime2! b: Build asl1: String packagesDir: String variant: String gcExtra: (List String) abiExtra: (List String) -> (Result String String)
+  (match (variantKey! b packagesDir asl1 variant)
     ((err e) (err e))
     ((ok key)
       (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (adopt! b dir (list (str "libaslrt-" variant ".a")))) (_ (useEntry! b dir))]

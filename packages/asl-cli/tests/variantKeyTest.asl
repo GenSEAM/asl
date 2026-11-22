@@ -5,14 +5,20 @@ fn ! sh! cmd: String -> Bool
   (= (run/runOneLimited (run/job (list "/bin/sh" "-c" cmd) "/" (run/childEnv (list))) (run/limits 120 8)).exit 0)
 
 fn ! keyOf! root: String -> String
+  (keyWith! root (str root "/asl1a"))
+
+fn ! keyWith! root: String asl1: String -> String
   (let [(b (nb/Build :root root :cache (str root "/cache") :tmp (str root "/tmp") :lib "" :base "" :clangVersion "clang-test" :owner "" :deadlineNs 0 :maxDesc 8))]
-    (resultOr (nb/variantKey! b (str root "/asl/packages") "notrace") ""))
+    (resultOr (nb/variantKey! b (str root "/asl/packages") asl1 "notrace") ""))
 
 fn ! runTests -> Bool
   (let [(real (resultOr (realPath ".") "."))
         (t (str "/tmp/variantKeyTest." (stringFromInt64 (procSelf))))
         (copied (sh! (str "set -e; mkdir -p " t "/asl && cp -R " real "/asl/packages " t "/asl/packages && cp -R " real "/asl/prelude " t "/asl/prelude && cp " real "/.asl.config.asn " t "/.asl.config.asn")))
+        (made (sh! (str "printf a > " t "/asl1a && printf b > " t "/asl1b")))
         (k0 (keyOf! t))
+        (kb (keyWith! t (str t "/asl1b")))
+        (kmissing (keyWith! t (str t "/nope")))
         (k0b (keyOf! t))
         (gc (str t "/asl/packages/asl-target-llvm/src/gcAsl.asl"))
         (edited (sh! (str "printf '\\n; edit\\n' >> " gc)))
@@ -25,6 +31,9 @@ fn ! runTests -> Bool
     (do (assert copied "the scratch tree was copied")
         (assert (= (stringLength k0) 64) "the key is a sha256")
         (assert (= k0 k0b) "the key is stable when nothing changed")
+        (assert made "two different asl1 stand-ins were written")
+        (assert (and (= (stringLength kb) 64) (!= k0 kb)) "another asl1 binary gives another key")
+        (assert (stringEmpty? kmissing) "an unreadable asl1 gives no key")
         (assert edited "gcAsl.asl was edited in the scratch copy")
         (assert (!= k0 k1) "editing gcAsl.asl, imported by gcRoute.asl, changes the key")
         (assert reverted "gcAsl.asl was restored")
