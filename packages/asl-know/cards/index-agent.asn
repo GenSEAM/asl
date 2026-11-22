@@ -2,7 +2,7 @@
 (:c "asl-agent" "Leon, the agent loop..." (withRemote knownParams))
 (:c "asl-agent-bus" "in-memory agent-to-agent..." (makeBusEnvelope makeSequencedBusEnvelope))
 (:c "asl-agent-core" "execution core, onion..." (makeMessage makeAgentContext))
-(:c "asl-coord" "Shared worktree scope..." (claimsStore! claimsAt))
+(:c "asl-coord" "Shared scope claim..." (leaseContent parseLease))
 (:c "asl-gateway" "L7 Cognitive Gateway &..." (paramsFromRequest gatewayCliMode?))
 (:c "asl-harness" "asl launch in ASL:..." (readAll readOne))
 (:c "asl-mem" "vector memory store and..." (makeEngine enginePutVector))
