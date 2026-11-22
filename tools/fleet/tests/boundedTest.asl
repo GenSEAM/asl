@@ -29,6 +29,12 @@ fn ! startDecoy! secs: String -> Int64
 fn ! child! root: String argv: (List String) -> fr/Done
   (fr/runOneLimited (fr/job (listAppend (list "./bin/asl" "run" "asl/tools/fleet/bounded.asl") argv) root (fr/childEnv (list))) (fr/limits 90 64))
 
+fn bjob root: String argv: (List String) -> fr/Job
+  (fr/job (listAppend (list "./bin/asl" "run" "asl/tools/fleet/bounded.asl") argv) root (fr/childEnv (list)))
+
+fn doneAt rs: (List fr/Done) i: Int64 -> fr/Done
+  (optionOr (listFind (fn [(d fr/Done)] -> Bool (= d.idx i)) rs) (fr/Done :idx i :exit 1 :out "no result" :ms 0 :verdict "missing"))
+
 ; (:m :ref BOUNDED-LAUNCHER-GROUP :do "the pid written to path once it is there, polled every 100 ms up to deadlineNs; 0 when it never came")
 fn ! pidBy! path: String deadlineNs: Int64 -> Int64
   (let [(p (pidIn! path))]
@@ -80,21 +86,23 @@ fn ! runTests -> Bool
         (decoy (startDecoy! sa))
         (rcpt (str dir "/receipt.asn"))
         ; (:m :ref BOUNDED-PIDS-FLAKE :do "SECS 15, not 3, for the cases whose command must start before the kill: SECS counts the launch (BOUNDED-WALL-INCLUDES-BUILD), a warm launch measured 1.1 to 2.2 s at load 96 on 2026-11-13, and past 3 s at the loads where INTEG23 and INTEG26 went red here with no pid recorded, the command refused at launch")
-        (tree (child! root (list "15" "--receipt" rcpt "--" "sh" "-c" (str "echo $$ > " dir "/w1; sleep " sa " & echo $! > " dir "/a; sh -c 'echo $$ > " dir "/w2; sleep " sb " & echo $! > " dir "/b; wait' & wait"))))
+        ; (:m :ref TEST-WAIT-TRIM :do "the three cases that wait out SECS 15 run as one pool of three, their wall one bound instead of three; each writes its own pid files and the judgements read them after the pool ends")
+        (trio (fr/runPoolLimited (list (bjob root (list "15" "--receipt" rcpt "--" "sh" "-c" (str "echo $$ > " dir "/w1; sleep " sa " & echo $! > " dir "/a; sh -c 'echo $$ > " dir "/w2; sleep " sb " & echo $! > " dir "/b; wait' & wait"))) (bjob root (list "15" "--" "sh" "-c" (str "echo $$ > " dir "/w3; exec ./bin/asl run asl/tools/fleet/bounded.asl 120 -- sh -c 'sleep " sc " & echo $! > " dir "/c; wait'"))) (bjob root (list "15" "--" "sh" "-c" (str "perl " dir "/esc.pl " dir "/o ./bin/asl run " dir "/spin.asl; sleep 100")))) 3 (fr/limits 90 64)))
+        (tree (doneAt trio 0))
+        (nested (doneAt trio 1))
+        (orphan (doneAt trio 2))
         (pa (pidIn! (str dir "/a")))
         (pb (pidIn! (str dir "/b")))
         (w1 (pidIn! (str dir "/w1")))
         (w2 (pidIn! (str dir "/w2")))
         (aliveA (aliveOwn? pa))
         (aliveB (aliveOwn? pb))
-        (nested (child! root (list "15" "--" "sh" "-c" (str "echo $$ > " dir "/w3; exec ./bin/asl run asl/tools/fleet/bounded.asl 120 -- sh -c 'sleep " sc " & echo $! > " dir "/c; wait'"))))
         (pc (pidIn! (str dir "/c")))
         (w3 (pidIn! (str dir "/w3")))
         (aliveC (aliveOwn? pc))
         (escape (child! root (list "20" "--" "sh" "-c" (str "perl " dir "/esc.pl " dir "/e sleep " sd "; sleep 1"))))
         (pe (pidIn! (str dir "/e")))
         (escapeeAliveAfterRun (aliveOwn? pe))
-        (orphan (child! root (list "15" "--" "sh" "-c" (str "perl " dir "/esc.pl " dir "/o ./bin/asl run " dir "/spin.asl; sleep 100"))))
         (po (pidIn! (str dir "/o")))
         (orphanAlive (aliveOwn? po))
         (orphanKilled (killOwn! po ""))
