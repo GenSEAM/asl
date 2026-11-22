@@ -901,7 +901,7 @@ fn openFds rs: (List Running) -> (List (Pair Int64 Int64))
 fn ! poolLoop jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (List Running) done: (List Done) lastCheck: Int64 admit: (fn [Int64] -> Bool) onDone: (fn [S Done] -> S) state: S -> (Pair (List Done) S)
   (if (and (< (listLength running) slots) (< next (listLength jobs)))
     (if (not (admit next))
-      (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state)
+      (let [(_ (js/dropTicket lim.jsDir lim.class (stringFromInt64 next)))] (poolLoop jobs (listLength jobs) slots lim running done lastCheck admit onDone state))
       (let [(g (js/want lim.jsDir lim.class (stringFromInt64 next) lim.timeoutMs))]
         (cond
           ((= g.state "expired")
@@ -942,6 +942,7 @@ fn ! poolPump jobs: (List Job) next: Int64 slots: Int64 lim: Limits running: (Li
             (finished (map finish closed))
             (_ (fold (fn [(n Int64) (r Running)] -> Int64 (+ n (js/releasePid lim.jsDir lim.class r.pid))) 0 closed))
             (_ (map (fn [(r Running)] -> Bool (removeLease! r.pid)) closed))
+            (_ (if (listEmpty? closed) () (js/dropTicket lim.jsDir lim.class (stringFromInt64 next))))
             (nextState (fold onDone state finished))]
         ; (:m :ref RUNASL-POOLLOOP-FDPOLL-TYPE-20261017 :do "fix: the two if branches disagreed in type (fdPoll's own (Result (List (Pair Int64 Int64)) String) vs the else branch's bare Unit) -- a latent mismatch only a full native rebuild's whole-program check surfaces, not the normal incremental path; fdPoll's own result was always discarded here (it is called only to block until a socket is ready or the 50ms timeout passes, never consulted), so the true branch now discards it explicitly too, making both branches Unit with no change in runtime behavior")
         (do (if (and (not progress) (listEmpty? closed)) (let [(_ (fdPoll (openFds still) 50))] ()) ())
