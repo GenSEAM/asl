@@ -124,7 +124,7 @@ fn keptParked existing: String ids: (List String) -> (List String)
 
 ; (:m :ref CONDUCTOR-TASK-REFRESH :do "a unit already in the store whose ledger row changed (task text, :owns or :gate) is refreshed when it is not in a stage: tasks/ID.txt and the store row's owns and gate are rewritten from the row and one (:refresh :unit :changed ...) row is appended to <store>/journal.asn; a unit in writing, gating, awaitReview, reviewing, merging or merged, a unit blocked awaiting the lead or a rebase, a unit holding a lease (store put refuses it) and a row that is no longer importable are left alone; a dry import only reports")
 fn refreshable? st: String await: String -> Bool
-  (and (not (listContains? (list "writing" "gating" "awaitReview" "reviewing" "merging" "merged") st))
+  (and (not (listContains? (list "writing" "gating" "awaitReview" "reviewing" "admitting" "merging" "merged") st))
        (not (and (= st "blocked") (listContains? (list "lead" "rebase") await))))
 
 fn ! cuField! store: String id: String key: String -> String

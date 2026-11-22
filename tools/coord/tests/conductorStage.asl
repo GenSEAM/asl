@@ -8,6 +8,21 @@
 fn res ok: Int64 wt: String branch: String model: String tokens: Int64 cost: Int64 claim: Int64 sig: String verdict: String -> cd/Res
   (cd/Res :tiers "" :ok ok :wt wt :branch branch :model model :tokens tokens :costMicro cost :claimedGreen claim :sig sig :ms 1 :exit 0 :asserts 0 :verdict verdict)
 
+; (:m :ref MERGE-ADMISSION :do "the fake admission: --admit admitted|baseRed|refused|conflict|infra (default admitted) picks a canned admission train stdout, kept as runs/ID-admitLog.txt as the real stage keeps it, and the conductor's own admitResOf reads it")
+fn admitOut verdict: String -> (Pair Int64 String)
+  (cond
+    ((= verdict "refused") (pair 1 "(:redLive \"a/tests/aTest.asl\" 1 1 :kind suite :err (\"ERR_ASSERT lib value is 3\"))\n(:admission :verdict refused :branch \"b\" :onto \"o\" :merged \"m\" :red ((\"a/tests/aTest.asl\" \"b\" 1 1 :kind suite :why only :err (\"ERR_ASSERT lib value is 3\"))) :assertLoss () :baseRed () :flaky () :unrun () :cached 0 :phasesMs (:rebase 5 :select 2) :suiteMs ((\"a/tests/aTest.asl\" 40)))"))
+    ((= verdict "baseRed") (pair 0 "(:admission :verdict admitted :branch \"b\" :onto \"o\" :merged \"m\" :red () :assertLoss () :baseRed (\"a/tests/aTest.asl\") :flaky () :unrun () :cached 0 :phasesMs (:rebase 5 :select 2) :suiteMs ((\"a/tests/aTest.asl\" 40)))"))
+    ((= verdict "conflict") (pair 3 "(:admission :verdict conflict :branch \"b\" :onto \"o\" :why \"(:conflict :branch b :files (impl.txt))\" :phasesMs (:rebase 5))"))
+    ((= verdict "infra") (pair 124 "killed"))
+    (else (pair 0 "(:admission :verdict admitted :branch \"b\" :onto \"o\" :merged \"m\" :red () :assertLoss () :baseRed () :flaky () :unrun () :cached 0 :phasesMs (:rebase 5 :select 2) :suiteMs ())")))
+
+fn ! fakeAdmit args: (List String) dir: String id: String -> cd/Res
+  (let [(o (admitOut (st/opt args "admit" "admitted")))
+        (_ (dirCreate (str dir "/runs")))
+        (_ (fileWrite (cd/admitLogPath dir id) (pairSecond o)))]
+    (cd/admitResOf (pairFirst o) (pairSecond o) 1))
+
 fn ! fakeRes args: (List String) dir: String stage: String id: String -> cd/Res
   (cond
     ((= stage "write")
@@ -18,6 +33,7 @@ fn ! fakeRes args: (List String) dir: String stage: String id: String -> cd/Res
             (cap (st/intOpt args "writefail" 0))
             (sig (if (or (= cap 0) (<= n cap)) (st/opt args "failsig" "") ""))]
         (res (if (stringEmpty? sig) 1 0) wt (str "sh/" id) "fakeWriter" (st/intOpt args "tokens" 100) (st/intOpt args "cost" 2500) (st/intOpt args "claim" 0) sig "")))
+    ((= stage "admit") (fakeAdmit args dir id))
     ((= stage "review")
       (with (res 0 "" "" "fakeReviewer" (st/intOpt args "tokens" 50) (st/intOpt args "cost" 1000) 0 (st/opt args "failsig" "") (st/opt args "verdict" "pass")) :tiers (st/opt args "tiers" "")))
     (else

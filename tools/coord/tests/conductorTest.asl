@@ -100,7 +100,7 @@ fn ! testDag bin: String -> Bool
                                 (task "C" (list "p/c") (list "A") (greenGate) "leon") (task "D" (list "p/d") (list "B" "C") (greenGate) "leon"))))
         (ctx (ctxOf dir bin 4 4 400))
         (ticks (cd/drain! ctx 600))
-        (chain (list "ready" "writing" "gating" "awaitReview" "reviewing" "merging" "merged"))
+        (chain (list "ready" "writing" "gating" "awaitReview" "reviewing" "admitting" "merging" "merged"))
         (a (cuOf dir "A"))
         (rows (resultOr (st/readUnits! dir) (list)))
         (tosA (tosOf dir "A")) (tosD (tosOf dir "D")) (stD (stOf dir "D"))
@@ -1185,7 +1185,7 @@ fn ! testResume bin: String -> Bool
         (assert (and (= mid.st "writing") (= mid.launched 1) (> pidMid 0)) (str "the first conductor left R writing with a child: " mid.st " " (stringFromInt64 pidMid)))
         (assert (= r.st "merged") (str "the second conductor finished R: " r.st " " r.sig " " (stringJoin (journalLines dir) " | ")))
         (assert (= (listLength (stringSplit starts "R write")) 2) (str "the write stage started exactly once: " starts))
-        (assert (= tos (list "ready" "writing" "gating" "awaitReview" "reviewing" "merging" "merged")) (str "one clean chain: " (stringJoin tos ",")))
+        (assert (= tos (list "ready" "writing" "gating" "awaitReview" "reviewing" "admitting" "merging" "merged")) (str "one clean chain: " (stringJoin tos ",")))
         true))
 
 ; (:m :ref CONDUCTOR :do "capacity counts the units already in flight: with 2 slots and 3 disjoint units, ticks after the first admission leave the third in ready until a slot frees, then all three merge")
