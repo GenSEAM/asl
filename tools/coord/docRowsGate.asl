@@ -32,7 +32,7 @@ fn ! memoKey wt: String base: String -> String
 fn ! memoPath wt: String -> String
   (str (out wt (list "rev-parse" "--absolute-git-dir")) "/docRowsGate.memo")
 
-; (:m :ref WALL-SLOW-GATES :do "the memo file lives in the worktree's own git dir (never tracked, never under ~/.asl) as four lines: key, kind (done, partial1 or partial2: a know timeout is retried once on the same tree, the budget skip is never stored), message, note; a different key or a missing file is a miss")
+; (:m :ref WALL-SLOW-GATES :do "the memo file lives in the worktree's own git dir (never tracked, never under ~/.asl) as four lines: key, kind done, message, note; only a complete answer is stored, a budget skip or an infra note never is, and a different key or a missing file is a miss")
 fn ! memoRead! wt: String key: String -> (Option (Pair String (Pair String String)))
   (let [(ls (stringLines (resultOr (fileReadString (memoPath wt)) "")))]
     (if (and (>= (listLength ls) 4) (= (optionOr (listGet ls 0) "") key))
@@ -44,17 +44,13 @@ fn ! memoWrite! wt: String key: String kind: String r: (Pair String String) -> B
     ((ok _) true)
     ((err _) false))
 
-; (:m :ref WALL-SLOW-GATES :do "the check itself under a budget: the time left after the duplicate check and the memo lookup goes to docRowsCheckAt! as its limit; a check that cannot start for lack of time, or whose know run hits the limit, answers a :partial note naming what did finish (the duplicate check and the doc ledger findings, which docRowsCheckAt! settles before the know run) and not a kill")
+; (:m :ref WALL-SLOW-GATES :do "the check itself under a budget: when less than 2 s of the inner budget is left after the duplicate check and the memo lookup it does not start and answers a :partial note naming what did finish (the duplicate check), never a kill")
 fn ! boundedCheck! wt: String base: String t0: Int64 inner: Int64 limit: Int64 -> (Pair String String)
-  (let [(left (- inner (- (nowSec) t0)))]
-    (if (< left 2)
-      (pair "" (str ":docRows :ran false :partial true :why budget :done (dup) :skipped (ledger know) :limitSec " (n limit) " :budgetSec " (n inner)))
-      (let [(r (cd/docRowsCheckAt! wt base left))]
-        (if (stringContains? (pairSecond r) ":detail timeout")
-          (pair "" (str ":docRows :ran false :partial true :why budget :done (dup ledger) :skipped (know) :limitSec " (n limit) " :budgetSec " (n inner) " :spentSec " (n (- (nowSec) t0))))
-          r))))
+  (if (< (- inner (- (nowSec) t0)) 2)
+    (pair "" (str ":docRows :ran false :partial true :why budget :done (dup) :skipped (ledger) :limitSec " (n limit) " :budgetSec " (n inner)))
+    (cd/docRowsCheckAt! wt base))
 
-; (:m :ref WALL-SLOW-GATES :do "runGate ARGS: the gate as (exit, output lines) so a test can read the text; ARGS are WT BASE [--writer] [--limit N]; the duplicate check runs live, the doc check is memoised by memoKey for complete answers and for :partial ones, so a repeat run in one write session costs the key only")
+; (:m :ref WALL-SLOW-GATES :do "runGate ARGS: the gate as (exit, output lines) so a test can read the text; ARGS are WT BASE [--writer] [--limit N]; the duplicate check runs live, the doc check is memoised by memoKey for complete answers, so a repeat run in one write session costs the key only")
 fn ! runGate args: (List String) -> (Pair Int64 (List String))
   (runGateEnv args (optionOr (envGet "ASL_GATE_LIMIT_SEC") ""))
 
@@ -75,11 +71,11 @@ fn ! runGateEnv args: (List String) envRaw: String -> (Pair Int64 (List String))
         (dupRed (if (stringEmpty? dup) 0 1))
         (key (memoKey wt base))
         (hit (memoRead! wt key))
-        (fresh? (match hit ((some h) (= (pairFirst h) "partial1")) ((none) true)))
+        (fresh? (match hit ((some _) false) ((none) true)))
         (r (if fresh? (boundedCheck! wt base t0 inner limit) (match hit ((some h) (pairSecond h)) ((none) (pair "" "")))))
         (note (pairSecond r))
         (partial (stringContains? note ":partial true"))
-        (_ (if (and fresh? (not (and (stringContains? note ":why infra") (not partial))) (not (stringContains? note ":skipped (ledger know)"))) (memoWrite! wt key (if partial (match hit ((some _) "partial2") ((none) "partial1")) "done") r) true))
+        (_ (if (and fresh? (and (not partial) (not (stringContains? note ":why infra")))) (memoWrite! wt key "done" r) true))
         (msg (pairFirst r))
         (writer (listContains? args "--writer"))
         (infra (stringContains? note ":why infra"))
@@ -87,13 +83,13 @@ fn ! runGateEnv args: (List String) envRaw: String -> (Pair Int64 (List String))
         (head (str "(:gate :asserts 2 :failed " (n failed) ")"))
         (dupLine (if (= dupRed 1) (str "FAIL docRows: " dup) "assert docRows: no symbol the unit added has two doc rows"))]
     (cond
-      (partial (pair (if writer dupRed (if (= dupRed 1) 1 2)) (list head dupLine (str "(:partial " note ")") (str "assert docRows: partial, the know run did not finish inside the budget, left to the conductor " note))))
+      (partial (pair (if writer dupRed (if (= dupRed 1) 1 2)) (list head dupLine (str "(:partial " note ")") (str "assert docRows: partial, the check did not start inside the budget, left to the conductor " note))))
       (infra
         ; (:m :ref COND-OWNS-DOC :do "--writer: the gate inside the writer's own run; a check that could not run is infrastructure and no fault of the model, so it is green there with the note, and the conductor's gate stage still judges the unit")
         (if writer
           (pair dupRed (list head dupLine (str "assert docRows: could not run, left to the conductor " note)))
           (pair (if (= dupRed 1) 1 2) (list head dupLine (str "gateInfra: docRows could not run " note)))))
-      ((stringEmpty? msg) (pair dupRed (list head dupLine "assert docRows: no new exported symbol lacks its contract row")))
+      ((stringEmpty? msg) (pair dupRed (list head dupLine "assert docRows: no doc row the unit added or touched breaks rule docs")))
       (else (pair 1 (list head dupLine (str "FAIL docRows: " msg))))))
 
 fn ! main args: (List String) -> (Result Int64 String)

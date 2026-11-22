@@ -88,11 +88,9 @@ fn symRow card: String m: sc/Module docs: (Map String String) name: String -> St
       ((some d) (str "(:sym " (q name) " :mod " (q m.name) (if (= d.kind "fn") "" (str " :kind " d.kind)) " :sig " (q (sigOf d))
                      (if (stringEmpty? doc) "" (str " :doc " (q (capWords doc 240)))) (tagList (pitTags d)) ")"))))
 
+; (:m :ref DOC-THIN :do "only an export with no declaration is missing; since rule docs no doc row is owed, so nodoc is gone and docs is kept for the callers")
 fn missingIn card: String m: sc/Module docs: (Map String String) name: String -> (List String)
-  (cond
-    ((not (mapHas? m.decls name)) (list (str card "#" m.name "/" name " nodecl")))
-    ((not (mapHas? docs (str m.path "#" name))) (list (str card "#" m.name "/" name " nodoc")))
-    (else (list)))
+  (if (mapHas? m.decls name) (list) (list (str card "#" m.name "/" name " nodecl")))
 
 fn fitSigs sigs: (List String) room: Int64 acc: (List String) -> (Pair (List String) (List String))
   (match (listHead sigs)

@@ -1,8 +1,8 @@
 (module asl-tools/coord/conductor
-  :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf exportsOf newExports? docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerHomeOf ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! docCheckSec redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
       main]
@@ -3758,44 +3758,11 @@ fn ! firstCheckSig! wt: String targets: (List String) sec: Int64 -> String
 fn ! checkSig! wt: String owned: (List String) sec: Int64 -> String
   (firstCheckSig! wt (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (fileExists? (str wt "/" p)))) (listAppend owned (importerFiles! wt owned))) sec)
 
-; (:m :ref GATE-DOC-ROWS :do "early, cheap copy of one knowCardsTest assertion: when the unit's diff against its merge-base with the base touches a package .asl source or a doc.asn, `asl know missing` runs in the worktree (asl-know owns the computation, run through fleet/run.asl under docCheckSec) and a new exported symbol the diff adds without its doc.asn row fails the gate with the literal row to add; a miss the base already had is not charged, and a check that cannot run (diff, tool error, timeout, unreadable output) never blocks: the receipt note says infra, the train still enforces the assertion. The note is a (:docRows ...) form appended to the receipt")
-fn docCheckSec -> Int64
-  300
+; (:m :ref DOC-THIN :do "the gate stage's docRows check: rule docs on the rows the unit's diff adds or touches, judged by docRowsCheckAt! against the unit's base; a check that cannot diff never blocks and its note says infra")
+fn ! docRowsCheck! wt: String u: st/Task -> (Pair String String)
+  (docRowsCheckAt! wt (baseRef u))
 
-fn ! docRowsCheck! wt: String u: st/Task sec: Int64 -> (Pair String String)
-  (docRowsCheckAt! wt (baseRef u) sec)
-
-; (:m :ref COND-OWNS-DOC :do "the names of a module's :x export list (the first one in the text), empty when it has none")
-fn exportsOf text: String -> (List String)
-  (match (stringIndexOf text ":x [")
-    ((none) (list))
-    ((some at) (let [(rest (optionOr (stringSlice text (+ at 4) (stringLength text)) ""))
-                     (close (optionOr (stringIndexOf rest "]") (stringLength rest)))]
-                 (filter (fn [(t String)] -> Bool (not (stringEmpty? t)))
-                         (map stringTrim (stringSplit (stringReplace (optionOr (stringSlice rest 0 close) "") "\n" " ") " "))))))
-
-; (:m :ref COND-OWNS-DOC :do "true when a touched package .asl file exports a name its base version did not (a new file counts): only then can the unit owe a contract row, and the know run is worth its up to 300 s")
-fn ! newExports? wt: String mb: String paths: (List String) -> Bool
-  (listAny? (fn [(p String)] -> Bool
-              (let [(was (gitOut wt (list "show" (str mb ":" p))))
-                    (old (if (= was.exit 0) (exportsOf was.out) (list)))]
-                (listAny? (fn [(x String)] -> Bool (not (listContains? old x))) (exportsOf (readOr (str wt "/" p))))))
-            (filter (fn [(p String)] -> Bool (and (dr/relevantPath? p) (stringEndsWith? p ".asl"))) paths))
-
-; (:m :ref DOC-ROWS-AT-GATE :do "the doc ledger that owns a path, the very mapping docLedgerTest scans: asl/packages/PKG/... has asl/packages/PKG/doc.asn, asl/AREA/... has asl/doc/AREA.asn; a path with no home (or a home that does not exist in the worktree) is empty")
-fn ! ledgerHomeOf wt: String p: String -> String
-  (let [(parts (stringSplit p "/"))
-        (home (cond
-                ((and (> (listLength parts) 3) (and (= (optionOr (listGet parts 0) "") "asl") (= (optionOr (listGet parts 1) "") "packages"))) (str "asl/packages/" (optionOr (listGet parts 2) "") "/doc.asn"))
-                ((and (> (listLength parts) 2) (= (optionOr (listGet parts 0) "") "asl")) (str "asl/doc/" (optionOr (listGet parts 1) "") ".asn"))
-                (else "")))]
-    (if (and (not (stringEmpty? home)) (fileExists? (str wt "/" home))) home ""))
-
-; (:m :ref DOC-ROWS-AT-GATE :do "the list without repeated names, first occurrence kept")
-fn ledgerUnique xs: (List String) -> (List String)
-  (fold (fn [(acc (List String)) (x String)] -> (List String) (if (listContains? acc x) acc (listAppend acc (list x)))) (list) xs)
-
-; (:m :ref DOC-ROWS-AT-GATE :do "one finding of the gate's ledger check: kind missing (a name its :x gained has no row in ledger where), stale (a baseline row sym in baseline file where is no longer a gap), or load (the ledger where did not load, sym holds the error)")
+; (:m :ref DOC-ROWS-AT-GATE :do "one finding of the gate's ledger check: kind is the dl/RowFinding kind and why (refused nameEcho, stale removed, ...) or load (the ledger diff did not parse, sym holds the error), where the ledger")
 (schema LedgerFinding
   (:f kind String)
   (:f sym String)
@@ -3805,61 +3772,30 @@ fn ledgerUnique xs: (List String) -> (List String)
 fn ledgerSkipped? p: String -> Bool
   (listAny? (fn [(s String)] -> Bool (or (stringStartsWith? s ".") (or (= s "out") (= s "fixtures")))) (stringSplit p "/"))
 
-; (:m :ref DOC-ROWS-AT-GATE :do "docLedgerTest's computation for the files the unit changed against its merge-base, each home ledger loaded once: for every scanned .asl file under asl/ (src, tests and tools, new files included, fixtures and out skipped like docLedger) a missing finding per name its :x gained without a row in the home ledger and outside the baselines; a stale finding per baseline row of the file that is no longer a gap (documented, export removed, file moved or deleted); a load finding when a ledger does not load; exports the unit did not add are never judged and an unparsable file adds nothing")
+; (:m :ref DOC-THIN :do "rule docs at the gate, the computation of dl/rowFindings!: the (:doc) rows the unit's diff adds to any doc ledger and every row of an .asl file it touches are judged; a refused row (name echo, paraphrase, repeat of the (:m), over one sentence or 200 chars, a kind that needs none, a symbol no other package uses), a stale row (symbol or file gone) and an added row that does not parse are findings; no row is ever owed, so a new export without a row is never charged")
 fn ! ledgerFindingsAt! wt: String mb: String paths: (List String) -> (List LedgerFinding)
-  (let [(pkgBase (readOr (str wt "/asl/packages/asl-gates/tests/docPackageBaseline.asn")))
-        (covBase (readOr (str wt "/asl/packages/asl-gates/tests/docCoverageBaseline.asn")))
-        (base (str pkgBase covBase))
-        (baseFiles (map (fn [(l String)] -> String (optionOr (listHead (stringSplit (stringReplace l "(:gap \"" "") "#")) ""))
-                        (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gap \"")) (stringLines base))))
-        (viaLedger (filter (fn [(f String)] -> Bool (let [(h (ledgerHomeOf wt f))] (and (not (stringEmpty? h)) (listContains? paths h)))) (ledgerUnique baseFiles)))
-        (homed (filter (fn [(h (Pair String String))] -> Bool (not (stringEmpty? (pairSecond h))))
-                       (map (fn [(p String)] -> (Pair String String) (pair p (ledgerHomeOf wt p)))
-                            (filter (fn [(p String)] -> Bool (and (stringStartsWith? p "asl/") (and (stringEndsWith? p ".asl") (not (ledgerSkipped? p))))) (ledgerUnique (listAppend paths viaLedger))))))
-        (loaded (fold (fn [(m (Map String (Result (List dl/DocRow) String))) (h (Pair String String))] -> (Map String (Result (List dl/DocRow) String))
-                        (if (mapHas? m (pairSecond h)) m (mapSet m (pairSecond h) (dl/loadLedger! (str wt "/" (pairSecond h))))))
-                      (mapEmpty) homed))
-        (loadErrs (map (fn [(k String)] -> LedgerFinding (LedgerFinding :kind "load" :sym (match (mapGetOr loaded k (ok (list))) ((err e) e) ((ok _) "")) :where k))
-                       (filter (fn [(k String)] -> Bool (match (mapGetOr loaded k (ok (list))) ((err _) true) ((ok _) false))) (mapKeys loaded))))]
-    (listAppend loadErrs
-      (listFlatMap
-        (fn [(h (Pair String String))] -> (List LedgerFinding)
-          (match (mapGetOr loaded (pairSecond h) (ok (list)))
-            ((err _) (list))
-            ((ok rows)
-              (let [(p (pairFirst h))
-                    (here? (fileExists? (str wt "/" p)))
-                    (was (gitOut wt (list "show" (str mb ":" p))))
-                    (old (if (= was.exit 0) (dl/exportsOf was.out) (list)))
-                    (all (if here? (dl/exportsOf (readOr (str wt "/" p))) (list)))
-                    (now (filter (fn [(x String)] -> Bool (and (!= x "!parse") (not (listContains? old x)))) all))
-                    (missing (filter (fn [(g String)] -> Bool (not (stringContains? base (str "(:gap \"" g "\")")))) (dl/exportGaps rows p now)))
-                    (listed (map (fn [(l String)] -> String (stringReplace (stringReplace l "(:gap \"" "") "\")" ""))
-                                 (filter (fn [(l String)] -> Bool (stringStartsWith? l (str "(:gap \"" p "#"))) (stringLines base))))
-                    (stale (if (listContains? all "!parse") (list) (dl/staleGaps listed (dl/exportGaps rows p all))))
-                    (bfile (if (stringStartsWith? p "asl/packages/") "asl/packages/asl-gates/tests/docPackageBaseline.asn" "asl/packages/asl-gates/tests/docCoverageBaseline.asn"))]
-                (listAppend (map (fn [(g String)] -> LedgerFinding (LedgerFinding :kind "missing" :sym g :where (pairSecond h))) missing)
-                            (map (fn [(g String)] -> LedgerFinding (LedgerFinding :kind "stale" :sym g :where bfile)) stale))))))
-        homed)))
+  (let [(ledgers (filter (fn [(p String)] -> Bool (dl/ledgerPath? p)) paths))
+        (diff (if (listEmpty? ledgers) "" (gitOut wt (listAppend (list "diff" "-U0" "--no-renames" mb "--") ledgers)).out))
+        (touched (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (not (ledgerSkipped? p)))) paths))]
+    (match (dl/addedRows diff)
+      ((err e) (list (LedgerFinding :kind "load" :sym e :where "the doc ledger diff")))
+      ((ok rows) (map (fn [(f dl/RowFinding)] -> LedgerFinding (LedgerFinding :kind (str f.kind " " f.why) :sym f.sym :where f.ledger)) (dl/rowFindings! wt rows touched)))))
 
-; (:m :ref DOC-ROWS-AT-GATE :do "the red message of ledgerFindingsAt!: one sentence per finding (the literal row to add, the baseline row to remove, the load error), at most maxListed and a count of the rest, on one line; it starts with docRows: so the writer's fix-round gate includes docRowsGate.asl")
+; (:m :ref DOC-ROWS-AT-GATE :do "the red message of ledgerFindingsAt!: one sentence per finding (the row to delete or rewrite and why, the load error), at most maxListed and a count of the rest, on one line; it starts with docRows: so the writer's fix-round gate includes docRowsGate.asl")
 fn ledgerGapMessage fs: (List LedgerFinding) -> String
   (let [(shown (listTake fs (dr/maxListed)))
         (rest (- (listLength fs) (listLength shown)))]
-    (str "docRows: " (stringFromInt64 (listLength fs)) " doc ledger findings, docLedgerTest would fail on them in the train; "
+    (str "docRows: " (stringFromInt64 (listLength fs)) " doc row findings under rule docs (a row says only why or how a public symbol is used); "
          (stringJoin (map (fn [(f LedgerFinding)] -> String
-                            (let [(at (optionOr (stringIndexOf f.sym "#") 0))
-                                  (file (optionOr (stringSlice f.sym 0 at) ""))
-                                  (name (optionOr (stringSlice f.sym (+ at 1) (stringLength f.sym)) ""))]
-                              (cond
-                                ((= f.kind "load") (str "ledger " f.where " does not load: " f.sym))
-                                ((= f.kind "stale") (str "baseline row " f.sym " is stale: remove it from " f.where))
-                                (else (str f.sym " has no row: add to " f.where " the line " (dr/rowText file name))))))
+                            (cond
+                              ((= f.kind "load") (str "ledger " f.where " does not load: " f.sym))
+                              ((stringStartsWith? f.kind "stale") (str "row " f.sym " names a removed symbol or file: delete it from " f.where))
+                              (else (str "row " f.sym " is refused (" (optionOr (listLast (stringSplit f.kind " ")) "") "): delete it from " f.where " or rewrite it as one sentence of at most 200 chars on why or how it is used"))))
                           shown) "; ")
          (if (> rest 0) (str "; and " (stringFromInt64 rest) " more") "")))
 
-; (:m :ref COND-WORK-PRESENT :do "the docRows check against a base ref, so the fix-round writer's own gate (docRowsGate.asl) runs the very computation the gate stage runs")
-fn ! docRowsCheckAt! wt: String base: String sec: Int64 -> (Pair String String)
+; (:m :ref COND-WORK-PRESENT :do "the docRows check against a base ref, so the fix-round writer's own gate (docRowsGate.asl) runs the very computation the gate stage runs; since rule docs no row is owed, so the know missing run (140 timeouts in 72 h on node2) and its time limit are gone")
+fn ! docRowsCheckAt! wt: String base: String -> (Pair String String)
   (let [(mb (stringTrim (gitOut wt (list "merge-base" "HEAD" base)).out))
         (names (gitOut wt (list "diff" "--name-only" "--no-renames" mb)))
         (paths (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines names.out))))
@@ -3867,22 +3803,7 @@ fn ! docRowsCheckAt! wt: String base: String sec: Int64 -> (Pair String String)
     (cond
       ((or (stringEmpty? mb) (!= names.exit 0)) (pair "" ":docRows :ran false :why infra :detail diffFailed"))
       ((not (listEmpty? ledgerGaps)) (pair (ledgerGapMessage ledgerGaps) (str ":docRows :ran true :charged " (n (listLength ledgerGaps)) " :ledger true")))
-      ((not (dr/relevant? paths)) (pair "" ":docRows :ran false :why noPackageSource"))
-      ; (:m :ref COND-OWNS-DOC :do "a unit that owns package src but adds no exported name has nothing to charge: the know run (up to 300 s) is skipped, so the gate stays cheap for the writer who owns src only to edit it")
-      ((not (newExports? wt mb paths)) (pair "" ":docRows :ran false :charged 0 :why noNewExports"))
-      (else
-        (let [(d (fr/runOneLimited (fr/job (list (str wt "/bin/asl") "run" (str wt "/asl/packages/asl-know/src/know.asl") "missing" wt) wt (fr/childEnv (list (str "ASL_ROOT=" wt) "ASL_PRELUDE=" "ASL_CLI_USER_PRELUDE="))) (fr/limits sec 200)))]
-          (cond
-            ((= d.verdict "timeout") (pair "" (str ":docRows :ran false :why infra :detail timeout :s " (n sec))))
-            ((or (!= d.exit 0) (not (stringContains? d.out "(:know :missing :new "))) (pair "" (str ":docRows :ran false :why infra :detail " (st/q (str "exit " (n d.exit))))))
-            (else
-              (let [(diff (gitOut wt (list "diff" "-U0" "--no-renames" mb "--" "asl/packages")))
-                    (touched (filter (fn [(p String)] -> Bool (and (dr/relevantPath? p) (stringEndsWith? p ".asl"))) paths))
-                    (files (map (fn [(p String)] -> (Pair String String) (pair p (readOr (str wt "/" p)))) touched))
-                    (rows (dr/charged (dr/parseRows d.out) (dr/addedNames diff.out)))]
-                (if (listEmpty? rows)
-                  (pair "" ":docRows :ran true :charged 0")
-                  (pair (dr/message rows files) (str ":docRows :ran true :charged " (n (listLength rows))))))))))))
+      (else (pair "" ":docRows :ran true :charged 0"))))
 
 ; (:m :ref CONDUCTOR :do "the conductor's own gate stage reruns the declared gate in the unit's worktree and never reads the writer's report")
 ; (:m :ref CONDHARDEN :do "before the declared gate: owned files may not lose more than half their base lines without the word rewrite in the task text, and every owned .asl file and each importer of an owned module must pass asl check; either failure is exit 3 with a :sig naming the file")
@@ -3917,7 +3838,7 @@ fn ! gateRunRetry! gate: String wt: String gateSec: Int64 -> fr/Done
 fn ! gatesResN gateSec: Int64 checkSec: Int64 task: String u: st/Task c: CUnit -> (Pair Res String)
   (let [(refused (if (stringEmpty? u.gate) "" (shrinkRefusal! c.wt u task)))
         (broken (if (or (stringEmpty? u.gate) (not (stringEmpty? refused))) "" (checkSig! c.wt (entryFiles u.owns) checkSec)))
-        (docs (if (or (stringEmpty? u.gate) (or (not (stringEmpty? refused)) (not (stringEmpty? broken)))) (pair "" "") (docRowsCheck! c.wt u (docCheckSec))))
+        (docs (if (or (stringEmpty? u.gate) (or (not (stringEmpty? refused)) (not (stringEmpty? broken)))) (pair "" "") (docRowsCheck! c.wt u)))
         (bad (fn [(sig String)] -> Res (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig sig :ms 0 :exit 3 :asserts 0 :verdict "")))]
     (cond
       ((stringEmpty? u.gate) (pair (Res :tiers "" :ok 0 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "unit declares no gate" :ms 0 :exit 2 :asserts 0 :verdict "") ""))
@@ -5367,7 +5288,7 @@ fn docOwns owns: (List String) -> (List String)
               (if (or (stringEmpty? h) (listContains? acc h)) acc (listAppend acc (list h)))))
           base owns))
 
-; (:m :ref DOC-OWNS-AREA-LEDGER :do "the ledger the gate judges a path against (ledgerHomeOf without the file check): a package path of any kind, tests included, maps to its doc.asn, and asl/AREA/... to asl/doc/AREA.asn; the writer owns it so a docRows refusal on a tests or tools export can be fixed inside its owns")
+; (:m :ref DOC-OWNS-AREA-LEDGER :do "the ledger the gate judges a path against (the doc ledger home without a file check): a package path of any kind, tests included, maps to its doc.asn, and asl/AREA/... to asl/doc/AREA.asn; the writer owns it so a docRows refusal on a tests or tools export can be fixed inside its owns")
 fn ledgerPathOf p: String -> String
   (let [(parts (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit p "/")))
         (s0 (optionOr (listGet parts 0) ""))

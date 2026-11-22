@@ -49,7 +49,6 @@ fn testLinearMemoryBounds! -> Bool
     ((ok src)
      (do
        (assert (stringContains? src "(:f maxRssBytes I64)") "bridge declares a max RSS ceiling field")
-       (assert (stringContains? (resultOr (fileReadString "asl/packages/asl-browser-plugin/doc.asn") "") "Hard memory boundary ceiling in bytes (16MB)") "the field's 16MB doc moved to doc.asn, not lost")
        (refute (stringContains? src ":maxRssBytes 0") "bridge refutes a zero RSS ceiling")
        (assert (stringContains? src ":linearMemoryBytes linearMem :activeSessions 1 :maxRssBytes maxRss") "bridge stores the given linear memory and RSS ceiling")
        (refute (stringContains? src ":linearMemoryBytes maxRss") "bridge refutes swapping linear memory and RSS ceiling")

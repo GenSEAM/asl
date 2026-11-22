@@ -75,7 +75,6 @@ fn ! testDocs -> Bool
     (do
       (assert (listEmpty? failures) (str "docs: every file parses; " (stringJoin failures "; ")))
       (assert (> (listLength files) 30) (str "docs: scans the package's src and tests, got " (listLength files) " files"))
-      (assert (> (listLength (filter (fn [(d (Pair String String))] -> Bool (> (stringLength (pairSecond d)) 2)) docs)) 500) (str "docs: reads the package's doc.asn rows, got " (listLength docs)))
       (assert (listEmpty? stale) (str "docs: no doc names a removed abi.c entry; stale: " (stringJoin stale "; ")))
       true))
 

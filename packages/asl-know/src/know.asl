@@ -74,7 +74,7 @@ fn ! writeCards! root: String -> (Result Int64 String)
 
 ; (:m :ref COND-AUDIT-FIX :do "missing.asn is a head line and one quoted row per line; the head carries no row count, which nobody read and which made every two branches that shrank the list conflict on line 1")
 fn ratchetText rows: (List String) -> String
-  (str "(:knowMissing :rule \"an exported symbol without a declaration (nodecl) or doc.asn contract (nodoc); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks\")\n"
+  (str "(:knowMissing :rule \"an exported symbol without a declaration (nodecl) or a builtin without its prelude doc (nodoc); doc.asn rows are never owed (rule docs); knowCardsTest fails when a row is added or a listed row is fixed, so this list only shrinks\")\n"
        (stringJoin (map r/q rows) "\n") "\n")
 
 fn ! writeRatchet! root: String -> (Result Int64 String)

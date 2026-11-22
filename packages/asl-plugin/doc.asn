@@ -1,4 +1,0 @@
-(:doc :symbol "asl/packages/asl-plugin/src/targetRegistry.asl#" :text "Dynamic target dispatch and capability integration registry for AgentSlang pluggable backends under ADR D93.")
-(:doc :symbol "asl/packages/asl-plugin/src/targetRegistry.asl#TargetRegistry.targets" :text "Map of target name to emitter function")
-(:doc :symbol "asl/packages/asl-plugin/src/targetRegistry.asl#TargetRegistry.docstrings" :text "Documentation string per target")
-(:doc :symbol "asl/packages/asl-plugin/tests/targetRegistryTest.asl#" :text "Unit tests and D77 refutations for dynamic target registry and dispatch under ADR D93.")
