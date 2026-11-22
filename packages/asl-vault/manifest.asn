@@ -1,0 +1,7 @@
+(:package asl-vault
+ :version "0.1.0"
+ :entry "src/vault.asl"
+ :description "Shared vault over the asl-store contract: provenance units, entries with scope maps, layers and statuses, supersede chains, bitemporal validity, edges, contradictions and resolutions, bodies keyed by sha256; talks to the store only through Op and Reply rows, so it runs on memStep and on any adapter, pure AgentSlang"
+ :aslFirst true
+ :modules ["asl-vault/time" "asl-vault/codec" "asl-vault/unit" "asl-vault/model" "asl-vault/graph" "asl-vault/curate" "asl-vault/vault"]
+ :dependencies ["asl-store"])
