@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! docAutodrop! docAutodropAt! docAutodropOnce! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -789,6 +789,7 @@ fn ! launchNow! ctx: Ctx u: st/Task c: CUnit -> CUnit
         (argv (stageArgv! ctx stage u c))
         (_ (dirCreate (runsDir ctx.dir)))
         (_ (dropRun! ctx.dir c.id stage))
+        (_ (if (= stage "merge") (docAutodropOnce! ctx u c true) 0))
         (_ (if (= stage "merge") (batchPlan! ctx u c) (list)))
         (_ (if (and (= stage "merge") (redRecordOn! ctx.dir)) (ok? (fileWrite (mergeBasePath ctx.dir c.id) (str (trainHead! ctx u) "\n"))) false))]
     (match (fr/spawnSep argv "." (fr/childEnv (list)))
@@ -1529,6 +1530,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
         (cond
           ((= res.verdict "pass")
             (let [(_ (ok? (pathRemove (reviewWhyPath ctx.dir c.id))))
+                  (_ (docAutodropOnce! ctx u c false))
                   (_ (gradeLand! ctx c c.id res.model))
                   (c1 (move! ctx c "merging" "review" res.model res.tokens res.costMicro "pass" res.ms))
                   (_ (launch! ctx u c1))]
@@ -3921,6 +3923,43 @@ fn ! docRowsCheckAt! wt: String base: String -> (Pair String String)
       ((not (listEmpty? ledgerGaps)) (pair (ledgerGapMessage ledgerGaps) (str ":docRows :ran true :charged " (n (listLength ledgerGaps)) " :ledger true")))
       (else (pair "" ":docRows :ran true :charged 0"))))
 
+; (:m :ref DOC-RULE-AUTODROP :do "the refused and stale doc rows of the unit's diff against base and its unparsed added doc rows are deleted from their ledgers in the worktree and committed as one commit through the vcs layer, by the planner of docLedger (dl/autodropPlan!, the computation of rowFindings! the gate judges with), each row by symbol and text; returns one label per row dropped, empty with no commit when none is refused, and a refused commit restores the ledgers and returns empty")
+fn ! docAutodropAt! wt: String base: String repo: String id: String -> (List String)
+  (let [(mb (stringTrim (gitOut wt (list "merge-base" "HEAD" base)).out))
+        (names (gitOut wt (list "diff" "--name-only" "--no-renames" mb)))
+        (paths (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines names.out))))
+        (ledgers (filter (fn [(p String)] -> Bool (dl/ledgerPath? p)) paths))
+        (diff (if (or (stringEmpty? mb) (or (!= names.exit 0) (listEmpty? ledgers))) "" (gitOut wt (listAppend (list "diff" "-U0" "--no-renames" mb "--") ledgers)).out))
+        (touched (filter (fn [(p String)] -> Bool (and (stringEndsWith? p ".asl") (not (ledgerSkipped? p)))) paths))
+        (plan (if (or (stringEmpty? mb) (!= names.exit 0)) (pair (list) (list)) (dl/autodropPlan! wt diff touched)))]
+    (if (and (listEmpty? (pairFirst plan)) (listEmpty? (pairSecond plan))) (list)
+      (let [(dropped (dl/dropRows! wt (pairFirst plan) (pairSecond plan)))
+            (changed (pairFirst dropped))
+            (labels (pairSecond dropped))]
+        (if (listEmpty? changed) (list)
+          (let [(r (vcs/commitWith! wt wt repo changed (str "(:c :a docs :do \"drop " (n (listLength labels)) " doc rows rule C refuses\" :autodrop " (n (listLength labels)) " :ev (" id "))") "commit"))]
+            (if (= r.code 0) labels
+              (let [(_ (vcs/restore! wt "HEAD" changed))] (list))))))))
+
+; (:m :ref DOC-RULE-AUTODROP :do "docAutodropAt! of the unit's worktree against its base; one (:docAutodrop :unit :rows :syms) journal row when any row was dropped; returns the rows dropped")
+fn ! docAutodrop! ctx: Ctx u: st/Task c: CUnit -> Int64
+  (let [(repo (stringTrim (readOr (repoPath ctx.dir))))]
+    (if (or (stringEmpty? repo) (stringEmpty? c.wt)) 0
+      (let [(labels (docAutodropAt! c.wt (baseRef u) repo u.id))
+            (k (listLength labels))
+            (_ (if (> k 0) (ok? (fileAppend (journalPath ctx.dir) (str "(:docAutodrop :unit " (st/q u.id) " :rows " (n k) " :syms (" (stringJoin (map st/q labels) " ") ") :at " (n (nowMs)) ")\n"))) false))]
+        k)))
+
+; (:m :ref DOC-RULE-AUTODROP :do "docAutodrop! once per head of the unit branch (runs/UNIT-autodrop.txt holds the head last looked at): at the review pass and at the start of the merge stage, so a unit already merging, a retry, a rebatch or a solo run is covered too; with regrade a drop is graded again (gradeLand!) so the :sha of the grade row is the new head")
+fn ! docAutodropOnce! ctx: Ctx u: st/Task c: CUnit regrade: Bool -> Int64
+  (if (stringEmpty? c.wt) 0
+    (let [(mark (runPath ctx.dir c.id "autodrop" "txt"))]
+      (if (= (stringTrim (readOr mark)) (headOf! c.wt)) 0
+        (let [(k (docAutodrop! ctx u c))
+              (_ (if (and regrade (> k 0)) (gradeLand! ctx c c.id c.model) ()))
+              (_ (fileWrite mark (str (headOf! c.wt) "\n")))]
+          k))))
+
 ; (:m :ref CONDUCTOR :do "the conductor's own gate stage reruns the declared gate in the unit's worktree and never reads the writer's report")
 ; (:m :ref CONDHARDEN :do "before the declared gate: owned files may not lose more than half their base lines without the word rewrite in the task text, and every owned .asl file and each importer of an owned module must pass asl check; either failure is exit 3 with a :sig naming the file")
 ; (:m :ref GATEADMIT-FIX :do "the Res of one finished gate run: a run refused for wallOverBound (exit 126, never started) is unverified, not red: its sig starts gateTimeout so the unit is requeued without a fail count, and its exit stays 126 with 0 asserts so it is never green")
@@ -4784,15 +4823,14 @@ fn ! writerGates rc: RealCfg p: String u: st/Task gfail: String -> (List String)
       (listAppend base (list (str "./bin/asl run asl/tools/coord/docRowsGate.asl . " (baseRef u) " --writer")))
       base))
 
-; (:m :ref COND-OWNS-DOC :do "what the writer is told at once, not only after a refusal: for each package whose src it owns, new exports need a contract row in <pkg>/doc.asn, in the form of the first (:doc row of that file; the asl-know card is the conductor's to regenerate")
+; (:m :ref COND-OWNS-DOC :do "what the writer is told at once, not only after a refusal: for each package whose src it owns, the writer is told to add no doc row (rule C, DOC-RULE-AUTODROP: a refused row is dropped before merging); the asl-know card is the conductor's to regenerate")
 fn ! docOwnsNote p: String u: st/Task -> String
   (let [(pkgs (ownsPackages u.owns))
-        (example (fn [(r String)] -> String
-                   (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? l "(:doc ")) (map stringTrim (stringLines (readOr (str p "/" r "/doc.asn"))))) "")))]
+        (_ (stringLength p))]
     (if (listEmpty? pkgs) ""
-      (str "\n\n(:contractRows :need \"every new exported symbol needs its contract row in the package doc.asn, which you own, or the docRows gate fails\" :files ("
+      (str "\n\n(:docRows :add none :why \"rule C refuses a doc row unless it is one sentence of at most 200 chars on why or how a symbol another package uses is used, and no row is ever required: add no row to doc.asn, the conductor drops a refused row before merging\" :files ("
            (stringJoin (map (fn [(r String)] -> String (st/q (str r "/doc.asn"))) pkgs) " ")
-           ") :example " (st/q (utf8Clip (stringJoin (map example pkgs) " ") 400)) " :cards \"the asl-know card is regenerated by the conductor, do not edit it\")")))
+           ") :cards \"the asl-know card is regenerated by the conductor, do not edit it\")")))
 
 ; (:m :ref COND-OWNS-DOC :do "the asl-know card of a package whose src the unit owns is regenerated by the conductor after the write (know.asl gen in the worktree) and committed as its own harness commit when it changed: one deterministic command, no model run and no instruction to follow, where telling the writer to run it would depend on Leon being allowed to; a failing gen or a refused commit is one cardsInfra row, leaves the tree as it was and the docRows gate speaks")
 fn ! cardsRegen! dir: String p: String u: st/Task model: String toolRoot: String -> Bool

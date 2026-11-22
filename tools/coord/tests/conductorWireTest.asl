@@ -1860,7 +1860,7 @@ fn ! testOwnsDoc -> Bool
         (assert (and (= r1.ok 1) (stringEmpty? (stringTrim (stringReplace ref1 "asl/packages/asl-know/cards/other.asn" "")))) (str "the writer may write its contract row: accepted, only the foreign card refused: " (stringFromInt64 r1.ok) " sig " r1.sig " refused: " ref1 " names " n1))
         (assert (and (stringContains? n1 "asl/packages/pk/doc.asn") (stringContains? n1 "asl/packages/pk/src/a.asl") (stringContains? n1 "asl/packages/pk/tests/aTest.asl")) (str "src, test and doc.asn are committed: " n1))
         (assert (stringContains? n1 "asl/packages/asl-know/cards/pk.asn") (str "the conductor regenerated and committed the card: " n1))
-        (assert (and (stringContains? t1 "(:contractRows") (stringContains? t1 "asl/packages/pk/doc.asn") (stringContains? t1 "returns one")) (str "the task names the contract rows with an example at once: " t1))
+        (assert (and (stringContains? t1 "(:docRows :add none") (and (stringContains? t1 "asl/packages/pk/doc.asn") (not (stringContains? t1 "(:contractRows")))) (str "the task tells the writer to add no doc row at once: " t1))
         (assert (stringContains? g1 "docRowsGate.asl") (str "docRowsGate is in the writer's gates from the first attempt: " g1))
         (assert (and (= r2.ok 1) (not (stringContains? n2 "doc.asn"))) (str "a writer who left the row out wrote the rest: " n2))
         (assert (and (stringContains? t2 "(:fixRound :gatesFailed ") (stringContains? t2 "docRows") (stringContains? g2 "docRowsGate.asl")) (str "after the docRows failure the next attempt is told: " t2))

@@ -1,5 +1,5 @@
 (module asl-gates/docLedger
-  :x [DocRow RowFinding loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! rowCap contentWords nameEcho? paraphrase? nameLead? metaEcho? sentenceCount textReasons kindReason testSource? metaOf ledgerPath? ledgerFiles! treeRows! localFindings! crossUsed! addedRows rowFindings! treeFindings! main]
+  :x [DocRow RowFinding loadLedger! findBySymbol! findByFile! renderText unresolvedSymbols! checkLedger! exportsOf aslFilesUnder! rowCap contentWords nameEcho? paraphrase? nameLead? metaEcho? sentenceCount textReasons kindReason testSource? metaOf ledgerPath? ledgerFiles! treeRows! localFindings! crossUsed! addedRows rowFindings! looseAdded rowKey autodropPlan! dropFromText dropRowsText dropRows! treeFindings! main]
   :i [(asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-syntax/asl/asn :a asn) (asl-gates/metaAudit :a meta) (asl-gates/docExtract :a dx)])
 
 (schema DocRow
@@ -245,7 +245,8 @@ fn ! main args: (List String) -> (Result Int64 String)
   (:f kind String)
   (:f sym String)
   (:f why String)
-  (:f ledger String))
+  (:f ledger String)
+  (:f text String :default ""))
 
 (schema SrcFacts
   (:f exists Bool)
@@ -431,7 +432,7 @@ fn ! factsOf! root: String path: String -> SrcFacts
                  ((ok tops) (SrcFacts :exists true :parsed true :tops tops :exports (exportsOf text) :metas (metaOf text) :test (testSource? path text))))))
 
 fn finding kind: String lr: (Pair String DocRow) why: String -> RowFinding
-  (RowFinding :kind kind :sym (pairSecond lr).symbol :why why :ledger (pairFirst lr))
+  (RowFinding :kind kind :sym (pairSecond lr).symbol :why why :ledger (pairFirst lr) :text (pairSecond lr).text)
 
 fn rowLocal facts: (Map String SrcFacts) lr: (Pair String DocRow) -> (List RowFinding)
   (let [(sym (pairSecond lr).symbol) (path (symPath sym)) (name (symName sym))
@@ -628,7 +629,7 @@ fn addedRows diff: String -> (Result (List (Pair String DocRow)) String)
     (pairSecond r))
 
 fn findingKey f: RowFinding -> String
-  (str f.kind " " f.sym " " f.why)
+  (str f.kind " " f.sym " " f.why " " f.text)
 
 fn dedupe fs: (List RowFinding) -> (List RowFinding)
   (pairFirst (fold (fn [(acc (Pair (List RowFinding) (Map String Bool))) (f RowFinding)] -> (Pair (List RowFinding) (Map String Bool))
@@ -648,6 +649,59 @@ fn ! rowFindings! root: String added: (List (Pair String DocRow)) touched: (List
         (used (if (listEmpty? clean) (mapEmpty) (crossUsed! root (map (fn [(lr (Pair String DocRow))] -> String (pairSecond lr).symbol) clean))))]
     (listAppend local (map (fn [(lr (Pair String DocRow))] -> RowFinding (finding "refused" lr "notPublic"))
                            (filter (fn [(lr (Pair String DocRow))] -> Bool (not (mapHas? used (pairSecond lr).symbol))) clean))))
+
+; (:m :ref DOC-RULE-AUTODROP :do "the added (:doc) rows of a -U0 diff read line by line: the rows that parse with their ledger, and the (ledger, line) pairs that do not, so one malformed added row never hides the others")
+fn looseAdded diff: String -> (Pair (List (Pair String DocRow)) (List (Pair String String)))
+  (let [(r (fold (fn [(acc (Pair String (Pair (List (Pair String DocRow)) (List (Pair String String))))) (l String)] -> (Pair String (Pair (List (Pair String DocRow)) (List (Pair String String))))
+                   (let [(file (pairFirst acc)) (good (pairFirst (pairSecond acc))) (bad (pairSecond (pairSecond acc))) (p (diffPathOf l))]
+                     (cond
+                       ((not (stringEmpty? p)) (pair p (pairSecond acc)))
+                       ((stringStartsWith? l "+(:doc ")
+                         (let [(line (sliceOr l 1 (stringLength l)))]
+                           (match (parseLedgerText line)
+                             ((err _) (pair file (pair good (listAppend bad (list (pair file line))))))
+                             ((ok rows) (pair file (pair (listAppend good (map (fn [(x DocRow)] -> (Pair String DocRow) (pair file x)) rows)) bad))))))
+                       (else acc))))
+                 (pair "" (pair (list) (list))) (stringLines diff)))]
+    (pairSecond r))
+
+fn rowKey sym: String text: String -> String
+  (str sym "\t" text)
+
+; (:m :ref DOC-RULE-AUTODROP :do "what rule C refuses of a diff, by the computation of rowFindings!: the refused and stale findings of the rows it adds and of the rows of the source files it touches, and the added lines that do not parse; nothing else is ever dropped")
+fn ! autodropPlan! root: String diff: String touched: (List String) -> (Pair (List RowFinding) (List (Pair String String)))
+  (let [(loose (looseAdded diff))]
+    (pair (filter (fn [(f RowFinding)] -> Bool (or (= f.kind "refused") (= f.kind "stale"))) (rowFindings! root (pairFirst loose) touched))
+          (pairSecond loose)))
+
+; (:m :ref DOC-RULE-AUTODROP :do "a ledger text without the (:doc) rows named by a (symbol, text) key and without the exact lines in bad; every other line is kept as it is; returns the new text and one label per row removed (its symbol, or unparsed)")
+fn dropFromText text: String keys: (List String) bad: (List String) -> (Pair String (List String))
+  (let [(r (fold (fn [(acc (Pair (List String) (List String))) (l String)] -> (Pair (List String) (List String))
+                   (if (not (stringStartsWith? l "(:doc ")) (pair (listAppend (pairFirst acc) (list l)) (pairSecond acc))
+                     (if (listContains? bad l) (pair (pairFirst acc) (listAppend (pairSecond acc) (list "unparsed")))
+                       (match (parseLedgerText l)
+                         ((ok rows) (let [(hit (filter (fn [(x DocRow)] -> Bool (listContains? keys (rowKey x.symbol x.text))) rows))]
+                                      (if (listEmpty? hit) (pair (listAppend (pairFirst acc) (list l)) (pairSecond acc))
+                                        (pair (pairFirst acc) (listAppend (pairSecond acc) (map (fn [(x DocRow)] -> String x.symbol) hit))))))
+                         ((err _) (pair (listAppend (pairFirst acc) (list l)) (pairSecond acc)))))))
+                 (pair (list) (list)) (stringSplit text "\n")))]
+    (pair (stringJoin (pairFirst r) "\n") (pairSecond r)))
+
+fn dropRowsText text: String syms: (List String) -> String
+  (pairFirst (dropFromText text syms (list)))
+
+; (:m :ref DOC-RULE-AUTODROP :do "removes the rows of the findings (by symbol and text) and the unparsed added lines from their ledgers under root; returns the changed ledger paths and one label per row removed; a ledger that cannot be read or written is left as it is")
+fn ! dropRows! root: String fs: (List RowFinding) bad: (List (Pair String String)) -> (Pair (List String) (List String))
+  (let [(ledgers (uniqueStrings (listAppend (map (fn [(f RowFinding)] -> String f.ledger) fs) (map pairFirst bad))))]
+    (fold (fn [(acc (Pair (List String) (List String))) (lp String)] -> (Pair (List String) (List String))
+            (match (fileReadString (str root "/" lp))
+              ((err _) acc)
+              ((ok text) (let [(keys (map (fn [(f RowFinding)] -> String (rowKey f.sym f.text)) (filter (fn [(f RowFinding)] -> Bool (= f.ledger lp)) fs)))
+                               (lines (map pairSecond (filter (fn [(b (Pair String String))] -> Bool (= (pairFirst b) lp)) bad)))
+                               (dropped (dropFromText text keys lines))]
+                           (if (or (listEmpty? (pairSecond dropped)) (not (ok? (fileWrite (str root "/" lp) (pairFirst dropped))))) acc
+                             (pair (listAppend (pairFirst acc) (list lp)) (listAppend (pairSecond acc) (pairSecond dropped))))))))
+          (pair (list) (list)) ledgers))
 
 fn findingLine f: RowFinding -> String
   (str "(:" f.kind " :symbol \"" (escRow f.sym) "\" :why " f.why " :ledger \"" f.ledger "\")")
