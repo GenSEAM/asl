@@ -1023,6 +1023,24 @@ fn breakerSkip st: srch/HubState prov: j/Json alias: j/Json name: j/Json -> (Pai
               (srch/hubNote (srch/hubStderr st1 (str "[Gateway Breaker] skip " (pt/pyStr prov) " for " secs "s\n")) prov alias (str "breaker " secs "s") (j/jnull))))
       (pair (none) st1)))
 
+fn badAliasKey alias: j/Json -> String
+  (str "alias400:" (pt/pyStr alias))
+
+; (:m :ref RESEARCH-KEEP-FACTS :do "an alias that answered HTTP 400 is not called again for the next 10 minutes, so later sub-questions of one run skip it; the mark lives in the hub breaker map under its own key")
+fn markBadAlias st: srch/HubState alias: j/Json e: pt/PyErr -> srch/HubState
+  (if (stringStartsWith? (errWord e) "HTTP 400")
+    (srch/hubWithBreaker st (mapSet st.breakerUntil (badAliasKey alias) (+ st.nowMs 600000)) st.count503)
+    st)
+
+fn badAliasRow st: srch/HubState alias: j/Json name: j/Json -> (Option j/Json)
+  (match (mapGet st.breakerUntil (badAliasKey alias))
+    ((some until) (if (> until st.nowMs) (some (triedRow alias name "skipped: HTTP 400 earlier in this run")) (none)))
+    ((none) (none)))
+
+; (:m :ref RESEARCH-KEEP-FACTS :do "a fact kept without an audit is stamped :verificationStatus unverified and :audit unaudited, so no reader takes it for corroborated")
+fn unaudited facts: (List j/Json) -> (List j/Json)
+  (map (fn [(f j/Json)] -> j/Json (pt/jset (pt/jset f "verificationStatus" (j/jstr "unverified")) "audit" (j/jstr "unaudited"))) facts)
+
 (schema Attempt (:f tried (List j/Json)) (:f won (Option j/Json)))
 
 ; (:m :ref RESEARCH-DEPTH :do "what one stage may take: its own timeout, cut to the wall that is left, never below one second")
@@ -1056,7 +1074,9 @@ fn ! chainUntil! entries: (List j/Json) st: srch/HubState tried: (List j/Json) p
             (match (researchEntryProvider entry up)
               ((err e) (pair (err e) st))
               ((ok prov)
-                (let [(sk (breakerSkip st prov (pairFirst lab) (pairSecond lab)))]
+                (let [(sk (match (badAliasRow st (pairFirst lab) (pairSecond lab))
+                            ((some row) (pair (some row) st))
+                            ((none) (breakerSkip st prov (pairFirst lab) (pairSecond lab)))))]
                   (match (pairFirst sk)
                     ((some row) (chainUntil! rest (pairSecond sk) (listAppend tried (list row)) prompt up dispatch finish leftMs))
                     ((none)
@@ -1065,7 +1085,7 @@ fn ! chainUntil! entries: (List j/Json) st: srch/HubState tried: (List j/Json) p
                           (pair (ok (Attempt :tried (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) "no wall left"))) :won (none))) (pairSecond sk))
                           (let [(call (researchCall! (pairSecond sk) (stageEntry entry left) prompt up dispatch)) (st2 (pairSecond call))]
                             (match (pairFirst call)
-                              ((err e) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish leftMs))
+                              ((err e) (chainUntil! rest (markBadAlias st2 (pairFirst lab) e) (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) (errWord e)))) prompt up dispatch finish leftMs))
                               ((ok text)
                                 (match (finish text)
                                   ((err why) (chainUntil! rest st2 (listAppend tried (list (triedRow (pairFirst lab) (pairSecond lab) why))) prompt up dispatch finish leftMs))
@@ -1277,7 +1297,7 @@ fn ! auditStage! st: srch/HubState rep: j/Json props: j/Json evidence: (List j/J
               (rep1 (pt/jset rep "auditTried" atried))]
           (match (pt/jget aud "verdicts")
             ((none)
-              (done (pt/jset rep1 "facts" (j/jarr (list))) "unverified"
+              (done (pt/jset rep1 "facts" (j/jarr (unaudited passed))) "unverified"
                     (str "auditor unavailable after " (stringFromInt64 (listLength (listOf atried))) " model(s); " (stringFromInt64 (listLength passed)) " fact(s) not audited") st1))
             ((some verdicts)
               (let [(rep2 (pt/jset rep1 "auditor" (j/jobj (list (pair "alias" (optionOr (pt/jget aud "alias") (j/jnull))) (pair "model" (optionOr (pt/jget aud "model") (j/jnull)))))))
@@ -1864,7 +1884,7 @@ fn ! planAudit! ps: PlanState rep: j/Json mode: j/Json origin: String subs: (Lis
         (let [(rep1 (pt/jset rep "auditTried" (optionOr (pt/jget aud "tried") (j/jarr (list)))))]
           (match (pt/jget aud "verdicts")
             ((none)
-              (let [(r (planReport rep1 mode origin subs ps1 (list) rejected evidence))]
+              (let [(r (planReport rep1 mode origin subs ps1 (unaudited facts) rejected evidence))]
                 (pair (ok (pt/jset (pt/jset r "status" (j/jstr "unverified")) "reason"
                                    (j/jstr (str "auditor unavailable after " (stringFromInt64 (listLength (listOf (optionOr (pt/jget aud "tried") (j/jarr (list)))))) " model(s); " (stringFromInt64 (listLength facts)) " fact(s) not audited"))))
                       ps1.st)))
@@ -1902,7 +1922,7 @@ fn ! executeResearchPlan! st: srch/HubState topic: String mode: j/Json entries: 
                       (cond
                         ((or (listEmpty? facts) (listEmpty? audits)) (pair (ok (planReport rep0 mode origin subs ps2 facts rejected evidence)) ps2.st))
                         ((= (budgetStop ps2 mode false 0 startMs clock) "wall")
-                          (pair (ok (pt/jset (pt/jset (planReport rep0 mode origin subs (noteStop ps2 "wall") facts rejected evidence) "status" (j/jstr "unverified")) "reason" (j/jstr "the wall budget was spent before the audit stage; the facts are not audited"))) ps2.st))
+                          (pair (ok (pt/jset (pt/jset (planReport rep0 mode origin subs (noteStop ps2 "wall") (unaudited facts) rejected evidence) "status" (j/jstr "unverified")) "reason" (j/jstr "the wall budget was spent before the audit stage; the facts are not audited"))) ps2.st))
                         (else (planAudit! ps2 rep0 mode origin subs facts rejected evidence audits up dispatch (fn [(u Int64)] -> Int64 (wallLeftMs mode startMs clock)))))))))))))))
 
 fn planLines rep: j/Json -> (List String)
