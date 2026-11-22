@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
@@ -1909,6 +1909,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
             (flying (listLength (filter slotHolder? (readCUnits! ctx.dir))))
             (_ (offerBacklog! ctx.dir (/ (nowNs) 1000000)))
             (_ (bpNote! ctx (readCUnits! ctx.dir)))
+            (_ (wipNote! ctx (readCUnits! ctx.dir)))
             (_ (let [(flow (flowRowOf ctx.dir))] (if (flowOn? flow) (flowStep! ctx (ownsFreeFirst! ctx (mergeFair! ctx units)) flow) (stepAll! ctx (ownsFreeFirst! ctx (mergeFair! ctx units)) (- (tokensOf) flying)))))
             (_ (rootRelease! ctx units))
             (_ (dwellNote! ctx))
@@ -2891,10 +2892,11 @@ fn ! readyWhy! ctx: Ctx cus: (List CUnit) c: CUnit cap: Int64 commit: Bool -> St
       ((draining? ctx.dir) "draining")
       ((providerWaiting? ctx.dir c.id (/ (nowNs) 1000000)) "provider")
       ((mergeHeld? (bpMaxOf (bpRowOf ctx.dir)) cus) "merge")
+      ((and (not (fixOwed? c)) (wipHeld? (trainMergeWipOf (trainRowOf ctx.dir)) cus)) "wip")
       (else (writerWhy! ctx cus c.id commit))))
 
 fn holdNames -> (List String)
-  (list "admit" "cap" "lane" "draining" "provider" "merge" "memory" "token" "warm")
+  (list "admit" "cap" "lane" "draining" "provider" "merge" "wip" "memory" "token" "warm")
 
 ; (:m :ref WRITER-ADMIT-DECOUPLE :do "the ready units of the store in tick order, each judged by readyWhy! as the claim judges it: an admitted one takes a slot, becomes writing for the lane count, and after it the rest wait warm when no warm row existed; returns (name count) for holdNames, admit counting the units the conditions let through (the claim may still refuse one as impossible)")
 fn ! readyHoldCounts! ctx: Ctx -> (List (Pair String Int64))
@@ -3015,6 +3017,37 @@ fn ! bpNote! ctx: Ctx cus: (List CUnit) -> String
                                   (_ (fileAppend (journalPath ctx.dir) (str "(:bpHeld :merging " (n (mergingCount cus)) " :max " (n max) " :at " at ")\n")))] "held"))
       ((and (not held) was) (let [(_ (pathRemove (bpHeldPath ctx.dir)))
                                   (_ (fileAppend (journalPath ctx.dir) (str "(:bpReleased :merging " (n (mergingCount cus)) " :max " (n max) " :at " at ")\n")))] "released"))
+      (else "")))
+
+; (:m :ref MERGE-GROUPING :do "(:train :batchAdditive N): how many additive units one pack may carry (1..64); a valid row without the key gives 6 (12 once the disqualifiers are proven on node2) when :batch allows batching at all, and 1 otherwise; no row or a rejected one gives 1")
+fn trainBatchAdditiveOf row: String shared: Int64 -> Int64
+  (if (or (stringEmpty? row) (not (listEmpty? (trainErrors row)))) 1
+    (match (stringToInt64 (sp/tokAfter row ":batchAdditive"))
+      ((some v) v)
+      ((none) (if (> shared 1) 6 1))))
+
+; (:m :ref MERGE-GROUPING :do "(:train :mergeWip N): the conductor claims no write unit while N or more units are merging; 0 is off, only an explicit key turns it on, no key, no row or a rejected row is off; owed fix rounds (fixOwed?) are never held, only new writers (hold name wip)")
+fn trainMergeWipOf row: String -> Int64
+  (if (or (stringEmpty? row) (not (listEmpty? (trainErrors row)))) 0
+    (match (stringToInt64 (sp/tokAfter row ":mergeWip"))
+      ((some v) v)
+      ((none) 0)))
+
+fn wipHeld? limit: Int64 cus: (List CUnit) -> Bool
+  (and (> limit 0) (>= (mergingCount cus) limit))
+
+fn wipHeldPath dir: String -> String
+  (str dir "/wipHeld.asn")
+
+; (:m :ref MERGE-GROUPING :do "one (:wipHold :merging M :limit N :at T) journal row when the WIP hold starts, a marker file in the store remembering it so a tick that changes nothing writes nothing; the marker goes when the hold ends; returns held, released or empty")
+fn ! wipNote! ctx: Ctx cus: (List CUnit) -> String
+  (let [(limit (trainMergeWipOf (trainRowOf ctx.dir)))
+        (held (wipHeld? limit cus))
+        (was (fileExists? (wipHeldPath ctx.dir)))]
+    (cond
+      ((and held (not was)) (let [(_ (fileWrite (wipHeldPath ctx.dir) (str "(:wipHold :merging " (n (mergingCount cus)) " :limit " (n limit) ")\n")))
+                                  (_ (fileAppend (journalPath ctx.dir) (str "(:wipHold :merging " (n (mergingCount cus)) " :limit " (n limit) " :at " (n (nowMs)) ")\n")))] "held"))
+      ((and (not held) was) (let [(_ (pathRemove (wipHeldPath ctx.dir)))] "released"))
       (else "")))
 
 ; (:m :ref BP-VISIBLE :do "the ladder rows whose keys and ranges the conductor checks at start and in conductor check, as the lane problems are: a (:backpressure) row bpErrors rejects and a (:train) row trainErrors rejects each name their problems; no row is no problem")
@@ -3329,16 +3362,16 @@ fn trainRowOf dir: String -> String
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the row carries :jobs, :batch or both; a key it names must hold a whole number in range (:jobs 1..64, :batch 1..16), a row naming neither is a problem")
 fn trainErrors row: String -> (List String)
   (let [(keys (filter (fn [(t String)] -> Bool (stringStartsWith? t ":")) (stringSplit row " ")))
-        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":train" ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes") k))) keys))
+        (bad (filter (fn [(k String)] -> Bool (not (listContains? (list ":train" ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes" ":batchAdditive" ":mergeWip") k))) keys))
         (range (fn [(k String) (lo Int64) (hi Int64)] -> (List String)
                  (if (not (listContains? keys k)) (list)
                    (match (stringToInt64 (sp/tokAfter row k))
                      ((none) (list (str k " missing or not a whole number")))
                      ((some v) (if (or (< v lo) (> v hi)) (list (str k " " (n v) " outside " (n lo) ".." (n hi))) (list)))))))]
     (listAppend (map (fn [(k String)] -> String (str "unknown key " k)) bad)
-                (if (listAny? (fn [(k String)] -> Bool (listContains? keys k)) (list ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes"))
-                  (listAppend (listAppend (range ":jobs" 1 64) (listAppend (range ":lanes" 1 4) (range ":batch" 1 16)))
-                              (listAppend (range ":limitS" 60 21600) (listAppend (range ":limitFactorPct" 100 1000) (listAppend (range ":limitFloorS" 60 21600) (range ":writerNice" 1 19)))))
+                (if (listAny? (fn [(k String)] -> Bool (listContains? keys k)) (list ":jobs" ":batch" ":limitS" ":limitFactorPct" ":limitFloorS" ":writerNice" ":lanes" ":batchAdditive" ":mergeWip"))
+                  (listAppend (listAppend (range ":batchAdditive" 1 64) (range ":mergeWip" 0 10000)) (listAppend (listAppend (range ":jobs" 1 64) (listAppend (range ":lanes" 1 4) (range ":batch" 1 16)))
+                              (listAppend (range ":limitS" 60 21600) (listAppend (range ":limitFactorPct" 100 1000) (listAppend (range ":limitFloorS" 60 21600) (range ":writerNice" 1 19))))))
                   (list ":jobs missing or not a whole number"))))
 
 ; (:m :ref TRAIN-PRIORITY-CPU :do "(:train :writerNice K) starts every write stage child under nice -n K: the writer's tree, its gates included (the fleet pool adds its own +15 on top, capped at 19), then yields the CPU to the merge train, whose stage child keeps the conductor's niceness (node2 2026-11-16: a 100-250 s train took 888 s beside 4 writers); no key, a row trainErrors rejects or any other stage leaves the argv as it is")
@@ -3407,24 +3440,107 @@ fn ! branchFiles! repo: String u: st/Task c: CUnit -> (Option (List String))
   (let [(d (fr/runOneLimited (fr/job (list "git" "-C" repo "diff" "--name-only" (str (baseRef (resolved! repo u)) "..." c.branch)) repo (fr/childEnv (list))) (fr/limits 60 0)))]
     (if (!= d.exit 0) (none) (some (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines d.out))))))
 
-; (:m :ref TRAIN-BATCH-BRANCHES :do "before a merge child starts, the leader's batch file names the passengers batchPick chooses among the batchable units of the store; with a batch of 1, a leader that is not batchable itself, no source repo or no passenger, no file is left and the child merges the leader alone as before")
+; (:m :ref MERGE-GROUPING :do "the package directory a file lives in, asl/packages/NAME, empty for a file outside a package directory")
+fn pkgDirOf f: String -> String
+  (let [(parts (stringSplit f "/"))]
+    (if (and (>= (listLength parts) 4) (and (= (optionOr (listGet parts 0) "") "asl") (= (optionOr (listGet parts 1) "") "packages")))
+      (str "asl/packages/" (optionOr (listGet parts 2) ""))
+      ""))
+
+; (:m :ref MERGE-GROUPING :do "an additive unit: every file it changes is a card, missing.asn or grades.asn file or lies under a package directory that is not in existing (the package dirs present on the unit's base), and at least one file is a package file; a file of an existing package, or any file outside a package, makes the unit shared")
+fn rowOnlyShared? f: String -> Bool
+  (or (stringStartsWith? f (st/cardsDir)) (or (= f (st/missingFile)) (= f ".asl/mem/grades.asn")))
+
+fn additiveFiles? files: (List String) existing: (List String) -> Bool
+  (let [(own (filter (fn [(f String)] -> Bool (not (rowOnlyShared? f))) files))]
+    (and (not (listEmpty? own))
+         (listAll? (fn [(f String)] -> Bool (let [(p (pkgDirOf f))] (and (not (stringEmpty? p)) (not (listContains? existing p))))) own)))
+
+; (:m :ref MERGE-GROUPING :do "the pack of one leader, dependencies before their dependents; two additive units of one package never share a pack: only candidates of the leader's class (additive with additive, shared with shared) join, through batchPick with that class's size; chain merge: a candidate whose unmerged deps (unmergedOf) all lie in the pack joins it, so rounds repeat until the pack stops growing and a final pass drops any member whose deps are not in the pack")
+fn batchGroup k: Int64 leaderId: String leaderFiles: (List String) leaderAdd: Bool cands: (List (Pair String (Option (List String)))) addOf: (fn [String] -> Bool) unmergedOf: (fn [String] -> (List String)) -> (List String)
+  (let [(classed (filter (fn [(cd (Pair String (Option (List String))))] -> Bool (= (addOf (pairFirst cd)) leaderAdd)) cands))
+        (pkgsOf (fn [(fs (List String))] -> (List String) (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map pkgDirOf fs))))
+        (spread (fn [(acc (Pair (List (Pair String (Option (List String)))) (List String))) (cd (Pair String (Option (List String))))] -> (Pair (List (Pair String (Option (List String)))) (List String))
+                  (let [(ps (pkgsOf (optionOr (pairSecond cd) (list))))]
+                    (if (listAny? (fn [(p String)] -> Bool (listContains? (pairSecond acc) p)) ps) acc
+                      (pair (listAppend (pairFirst acc) (list cd)) (listAppend (pairSecond acc) ps))))))
+        (same (if leaderAdd (pairFirst (fold spread (pair (list) (pkgsOf leaderFiles)) classed)) classed))
+        (inPack (fn [(picked (List String)) (id String)] -> Bool
+                  (listAll? (fn [(d String)] -> Bool (or (= d leaderId) (listContains? picked d))) (unmergedOf id))))
+        (round (fn [(picked (List String))] -> (List String)
+                 (batchPick k leaderFiles (filter (fn [(cd (Pair String (Option (List String))))] -> Bool (inPack picked (pairFirst cd))) same))))
+        (close (fn [(picked (List String))] -> (List String)
+                 (filter (fn [(id String)] -> Bool (inPack picked id)) picked)))
+        (r (close (close (close (round (round (round (round (list)))))))))
+        (pass (fn [(acc (List String))] -> (List String)
+                (listAppend acc (filter (fn [(id String)] -> Bool (and (not (listContains? acc id)) (inPack acc id))) r))))]
+    (pass (pass (pass (pass (pass (list)))))))
+
+fn ! pkgsOnBase! repo: String ref: String files: (List String) -> (List String)
+  (filter (fn [(p String)] -> Bool (= (gitOut repo (list "rev-parse" "--verify" "--quiet" (str ref ":" p))).exit 0))
+          (uniq (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map pkgDirOf files))))
+
+fn ! mainNames! repo: String pattern: String glob: String prefix: String -> (List String)
+  (map (fn [(l String)] -> String (stringReplace (optionOr (listHead (stringSplit (stringTrim (stringReplace l prefix "")) " ")) "") ")" ""))
+       (filter (fn [(l String)] -> Bool (stringStartsWith? l prefix)) (stringLines (gitOut repo (list "grep" "-h" "-E" pattern "main" "--" glob)).out)))
+
+fn ! branchText! repo: String branch: String path: String -> String
+  (let [(d (gitOut repo (list "show" (str branch ":" path))))] (if (= d.exit 0) d.out ""))
+
+; (:m :ref MERGE-GROUPING :do "an additive unit also may not shadow what main has: the new package's name is no directory of . or asl/ on main, its manifest :package (and its dir name) is no package of main, and none of its (module X ..) heads is declared on main (a second declaration makes ERR_AMBIGUOUS_MODULE fail the importers); the package dirs are looked up on main, the ref the train merges into, not on the unit's base")
+fn ! additive! repo: String branch: String files: (List String) mods: (List String) pkgNames: (List String) -> Bool
+  (and (additiveFiles? files (pkgsOnBase! repo "main" files))
+    (let [(dirs (uniq (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (map pkgDirOf files))))
+          (clash (fn [(d String)] -> Bool
+                   (let [(nm (optionOr (listGet (stringSplit d "/") 2) ""))
+                         (tree (gitOut repo (list "ls-tree" "--name-only" "main" "--" nm (str "asl/" nm))))
+                         (man (map (fn [(l String)] -> String (stringReplace (optionOr (listHead (stringSplit (stringTrim (stringReplace l "(:package " "")) " ")) "") ")" ""))
+                                   (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:package ")) (stringLines (branchText! repo branch (str d "/manifest.asn"))))))
+                         (declared (listFlatMap (fn [(f String)] -> (List String)
+                                                  (map (fn [(l String)] -> String (optionOr (listHead (stringSplit (stringTrim (stringReplace l "(module " "")) " ")) ""))
+                                                       (filter (fn [(l String)] -> Bool (stringStartsWith? l "(module ")) (stringLines (branchText! repo branch f)))))
+                                                (filter (fn [(f String)] -> Bool (and (stringStartsWith? f (str d "/")) (stringEndsWith? f ".asl"))) files)))]
+                     (or (not (stringEmpty? (stringTrim tree.out)))
+                       (or (listContains? pkgNames nm)
+                         (or (listAny? (fn [(m String)] -> Bool (listContains? pkgNames m)) man)
+                           (listAny? (fn [(m String)] -> Bool (listContains? mods m)) declared)))))))]
+      (not (listAny? clash dirs))))
+
+; (:m :ref MERGE-GROUPING :do "batchPlan! sizes the pack by the leader's risk class: an additive leader (additive!) takes up to (:train :batchAdditive N) additive units, any other leader up to :batch shared ones, never mixed; units whose unmerged deps are all in the pack ride too (batchGroup)")
 fn ! batchPlan! ctx: Ctx u: st/Task c: CUnit -> (List String)
   (let [(_ (lanesIgnored! ctx.dir))
-        (k (trainBatchOf (trainRowOf ctx.dir)))
+        (row (trainRowOf ctx.dir))
+        (kShared (trainBatchOf row))
+        (kAdd (trainBatchAdditiveOf row kShared))
         (repo (stringTrim (readOr (repoPath ctx.dir))))
         (_ (pathRemove (batchPath ctx.dir c.id)))
         (_ (pathRemove (passPath ctx.dir c.id)))]
-    (if (or (<= k 1) (or (stringEmpty? repo) (not (batchableNow! ctx.dir (with c :launched 0))))) (list)
+    (if (or (and (<= kShared 1) (<= kAdd 1)) (or (stringEmpty? repo) (not (batchableNow! ctx.dir (with c :launched 0))))) (list)
       (match (branchFiles! repo u c)
         ((none) (list))
         ((some mine)
-          (let [(units (resultOr (st/readUnits! ctx.dir) (list)))
+          (let [(mods (mainNames! repo "^\\(module " "*.asl" "(module "))
+                (pkgNames (mainNames! repo "^\\(:package " "*manifest.asn" "(:package "))
+                (leaderAdd (additive! repo c.branch mine mods pkgNames))
+                (k (if leaderAdd kAdd kShared))
+                (units (resultOr (st/readUnits! ctx.dir) (list)))
+                (cus (readCUnits! ctx.dir))
                 (cands (map (fn [(x CUnit)] -> (Pair String (Option (List String)))
                               (match (listFind (fn [(t st/Task)] -> Bool (= t.id x.id)) units)
                                 ((none) (pair x.id (none)))
                                 ((some t) (pair x.id (branchFiles! repo t x)))))
-                            (filter (fn [(x CUnit)] -> Bool (and (!= x.id c.id) (batchableNow! ctx.dir x))) (readCUnits! ctx.dir))))
-                (picked (batchPick k mine cands))
+                            (filter (fn [(x CUnit)] -> Bool (and (!= x.id c.id) (batchableNow! ctx.dir x))) cus)))
+                (addIds (map (fn [(cd (Pair String (Option (List String))))] -> String (pairFirst cd))
+                             (filter (fn [(cd (Pair String (Option (List String))))] -> Bool
+                                       (match (pairSecond cd)
+                                         ((none) false)
+                                         ((some fs) (additive! repo (match (listFind (fn [(x CUnit)] -> Bool (= x.id (pairFirst cd))) cus) ((some x) x.branch) ((none) "")) fs mods pkgNames))))
+                                     cands)))
+                (unmergedOf (fn [(id String)] -> (List String)
+                              (match (listFind (fn [(t st/Task)] -> Bool (= t.id id)) units)
+                                ((none) (list))
+                                ((some t) (filter (fn [(d String)] -> Bool (match (cuOf cus d) ((some x) (!= x.st "merged")) ((none) true))) t.after)))))
+                (picked (if (<= k 1) (list) (batchGroup k c.id mine leaderAdd cands (fn [(id String)] -> Bool (listContains? addIds id)) unmergedOf)))
                 (_ (if (listEmpty? picked) false (ok? (fileWrite (batchPath ctx.dir c.id) (str "(:batch :leader " (st/q c.id) " :units (" (stringJoin (map st/q picked) " ") "))\n")))))]
             picked)))))
 
