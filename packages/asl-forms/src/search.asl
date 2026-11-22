@@ -1030,36 +1030,61 @@ fn confirmCands! ws: String cands: (List Cand) limit: Int64 st: Confirm -> Confi
                           (with st :defs (listAppend st.defs (list c)) :index index)
                           (with st :rejected (listAppend st.rejected (list (Hit :rel c.rel :no c.no :line c.line))) :index index)))))))
 
-fn lineStarts b: Bytes n: Int64 i: Int64 want: Int64 acc: (List Int64) count: Int64 -> (List Int64)
-  (cond
-    ((> count want) (listReverse acc))
-    ((>= i n) (listReverse acc))
-    ((= (bytesGet b i) 10) (lineStarts b n (+ i 1) want (cons (+ i 1) acc) (+ count 1)))
-    (else (lineStarts b n (+ i 1) want acc count)))
+fn hitDelim? c: Int64 -> Bool
+  (listContains? (list 32 9 10 13 40 41 91 93 123 125 34 39 44 59 96) c)
 
-fn countAnchor t: String b: Bytes anchor: String pos: Int64 i: Int64 k: Int64 -> Int64
-  (if (or (= i -1) (> i pos)) k (countAnchor t b anchor pos (k/findFrom t b anchor (+ i 1)) (+ k 1)))
+fn hitCut? b: Bytes n: Int64 i: Int64 -> Bool
+  (and (> i 0) (< i n) (not (hitDelim? (bytesGet b (- i 1)))) (not (hitDelim? (bytesGet b i))))
 
-fn occurrence! ws: String h: Hit anchor: String -> Int64
-  (match (readText! (k/joinPath ws h.rel))
-    ((none) 1)
-    ((some t)
-      (let [(b (stringToBytes t))
-            (starts (lineStarts b (stringLength t) 0 h.no (list 0) 1))
-            (pos (if (< (- h.no 1) (listLength starts)) (+ (optionOr (listGet starts (- h.no 1)) 0) (pyLstripLen h.line)) 0))]
-        (max 1 (countAnchor t b anchor pos (k/findFrom t b anchor 0) 0)))))
+fn hitTokStart b: Bytes i: Int64 -> Int64
+  (if (and (> i 0) (not (hitDelim? (bytesGet b (- i 1))))) (hitTokStart b (- i 1)) i)
 
-fn cellOf! ws: String h: Hit -> String
-  (let [(excerpt (utf8Take (pyStrip h.line) 60)) (n (occurrence! ws h excerpt)) (cell (quoted excerpt))]
-    (if (> n 1) (str "(" cell " " (stringFromInt64 n) ")") cell))
+fn hitTokEnd b: Bytes n: Int64 i: Int64 -> Int64
+  (if (and (< i n) (not (hitDelim? (bytesGet b i)))) (hitTokEnd b n (+ i 1)) i)
 
-fn groupCells! ws: String hits: (List Hit) order: (List String) cells: (Map String (List String)) -> (List String)
-  (match (listHead hits)
-    ((none) (map (fn [(rel String)] -> String (str (quoted rel) " (" (stringJoin (optionOr (mapGet cells rel) (list)) " ") ")")) (listReverse order)))
-    ((some h)
-      (let [(rel h.rel) (have (mapGet cells rel))]
-        (groupCells! ws (optionOr (listTail hits) (list)) (if (some? have) order (cons rel order))
-                    (mapSet cells rel (listAppend (optionOr have (list)) (list (cellOf! ws h))))))))
+fn hitSnapStart b: Bytes n: Int64 i: Int64 lim: Int64 -> Int64
+  (if (and (< i lim) (hitCut? b n i)) (hitSnapStart b n (+ i 1) lim) i)
+
+fn hitSnapEnd b: Bytes n: Int64 j: Int64 lim: Int64 -> Int64
+  (if (and (> j lim) (hitCut? b n j)) (hitSnapEnd b n (- j 1) lim) j)
+
+fn hitUtf8Fwd b: Bytes n: Int64 i: Int64 -> Int64
+  (if (and (< i n) (contByte? (bytesGet b i))) (hitUtf8Fwd b n (+ i 1)) i)
+
+fn hitUtf8Back b: Bytes n: Int64 j: Int64 -> Int64
+  (if (and (> j 0) (< j n) (contByte? (bytesGet b j))) (hitUtf8Back b n (- j 1)) j)
+
+fn hitTokenCap -> Int64
+  160
+
+fn hitExcerpt line: String low: String -> String
+  (let [(s (pyStrip line)) (n (stringLength s)) (b (stringToBytes s)) (ls (stringLower s))
+        (at (if (= (stringLength ls) n) (optionOr (stringIndexOf ls low) 0) 0))
+        (ms0 (hitTokStart b at))
+        (me0 (hitTokEnd b n (min n (+ at (stringLength low)))))
+        (big (> (- me0 ms0) (hitTokenCap)))
+        (mlen (min (hitTokenCap) (stringLength low)))
+        (ms (if big (hitUtf8Fwd b n (max ms0 (- at (/ (- (hitTokenCap) mlen) 2)))) ms0))
+        (me (if big (max (min n (+ at mlen)) (hitUtf8Back b n (min me0 (+ ms (hitTokenCap))))) me0))
+        (span (- me ms))
+        (st0 (max 0 (- ms (/ (max 0 (- 100 span)) 2))))
+        (en0 (min n (+ st0 (max 100 span))))
+        (st (hitSnapStart b n st0 ms))
+        (en (hitSnapEnd b n en0 me))]
+    (str (if (and big (> ms ms0)) "..." "") (slice s st en) (if (and big (< me me0)) "..." "")))
+
+fn enclosingDef idx: (List (Pair Int64 String)) no: Int64 -> String
+  (pairSecond (fold (fn [(best (Pair Int64 String)) (p (Pair Int64 String))] -> (Pair Int64 String)
+                      (if (and (<= (pairFirst p) no) (>= (pairFirst p) (pairFirst best))) p best))
+                    (pair 0 "") idx))
+
+fn hitForm! ws: String low: String h: Hit -> String
+  (let [(path (k/joinPath ws h.rel))
+        (def (match (readText! path) ((some t) (enclosingDef (defLines t (languageOf! path)) h.no)) ((none) "")))]
+    (str "(:at " (quoted (str h.rel ":" (stringFromInt64 h.no))) (if (stringEmpty? def) "" (str " :after " (quoted def))) " :text " (quoted (hitExcerpt h.line low)) ")"))
+
+fn groupCells! ws: String low: String hits: (List Hit) -> (List String)
+  (map (fn [(h Hit)] -> String (hitForm! ws low h)) hits)
 
 fn countPairs sp: Split -> (List (Pair String Int64))
   (filter (fn [(p (Pair String Int64))] -> Bool (> (pairSecond p) 0))
@@ -1085,13 +1110,13 @@ fn workspaceQuery! ws: String q: String limit: Int64 scope: String -> QueryResul
             (texts (listAppend conf.rejected plain))
             (shownDefs (map (fn [(c Cand)] -> String (quoted (str c.rel "#" c.name))) (listTake conf.defs limit)))
             (shownTexts (listTake texts (max 0 (- limit (listLength shownDefs)))))
-            (hits (groupCells! ws shownTexts (list) (mapEmpty)))
+            (hits (groupCells! ws low shownTexts))
             (more0 (+ (max 0 (- (listLength conf.defs) (listLength shownDefs))) (max 0 (- (listLength texts) (listLength shownTexts)))))
             (kinds (list (pair "comment" sp.comment) (pair "doc" sp.doc) (pair "memory" sp.memory) (pair "data" sp.data)))
             (textScope (or (= scope "text") (= scope "all")))
             (sections (if textScope
                         (filter (fn [(p (Pair String (List String)))] -> Bool (not (listEmpty? (pairSecond p))))
-                                (map (fn [(kp (Pair String (List Hit)))] -> (Pair String (List String)) (pair (pairFirst kp) (groupCells! ws (listTake (pairSecond kp) limit) (list) (mapEmpty)))) kinds))
+                                (map (fn [(kp (Pair String (List Hit)))] -> (Pair String (List String)) (pair (pairFirst kp) (groupCells! ws low (listTake (pairSecond kp) limit)))) kinds))
                         (list)))
             (moreText (if textScope (listSum (map (fn [(kp (Pair String (List Hit)))] -> Int64 (max 0 (- (listLength (pairSecond kp)) limit))) kinds)) 0))]
         (QueryResult :defs shownDefs :hits hits :more (+ more0 moreText) :capped scan.capped :binSkipped (listLength scan.skipped)
