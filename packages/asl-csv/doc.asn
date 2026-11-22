@@ -1,1 +1,4 @@
 (:doc :symbol "asl/packages/asl-csv/src/csv.asl#" :text "Pure ASL RFC 4180 CSV row reader and typed numeric column parser for headerless data.")
+(:doc :symbol "asl/packages/asl-csv/src/csvWrite.asl#csvField" :text "Quote a single CSV field per RFC 4180: wraps in double quotes when the field contains comma, quote, CR, LF or leading/trailing space, doubling embedded quotes.")
+(:doc :symbol "asl/packages/asl-csv/src/csvWrite.asl#csvRow" :text "Join a list of field strings into one comma-separated CSV row, quoting each field via csvField.")
+(:doc :symbol "asl/packages/asl-csv/src/csvWrite.asl#csvFormat" :text "Render a list of rows into a CSV document with LF line endings and a trailing LF; returns empty string for no rows.")
