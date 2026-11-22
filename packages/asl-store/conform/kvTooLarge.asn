@@ -1,0 +1,6 @@
+(:script :id kvTooLarge :checks 5)
+(:step (:put notes big (:rep "x" 4194305) 0 1) (:err tooLarge _))
+(:step (:get notes big 1) (:absent))
+(:step (:put notes edge (:rep "x" 4194304) 0 1) (:written 1))
+(:step (:cas notes big2 0 (:rep "x" 4194305) 0 1) (:err tooLarge _))
+(:step (:get notes big2 1) (:absent))
