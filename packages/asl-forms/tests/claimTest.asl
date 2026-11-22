@@ -1,16 +1,37 @@
-(module asl-forms/tests/claimTest :x [runTests] :i [(asl-forms/tests/formsDriver :a fd)])
+(module asl-forms/tests/claimTest :x [runTests] :i [(asl-forms/tests/formsDriver :a fd) (asl-tools/fleet/run :a fr)])
 
+; (:m :ref VS-COORD :do "claims live in the machine vault under the child's HOME, so every probe runs with a scratch HOME next to the repositories and never touches the real ~/.asl")
 fn runEnv! workspace: String env: String form: String -> ProcessOutput
   (let [(root (optionOr (envGet "ROOT_DIR") (resultOr (realPath ".") ".")))
         (forms (fd/formsBin! (resultOr (realPath ".") ".")))
         (payload (stringReplace form "\"" "\\\""))]
-    (processRun (str "cd " workspace " && ROOT_DIR=" root " ASL_LEASE_PID=0 " env " ASL_VFS_DIR=" workspace "/.asl/vfs " forms " --root " workspace " \"" payload "\"")))
+    (processRun (str "cd " workspace " && ROOT_DIR=" root " ASL_LEASE_PID=0 HOME=" workspace "/../home " (stringJoin (fr/cacheEnv!) " ") " " env " ASL_VFS_DIR=" workspace "/.asl/vfs " forms " --root " workspace " \"" payload "\"")))
 
 fn runAt! workspace: String unit: String form: String -> ProcessOutput
   (runEnv! workspace (str "ASL_UNIT=" unit " ASL_AGENT=" unit) form)
 
 fn runAtBranch! workspace: String agent: String form: String -> ProcessOutput
   (runEnv! workspace (str "ASL_AGENT=" agent) form)
+
+fn rowPath tmp: String unit: String -> String
+  (let [(d (str tmp "/home/.asl/vault/kv/claims"))
+        (names (filter (fn [(n String)] -> Bool (stringStartsWith? n "seed-")) (resultOr (dirList d) (list))))]
+    (str d "/" (optionOr (listHead names) "seed") "/" unit ".row"))
+
+; (:m :ref VS-COORD :do "a lease expires by its own :at against the caller's now, so the probes age a lease by rewriting :at in its row (the header and revision stay) instead of touching the file mtime")
+fn ! ageRow! path: String -> (Result Unit String)
+  (match (fileReadString path)
+    ((err e) (err e))
+    ((ok text)
+      (match (stringIndexOf text " :at ")
+        ((none) (err "row has no :at"))
+        ((some i)
+          (match (stringIndexOf text " :ttl ")
+            ((none) (err "row has no :ttl"))
+            ((some j)
+              (match (fileWrite path (stringToBytes (str (optionOr (stringSlice text 0 (+ i 5)) "") "1000" (optionOr (stringSlice text j (stringLength text)) ""))))
+                ((ok _) (ok ()))
+                ((err e) (err e)))))))))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))]
@@ -20,10 +41,10 @@ fn ! runTests -> Bool
         (b (str tmp "/b"))
         (setup (processRun (str "mkdir -p " seed "/src/a " seed "/src/b && cd " seed " && git init -b main >/dev/null && git config user.email test@example.invalid && git config user.name test && printf 'before\\n' > src/a/y.asl && printf 'before\\n' > src/a/txn.asl && printf 'before\\n' > src/b/y.asl && git add src && git commit -m base >/dev/null && git worktree add -b sh/A " a " >/dev/null && git worktree add -b sh/B " b " >/dev/null")))
         (unclaimedEdit (runAt! b "B" "(:edit :file \"src/b/y.asl\" :old \"before\" :new \"free\") (:flush)"))
-        (claimsAbsentAfterEdit (match (dirList (str seed "/.git/asl/claims")) ((err _) true) ((ok _) false)))
+        (claimsAbsentAfterEdit (and (match (dirList (str seed "/.git/asl/claims")) ((err _) true) ((ok _) false)) (not (fileExists? (str tmp "/home/.asl/vault")))))
         (commitA (processRun (str "cd " a " && git -c user.email=test@example.invalid -c user.name=test commit --allow-empty -m claimed >/dev/null")))
         (claimA (runAt! a "A" "(:claim :unit \"A\" :owns (\"src/a\" \"scripts/audit/foreignBaseline.asn\" \"scripts/audit/foreignAllowlist.asn\"))"))
-        (leasePath (str seed "/.git/asl/claims/A.asn"))
+        (leasePath (rowPath tmp "A"))
         (mtimeBefore (match (fileStat leasePath) ((ok st) st.mtimeNs) ((err _) 0)))
         (pause (processRun "sleep 0.01"))
         (ownEdit (runAtBranch! a "A" "(:edit :file \"src/a/y.asl\" :old \"before\" :new \"after\") (:flush)"))
@@ -48,17 +69,17 @@ fn ! runTests -> Bool
         (gone (runAt! a "D" "(:claim :unit \"D\" :owns (\"src/c\"))"))
         (movedB (str tmp "/b-moved"))
         (liveE (runAt! movedB "E" "(:claim :unit \"E\" :owns (\"src/d\"))"))
-        (ttlRecord (resultOr (fileReadString (str seed "/.git/asl/claims/E.asn")) ""))
-        (aged (fileUtime (str seed "/.git/asl/claims/E.asn") (- (nowNs) 7201000000000)))
+        (ttlRecord (resultOr (fileReadString (rowPath tmp "E")) ""))
+        (aged (ageRow! (rowPath tmp "E")))
         (ttlTakeover (runAt! movedB "F" "(:claim :unit \"F\" :owns (\"src/d\"))"))
         (holderPid (stringTrim (processRun "printf %s $PPID").stdout))
         (liveHolder (runEnv! movedB (str "ASL_UNIT=H ASL_AGENT=H ASL_LEASE_PID=" holderPid) "(:claim :unit \"H\" :owns (\"src/h\"))"))
-        (agedHolder (fileUtime (str seed "/.git/asl/claims/H.asn") (- (nowNs) 7201000000000)))
+        (agedHolder (ageRow! (rowPath tmp "H")))
         (holderKept (runAt! movedB "I" "(:claim :unit \"I\" :owns (\"src/h\"))"))
         (ownClaim (runAtBranch! movedB "agentX" "(:claim :unit \"B\" :owns (\"src/e\"))"))
         (otherAgentRelease (runAtBranch! movedB "agentY" "(:release :unit \"B\")"))
         (ownRelease (runAtBranch! movedB "agentX" "(:release :unit \"B\")"))
-        (ownLeaseGone (not (fileExists? (str seed "/.git/asl/claims/B.asn"))))
+        (ownLeaseGone (not (fileExists? (rowPath tmp "B"))))
         (cleaned (pathRemove tmp))]
     (do
       (assert (= setup.exitCode 0) "the test creates two linked worktrees of a temporary repository")
