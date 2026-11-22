@@ -1,5 +1,5 @@
 (module asl-tools/coord/conductor
-  :x [docAutodrop! docAutodropAt! docAutodropOnce! preexistingOf trainPreexisting! admissionMaxParallelOf admitFull? admitLimitOf scaledEstimateS admitEstimateS! admitLimitFor! stageSecFor! killedReds admitResWith admitSweep! admissionCounts failRes admissionRowOf admissionErrors admissionOn? admissionJobsOf admitScratchOf admitArgv admitLogPath admitRedPath admitRedNote! admissionLine admitResOf admitNote admitRounds! admitRedFix! admitFinish! admitStage lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
+  :x [batchVerdictsOwned tagChunks! bisectChunks zipPairs bisectAwait? heldAwait? retryVerdict? bisectTag soloConvert! docAutodrop! docAutodropAt! docAutodropOnce! preexistingOf trainPreexisting! admissionMaxParallelOf admitFull? admitLimitOf scaledEstimateS admitEstimateS! admitLimitFor! stageSecFor! killedReds admitResWith admitSweep! admissionCounts failRes admissionRowOf admissionErrors admissionOn? admissionJobsOf admitScratchOf admitArgv admitLogPath admitRedPath admitRedNote! admissionLine admitResOf admitNote admitRounds! admitRedFix! admitFinish! admitStage lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
@@ -829,7 +829,7 @@ fn ! mergeFail! ctx: Ctx u: st/Task c: CUnit sig: String ms: Int64 -> CUnit
         (c1 (with c :fails fails :sig sig))]
     (if (>= fails ctx.maxSame)
       (let [(_ (dropLease! ctx c1))
-            (c2 (escalate! ctx (with c1 :epoch 0 :await (if (= c1.await "solo") "" c1.await)) sig (str "merge failed " (n fails) "x with the same signature")))]
+            (c2 (escalate! ctx (with c1 :epoch 0 :await (if (heldAwait? c1.await) "" c1.await)) sig (str "merge failed " (n fails) "x with the same signature")))]
         (move! ctx c2 "blocked" "merge" "" 0 0 (str "escalated: " (verdictSig sig)) ms))
       (let [(c2 (move! ctx c1 "merging" "merge" "" 0 0 (str (if (progressed? c.sig sig) "progress: " "retry: ") (verdictSig sig)) ms))]
         (launch! ctx u c2))))
@@ -988,7 +988,7 @@ fn ! mergeRedEscalate! ctx: Ctx c: CUnit sig: String r: MergeRed done: Int64 of:
         (_ (dropLease! ctx c1))
         (_ (mergeRedRow! ctx.dir c.id "escalate" done of r why sig))
         (tried (str "merge red on its own branch after " (n done) " of " (n of) " fix rounds" (if (= why "unchanged") ", the last round left the same red" "")))
-        (c2 (escalate! ctx (with c1 :epoch 0 :await (if (= c1.await "solo") "" c1.await)) sig tried))]
+        (c2 (escalate! ctx (with c1 :epoch 0 :await (if (heldAwait? c1.await) "" c1.await)) sig tried))]
     (move! ctx c2 "blocked" "merge" "" 0 0 (str "escalated: mergeRed " why " " (n done) "/" (n of) ": " (verdictSig sig)) ms))
 
 ; (:m :ref MERGE-SPEED-COND :do "a train that stopped admitting suites at its phase deadline (tools/fleet/train.asl admitUntil!, the (:trainDeadline :phase ...) row) is an infra outcome: its signature names the phase and the unfinished suites, as a kill's :running tail does")
@@ -1485,7 +1485,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
         (_ (dropRun! ctx.dir c.id stage))
         (_ (if (= c.st "merging") (applyPassengers! ctx c) 0))
         (_ (if (= c.st "merging") (ok? (pathRemove (mergeRedPath ctx.dir c.id))) false))
-        (_ (if (and (= c.st "merging") (not (or (deadlineSig? res.sig) (or (stringStartsWith? res.sig "killed") (listContains? (list "deadline" "rebatch" "solo" "baseFlaky" "recheck") res.verdict))))) (deadlineForget! ctx.dir c.id) false))
+        (_ (if (and (= c.st "merging") (not (or (deadlineSig? res.sig) (or (stringStartsWith? res.sig "killed") (or (retryVerdict? res.verdict) (or (= res.verdict "deadline") (= res.verdict "baseFlaky"))))))) (deadlineForget! ctx.dir c.id) false))
         (_ (if (= c.st "reviewing") (if (= res.verdict "defer") (if (> (rdWaitS (rdRowOf ctx.dir)) 0) (deferMark! ctx.dir c.id (nowMs)) false) (reviewDeferClear! ctx.dir c.id)) false))]
     (cond
       ((= c.st "writing")
@@ -1561,8 +1561,8 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
           ((or (= res.verdict "deadline") (deadlineSig? res.sig))
             (let [(_ (trainDeadline! ctx u c res.sig res.ms))] ()))
           ((= res.verdict "baseFlaky") (let [(_ (baseFlaky! ctx u c res))] ()))
-          ((or (= res.verdict "rebatch") (or (= res.verdict "solo") (= res.verdict "recheck")))
-            (let [(c1 (move! ctx (if (= res.verdict "solo") (with c :await "solo") c) "merging" "merge" "" 0 0 (verdictSig res.sig) res.ms))
+          ((retryVerdict? res.verdict)
+            (let [(c1 (move! ctx (if (heldAwait? res.verdict) (with c :await res.verdict) c) "merging" "merge" "" 0 0 (verdictSig res.sig) res.ms))
                   (_ (launch! ctx u c1))]
               ()))
           ; (:m :ref MERGE-WIDE-TRAIN-STARVES :do "a solo train its limit killed parks the unit instead of starting the same train again")
@@ -1571,7 +1571,7 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
           (else
         (if (= res.ok 1)
           (match (st/commit! ctx.dir c.id c.epoch c.branch)
-            ((ok _) (let [(_ (dropTrains! ctx.dir c.id)) (_ (ok? (pathRemove (baseFlakyPath ctx.dir c.id)))) (_ (pathRemove (mergeRetryPath ctx.dir c.id))) (_ (move! ctx (with (noEpoch c) :await (if (= c.await "solo") "" c.await)) "merged" "merge" "" 0 0 "merged" res.ms))] ()))
+            ((ok _) (let [(_ (dropTrains! ctx.dir c.id)) (_ (ok? (pathRemove (baseFlakyPath ctx.dir c.id)))) (_ (pathRemove (mergeRetryPath ctx.dir c.id))) (_ (move! ctx (with (noEpoch c) :await (if (heldAwait? c.await) "" c.await)) "merged" "merge" "" 0 0 "merged" res.ms))] ()))
             ((err e) (let [(_ (mergeFail! ctx u c e res.ms))] ())))
           (if (and (baseRedSig? res.sig) (not (stringEmpty? (trainHead! ctx u))))
             (let [(_ (baseHold! ctx u c res.sig res.ms))] ())
@@ -1585,7 +1585,7 @@ fn ! applyPassengers! ctx: Ctx c: CUnit -> Int64
         (rows (fold (fn [(acc (List (Pair (Pair String Int64) Res))) (l String)] -> (List (Pair (Pair String Int64) Res)) (match (passOf l) ((none) acc) ((some r) (listAppend acc (list r))))) (list) (stringLines (readOr path))))
         (_ (pathRemove path))
         (_ (pathRemove (batchPath ctx.dir c.id)))
-        (retry? (fn [(r (Pair (Pair String Int64) Res))] -> Bool (listContains? (list "rebatch" "solo" "deadline" "baseFlaky" "recheck") (pairSecond r).verdict)))
+        (retry? (fn [(r (Pair (Pair String Int64) Res))] -> Bool (or (retryVerdict? (pairSecond r).verdict) (listContains? (list "deadline" "baseFlaky") (pairSecond r).verdict))))
         (ordered (listAppend (filter (fn [(r (Pair (Pair String Int64) Res))] -> Bool (not (retry? r))) rows) (filter retry? rows)))
         (applied (map (fn [(r (Pair (Pair String Int64) Res))] -> Bool
                         (let [(id (pairFirst (pairFirst r)))
@@ -3632,7 +3632,7 @@ fn ! admitStage rc: RealCfg store: String u: st/Task c: CUnit -> Res
 
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "a merging unit may ride in another unit's train when it waits unlaunched with no await, and its last merge failure, if any, was a killed train (a :running tail): a unit whose last train was red runs alone, so its own verdict is never mixed with others'")
 fn batchable? c: CUnit -> Bool
-  (and (= c.st "merging") (and (= c.launched 0) (and (stringEmpty? c.await) (and (not (stringEmpty? c.branch)) (or (= c.fails 0) (>= (runningCount c.sig) 0))))))
+  (and (= c.st "merging") (and (= c.launched 0) (and (or (stringEmpty? c.await) (bisectAwait? c.await)) (and (not (stringEmpty? c.branch)) (or (= c.fails 0) (>= (runningCount c.sig) 0))))))
 
 ; (:m :ref MERGE-SPEED-COND :do "a merge outcome that may be the unit's own hang: a killed train or a stage timeout; such a unit rides solo until a train of its current head finishes, so its suite cannot kill a batch")
 fn hangSig? sig: String -> Bool
@@ -3760,7 +3760,7 @@ fn ! batchPlan! ctx: Ctx u: st/Task c: CUnit -> (List String)
                               (match (listFind (fn [(t st/Task)] -> Bool (= t.id x.id)) units)
                                 ((none) (pair x.id (none)))
                                 ((some t) (pair x.id (branchFiles! repo t x)))))
-                            (filter (fn [(x CUnit)] -> Bool (and (!= x.id c.id) (batchableNow! ctx.dir x))) cus)))
+                            (filter (fn [(x CUnit)] -> Bool (and (!= x.id c.id) (and (= x.await c.await) (batchableNow! ctx.dir x)))) cus)))
                 (addIds (map (fn [(cd (Pair String (Option (List String))))] -> String (pairFirst cd))
                              (filter (fn [(cd (Pair String (Option (List String))))] -> Bool
                                        (match (pairSecond cd)
@@ -5409,8 +5409,12 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
                   (let [(f (failRes (gateSig d.out)))]
                     (if (baseRedFlaky! rc f.sig (- rc.stageSec (- (monoSec! rc) t0))) (with f :ms d.ms :verdict "baseFlaky") (with f :ms d.ms)))))))))))
 
+; (:m :ref MERGE-SOLO-BISECT :do "update to the verdict list below: a red no branch carries (mixed or unattributed) and an assert loss halve the unmerged members (bisect:FIRST/SIZE, a half of one solo); a killed train sends the owners of the suites still running at the kill (from :running, owners by changed file or package dir, passed in as owners) solo and the rest back to the batch as rebatch, all solo when no suite was running or one has no owner")
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the outcome of one batch train per branch, in order: merged whenever the branch is an ancestor of dev afterwards, whatever the train's exit (a kill after the commit landed), and never otherwise (a green train whose branch is not in dev is fail); with fresh reds, red for each branch a red row names alone, solo for one a bisection named (the red may need an earlier branch) and rebatch for the others, or solo for all when a row names a combination of branches or none of them; with no fresh red, a merge-step failure naming exactly one branch (conflict, guard refusal, merge timeout) is red for it and rebatch for the others, an assert loss or a kill of the train is solo for all, so progress across trains of different members is never compared and a batch kill never counts against a unit, anything else (a base red, a commit error) is fail for all")
 fn batchVerdicts branches: (List String) exit: Int64 out: String inDev: (List String) -> (List String)
+  (batchVerdictsOwned branches exit out inDev (list))
+
+fn batchVerdictsOwned branches: (List String) exit: Int64 out: String inDev: (List String) owners: (List (Pair String (List String))) -> (List String)
   (let [(lines (map stringTrim (stringLines out)))
         (receipt (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:train :head ")) lines)) ""))
         (redText (stringTrim (segment receipt " :red (" " :preexisting (")))
@@ -5427,22 +5431,31 @@ fn batchVerdicts branches: (List String) exit: Int64 out: String inDev: (List St
         (deadline (and (stringContains? out "(:trainDeadline ") (and (stringEmpty? lost) (and (not killed) (not infra)))))
         (keep (fn [(vs (List String))] -> (List String) (map (fn [(p (Pair String String))] -> String (if (listContains? inDev (pairFirst p)) "merged" (pairSecond p))) (zipPairs branches vs))))
         (split (fn [(guilty (List String))] -> (List String) (map (fn [(b String)] -> String (cond ((listContains? bisected b) "solo") ((listContains? guilty b) "red") (else "rebatch"))) branches)))
-        (all (fn [(v String)] -> (List String) (map (fn [(b String)] -> String v) branches)))]
+        (all (fn [(v String)] -> (List String) (map (fn [(b String)] -> String v) branches)))
+        (running (stillRunning (map stringTrim (stringLines out))))
+        (ownersOf (fn [(s String)] -> (List String) (map pairFirst (filter (fn [(o (Pair String (List String)))] -> Bool (listAny? (fn [(f String)] -> Bool (or (= f s) (and (not (stringEmpty? (pkgDirOf s))) (= (pkgDirOf f) (pkgDirOf s))))) (pairSecond o))) owners))))
+        (culprits (fold (fn [(a (List String)) (s String)] -> (List String) (fold (fn [(a2 (List String)) (b String)] -> (List String) (if (listContains? a2 b) a2 (listAppend a2 (list b)))) a (ownersOf s))) (list) running))
+        (unowned (listAny? (fn [(s String)] -> Bool (listEmpty? (ownersOf s))) running))
+        (byTail (if (or (listEmpty? running) (or unowned (listEmpty? culprits))) (all "solo") (map (fn [(b String)] -> String (if (listContains? culprits b) "solo" "rebatch")) branches)))
+        (halves (let [(rest (filter (fn [(b String)] -> Bool (not (listContains? inDev b))) branches))
+                      (h (- (listLength rest) (/ (listLength rest) 2)))
+                      (first (listTake rest h))]
+                  (map (fn [(b String)] -> String (let [(g (if (listContains? first b) first (listDrop rest h)))] (bisectTag g))) branches)))]
     (keep
       (cond
         (green (all "fail"))
-        ((not (stringEmpty? fresh)) (if (or mixed (listEmpty? alone)) (all "solo") (split alone)))
+        ((not (stringEmpty? fresh)) (if (or mixed (listEmpty? alone)) halves (split alone)))
         (deadline (all "deadline"))
         ((= (listLength named) 1) (split named))
-        ((not (stringEmpty? lost)) (all "solo"))
-        (killed (all "solo"))
+        ((not (stringEmpty? lost)) halves)
+        (killed byTail)
         (else (all "fail")))))
 
 ; (:m :ref TRAIN-BATCH-BRANCHES :do "the Res of one batch member from its verdict: merged is the ok row a single merge writes; red and fail carry the train signature as a single red train does, so fail counting, mergeSigKey and progressed? read them as before; rebatch and solo carry the signature under their own verdict, which finish! turns into a retry without a failure count")
 fn batchRes verdict: String sig: String ms: Int64 -> Res
   (cond
     ((= verdict "merged") (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms ms :exit 0 :asserts 0 :verdict ""))
-    ((or (= verdict "rebatch") (= verdict "solo")) (with (failRes (str verdict ": " sig)) :ms ms :verdict verdict))
+    ((retryVerdict? verdict) (with (failRes (str verdict ": " sig)) :ms ms :verdict verdict))
     ((or (= verdict "deadline") (= verdict "baseFlaky")) (with (failRes sig) :ms ms :verdict verdict))
     (else (with (failRes sig) :ms ms)))
 
@@ -5526,7 +5539,8 @@ fn ! batchRun! rc: RealCfg store: String lead: (Pair st/Task CUnit) pass: (List 
               (d (if (listEmpty? cands) (fr/Done :idx 0 :exit 0 :out "" :ms 0 :verdict "")
                    (fr/runOneLimited (fr/job (trainArgvAll rc.devRepo branches (trainRowOf store)) rc.devRepo (mergeEnv)) (fr/limits eff 200))))
               (inDev (filter (fn [(b String)] -> Bool (= (gitOut rc.devRepo (list "merge-base" "--is-ancestor" b "HEAD")).exit 0)) branches))
-              (verdicts (batchVerdicts branches d.exit d.out inDev))
+              (owners (if (stringContains? d.out "(:fleetRun :verdict :") (map (fn [(m (Pair st/Task CUnit))] -> (Pair String (List String)) (pair (pairSecond m).branch (optionOr (branchFiles! rc.repo (pairFirst m) (pairSecond m)) (list)))) cands) (list)))
+              (verdicts (batchVerdictsOwned branches d.exit d.out inDev owners))
               (sig (gateSig d.out))
               (flaky (and (listContains? verdicts "fail") (baseRedFlaky! rc sig (- rc.stageSec (- (clock rc) t0)))))
               (trained (map (fn [(p (Pair (Pair st/Task CUnit) String))] -> (Pair String Res)
@@ -6185,6 +6199,7 @@ fn ! loopOnce! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) refres
     ((draining? ctx.dir) (let [(_ (restart! ctx))] false))
     (else
     (let [(_ (importCycle! ctx))
+          (_ (soloConvert! ctx.dir))
           (_ (tick! ctx))
           (_ (offerStrong! ctx snapshot))
           (_ (if refreshDue (refreshWake! ctx snapshot refresh) 0))]
@@ -6293,3 +6308,42 @@ fn ! main args: (List String) -> (Result Int64 String)
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
       (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|close --ids A,B (merged without any check that the work is on main)|reload --ids A,B (definition re-read from the intake files, counters reset)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
+
+; (:m :ref MERGE-SOLO-BISECT :do "a batch red no single branch carries, an assert loss or a killed train splits the unmerged members in halves instead of sending each to a train of its own: a half of one runs solo, a larger half carries await bisect:FIRSTBRANCH/SIZE and only members of the same group ride together, so a green half merges at once and a red one splits again, k units cost at most 2*log2(k) trains")
+fn bisectAwait? a: String -> Bool
+  (stringStartsWith? a "bisect:")
+
+fn heldAwait? a: String -> Bool
+  (or (= a "solo") (bisectAwait? a))
+
+fn retryVerdict? v: String -> Bool
+  (or (or (= v "rebatch") (= v "solo")) (or (= v "recheck") (bisectAwait? v)))
+
+fn bisectTag g: (List String) -> String
+  (if (<= (listLength g) 1) "solo" (str "bisect:" (optionOr (listHead g) "") "/" (n (listLength g))))
+
+; (:m :ref MERGE-SOLO-BISECT :do "once per store: units merging unlaunched with await solo (set before bisection existed) become one bisect group bisect:legacy/N, so a backlog of k solo units drains in grouped trains; a lone one stays solo; the marker file bisectConverted keeps solo from converting again after the halving itself writes it")
+fn bisectChunks xs: (List String) k: Int64 -> (List (List String))
+  (if (listEmpty? xs) (list) (listAppend (list (listTake xs k)) (bisectChunks (listDrop xs k) k)))
+
+fn ! tagUnit! dir: String id: String tag: String -> Bool
+  (listAny? (fn [(c CUnit)] -> Bool (ok? (writeCUnit! dir (with c :await tag)))) (filter (fn [(c CUnit)] -> Bool (= c.id id)) (readCUnits! dir)))
+
+fn ! tagChunks! dir: String chunks: (List (List String)) i: Int64 -> Int64
+  (match (listHead chunks)
+    ((none) i)
+    ((some g) (let [(tag (str "bisect:legacy" (n i) "/" (n (listLength g))))
+                    (_ (if (<= (listLength g) 1) false (do (map (fn [(id String)] -> Bool (tagUnit! dir id tag)) g) true)))]
+                (tagChunks! dir (listDrop chunks 1) (+ i 1)))))
+
+; (:m :ref MERGE-SOLO-BISECT :do "soloConvert! splits the legacy solo units, in store order, into groups of at most the (:train :batch) size of ladder.asn (4 when none), tagged bisect:legacyI/SIZE; a group of one stays solo; a train wider than the batch limit would be killed and halve again")
+fn ! soloConvert! dir: String -> Int64
+  (let [(marker (str dir "/bisectConverted"))]
+    (if (fileExists? marker) 0
+      (let [(solos (map (fn [(c CUnit)] -> String c.id) (filter (fn [(c CUnit)] -> Bool (and (= c.st "merging") (and (= c.launched 0) (= c.await "solo")))) (readCUnits! dir))))
+            (k (trainBatchOf (trainRowOf dir)))
+            (chunks (if (<= k 1) (list) (bisectChunks solos k)))
+            (used (fold (fn [(a Int64) (c CUnit)] -> Int64 (if (stringStartsWith? c.await "bisect:legacy") (max a (optionOr (stringToInt64 (segment c.await "bisect:legacy" "/")) -1)) a)) -1 (readCUnits! dir)))
+            (_ (tagChunks! dir chunks (+ used 1)))
+            (_ (if (or (> k 1) (listEmpty? solos)) (ok? (fileWrite marker "1\n")) false))]
+        (listLength (filter (fn [(g (List String))] -> Bool (> (listLength g) 1)) chunks)))))
