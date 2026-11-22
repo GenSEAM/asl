@@ -2,7 +2,7 @@
 
 fn ! cliWithin! root: String cache: String timeoutS: Int64 argv: (List String) -> run/Done
   (run/runOneLimited
-    (run/job (listAppend (list "/usr/bin/nice" "-n" "15" (str root "/bin/asl")) argv) root
+    (run/job (listAppend (run/niceWords) (cons (str root "/bin/asl") argv)) root
              (run/childEnv (list (str "ASL_ROOT=" root)
                                  (str "ASL_CLI_ROOT=" root)
                                  (str "ASL_PRELUDE=" root "/asl/prelude/prelude.asl")

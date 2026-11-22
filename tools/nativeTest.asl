@@ -204,8 +204,9 @@ fn runnerSwitches -> (List String)
 fn withoutRunnerSwitches rows: (List String) -> (List String)
   (filter (fn [(row String)] -> Bool (not (listContains? (runnerSwitches) (optionOr (listHead (stringSplit row "=")) row)))) rows)
 
-fn withEnvOverrides! overrides: (List String) -> (List String)
-  (let [(names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
+fn ! withEnvOverrides! given: (List String) -> (List String)
+  (let [(overrides (if (listContains? (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) given) "ASL_NICE_STATE") given (cons (fr/niceStateRow) given)))
+        (names (map (fn [(s String)] -> String (optionOr (listHead (stringSplit s "=")) s)) overrides))]
     (listAppend overrides
                 (withoutRunnerSwitches
                   (filter (fn [(row String)] -> Bool
@@ -248,8 +249,15 @@ fn ! linkedWorktree? root: String -> Bool
     ((ok st) (not st.isDir))
     ((err _) false))
 
+; (:m :ref SANDBOX-NICE-FALLBACK :do "the shared home cache is used only when this process can create it: where a sandbox grants the workspace but not the home, a linked worktree falls back to the workspace .asl/cache/nativeTest (the CLI prints the one (:cache :denied) line); the choice is made in process, no restart")
+fn ! homeWritable? dir: String -> Bool
+  (match (dirCreate dir)
+    ((err _) false)
+    ((ok _) (let [(probe (str dir "/.probe." (stringFromInt64 (procSelf))))]
+              (match (fileWrite probe "") ((err _) false) ((ok _) (do (pathRemove probe) true))))))
+
 fn ! defaultCacheDirFor root: String home: String -> String
-  (if (and (not (stringEmpty? home)) (linkedWorktree? root)) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
+  (if (and (not (stringEmpty? home)) (and (linkedWorktree? root) (homeWritable? (str home "/.asl/run/nativeTest")))) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
 
 fn ! cacheDir! -> String
   (let [(c (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (defaultCacheDirFor (toolRoot) (optionOr (envGet "HOME") ""))))]
@@ -540,7 +548,7 @@ fn initPhaseOn -> String
 fn ! judgeInit! bin: String path: String prelude: String ran: Verdict -> Verdict
   (if (!= ran.exit 0)
     ran
-    (let [(probe (runProc (list "nice" "-n" "15" bin) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOn))))))]
+    (let [(probe (runProc (listAppend (fr/niceWords) (list bin)) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOn))))))]
       (optionOr (initVerdict path probe.exitCode probe.stderr) ran)))
 
 fn hostVerdictLine text: String -> String
@@ -2457,7 +2465,7 @@ fn ! runOne path: String fp: String -> Outcome
        (let [(t0 (monotonicNs))
              (prelude (str "ASL_PRELUDE=" (absPath "asl/host/out/prelude.asl")))
              (wall (suiteWall (resultOr (fileReadString path) "")))
-             (out (fromFr (fr/runGuarded (list "nice" "-n" "15" bin) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
+             (out (fromFr (fr/runGuarded (listAppend (fr/niceWords) (list bin)) "." (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" prelude (initPhaseOff))) (fr/limits wall 64))))
              (took (ms (- (monotonicNs) t0)))
              (v (judgeInit! bin path prelude (verdictOf path out.exitCode out.stderr)))]
          (do (emit out v)
@@ -2910,7 +2918,7 @@ fn ! testNativeExecution cacheDir: String -> Bool
         (fp (fingerprint))
         (b1 (prepareIn cacheDir fixturePath fp "test"))
         (bin1 (optionOr b1.binary ""))
-        (run1 (if (stringEmpty? bin1) (ProcOut :exitCode 1 :stdout "" :stderr "no bin") (runProc (list "nice" "-n" "15" bin1) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl"))))))
+        (run1 (if (stringEmpty? bin1) (ProcOut :exitCode 1 :stdout "" :stderr "no bin") (runProc (listAppend (fr/niceWords) (list bin1)) (some (withEnvOverrides! (list "ASL_ASSERT_REPORT=1" "ASL_PRELUDE=asl/host/out/prelude.asl"))))))
         (v (verdictOf fixturePath run1.exitCode run1.stderr))
         (b2 (prepareIn cacheDir fixturePath fp "test"))]
     (do (assert (some? b1.binary) (str "native compilation of passingSuite succeeds: " b1.reason))

@@ -610,7 +610,7 @@ fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
         (freshMark (str ctx.root "/asl/host/out/aslNativeBuild-fresh"))]
     (if (not (nativeBuildReady? ctx native freshMark))
       (do (pathRemove lock) "its build helper is stale and the hostless refresh (sh asl/host/build.sh) did not restore it")
-      (let [(argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh" "nice" "-n" "15") (list native ctx.root cache)))
+      (let [(argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh") (listAppend (run/niceWords) (list native ctx.root cache))))
             (d (match (sys/captureWith! argv (some ctx.root) (list (str "NATIVE_CLI_LOG=" log)))
                  ((ok c) c)
                  ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))))

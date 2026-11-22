@@ -1,5 +1,5 @@
 (module asl-tools/fleet/run
-  :x [cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! fleetRunDir sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
+  :x [niceWords niceStateRow cacheEnv! cacheRows Job Done Limits Proc ProcOut Running RunningSep Lease Forked ForkEnd ForkStep forkLimited! forkAdvance! forkKill! job limits defaultLimits runPool runPoolLimited runPoolEach runOne runOneLimited heavy runShell! gateOut gateOutHost gateFiles stubHost! stubHostIn! stubHostPath stubHostFor! stubRemove! stubSweepDead! stubTrustedIn! stubDirsOwnedBy ownerPidOf stubBase stubPrefix stubVerifiedIn! privateDir? stubHostText runGuarded Guarded GuardStep guardStart! guardBegin! guardAdvance! guardPoll! guardLoop guardFds spawn spawnSep reapStaleLeases! fleetRunDir sweepOrphanTests! sweepStamp sweepLog orphanTestPids orphanTestPidsWith argsExe nativeTestExe? poolLeaseDeadline reapLeasesIn! reapLeasesAt! leaseDir leasePath writeLease! writeLeaseAt! bornIn sameStart? psPairs descendantsOf psSnapshot procsOf procsAt pinOf pinsOf procSnapshot treeOf fenceOf fenced? killTree! killTreeWith! judge judgeSep fleetInt fleetGroupAt drainConfig! Drain drainFd stopGuard! ownGroup shellOut childEnv secretName? executedOf errorLinesOf builtBinary! nativeCliPath! nativeCli! nativeCliFor legacyHost! sideEnv quoteArgv gateVerdict redEvidence? LoadAdmit admitLoad! loadCenti loadNote wallOver fitTimeoutS]
   :i [(asl-tools/fleet/jobserver :a js) (asl-proc/jobPool :a jp) (asl-gates/suiteTimes :a st)])
 
 (schema Job
@@ -105,7 +105,7 @@ fn ! childEnv overrides: (List String) -> (List String)
         (cache (if (and (listContains? given "HOME") (not (listContains? given "ASL_NATIVE_TEST_CACHE")))
                  (filter (fn [(row String)] -> Bool (= (nameOf row) "ASL_NATIVE_TEST_CACHE")) (cacheEnv!))
                  (list)))
-        (rows (listAppend overrides cache))
+        (rows (listAppend (if (listContains? given "ASL_NICE_STATE") overrides (cons (jp/niceStateRow) overrides)) cache))
         (names (map nameOf rows))]
     (listAppend rows
       (filter (fn [(row String)] -> Bool
@@ -525,8 +525,14 @@ fn ! spawnPooled idx: Int64 j: Job -> (Result Running Done)
   (let [(t (freshTmp j.env))]
     (spawnIn idx j (pairFirst t) (pairSecond t)))
 
+fn ! niceWords -> (List String)
+  (jp/niceWords)
+
+fn ! niceStateRow -> String
+  (jp/niceStateRow)
+
 fn ! spawnIn idx: Int64 j: Job tmp: String env: (List String) -> (Result Running Done)
-  (match (spawnSep (listAppend (list "nice" "-n" "15") j.argv) j.cwd env)
+  (match (spawnSep (listAppend (jp/niceWords) j.argv) j.cwd env)
     ((err po) (let [(_ (dropTmp tmp))] (err (Done :idx idx :exit po.exitCode :out po.stderr :ms 0 :verdict "spawnFailed"))))
     ((ok r) (ok (Running :idx idx :pid r.pid :outFd r.outFd :errFd r.errFd :text "" :outOpen r.outOpen :errOpen r.errOpen :startNs r.startNs :killed r.killed :groups r.groups :known r.known :tmp tmp))))
 

@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-proc/src/jobPool :a jp) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/nativeBuild :a nb) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/rcConfig :a rcc) (asl-parser/reader :a rd) (asl-parser/ast :a a) (asl-checker/resolve :a r) (asl-checker/foreign :a fsig)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -59,13 +59,13 @@ fn rcArgs mode: String -> (List String)
 fn ! interpretAsl1! ctx: sys/Context target: String ll: String mode: String -> Int64
   (if (not (sys/executable? ctx.hostBin))
     (do (sys/say! (sys/hostAbsent "build")) 2)
-    (sys/run! (listAppend (list "nice" "-n" "15" ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode))))
+    (sys/run! (listAppend (jp/niceWords) (listAppend (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl") "build" target "-o" ll) (rcArgs mode)))))
 
 fn ! compileLl! ctx: sys/Context clang: String lib: String target: String ll: String mode: String -> Int64
   (if (not (sys/isFile? (str ctx.root "/asl/packages/asl-compiler/src/asl1.asl")))
     (interpretAsl1! ctx target ll mode)
     (match (cache/nativeAsl1! ctx lib clang)
-      ((ok native) (sys/runAt! ctx.root (listAppend (list "nice" "-n" "15" native "build" (resultOr (realPath target) target) "-o" ll) (rcArgs mode))))
+      ((ok native) (sys/runAt! ctx.root (listAppend (jp/niceWords) (listAppend (list native "build" (resultOr (realPath target) target) "-o" ll) (rcArgs mode)))))
       ((err reason)
         (do
           (sys/sayErr! (str "NATIVE-ASL1-FALLBACK " reason))
