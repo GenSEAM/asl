@@ -1,6 +1,6 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
   (:f root String)
@@ -12,7 +12,9 @@
   (:f owner String)
   (:f deadlineNs Int64)
   (:f maxDesc Int64)
-  (:f links (List String) :default (list)))
+  (:f links (List String) :default (list))
+  (:f objs String :default "")
+  (:f buckets Int64 :default 16))
 
 fn seedField row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -92,7 +94,7 @@ fn ! firstLine! b: Build argv: (List String) -> (Result String String)
 
 fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner
+        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir))
                       :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)))]
     (if (not (sys/isFile? lib))
       (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
@@ -208,6 +210,13 @@ fn inlineFor flags: (List String) -> Int64
   (if (listContains? flags "-O1") 0 (ir/inlineLimit))
 
 fn ! linkParts! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
+  (if (stringEmpty? b.objs) (linkPartsPlain! b clang flags ll out n)
+    (match (linkCached! b clang flags ll out (max n 1))
+      ((ok r) (ok (pair (listLength r.objects) "")))
+      ((err e) (if (stringStartsWith? e "cannot split ") (do (say! (str "asl: native build: " e "; linking by size")) (linkPartsPlain! b clang flags ll out n)) (err e)))))
+
+; (:m :ref BUILD-CACHE :do "the parts link without an object store, as before it")
+fn ! linkPartsPlain! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result (Pair Int64 String) String)
   (let [(whole (fn [(why String)] -> (Result (Pair Int64 String) String)
                  (match (withSlots! b 1 (fn [(slots Int64)] -> (Result String String) (linkObjs! b clang flags (list "-Wno-override-module" "-x" "ir" ll "-x" "none") (sys/baseName ll) out)))
                    ((err e) (err e))
@@ -713,7 +722,8 @@ fn ! buildCode! root: String cacheDir: String owner: String -> Int64
         (_ (say! (str "asl: native build pid " pid " started for " root)))
         (code (match (build! root cacheDir owner)
                 ((ok dir) (do (say! (str "asl: native build: " dir))
-                               (if (sweepOn? root) (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries")) true)
+                               (if (sweepOn? root) (do (say! (str "asl: native build swept " (stringFromInt64 (nc/sweepNativeCache! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " cache entries"))
+                                                     (say! (str "asl: native build swept " (stringFromInt64 (sweepObjects! cacheDir (storeCapFor! root) (storeMinAgeNs! root))) " objects"))) true)
                                0))
                 ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
         (_ (pathRemove (str cacheDir "/tmp." pid)))
@@ -743,3 +753,166 @@ fn ! main args: (List String) -> (Result Int64 String)
               (_ (releaseLock! cacheDir owner))]
           (do (say! (str "asl: native build pid " pid " exit " (stringFromInt64 code)))
               (ok code))))))
+
+; (:m :ref BUILD-CACHE :do "the content-addressed object store: a part's object is keyed by the digest of the format word, clang's version line and target triple, the clang flags and the part's IR text, so the same part under the same clang is compiled once for every worktree, version and build that reaches it; the store is the obj directory of the native CLI cache (shared across worktrees), or the :native :objStore row of the nearest config for bin/asl build, absent meaning no object cache")
+(schema ObjLink
+  (:f objects (List String))
+  (:f compiled (List String))
+  (:f reused (List String))
+  (:f corrupt (List String)))
+
+fn objFormat -> String
+  "obj/1"
+
+; (:m :ref BUILD-CACHE :do "the object cache of CLI builds is on unless :native :objCache is false in the nearest config")
+fn ! objCacheOff? dir: String -> Bool
+  (= (configured! dir ":objCache") (some "false"))
+
+fn objDirOf cache: String -> String
+  (str cache "/obj")
+
+; (:m :ref BUILD-CACHE :do "the object store of asl build is the :native :objStore row, off when absent; a relative row is taken against the directory of the config that holds it (or ~/.asl for the home config), so every cwd and worktree reaches the same store")
+fn ! objStoreFor! dir: String -> String
+  (match (configured! dir ":objStore")
+    ((none) "")
+    ((some w) (let [(p (stringTrim (stringReplace w "\"" "")))]
+                (cond ((stringEmpty? p) "")
+                      ((stringStartsWith? p "/") p)
+                      (else (str (configDirOf! dir ":objStore") "/" p))))))
+
+fn ! configDirOf! dir: String key: String -> String
+  (cond
+    ((fileExists? (str dir "/.asl.config.asn")) (if (some? (nativeKey (resultOr (fileReadString (str dir "/.asl.config.asn")) "") key)) dir (str (optionOr (envGet "HOME") "") "/.asl")))
+    ((or (stringEmpty? dir) (= dir "/")) (str (optionOr (envGet "HOME") "") "/.asl"))
+    (else (configDirOf! (parentDir dir) key)))
+
+fn objKey ident: String flags: (List String) text: String -> String
+  (sh/bytesSha256 (stringToBytes (str (objFormat) "\n" ident "\n" (stringJoin flags " ") "\n" text)))
+
+fn objCompileArgv clang: String flags: (List String) ll: String out: String -> (List String)
+  (listAppend (cons clang flags) (list "-Wno-override-module" "-x" "ir" ll "-c" "-o" out))
+
+; (:m :ref BUILD-CACHE :do "the toolchain identity in every object key: clang version line, target triple, and the SDKROOT and MACOSX_DEPLOYMENT_TARGET a build runs with, since both change the object clang writes; the values only enter the key and are never printed")
+fn ! clangIdent! b: Build clang: String -> String
+  (str (resultOr (firstLine! b (list clang "--version")) clang) " " (resultOr (firstLine! b (list clang "-print-target-triple")) "")
+       " SDKROOT=" (optionOr (envGet "SDKROOT") "") " MACOSX_DEPLOYMENT_TARGET=" (optionOr (envGet "MACOSX_DEPLOYMENT_TARGET") ""))
+
+(schema Keyed (:f name String) (:f key String) (:f text String))
+
+fn kOf p: (Pair Int64 Keyed) -> Keyed
+  (pairSecond p)
+
+fn kName p: (Pair Int64 Keyed) -> String
+  (let [(k (kOf p))] k.name)
+
+fn kKey p: (Pair Int64 Keyed) -> String
+  (let [(k (kOf p))] k.key)
+
+fn kText p: (Pair Int64 Keyed) -> String
+  (let [(k (kOf p))] k.text)
+
+fn ! compileMisses! b: Build clang: String flags: (List String) objs: String misses: (List (Pair Int64 Keyed)) n: Int64 -> (Result (List String) String)
+  (match (collect! (map (fn [(p (Pair Int64 Keyed))] -> (Result String String)
+                          (let [(ll (str b.tmp "/mp" (stringFromInt64 (pairFirst p)) ".ll"))]
+                            (match (fileWrite ll (kText p)) ((err e) (err (str "cannot write " ll ": " e))) ((ok _) (ok ll)))))
+                        misses))
+    ((err e) (err e))
+    ((ok lls) (let [(tmps (map (fn [(p (Pair Int64 Keyed))] -> String (os/objTmpPath objs (kKey p) (procSelf))) misses))
+                    (jobs (map (fn [(q (Pair String String))] -> run/Job (run/job (objCompileArgv clang flags (pairFirst q) (pairSecond q)) b.root (run/childEnv (list)))) (zip lls tmps)))
+                    (done (if (or (listEmpty? jobs) (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b)))) (list)
+                            (withSlots! b (max 1 (min n (listLength jobs))) (fn [(slots Int64)] -> (List run/Done) (run/runPoolLimited jobs slots (ownedLimits b))))))
+                    (bad (filter (fn [(d run/Done)] -> Bool (not (passed? d))) done))
+                    (_ (map (fn [(l String)] -> Bool (ok? (pathRemove l))) lls))]
+                (cond
+                  ((!= (listLength done) (listLength jobs)) (do (map (fn [(t String)] -> Bool (ok? (pathRemove t))) tmps) (err (str "clang -c of the module parts did not run: " (if (ownerAlive? b) "deadline" "owner-gone")))))
+                  ((not (listEmpty? bad)) (do (keepPassed! objs misses tmps done)
+                                              (err (match (listHead bad) ((some d) (failure (str "clang -c of part " (match (listGet misses d.idx) ((some p) (kName p)) ((none) "?"))) d)) ((none) "clang -c of a module part failed")))))
+                  (else (collect! (map (fn [(p (Pair (Pair Int64 Keyed) String))] -> (Result String String) (os/installObj! objs (kKey (pairFirst p)) (pairSecond p))) (zip misses tmps))))))))
+
+; (:m :ref BUILD-CACHE :do "when some parts fail to compile, the ones that compiled still land in the store, so the next build after a fix compiles only what failed")
+fn ! keepPassed! objs: String misses: (List (Pair Int64 Keyed)) tmps: (List String) done: (List run/Done) -> Int64
+  (fold (fn [(acc Int64) (d run/Done)] -> Int64
+          (let [(tmp (optionOr (listGet tmps d.idx) ""))]
+            (if (passed? d)
+              (match (listGet misses d.idx) ((some p) (if (ok? (os/installObj! objs (kKey p) tmp)) (+ acc 1) acc)) ((none) acc))
+              (do (pathRemove tmp) acc))))
+        0 done)
+
+fn collectFrom xs: (List (Result String String)) acc: (List String) -> (Result (List String) String)
+  (match (listHead xs)
+    ((none) (ok (listReverse acc)))
+    ((some r) (match r ((err e) (err e)) ((ok s) (collectFrom (optionOr (listTail xs) (list)) (cons s acc))))))
+
+fn ! collect! xs: (List (Result String String)) -> (Result (List String) String)
+  (collectFrom xs (list))
+
+fn receiptLine r: ObjLink -> String
+  (str "(:build :objects " (stringFromInt64 (listLength r.objects)) " :compiled " (stringFromInt64 (listLength r.compiled)) " :reused " (stringFromInt64 (listLength r.reused))
+       " :corrupt " (stringFromInt64 (listLength r.corrupt)) " :parts (" (stringJoin (map (fn [(n String)] -> String (str "\"" n "\"")) (listTake r.compiled 12)) " ") "))")
+
+; (:m :ref BUILD-CACHE :do "misses are compiled largest part first, so with the two tokens of the build pool the biggest bucket never starts last and leaves one token idle")
+; (:m :ref BUILD-CACHE :do "the cached link: split the program's IR into module parts, take every part whose key the store holds verified, compile only the others through the build pool straight into the store, then link the objects in part order (the same IR always links the same objects in the same order). Returns the receipt: objects linked and which parts were compiled, reused or found corrupt")
+fn ! linkCached! b: Build clang: String flags: (List String) ll: String out: String n: Int64 -> (Result ObjLink String)
+  (match (fileReadString ll)
+    ((err e) (err (str "cannot read " ll ": " e)))
+    ((ok text) (match (ir/splitBuckets text (inlineFor flags) b.buckets)
+      ((err e) (err (str "cannot split " ll " by module: " e)))
+      ((ok parts) (match (dirCreate b.objs)
+        ((err e) (err (str "cannot create " b.objs ": " e)))
+        ((ok _) (let [(ident (clangIdent! b clang))
+                      (keyed (map (fn [(p ir/Named)] -> Keyed (Keyed :name p.name :key (objKey ident flags p.text) :text p.text)) parts))
+                      (state (map (fn [(k Keyed)] -> Int64 (os/partState! b.objs k.key)) keyed))
+                      (tagged (zip state keyed))
+                      (misses (filter (fn [(p (Pair Int64 (Pair Int64 Keyed)))] -> Bool (> (pairFirst (pairSecond p)) 0)) (enumerate tagged)))
+                      (missKeyed (listSortBy (fn [(p (Pair Int64 Keyed))] -> Int64 (- 0 (stringLength (kText p))))
+                                             (map (fn [(p (Pair Int64 (Pair Int64 Keyed)))] -> (Pair Int64 Keyed) (pair (pairFirst p) (pairSecond (pairSecond p)))) misses)))]
+                  (match (compileMisses! b clang flags b.objs missKeyed n)
+                    ((err e) (err e))
+                    ((ok _) (let [(objects (map (fn [(k Keyed)] -> String (os/objPath b.objs k.key)) keyed))
+                                  (r (ObjLink :objects objects
+                                              :compiled (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) missKeyed)
+                                              :reused (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) (filter (fn [(p (Pair Int64 Keyed))] -> Bool (= (pairFirst p) 0)) tagged))
+                                              :corrupt (map (fn [(p (Pair Int64 Keyed))] -> String (kName p)) (filter (fn [(p (Pair Int64 Keyed))] -> Bool (= (pairFirst p) 2)) tagged))))
+                                  (_ (say! (receiptLine r)))]
+                              (match (withSlots! b 1 (fn [(slots Int64)] -> (Result String String) (linkObjs! b clang flags objects (sys/baseName ll) out)))
+                                ((err e) (err e))
+                                ((ok _) (ok r)))))))))))))
+
+fn tmpOwner name: String -> Int64
+  (optionOr (stringToInt64 (optionOr (listLast (stringSplit name ".tmp.")) "")) 0)
+
+; (:m :ref BUILD-CACHE :do "another build is in flight when a lease of a live pid other than self is held, or a live tmp.PID build dir of another pid exists; it may hold any object, so then the sweep removes nothing but tmp files of dead pids")
+fn ! othersBuilding? cache: String self: Int64 -> Bool
+  (or (listAny? (fn [(n String)] -> Bool (let [(pid (optionOr (stringToInt64 (optionOr (listLast (stringSplit n "@")) "")) 0))] (and (!= pid self) (nc/alive? pid))))
+                (resultOr (dirList (str cache "/leases")) (list)))
+      (listAny? (fn [(n String)] -> Bool (let [(pid (if (stringStartsWith? n "tmp.") (optionOr (stringToInt64 (optionOr (stringSlice n 4 (stringLength n)) "")) 0) 0))] (and (!= pid self) (nc/alive? pid))))
+                (resultOr (dirList cache) (list))))
+
+fn metaKey name: String -> String
+  (optionOr (stringSlice name 0 (- (stringLength name) 5)) "")
+
+; (:m :ref BUILD-CACHE :do "the object store is held under capBytes by last use (the meta file's mtime, touched at every hit): oldest first, an entry goes only when it is older than minAgeNs and no other build is in flight; a tmp object whose pid is dead always goes. Returns the count of entries and tmp files removed")
+fn ! sweepObjectsAs! cache: String objs: String capBytes: Int64 minAgeNs: Int64 self: Int64 -> Int64
+  (let [(names (resultOr (dirList objs) (list)))
+        (deadTmp (listLength (filter (fn [(n String)] -> Bool (and (stringContains? n ".tmp.") (and (not (nc/alive? (tmpOwner n))) (ok? (pathRemove (str objs "/" n)))))) names)))]
+    (if (othersBuilding? cache self)
+      deadTmp
+      (let [(now (nowNs))
+            (metas (filter (fn [(n String)] -> Bool (stringEndsWith? n ".meta")) names))
+            (entries (map (fn [(n String)] -> (Pair String (Pair Int64 Int64))
+                            (let [(k (metaKey n))
+                                  (m (os/statOf (os/metaPath objs k)))
+                                  (o (os/statOf (os/objPath objs k)))]
+                              (pair k (pair (pairSecond m) (+ (max 0 (pairFirst m)) (max 0 (pairFirst o)))))))
+                          metas))
+            (total (fold (fn [(acc Int64) (e (Pair String (Pair Int64 Int64)))] -> Int64 (+ acc (pairSecond (pairSecond e)))) 0 entries))
+            (oldestFirst (listSortBy (fn [(e (Pair String (Pair Int64 Int64)))] -> Int64 (pairFirst (pairSecond e))) entries))
+            (swept (fold (fn [(acc (Pair Int64 Int64)) (e (Pair String (Pair Int64 Int64)))] -> (Pair Int64 Int64)
+                           (if (and (> (pairFirst acc) capBytes) (> (- now (pairFirst (pairSecond e))) minAgeNs))
+                             (do (os/dropObj! objs (pairFirst e)) (pair (- (pairFirst acc) (pairSecond (pairSecond e))) (+ (pairSecond acc) 1)))
+                             acc))
+                         (pair total 0) oldestFirst))]
+        (+ deadTmp (pairSecond swept)))))
+
+fn ! sweepObjects! cache: String capBytes: Int64 minAgeNs: Int64 -> Int64
+  (sweepObjectsAs! cache (objDirOf cache) capBytes minAgeNs (procSelf))
