@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -14,7 +14,9 @@
   (:f maxDesc Int64)
   (:f links (List String) :default (list))
   (:f objs String :default "")
-  (:f buckets Int64 :default 16))
+  (:f buckets Int64 :default 16)
+  (:f upstream String :default "")
+  (:f take (List String) :default (list)))
 
 fn seedField row: String key: String -> (Option String)
   (let [(parts (stringSplit row (str ":" key " ")))]
@@ -92,10 +94,47 @@ fn ! firstLine! b: Build argv: (List String) -> (Result String String)
   (let [(d (child! b argv))]
     (if (passed? d) (ok (stringTrim (optionOr (listHead (stringLines d.out)) ""))) (err (failure (stringJoin argv " ") d))))
 
+; (:m :ref TRAIN-SUITES-COLD-CLI :do "a private native CLI cache may name a read-only upstream store in CACHE/upstream.asn, (:upstream :dir \"/abs\" :take (seed rt asl1 cli)): a test's scratch cache took 13 min on the mac and 26 on node2 to lower seed, runtime, asl1 and cli cold although the run's own store held every entry under the same content keys")
+fn upstreamFile cacheDir: String -> String
+  (str cacheDir "/upstream.asn")
+
+fn unquote word: String -> String
+  (stringTrim (stringReplace word "\"" ""))
+
+fn upstreamOf text: String -> (Pair String (List String))
+  (let [(items (rd/sexprToList (rd/parseSexpr text)))]
+    (if (!= (optionOr (match (listHead items) ((some h) (some (rd/sexprHead h))) ((none) (none))) "") ":upstream")
+      (pair "" (list))
+      (pair (match (valueAfter items ":dir") ((some v) (if (rd/isAtom? v) (unquote (rd/sexprHead v)) "")) ((none) ""))
+            (match (valueAfter items ":take") ((some v) (map (fn [(s rd/SExpr)] -> String (rd/sexprHead s)) (filter rd/isAtom? (rd/sexprToList v)))) ((none) (list))))))
+
+fn ! withUpstream b: Build cacheDir: String -> Build
+  (let [(row (upstreamOf (resultOr (fileReadString (upstreamFile cacheDir)) "")))
+        (dir (pairFirst row))]
+    (if (or (not (stringStartsWith? dir "/")) (= dir cacheDir)) b (with (with b :upstream dir) :take (pairSecond row))))
+
+fn entryKind name: String -> String
+  (optionOr (listHead (stringSplit name "-")) "")
+
+; (:m :ref TRAIN-SUITES-COLD-CLI :do "an entry this cache lacks, of a taken kind, whose needed files all exist upstream is copied in by cp -R into this build's tmp, its needed files checked again in the copy (an upstream sweep may remove them mid-copy), and renamed into place: upstream is only read, never leased or touched; a failed copy leaves nothing and the caller builds as before")
+fn ! adopt! b: Build dir: String needs: (List String) -> Bool
+  (let [(name (sys/baseName dir))
+        (from (str b.upstream "/" name))
+        (part (str b.tmp "/adopt." name))]
+    (cond
+      ((stringEmpty? b.upstream) false)
+      ((fileExists? dir) false)
+      ((not (listContains? b.take (entryKind name))) false)
+      ((not (listAll? (fn [(n String)] -> Bool (fileExists? (str from "/" n))) needs)) false)
+      (else (let [(d (child! b (list "/bin/cp" "-R" from part)))]
+              (if (and (passed? d) (and (listAll? (fn [(n String)] -> Bool (fileExists? (str part "/" n))) needs) (ok? (pathRename part dir))))
+                (say! (str "(:adopt :entry " name " :from upstream)"))
+                (do (child! b (list "/bin/rm" "-rf" part)) false))))))
+
 fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir))
-                      :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)))]
+        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir))
+                      :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)) cacheDir))]
     (if (not (sys/isFile? lib))
       (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
       (match (firstLine! start (list (clang!) "-print-target-triple"))
@@ -507,7 +546,7 @@ fn ! variantRuntime! b: Build asl1: String packagesDir: String variant: String g
   (match (variantKey! b packagesDir variant)
     ((err e) (err e))
     ((ok key)
-      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (useEntry! b dir))]
+      (let [(dir (str b.cache "/rt-" variant "-" key)) (lib (str dir "/libaslrt-" variant ".a")) (_ (adopt! b dir (list (str "libaslrt-" variant ".a")))) (_ (useEntry! b dir))]
         (if (sys/isFile? lib) (ok lib)
           (let [(tmp (str b.tmp "/rt-" variant "." (stringFromInt64 (procSelf))))
                 (specs (list (pair (pair (str packagesDir "/asl-target-llvm/src/gcRoute.asl") "gcAsl") gcExtra)
@@ -535,6 +574,7 @@ fn ! seed! b: Build row: String -> (Result String String)
         (llSha (optionOr (seedField row "llSha256") ""))
         (dir (seedDirOf b row))
         (ll (str b.tmp "/seed.ll"))
+        (_ (adopt! b dir (list "bin")))
         (_ (useEntry! b dir))]
     (cond
       ((or (stringEmpty? file) (!= (stringLength llSha) 64)) (err "the seed row lacks :file or :llSha256"))
@@ -639,6 +679,7 @@ fn ! stage! b: Build name: String compiler: String tag: String entry: String ext
     ((ok found) (let [(key (pairFirst found))
                       (deps (pairSecond found))]
       (let [(dir (str b.cache "/" name "-" key))
+                       (_ (adopt! b dir (list "bin" "deps")))
                        (_ (useEntry! b dir))
                        (marker (str dir ".failed"))
                        (markerPresent (sys/isFile? marker))

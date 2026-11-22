@@ -1,8 +1,8 @@
 (module asl-cli/tests/buildOwnerGoneTest
   :x [runTests]
-  :i [(asl-tools/fleet/run :a fr)])
+  :i [(asl-tools/fleet/run :a fr) (asl/packages/asl-cli/tests/nativeColdFixture :a nf)])
 
-; (:m :ref BUILD-DETACHED-ESCAPE :do "a cold native CLI build in a scratch cache is owned by the bin/asl that started it: once that bin/asl is killed while a clang of the build runs, no process of its tree is left 5 s later, and a second bin/asl waiting on the same cache still finishes the build and answers")
+; (:m :ref BUILD-DETACHED-ESCAPE :do "a native CLI build in a scratch cache (seed, runtime and asl1 copied from the run store, the CLI stage built cold) is owned by the bin/asl that started it: once that bin/asl is killed while a clang of the build runs, no process of its tree is left 5 s later, and a second bin/asl waiting on the same cache still finishes the build and answers")
 fn ! treeOf! root: Int64 -> (List Int64)
   (fr/descendantsOf (fr/psSnapshot) root)
 
@@ -26,7 +26,7 @@ fn ! alive pids: (List Int64) -> (List Int64)
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (cache (str "/tmp/buildOwnerGoneTest." (stringFromInt64 (procSelf))))
-        (_ (dirCreate cache))
+        (upstream (nf/adoptFrom! cache (list "seed" "rt" "asl1")))
         (env (fr/childEnv (list (str "ASL_NATIVE_CLI_CACHE=" cache))))
         (argv (list (str root "/bin/asl") "version"))
         (first (fr/guardStart! argv root env (fr/limits 1800 400)))]
@@ -44,7 +44,8 @@ fn ! runTests -> Bool
               (b (match second ((ok g) (some (finish! g))) ((err _) (none))))
               (head (fileExists? (str cache "/head" (stringReplace root "/" "_"))))
               (cleaned (fr/runShell! (str "rm -rf \"" cache "\"") "/" (fr/childEnv (list)) (fr/limits 120 4)))]
-          (do (assert (not (listEmpty? tree)) "a clang of the cold build ran under the first bin/asl")
+          (do (assert upstream "the scratch cache copies seed, runtime and asl1 from the run's store: only the CLI stage the claim is about is built")
+              (assert (not (listEmpty? tree)) "a clang of the cold build ran under the first bin/asl")
               (assert reaped "the killed bin/asl was reaped")
               (assert (listEmpty? left) (str "5 s after its bin/asl was killed no process of that build is left: " (stringJoin (map stringFromInt64 left) " ")))
               (assert (match b ((some o) (= o.exitCode 0)) ((none) false)) (str "the second bin/asl finished the build and answered: " (match b ((some o) (str (stringFromInt64 o.exitCode) " " (optionOr (stringSlice o.stderr 0 600) ""))) ((none) "did not start"))))

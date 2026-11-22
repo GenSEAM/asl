@@ -1,4 +1,4 @@
-(module asl-cli/binAslHostlessTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
+(module asl-cli/binAslHostlessTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl/packages/asl-cli/tests/nativeColdFixture :a nf)])
 
 fn probe -> String
   "asl/packages/asl-cli/tests/fixtures/servedBy/servedProbe.asl"
@@ -37,6 +37,7 @@ fn ! runTests -> Bool
         (added (sh! root (list "git" "worktree" "add" "--detach" fresh "HEAD") 120 16))
         (noOut (not (ok? (dirList (str fresh "/asl/host/out")))))
         (homed (dirCreate home))
+        (upstream (nf/adoptFrom! cache (list "rt" "cli")))
         (noPathHost (sh! fresh (list "/bin/sh" "-c" "command -v asl-host") 10 4))
         (cold (binAslHostless! fresh (list "test" (probe)) home cache hostCache))
         (removed (sh! root (list "git" "worktree" "remove" "--force" fresh) 30 8))
@@ -45,6 +46,7 @@ fn ! runTests -> Bool
         (assert (= added.exit 0) (str "a fresh worktree was checked out with no asl/host/out: " added.out added.verdict))
         (assert noOut "the fresh worktree has no asl/host/out/asl-host (a true cold clone)")
         (assert (ok? homed) "a fresh HOME for the cold run was created")
+        (assert upstream "the fresh native CLI cache copies only the runtime and the CLI stage from the run store: seed and asl1 are still lowered cold with no asl-host")
         (assert (!= noPathHost.exit 0) "the cold run's PATH has no asl-host on it either")
         (assert (= cold.verdict "exit") (str "bin/asl test ended on its own, inside the limit: " cold.verdict " " cold.out))
         (assert (= cold.exit 0) (str "a fresh clone with no asl-host and no asl-host on PATH still answers bin/asl test: " cold.out))
