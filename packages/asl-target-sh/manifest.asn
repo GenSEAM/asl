@@ -13,5 +13,5 @@
    "asl-target-sh/distrib"
    "asl-target-sh/rules"
  ]
- :dependencies []
+ :dependencies ["asl-utils"]
  :capabilities ["codegen/target" "codegen/shell" "codegen/powershell" "codegen/distrib"])

@@ -8,7 +8,8 @@
   :i [(asl-parser/reader :a rd)
       (aslGateway/config :a cfg)
       (aslGateway/usageLedger :a ul)
-      (asl-json/json :a j)])
+      (asl-json/json :a j)
+      (asl-utils/civilDate :a cd)])
 
 ; (:m :ref GW-BUDGET-BALANCER-20261027 :do "pure model-pool balancer: every model is routable with a quality from the best source (own CAL, declared, tier prior) and a confidence, modes filter tiers, pacing spreads each budget window evenly, soft caps shift load, hard caps refuse, costs are Int64 microUSD")
 
@@ -972,15 +973,6 @@ fn parseDurationMs s: String -> (Option Int64)
       ((= (pairFirst (pairFirst done)) 0) (durationPart (pairSecond (pairFirst done)) "s"))
       (else none)))
 
-fn daysFromCivil y: Int64 m: Int64 d: Int64 -> Int64
-  (let [(y1 (if (<= m 2) (- y 1) y))
-        (era (/ (if (>= y1 0) y1 (- y1 399)) 400))
-        (yoe (- y1 (* era 400)))
-        (mp (if (> m 2) (- m 3) (+ m 9)))
-        (doy (+ (/ (+ (* 153 mp) 2) 5) (- d 1)))
-        (doe (+ (* yoe 365) (/ yoe 4) (- 0 (/ yoe 100)) doy))]
-    (+ (* era 146097) doe -719468))
-
 fn sliceInt s: String i: Int64 j: Int64 -> (Option Int64)
   (match (stringSlice s i j) ((some t) (stringToInt64 t)) ((none) none))
 
@@ -996,7 +988,7 @@ fn parseRfc3339Ms s: String -> (Option Int64)
         (y (optionOr (sliceInt t 0 4) -1)) (mo (optionOr (sliceInt t 5 7) -1)) (d (optionOr (sliceInt t 8 10) -1))
         (h (optionOr (sliceInt t 11 13) -1)) (mi (optionOr (sliceInt t 14 16) -1)) (sec (optionOr (sliceInt t 17 19) -1))]
     (if (and utc (= (optionOr (stringSlice t 10 11) "") "T") (>= y 0) (>= mo 1) (<= mo 12) (>= d 1) (<= d 31) (>= h 0) (<= h 23) (>= mi 0) (<= mi 59) (>= sec 0) (<= sec 60))
-      (some (+ (* (+ (* (+ (* (daysFromCivil y mo d) 24) h) 60) mi) 60000) (* sec 1000) fracMs))
+      (some (+ (* (+ (* (+ (* (cd/daysFromCivil y mo d) 24) h) 60) mi) 60000) (* sec 1000) fracMs))
       none))
 
 fn resetAt value: (Option String) nowMs: Int64 -> Int64
@@ -1042,7 +1034,7 @@ fn parseHttpDateMs s: String -> (Option Int64)
         (h (part 0)) (mi (part 1)) (sec (part 2))]
     (if (and (= (listLength parts) 6) (stringEndsWith? (at 0) ",") (= (stringLength (at 1)) 2) (= (stringLength (at 3)) 4) (= (listLength clock) 3) (= (at 5) "GMT")
              (>= mo 1) (>= d 1) (<= d 31) (>= y 0) (>= h 0) (<= h 23) (>= mi 0) (<= mi 59) (>= sec 0) (<= sec 60))
-      (some (+ (* (+ (* (+ (* (daysFromCivil y mo d) 24) h) 60) mi) 60000) (* sec 1000)))
+      (some (+ (* (+ (* (+ (* (cd/daysFromCivil y mo d) 24) h) 60) mi) 60000) (* sec 1000)))
       none))
 
 ; (:m :ref GW-BALANCER-RETRYAFTER-DATE :do "the delay a Retry-After header asks for: delay-seconds, or an HTTP-date taken against nowMs, a date already past being no delay")
