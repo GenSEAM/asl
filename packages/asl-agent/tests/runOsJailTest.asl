@@ -16,7 +16,7 @@ fn leaky? name: String -> Bool
 
 fn harnessAsl? name: String -> Bool
   (and (stringStartsWith? name "ASL_")
-    (not (listContains? (list "ASL_NATIVE_CLI_CACHE" "ASL_HOST_CACHE_DIR" "ASL_NATIVE_ASL1_CACHE" "ASL_CHECK_CACHE" "ASL_CORPUS_CACHE" "ASL_NATIVE_TEST_CACHE" "ASL_FLEET_TAG" "ASL_NATIVE_BUILD_WAIT" "ASL_RUN_TMP") name)))
+    (not (listContains? (list "ASL_NATIVE_CLI_CACHE" "ASL_HOST_CACHE_DIR" "ASL_NATIVE_ASL1_CACHE" "ASL_CHECK_CACHE" "ASL_CORPUS_CACHE" "ASL_NATIVE_TEST_CACHE" "ASL_FLEET_TAG" "ASL_NATIVE_BUILD_WAIT" "ASL_RUN_TMP" "ASL_GATE_LIMIT_SEC") name)))
 
 ; (:m :ref JAIL-LINUX :do "D4: macOS keeps its fixtures under /private/tmp, the real path of /tmp there; Linux has no /private")
 fn ! tmpBase! -> String
