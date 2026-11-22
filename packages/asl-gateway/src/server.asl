@@ -1,10 +1,10 @@
 (module aslGateway/server
   :x [paramsFromRequest gatewayCliMode? hubStatusText! staleHeaderName staleHeaderLine staleMarked addConn requeueWriting stepWriting! failureReason busyOutcome busyOutcomeIn planOutcome breakerEvent! GatewayTurnVerdict Launch GatewayLoop linkOpen! linkSend! extractThinkBlocks detectEshViolation inspectCompletionTurn handleSyncIngest handleBrowserDispatch handleMediaDispatch gatewayHostPath! gatewayStatePath! ensureSessionHeader main mainWith
-      breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
+      hubKeyRows hubKeyNames breakerStateFromConfig settledFailure! GatewayConn ConnPhase connReading connTimer connBucketWait connCli connWriting drive! hubLearnedFrom gatewayTurn! loopConns apiKindOf PendingCall packAttrib runEffect! budgetRefusal! cliAdmit! keyFilesWorldEnv! rampedWorldTable! acceptReq! finishReq! dispatch! HttpRequest sharedRollup seedSinceMs]
   :i [(wire :a wire) (sync :a sync) (browser :a browser) (media :a media) (aslGateway/cliDispatch :a cli) (sessions :a ses) (binding :a bd) (asl-text/say :a sys) (asl-text/string :a ts)
       (aslGateway/chat :a ch) (aslGateway/upstream :a u) (aslGateway/config :a c) (aslGateway/poolDispatch :a pd) (aslGateway/breaker :a b)
       (aslGateway/dispatch :a dp) (aslGateway/plugin :a p) (aslGateway/usage :a g) (aslGateway/usageLedger :a ul) (aslGateway/limits :a lim) (aslGateway/admission :a adm) (aslGateway/learn :a ln) (aslGateway/router :a rt) (asl-json/json :a j)
-      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h)])
+      (aslGateway/subPace :a spc) (aslGateway/subsRefresh :a subsr) (aslGateway/affinity :a af) (aslGateway/omniApi :a om) (aslGateway/federation :a fed) (aslGateway/balancer :a bl) (aslGateway/rateLearn :a rl) (aslGateway/requestLog :a rq) (asl-http/http11 :a h) (aslGateway/getRoutes :a gr) (aslGateway/research :a rs) (aslGateway/search :a srch) (aslGateway/pyText :a pt) (asl-tools/fleet/run :a fr)])
 
 (schema GatewayTurnVerdict
   (:f allowed Bool)
@@ -258,6 +258,7 @@ fn ! mainWith args: (List String) module: String families: (List dp/LifecycleFam
               (do (sys/say! (str "(:gateway :status :running :port " boundPort
                               " :pid " (gatewayNumberAfter state ":pid " 0) ")"))
                 (ok 0))))))
+      ((= mode "hubJob") (hubJobMain! args))
       ((= mode "status") (gatewayStatus! launch port))
       ((= mode "stop") (gatewayStop! launch))
       ((= mode "serve")
@@ -395,6 +396,7 @@ fn ! gatewayRunAt! launch: Launch port: Int64 upstream: String readyPath: String
   (:c connBucketWait [(deadlineMs Int64) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String)])
   ; (:m :ref GW-SESSION-BIND :do "a bound CLI turn parks here instead of blocking the reactor: the vendor child runs under fleet/run limits, the reactor polls its pipes with every other connection and steps it each turn, and the continuation resumes when the child has ended")
   (:c connCli [(p bd/BoundPend) (k (fn [ch/ChatOutcome] -> ch/ChatStep)) (tag String) (t0 Int64)])
+  (:c connJob [(g fr/Guarded) (tmp String)])
   (:c connProxy [(upstreamFd Int64) (pending String) (response String)])
   (:c connWriting [(data String)])
   (:c connStatusPoll [(call u/UpstreamCall) (budget String)]))
@@ -1139,7 +1141,7 @@ fn ! dispatchAuthed! srv: GatewayLoop fd: Int64 raw: String request: HttpRequest
       (match (pairSecond w)
         ((err e) (addConn (pairFirst w) fd (connWriting (errorResponse 500 e))))
         ((ok world) (drive! (pairFirst w) fd tag (ch/chatStart! (ch/ChatRequest :path request.path :headers headersWithSession :body request.body) world)))))
-    (match (omniRoute! srv fd request)
+    (match (hubApiRoute! srv fd request)
       ((some next) next)
       ((none)
         (match (tcpConnect srv.upstreamPort)
@@ -1198,6 +1200,203 @@ fn ! hubStatusRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> GatewayL
   (match (fed/serveAuthError srv.env request.headers)
     ((some e) (addConn srv fd (connWriting (errorResponse 401 e))))
     ((none) (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 200) (ch/headField "Content-Type" "application/asn+sexpr")) :body (str (hubStatusText! srv) "\n")))))))
+
+; (:m :ref HUB-GETROUTES-WIRING :do "getRoutes.asl implemented GET /v1/models and /api/asl/search but server.asl never imported it, so both fell through to the generic proxy and 502'd against the dummy --upstream; POST /api/asl/research had no HTTP route at all. hubApiRoute! claims only these three routes (after the bearer check) and returns none for everything else, so every other request keeps its old path; the handlers run the same code as the agent plane: getRoutes gatewayGet and search.asl executeSearchHub! for the GETs, research.asl researchPipeline! for the POST. A search or research call blocks this loop for its own duration, like the curl stages beneath it")
+fn hubRoutePath path: String -> String
+  (optionOr (listHead (stringSplit path "?")) path)
+
+fn hubGetPath? path: String -> Bool
+  (let [(base (hubRoutePath path))]
+    (or (= base "/v1/models") (= base "/models") (= base "/api/asl/search")))
+
+fn ! hubSearchEnv! env: (Map String String) -> (Map String String)
+  (rs/withSearchKeys! env (list "~/.asl/keys.env"))
+
+; (:m :ref HUB-GETROUTES-WIRING :do "search and research never run in the hub's poll loop: a search is seconds and a research minutes of curl and model waits, so the route starts a child (this module's hubJob mode) through fleet/run guardStart with a timeout and a descendant limit, parks the client connection as connJob and the loop goes on serving every other connection; the child prints one JSON line {status type body} and the loop answers the client when the child has ended, a child that overran its timeout is a 504")
+fn jobLine status: Int64 kind: String body: String -> String
+  (pt/jsonDumps (j/jobj (list (pair "status" (j/jint status)) (pair "type" (j/jstr kind)) (pair "body" (j/jstr body)))) -1)
+
+fn jobError status: Int64 text: String -> String
+  (jobLine status "application/json" (str (pt/jsonDumps (j/jobj (list (pair "error" (j/jstr text)))) -1) "\n"))
+
+fn jobJson status: Int64 v: j/Json -> String
+  (jobLine status "application/json" (str (pt/jsonDumps v -1) "\n"))
+
+fn hubJsonReply srv: GatewayLoop fd: Int64 code: Int64 body: j/Json -> GatewayLoop
+  (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus code) (ch/headField "Content-Type" "application/json")) :body (str (pt/jsonDumps body -1) "\n")))))
+
+fn hubErrorReply srv: GatewayLoop fd: Int64 code: Int64 text: String -> GatewayLoop
+  (hubJsonReply srv fd code (j/jobj (list (pair "error" (j/jstr text)))))
+
+fn hubGetState table: (Result c/GatewayTable String) -> gr/GetState
+  (gr/GetState :projects (list) :channels (list) :sessions (list) :targets (list) :targetQueues (list) :extensionQueues (list)
+    :health (gr/HealthInputs :pools (list) :clis (list) :breaker (list) :undeclared (list)
+              :update (g/GatewayStatus :pid 0 :version "" :diskVersion "" :stale false :diskValid true :updates 0 :updatedFrom "" :inFlight 0 :draining false)
+              :usage (j/jnull) :profiles table :envProfile none :profilePath "" :profileExists false))
+
+; (:m :do "the child side of GET /api/asl/search: argv carries query, engine, limit and whether the caller asked for JSON")
+fn ! hubSearchJob! env: (Map String String) args: (List String) -> String
+  (let [(req (gr/SearchRequest :query (optionOr (listGet args 2) "") :engine (optionOr (listGet args 3) "auto")
+                               :limit (optionOr (stringToInt64 (optionOr (listGet args 4) "5")) 5) :json (= (optionOr (listGet args 5) "") "true")))
+        (st (srch/newHubState (hubSearchEnv! env) (nowMs!) 0 (mapEmpty) (mapEmpty)))
+        (step (srch/executeSearchHub! st req.query req.engine req.limit))]
+    (match (pairFirst step)
+      ((err e) (jobError 502 e.msg))
+      ((ok res)
+        (match (gr/searchResponse req res)
+          ((err e) (jobError 502 e.msg))
+          ((ok resp) (jobLine 200 (if req.json "application/json" "application/asn+sexpr") resp.body))))))
+
+fn ! hubModesPath! root: String -> String
+  (let [(a (str root "/asl/packages/asl-gateway/researchModes.asn"))
+        (b (str root "/packages/asl-gateway/researchModes.asn"))]
+    (if (fileExists? a) a b))
+
+fn hubCliRefused cli: String model: j/Json effort: j/Json prompt: String -> (Result j/Json pt/PyErr)
+  (err (pt/pyErr "RuntimeError" (str "research provider " cli " is a CLI route; the hub serves HTTP routes only")))
+
+fn hubTriage? body: j/Json -> Bool
+  (match (optionOr (j/jsonGet body "triage") (j/jnull))
+    ((j/jbool b) b)
+    ((j/jstr s) (listContains? (list "true" "1" "yes" ":true") (stringLower s)))
+    (_ false))
+
+fn hubBodyText body: j/Json key: String fallback: String -> String
+  (match (optionOr (j/jsonGet body key) (j/jnull)) ((j/jstr s) s) (_ fallback))
+
+; (:m :do "the child side of POST /api/asl/research, the same pipeline the (:research) op runs")
+fn ! hubResearchJob! env: (Map String String) home: String root: String registry: String bodyText: String -> String
+  (match (j/jsonParse bodyText)
+    ((err _) (jobError 400 "research body must be a JSON object"))
+    ((ok body)
+      (let [(topic (hubBodyText body "topic" ""))
+            (depth (hubBodyText body "depth" "flash"))
+            (dTarget (rs/researchDepth depth))
+            (loaded (c/gatewayProfilesLoad! (c/emptyProfilesCache) home registry))]
+        (cond
+          ((stringEmpty? topic) (jobError 400 "Missing topic argument"))
+          ((stringEmpty? dTarget) (jobError 400 (str "unknown depth " depth "; allowed: flash deep exhaustive")))
+          (else
+            (match (rs/researchModeAt! (str root "/.asl/researchModes.asn") (hubModesPath! root) depth)
+              ((err e) (jobError 400 e.msg))
+              ((ok mode)
+                (match (pairSecond loaded)
+                  ((err e) (jobError 500 e))
+                  ((ok table)
+                    (match (rs/researchGatewayRoutes! table none (hubBodyText body "model" ""))
+                      ((err e) (jobError 400 e.msg))
+                      ((ok routes)
+                        (let [(clock (fn [(u Int64)] -> Int64 (/ (monotonicNs) 1000000)))]
+                          (match (rs/researchPipeline! topic dTarget mode (hubTriage? body) routes (hubSearchEnv! env) hubCliRefused hubCliRefused (nowMs!) clock)
+                            ((err e) (jobError 502 e.msg))
+                            ((ok rep) (jobJson (if (= (pt/pyStr (optionOr (pt/jget rep "status") (j/jstr ""))) "failed") 502 200) rep)))))))))))))))
+; (:m :ref HUB-GETROUTES-WIRING :do "a hub-job child also leaves a lease, and at start the hub reaps leases whose owner is gone (KillMode=process lets children outlive a restart). hubJob <kind> <arg>: the child of a hub route; its env is the hub's non-secret env plus the provider and search key rows the hub passed, overlaid like the server does (secrets file, config keyFiles); a research body arrives as a file the child reads and removes, never on argv; one JSON line goes to stdout")
+fn ! hubJobMain! args: (List String) -> (Result Int64 String)
+  (let [(env0 (u/envMapFromList (envList)))
+        (home (optionOr (mapGet env0 "HOME") ""))
+        (env (keyFilesAt! home (resultOr (secretsOverlayAt! home env0) env0)))
+        (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") (resultOr (realPath ".") "."))))
+        (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
+        (registry (if (stringEmpty? registryEnv) (str root "/.asl/mem/calibration/index.asn") registryEnv))
+        (kind (optionOr (listGet args 1) ""))]
+    (cond
+      ((= kind "search") (do (sys/say! (hubSearchJob! env args)) (ok 0)))
+      ((= kind "research")
+        (let [(file (optionOr (listGet args 2) ""))
+              (text (resultOr (fileReadString file) ""))
+              (_ (pathRemove file))]
+          (do (sys/say! (hubResearchJob! env home root registry text)) (ok 0))))
+      (else (do (sys/sayErr! (str "hubJob: unknown kind " kind)) (ok 2)))))
+
+; (:m :ref HUB-GETROUTES-WIRING :do "the NAME=value rows a hub child may keep from the hub's env: only the named keys that are set (every provider keyEnv of the config and the search keys), so fleet/run childEnv still strips every other secret row")
+fn hubKeyRows names: (List String) env: (Map String String) -> (List String)
+  (fold (fn [(acc (List String)) (n String)] -> (List String)
+          (let [(v (optionOr (mapGet env n) ""))]
+            (if (or (stringEmpty? n) (stringEmpty? v)) acc (listAppend acc (list (str n "=" v))))))
+    (list) names)
+
+fn hubKeyNames table: (Result c/GatewayTable String) -> (List String)
+  (listAppend (rs/searchKeyNames)
+    (match table
+      ((ok t) (map (fn [(pv c/GatewayProvider)] -> String pv.keyEnv) (mapValues t.providers)))
+      ((err _) (list))))
+
+; (:m :ref HUB-GETROUTES-WIRING :do "at most (:gateway :hubJobMax N) hub jobs run at once, 3 when unset; the next request is a 429 with Retry-After, so a burst of researches cannot fill the node with children")
+fn ! hubJobMax srv: GatewayLoop -> Int64
+  (match (c/gatewayTopIntOverride (resultOr (fileReadString (c/gatewayProfilesPath srv.home)) "") "hubJobMax")
+    ((some n) (if (>= n 1) n 3))
+    ((none) 3))
+
+fn hubJobsRunning srv: GatewayLoop -> Int64
+  (listLength (filter (fn [(x GatewayConn)] -> Bool (match x.phase ((connJob _ _) true) (_ false))) srv.conns))
+
+fn ! hubJobDrop! tmp: String -> Bool
+  (if (stringEmpty? tmp) true (do (pathRemove tmp) true))
+
+fn ! hubSpawnJob! srv: GatewayLoop fd: Int64 argsTail: (List String) timeoutS: Int64 tmp: String -> GatewayLoop
+  (if (>= (hubJobsRunning srv) (hubJobMax srv))
+    (do (hubJobDrop! tmp)
+        (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus 429) (ch/headField "Content-Type" "application/json") (ch/headField "Retry-After" "5")) :body "{\"error\": \"too many hub jobs running\"}\n")))))
+    (match (gatewayHostPath! (ok (str srv.rootDir "/bin/asl")))
+      ((err e) (do (hubJobDrop! tmp) (hubErrorReply srv fd 502 e)))
+      ((ok host)
+        (let [(argv (listAppend (list host "run" (str srv.rootDir "/asl/packages/asl-gateway/src/server.asl") "hubJob") argsTail))
+              (rows (hubKeyRows (hubKeyNames (pairSecond (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))) srv.env))]
+          (match (fr/guardBegin! argv srv.rootDir (fr/childEnv rows) (fr/limits timeoutS 40))
+            ((err po) (do (hubJobDrop! tmp) (hubErrorReply srv fd 502 "hub job did not start")))
+            ((ok g) (addConn srv fd (connJob g tmp))))))))
+
+fn hubJobReply srv: GatewayLoop fd: Int64 po: fr/ProcOut -> GatewayLoop
+  (if po.timedOut (hubErrorReply srv fd 504 "hub job overran its timeout")
+    (match (j/jsonParse (stringTrim po.stdout))
+      ((err _) (hubErrorReply srv fd 502 (str "hub job exited " (stringFromInt64 po.exitCode) " with no reply")))
+      ((ok r)
+        (addConn srv fd (connWriting (renderResponse (ch/ChatResponse :head (list (ch/headStatus (match (optionOr (j/jsonGet r "status") (j/jnull)) ((j/jint n) n) (_ 502))) (ch/headField "Content-Type" (hubBodyText r "type" "application/json"))) :body (hubBodyText r "body" ""))))))))
+
+; (:m :ref HUB-GETROUTES-WIRING :do "one reactor turn of a hub job: the client's fd is watched too, so a caller that hung up (end of stream or an error) has the child's whole tree killed and its request closed as clientGone; otherwise guardPoll! (no ps in the loop) judges the child and the reply goes out when it ended")
+fn ! jobClientGone? fd: Int64 ready: (List (Pair Int64 Int64)) -> Bool
+  (if (not (readyOn? ready fd)) false
+    (match (fdRead fd 4096)
+      ((err e) (!= e "wouldBlock"))
+      ((ok chunk) (stringEmpty? chunk))))
+
+fn ! stepJob! srv: GatewayLoop conn: GatewayConn g: fr/Guarded tmp: String ready: (List (Pair Int64 Int64)) -> GatewayLoop
+  (if (jobClientGone? conn.fd ready)
+    (do (fr/stopGuard! g) (hubJobDrop! tmp) (finishReq! srv conn true))
+    (let [(s (fr/guardPoll! g))]
+      (match s.out
+        ((none) (loopConns srv (listAppend srv.conns (list (GatewayConn :fd conn.fd :input conn.input :phase (connJob s.guard tmp))))))
+        ((some po) (do (hubJobDrop! tmp) (hubJobReply srv conn.fd po))))))
+
+fn ! hubGetRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> GatewayLoop
+  (let [(loaded (c/gatewayProfilesLoad! srv.profiles srv.home srv.registryPath))
+        (srv1 (loopState srv srv.breaker srv.buckets (pairFirst loaded)))]
+    (match (gr/gatewayGet request.path request.headers (hubGetState (pairSecond loaded)))
+      ((gr/getRespond _ resp) (addConn srv1 fd (connWriting (h/formatHttpResponse resp))))
+      ((gr/getSearch req) (hubSpawnJob! srv1 fd (list "search" req.query req.engine (stringFromInt64 req.limit) (if req.json "true" "false")) 70 ""))
+      ((gr/getCockpit _) (hubErrorReply srv1 fd 404 "not served here"))
+      ((gr/getFail e) (hubErrorReply srv1 fd 400 e.msg))))
+
+fn hubResearchSeconds depth: String -> Int64
+  (if (= depth "flash") 600 2400)
+
+fn ! hubResearchRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> GatewayLoop
+  (match (j/jsonParse request.body)
+    ((err _) (hubErrorReply srv fd 400 "research body must be a JSON object"))
+    ((ok body)
+      (let [(dir (str srv.home "/.asl/run"))
+            (_ (dirCreate (str srv.home "/.asl")))
+            (_2 (dirCreate dir))
+            (tmp (str dir "/hubJob-" (stringFromInt64 (nowNs)) "-" (stringFromInt64 fd) ".json"))]
+        (match (fileWrite tmp request.body)
+          ((err e) (hubErrorReply srv fd 502 "hub job body could not be staged"))
+          ((ok _) (do (fileChmod tmp 384) (hubSpawnJob! srv fd (list "research" tmp) (hubResearchSeconds (hubBodyText body "depth" "flash")) tmp)))))))
+
+fn ! hubApiRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option GatewayLoop)
+  (cond
+    ((and (= request.method "GET") (hubGetPath? request.path)) (some (hubGetRoute! srv fd request)))
+    ((and (= request.method "POST") (= (hubRoutePath request.path) "/api/asl/research")) (some (hubResearchRoute! srv fd request)))
+    (else (omniRoute! srv fd request)))
 
 ; (:m :ref MAINFIX10 :do "omniApi.asl implemented every /api/asl/ route (browser target+extension registration and poll, project/channel sync ingest) but was never imported outside itself, so every /api/asl/ request fell through to the generic proxy and 502'd against whatever --upstream happened to be. omniRoute! handles only paths omniDispatch itself recognizes under /api/asl/, returning none for anything else (including every non-/api/asl path) so the existing fallback arm's proxy call is unchanged for everything this does not claim")
 fn ! omniRoute! srv: GatewayLoop fd: Int64 request: HttpRequest -> (Option GatewayLoop)
@@ -1304,6 +1503,7 @@ fn ! stepConn! srv: GatewayLoop conn: GatewayConn ready: (List (Pair Int64 Int64
     ((connWarm slot provider sent timeout k deadline model intent tag profile deadlines) (stepWarm! srv conn tag slot provider sent timeout k deadline model intent profile deadlines))
     ((connTimer deadlineMs k tag) (stepTimer! srv conn deadlineMs k tag))
     ((connCli p k tag t0) (stepCli! srv conn p k tag t0))
+    ((connJob g tmp) (stepJob! srv conn g tmp ready))
     ((connBucketWait deadlineMs k tag) (stepBucketWait! srv conn deadlineMs k tag))
     ((connProxy upstreamFd pending response) (stepProxy! srv conn upstreamFd pending response ready))
     ((connWriting data) (stepWriting! srv conn data ready))
@@ -1334,6 +1534,7 @@ fn connWatch conn: GatewayConn -> (List (Pair Int64 Int64))
     ((connWarm _ _ _ _ _ _ _ _ _ _ _) (list))
     ((connTimer _ _ _) (list))
     ((connCli p _ _ _) (bd/boundFds p))
+    ((connJob g _) (cons (pair conn.fd 1) (fr/guardFds g)))
     ((connBucketWait _ _ _) (list))
     ((connProxy upstreamFd pending _) (list (pair upstreamFd (if (stringEmpty? pending) 1 2))))
     ((connWriting _) (list (pair conn.fd 2)))
@@ -1396,7 +1597,7 @@ fn pollsPending? srv: GatewayLoop -> Bool
   (match srv.wiring.pool ((some p) (not (listEmpty? p.polls))) ((none) false))
 
 fn cliParked? conn: GatewayConn -> Bool
-  (match conn.phase ((connCli _ _ _ _) true) (_ false))
+  (match conn.phase ((connCli _ _ _ _) true) ((connJob _ _) true) (_ false))
 
 fn parked? conn: GatewayConn -> Bool
   (match conn.phase ((connWarm _ _ _ _ _ _ _ _ _ _ _) true) (_ false))
@@ -1471,6 +1672,7 @@ fn ! secretsOverlayAt! home: String env: (Map String String) -> (Result (Map Str
 fn ! gatewayServeWith! listenerFd: Int64 upstreamPort: Int64 families: (List dp/LifecycleFamily) env: (Map String String) -> (Result Int64 String)
   (let [        (root (optionOr (mapGet env "ASL_GATEWAY_ROOT") (optionOr (mapGet env "ROOT_DIR") (resultOr (realPath ".") "."))))
         (registryEnv (optionOr (mapGet env "ASL_CALIBRATION_INDEX") ""))
+        (reaped (fr/reapStaleLeases!))
         (quarantined (match (rq/quarantineCorrupt! (optionOr (mapGet env "HOME") root) (nowMs!))
                        ((some to) (logLine! (str "(:gateway :requests :corrupt \"" (wire/asnEscape to) "\")")))
                        ((none) true)))

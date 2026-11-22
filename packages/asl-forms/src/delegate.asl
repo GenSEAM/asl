@@ -278,16 +278,22 @@ fn envMapFromList! -> (Map String String)
             ((none) (mapSet m row ""))))
         (mapEmpty) (envList))
 
-; (:m :ref SEARCH-KEYS-FILE :do "search engine keys absent from the process env (bounded.asl and Leon runs strip it) come from the key files the gateway reads, so (:search) and (:research) see SYNTHETIC/TAVILY/BRAVE/SERPER without exporting them")
-fn searchKeyNames -> (List String)
-  (list "SYNTHETIC_API_KEY" "TAVILY_API_KEY" "BRAVE_API_KEY" "SERPER_API_KEY")
-
+; (:m :ref HUB-GETROUTES-WIRING :do "the research route, mode and search-key logic lives in aslGateway/research so the hub's POST /api/asl/research and the (:research) op run the same code; these names stay as the op module's exports")
 fn ! withSearchKeys! env: (Map String String) paths: (List String) -> (Map String String)
-  (fold (fn [(m (Map String String)) (k String)] -> (Map String String)
-          (if (stringEmpty? (optionOr (mapGet m k) ""))
-            (match (cfg/keyFileLookup! paths k) ((some v) (mapSet m k v)) ((none) m))
-            m))
-        env (searchKeyNames))
+  (rs/withSearchKeys! env paths)
+
+fn researchEntryJson e: cfg/GatewayEntry -> j/Json
+  (rs/researchEntryJson e)
+
+fn researchGatewayRoutes! table: cfg/GatewayTable profile: (Option String) model: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
+  (rs/researchGatewayRoutes! table profile model)
+
+fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option String) -> (Result j/Json pt/PyErr)
+  (rs/resolveResearchEntry! table model profile)
+
+fn ! researchModeAt! wsTable: String pkgTable: String depth: String -> (Result j/Json pt/PyErr)
+  (rs/researchModeAt! wsTable pkgTable depth)
+
 
 fn ! searchEnv! -> (Map String String)
   (withSearchKeys! (envMapFromList!) (list "~/.asl/keys.env"))
@@ -339,74 +345,6 @@ fn ! searchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List S
                   ((ok text)
                     (okLine (str (stepHead id "search") " :status \"ok\" :results\n" (pyStrip text) ")")))))))))))
 
-fn researchTemp p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.temperature ((some v) (list (pair "temperature" (j/jfloat v)))) ((none) (list)))
-
-fn researchEffort p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.effort ((some v) (list (pair "effort" (j/jstr v)))) ((none) (list)))
-
-fn researchMaxTokens p: cfg/GatewayParams -> (List (Pair String j/Json))
-  (match p.maxTokens ((some v) (list (pair "maxTokens" (j/jint v)))) ((none) (list)))
-
-fn researchParams p: cfg/GatewayParams -> j/Json
-  (j/jobj (listAppend (listAppend (researchTemp p) (researchEffort p)) (researchMaxTokens p)))
-
-fn researchEntryJson e: cfg/GatewayEntry -> j/Json
-  (let [(u e.upstream)]
-    (j/jobj (list (pair "alias" (j/jstr e.alias))
-      (pair "dispatch" (j/jstr e.dispatch))
-      (pair "upstream" (j/jobj (list
-        (pair "provider" (j/jstr u.provider))
-        (pair "url" (j/jstr u.url))
-        (pair "key" (j/jstr u.key)))))
-      (pair "params" (researchParams e.params))
-      (pair "timeoutSec" (j/jfloat e.timeoutSec))
-      (pair "rpm" (match e.rpm ((some v) (j/jfloat v)) ((none) (j/jnull)))))))
-
-fn resolvedResearchEntry r: cfg/GatewayResolvedEntry -> (Result j/Json pt/PyErr)
-  (match r
-    ((cfg/entryResolved e) (ok (researchEntryJson e)))
-    ((cfg/entryUnresolved a) (err (pt/pyErr "ValueError" (str "unresolved research route " a)))))
-
-fn resolvedResearchEntries entries: (List cfg/GatewayResolvedEntry) -> (Result (List j/Json) pt/PyErr)
-  (match (listHead entries)
-    ((none) (ok (list)))
-    ((some entry)
-      (match (resolvedResearchEntry entry)
-        ((err e) (err e))
-        ((ok json)
-          (match (resolvedResearchEntries (optionOr (listTail entries) (list)))
-            ((err e) (err e))
-            ((ok rest) (ok (cons json rest))))))))
-
-fn researchLabelMatches entry: j/Json model: String -> Bool
-  (or (stringContains? (pt/pyStr (optionOr (pt/jget entry "alias") (j/jstr ""))) model)
-      (stringContains? (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))) model))
-
-fn researchRoutesFor! table: cfg/GatewayTable profile: (Option String) intent: String model: String -> (Result (Pair String (List j/Json)) pt/PyErr)
-  (match (cfg/gatewayRouteEntries! table (list) profile intent)
-    ((err message) (err (pt/pyErr "ValueError" message)))
-    ((ok routes)
-      (match (resolvedResearchEntries routes.entries)
-        ((err e) (err e))
-        ((ok entries)
-          (let [(selected (if (stringEmpty? model) entries (filter (fn [(e j/Json)] -> Bool (researchLabelMatches e model)) entries)))]
-            (if (and (listEmpty? selected) (!= intent "audit"))
-              (err (pt/pyErr "ValueError" (if (stringEmpty? model) (str "gateway profile has no " intent " route") (str "model " model " is not in the " intent " route of profile " routes.name))))
-              (ok (pair routes.name selected))))))))
-
-fn researchGatewayRoutes! table: cfg/GatewayTable profile: (Option String) model: String -> (Result (Pair String (Pair (List j/Json) (List j/Json))) pt/PyErr)
-  (match (researchRoutesFor! table profile "research" model)
-    ((err e) (err e))
-    ((ok research)
-      (match (researchRoutesFor! table (some (pairFirst research)) "audit" "")
-        ((err e) (err e))
-        ((ok audit) (ok (pair (pairFirst research) (pair (pairSecond research) (pairSecond audit))))))))
-
-fn resolveResearchEntry! table: cfg/GatewayTable model: String profile: (Option String) -> (Result j/Json pt/PyErr)
-  (match (researchRoutesFor! table profile "research" model)
-    ((err e) (err e))
-    ((ok routes) (match (listHead (pairSecond routes)) ((none) (err (pt/pyErr "ValueError" "gateway profile has no research route"))) ((some entry) (ok entry)))))
 
 ; (:m :ref PROFILE-PIN-NAME-20261018 :do "rule no-env-config: FREEBULK-ROUTED-DEEPSEEK-20261017 dropped ASL_PROFILE everywhere it was read, this included -- a (:research ...) op reads the same per-worktree pin file asl/packages/asl-agent/src/providers.asl's providerEnv! and tools/fleet/freePool.asl's writeProfilePin! already use, instead of a process-wide env var; absent or unparseable, this returns none, same as an unset ASL_PROFILE did. Previously this was its own stringIndexOf/split scan of researchProfilePinPath; now it is cfg/profilePinRead!, the one shared reader every caller uses")
 fn researchProfileFromConfig! rootDir: String -> (Option String)
@@ -423,7 +361,7 @@ fn researchGatewayEntry! model: String rootDir: String -> (Result (Pair String (
         (profileName (researchProfileFromConfig! rootDir))]
     (match loaded
       ((err message) (err (pt/pyErr "ValueError" message)))
-      ((ok table) (researchGatewayRoutes! table profileName model))))
+      ((ok table) (rs/researchGatewayRoutes! table profileName model))))
 
 fn researchCliArgv! cli: String model: j/Json effort: j/Json prompt: String -> (List String)
   (researchCliArgvAt! cli model effort prompt "<system-prompt-file>" "<prompt-directory>" (resultOr (realPath ".") "."))
@@ -503,27 +441,7 @@ fn ! researchDispatch cli: String model: j/Json effort: j/Json prompt: String ->
 fn researchTimeoutSeconds -> Int64
   400
 
-fn routeUpstream entries: (List j/Json) name: String -> j/Json
-  (match (listHead entries)
-    ((none) (j/jnull))
-    ((some entry)
-      (if (or (= name (pt/pyStr (optionOr (pt/jget entry "dispatch") (j/jstr ""))))
-              (= name (pt/pyStr (optionOr (pt/jget entry "alias") (j/jstr "")))))
-        (optionOr (pt/jget entry "upstream") (j/jnull))
-        (routeUpstream (optionOr (listTail entries) (list)) name))))
 
-; (:m :ref RESEARCH-DEPTH :do "the depth names; what each one spends is a (:mode ...) row of researchModes.asn, read by researchStep")
-fn researchDepth depth: String -> String
-  (cond ((= depth "flash") "flash") ((= depth "deep") "targeted") ((= depth "exhaustive") "matrix") (else ""))
-
-; (:m :ref RESEARCH-DEPTH :do "the mode row of a depth: the workspace table when it exists, else the package table; an unreadable table is an error for every depth but :flash, which then runs the single pipeline; a readable table with a missing or invalid row is an error for every depth")
-fn ! researchModeAt! wsTable: String pkgTable: String depth: String -> (Result j/Json pt/PyErr)
-  (let [(tablePath (if (fileExists? wsTable) wsTable pkgTable))]
-    (match (fileReadString tablePath)
-      ((err _) (if (= depth "flash")
-                 (ok (j/jobj (list (pair "pipeline" (j/jstr "single")) (pair "depth" (j/jstr "flash")))))
-                 (err (pt/pyErr "ValueError" (str "research mode table is unreadable: " tablePath)))))
-      ((ok text) (rs/researchModeOf text depth))))
 
 ; (:m :ref RESEARCH-DEPTH :do "every depth takes its mode row (only :flash falls back to the single pipeline when no table is readable) from <root>/.asl/researchModes.asn when the workspace has one, else from the gateway package, and a row with :pipeline plan runs executeResearchPlan! under its declared budgets")
 fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List String) -> Outcome
@@ -531,7 +449,7 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
         (depth (k/lstripColons (k/kwOr kw "depth" "flash")))
         (triage (researchTriage? (optionOr (mapGet kw "triage") "")))
         (model (k/kwOr kw "model" ""))
-        (dTarget (researchDepth depth))]
+        (dTarget (rs/researchDepth depth))]
     (cond
       ((stringEmpty? topic) (rejectedLine id "research" "ERR_MISSING_ARG" (msgTail "Missing topic argument")))
       ((stringEmpty? dTarget) (rejectedLine id "research" "ERR_INVALID_ARG" (msgTail (str "unknown depth :" depth "; allowed: :flash :deep :exhaustive"))))
@@ -543,26 +461,16 @@ fn ! researchStep ctx: DelegateCtx id: Int64 kw: (Map String String) args: (List
               (match (researchGatewayEntry! model ctx.rootDir)
                 ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
                 ((ok routes)
-                  (let [(env (searchEnv!))
-                        (now (monotonicNs))
-                        (st (srch/newHubState env (/ now 1000000) 0 (mapEmpty) (mapEmpty)))
-                        (entries (pairFirst (pairSecond routes)))
-                        (auditEntries (pairSecond (pairSecond routes)))
-                        (allEntries (listAppend entries auditEntries))
-                        (up (fn [(m String)] -> j/Json (routeUpstream allEntries m)))
+                  (let [(now (monotonicNs))
                         (disp (fn [(cli String) (r j/Json) (eff j/Json) (prompt String)] -> (Result j/Json pt/PyErr) (researchDispatch cli r eff prompt)))
-                        (auditOpt (if (listEmpty? auditEntries) (none) (some auditEntries)))
                         (clock (fn [(u Int64)] -> Int64 (/ (monotonicNs) 1000000)))
                         (planDisp (fn [(cli String) (r j/Json) (eff j/Json) (prompt String)] -> (Result j/Json pt/PyErr)
                                     (researchDispatchTimed cli r eff prompt (mapEmpty) (rs/stageSeconds (researchTimeoutSeconds) (rs/wallLeftMs mode (/ now 1000000) clock)))))
-                        (resPair (if (= (pt/pyStr (optionOr (pt/jget mode "pipeline") (j/jstr ""))) "plan")
-                                   (rs/executeResearchPlan! st topic mode entries triage auditOpt up planDisp (/ now 1000000) clock)
-                                   (rs/executeResearchHub! st topic (pt/pyStr (optionOr (pt/jget mode "depth") (j/jstr dTarget))) entries (j/jstr "auto") triage auditOpt up disp)))]
-                    (match (pairFirst resPair)
+                        (resPair (rs/researchPipeline! topic dTarget mode triage routes (searchEnv!) disp planDisp (/ now 1000000) clock))]
+                    (match resPair
                       ((err e) (rejectedLine id "research" (failureCode e.msg) (msgTail e.msg)))
-                      ((ok rawRep)
-                        (let [(rep (pt/jset rawRep "profile" (j/jstr (pairFirst routes))))
-                              (status (pt/pyStr (optionOr (pt/jget rep "status") (j/jstr ""))))]
+                      ((ok rep)
+                        (let [(status (pt/pyStr (optionOr (pt/jget rep "status") (j/jstr ""))))]
                           (if (= status "failed")
                             (let [(rawReason (pt/pyStr (optionOr (pt/jget rep "reason") (j/jstr "Research execution failed"))))
                                   (triedList (listOf (optionOr (pt/jget rep "tried") (j/jarr (list)))))
