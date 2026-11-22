@@ -55,3 +55,5 @@
 (:doc :symbol "asl/examples/tests/examplesBTest.asl#runTests" :text "examples gate B: module imports (double, cube, quad), file roundTrip, lineCount and readOr present and missing after removing a temp file, string words, csv, hasTarget, prefix, shout, and map counts, getOr, bump, sortedKeys")
 (:doc :symbol "asl/examples/greet.asl#greet" :text "the string 'hello, ' followed by name, for example 'hello, asl'; it never fails, any String input yields a greeting")
 (:doc :symbol "asl/examples/tests/greetTest.asl#runTests" :text "asserts that greet \"asl\" is \"hello, asl\" and returns true; it fails when that assertion fails")
+(:doc :symbol "asl/examples/optionDemo.asl#firstOr" :text "the first element of the list, or the fallback when the list is empty (it never fails)")
+(:doc :symbol "asl/examples/tests/optionDemoTest.asl#runTests" :text "optionDemo gate: firstOr returns the head of a non-empty list and the fallback for an empty list")
