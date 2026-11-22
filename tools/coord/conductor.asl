@@ -2,7 +2,7 @@
   :x [batchVerdictsOwned tagChunks! bisectChunks zipPairs bisectAwait? heldAwait? retryVerdict? bisectTag soloConvert! docAutodrop! docAutodropAt! docAutodropOnce! preexistingOf trainPreexisting! admissionMaxParallelOf admitFull? admitLimitOf scaledEstimateS admitEstimateS! admitLimitFor! stageSecFor! killedReds admitResWith admitSweep! admissionCounts failRes admissionRowOf admissionErrors admissionOn? admissionJobsOf admitScratchOf admitArgv admitLogPath admitRedPath admitRedNote! admissionLine admitResOf admitNote admitRounds! admitRedFix! admitFinish! admitStage lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! docRowsCheckStepsAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
-      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
+      requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? requestRebrief! rebriefDrain! rebriefOne! rebriefPath requestRemodel! remodelRefusal remodelAliasKnown? remodelDrain! remodelOne! remodelAliasOf remodelAliasPath remodelCfg inFlightState? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
       main]
@@ -118,7 +118,8 @@ fn ! moveA! ctx: Ctx c: CUnit to: String stage: String model: String alias: Stri
                     :sig (if (and (= to "blocked") (stringEmpty? c.sig)) (blockSig stage verdict) c.sig)))
         (_ (journalA! ctx c to stage model alias tokens cost verdict ms))
         (_ (writeCUnit! ctx.dir next))
-        (_ (if (and (!= to c.st) (= to "merged")) (dropShBase! ctx c.id) false))]
+        (_ (if (and (!= to c.st) (= to "merged")) (dropShBase! ctx c.id) false))
+        (_ (if (and (!= to c.st) (= to "merged")) (ok? (pathRemove (remodelAliasPath ctx.dir c.id))) false))]
     next)
 
 ; (:m :ref SERVED-ALIAS-JOURNAL :do "the model a write is journalled under comes from Leon's receipt: :servedAlias A, else :servedModel M, else the older literal :model tag (modelOf, unknown when absent); the alias alone is also journalled as :alias; review's writer exclusion (reviewWriter) reads the unit's model, so it sees the served alias and never an unknown family when the receipt named one")
@@ -1515,7 +1516,8 @@ fn ! finish! ctx: Ctx u0: st/Task c: CUnit res0: Res -> Unit
             (let [(_ (wipSave! ctx c.id "vacuousGate"))
                   (_ (vacuousMark! ctx u c))
                   (_ (dropLease! ctx c))
-                  (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig "write: the unit gate passes on the base before any edit, so no write can prove it; make the gate fail on the base or mark the task a regression guard"))
+                  (c1 (escalate! ctx (with c :sig res.sig :epoch 0) res.sig (vacuousBlockWhy res.asserts)))
+                  (_ (vacuousNeed! ctx c res))
                   (_ (move! ctx c1 "blocked" "write" res.model res.tokens res.costMicro (str "escalated: " (verdictSig res.sig)) res.ms))]
               ())
             (let [(_ (failT! ctx c "write" res.model res.sig res.ms res.tokens res.costMicro))] ()))))))))
@@ -1893,7 +1895,7 @@ fn ! tick! ctx: Ctx -> (Result Int64 String)
     (if (repoGate! ctx) (tickRepo! ctx) (ok 0)))
 
 fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
-  (match (let [(_ (reloadDrain! ctx))] (st/readUnits! ctx.dir))
+  (match (let [(_ (reloadDrain! ctx)) (_ (rebriefDrain! ctx)) (_ (remodelDrain! ctx))] (st/readUnits! ctx.dir))
     ((err e) (err e))
     ((ok units)
       (let [(_ (requeueDrain! ctx units))
@@ -2176,7 +2178,7 @@ fn ! archiveName! repo: String id: String stamp: String k: Int64 -> String
 fn unbranched c: CUnit -> CUnit
   (with c :branch "" :wt "")
 
-fn ! reloadApply! ctx: Ctx u: st/Task c: CUnit r: pi/PlanRow cus: (List CUnit) -> Bool
+fn ! reloadApply! ctx: Ctx u: st/Task c: CUnit r: pi/PlanRow cus: (List CUnit) to0: String -> Bool
   (let [(old (unitDigest! ctx.dir u))
         (work (or (!= u.owns r.owns) (or (!= u.gate r.gate) (!= (readOr (str ctx.dir "/tasks/" u.id ".txt")) r.doc))))
         (_ (dropLease! ctx c))
@@ -2190,7 +2192,7 @@ fn ! reloadApply! ctx: Ctx u: st/Task c: CUnit r: pi/PlanRow cus: (List CUnit) -
               (_ (dirCreate (str ctx.dir "/tasks")))
               (_ (fileWrite (str ctx.dir "/tasks/" u.id ".txt") r.doc))
               (_ (countersReset! ctx c))
-              (to (if (depsMerged? u1 cus) "ready" "queued"))
+              (to (cond ((not (stringEmpty? to0)) to0) ((depsMerged? u1 cus) "ready") (else "queued")))
               (_ (move! ctx (cleaned c1 r.channel) to "reload" "" 0 0 "reloaded" 0))
               (_ (fileAppend (journalPath ctx.dir) (str "(:reload :unit " (st/q u.id) " :old " (st/q old) " :new " (st/q (unitDigest! ctx.dir u1)) " :to " to " :branch " arch " :at " (n (nowMs)) ")\n")))]
           true)))))
@@ -2216,7 +2218,7 @@ fn ! reloadOne! ctx: Ctx units: (List st/Task) id: String -> Bool
               (if (not (pi/importable? r)) (reloadRefuse! ctx.dir id (str "need " (if (listEmpty? r.owns) "owns" "gate")))
                 (let [(gone (filter (fn [(d String)] -> Bool (not (listAny? (fn [(x st/Task)] -> Bool (= x.id d)) units))) r.after))]
                   (if (not (listEmpty? gone)) (reloadRefuse! ctx.dir id (str "after unknown " (stringJoin gone " ")))
-                    (reloadApply! ctx u (optionOr cu (newCUnit u)) r cus))))))))))
+                    (reloadApply! ctx u (optionOr cu (newCUnit u)) r cus ""))))))))))
 
 fn ! reloadDrain! ctx: Ctx -> Int64
   (let [(p (reloadPath ctx.dir))
@@ -2226,6 +2228,146 @@ fn ! reloadDrain! ctx: Ctx -> Int64
       (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(l String)] -> String (quotedAfter l ":unit \"")) (stringLines (readOr taken)))))
             (units (resultOr (st/readUnits! ctx.dir) (list)))
             (done (filter (fn [(id String)] -> Bool (reloadOne! ctx units id)) ids))
+            (_ (pathRemove taken))]
+        (listLength done))))
+
+; (:m :ref COND-REBRIEF :do "rebrief: `conductor rebrief --ids A --row FILE --store DIR` copies the ASN row of FILE to <store>/rebrief/ID.asn and appends (:rebrief :unit ID) to <store>/rebrief.asn; the running tick claims the file by rename and a unit that is not writing, gating, in review, admitting, merging or merged gets tasks/ID.txt and its :owns :gate :after from the row (an old worktree is archived when the work changes), a (:rebrief :unit :old :new) row with the digests of the old and new definition, clean counters and the state queued; a refused unit is journalled as (:rebrief :unit ID :refused WHY) and nothing changes; reload stays the operator's no")
+fn rebriefPath dir: String -> String
+  (str dir "/rebrief.asn")
+
+fn rebriefRowPath dir: String id: String -> String
+  (str dir "/rebrief/" id ".asn")
+
+fn ! requestRebrief! dir: String ids: (List String) rowFile: String -> Bool
+  (if (listEmpty? ids) true
+    (let [(text (readOr rowFile))]
+      (if (stringEmpty? text) false
+        (let [(_ (dirCreate (str dir "/rebrief")))
+              (saved (filter (fn [(id String)] -> Bool (ok? (fileWrite (rebriefRowPath dir id) text))) ids))]
+          (and (= (listLength saved) (listLength ids))
+               (ok? (fileAppend (rebriefPath dir) (str (stringJoin (map (fn [(id String)] -> String (str "(:rebrief :unit " (st/q id) ")")) ids) "\n") "\n"))))))))
+
+fn inFlightState? s: String -> Bool
+  (listContains? (list "writing" "gating" "awaitReview" "reviewing" "admitting" "merging" "merged") s)
+
+fn ! rebriefRefuse! dir: String id: String why: String -> Bool
+  (let [(_ (fileAppend (journalPath dir) (str "(:rebrief :unit " (st/q id) " :refused " (st/q why) " :at " (n (nowMs)) ")\n")))] false)
+
+; (:m :ref COND-REBRIEF :do "the definition a rebrief replaces is kept: <store>/rebrief/ID.old-MS.asn holds the old task text and the unit row, so a wrong row is undone by hand; and new :owns that clash with the live lease of another unit are refused at once, not at the first claim")
+fn ! rebriefSaveOld! dir: String u: st/Task -> Bool
+  (let [(_ (dirCreate (str dir "/rebrief")))]
+    (ok? (fileWrite (str dir "/rebrief/" u.id ".old-" (n (nowMs)) ".asn") (str "(:rebriefOld :unit " (st/q u.id) " :task " (st/q (readOr (str dir "/tasks/" u.id ".txt"))) ")\n" (st/renderUnit u) "\n"))))
+
+fn ownsOf u: st/Task owns: (List String) -> st/Task
+  (with u :owns owns)
+
+fn ! rebriefClash dir: String u: st/Task owns: (List String) -> String
+  (match (st/readLeases! dir)
+    ((err _) "")
+    ((ok ls) (st/ownsClash (ownsOf u owns) (filter (fn [(l st/Lease)] -> Bool (st/live? l (nowNs))) ls))))
+
+fn ! rebriefOne! ctx: Ctx units: (List st/Task) id: String -> Bool
+  (let [(cus (readCUnits! ctx.dir))
+        (cu (cuOf cus id))
+        (now (match cu ((some c) c.st) ((none) "queued")))]
+    (match (listFind (fn [(u st/Task)] -> Bool (= u.id id)) units)
+      ((none) (rebriefRefuse! ctx.dir id "unknown"))
+      ((some u)
+        (if (inFlightState? now) (rebriefRefuse! ctx.dir id now)
+          (match (listFind (fn [(r pi/PlanRow)] -> Bool (= r.id id)) (pi/rowsOfIn (readOr (rebriefRowPath ctx.dir id)) (match cu ((some c) c.lane) ((none) u.channel))))
+            ((none) (rebriefRefuse! ctx.dir id "noRow"))
+            ((some r)
+              (if (not (pi/importable? r)) (rebriefRefuse! ctx.dir id (str "need " (if (listEmpty? r.owns) "owns" "gate")))
+                (let [(gone (filter (fn [(d String)] -> Bool (not (listAny? (fn [(x st/Task)] -> Bool (= x.id d)) units))) r.after))
+                      (old (unitDigest! ctx.dir u))]
+                  (if (not (listEmpty? gone)) (rebriefRefuse! ctx.dir id (str "after unknown " (stringJoin gone " ")))
+                  (if (not (stringEmpty? (rebriefClash ctx.dir u r.owns))) (rebriefRefuse! ctx.dir id (str "owns clash" (rebriefClash ctx.dir u r.owns)))
+                    (let [(_ (rebriefSaveOld! ctx.dir u))
+                          (ok (reloadApply! ctx u (optionOr cu (newCUnit u)) r cus "queued"))
+                          (_ (pathRemove (remodelAliasPath ctx.dir id)))
+                          (fresh (match (listFind (fn [(x st/Task)] -> Bool (= x.id id)) (resultOr (st/readUnits! ctx.dir) (list))) ((some x) x) ((none) u)))
+                          (_ (fileAppend (journalPath ctx.dir) (str "(:rebrief :unit " (st/q id) " :old " (st/q old) " :new " (st/q (unitDigest! ctx.dir fresh)) " :at " (n (nowMs)) ")\n")))]
+                      ok)))))))))))
+
+fn ! rebriefDrain! ctx: Ctx -> Int64
+  (let [(p (rebriefPath ctx.dir))
+        (taken (str p ".taken"))
+        (_ (if (and (fileExists? p) (not (fileExists? taken))) (pathRename p taken) (ok ())))]
+    (if (not (fileExists? taken)) 0
+      (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map (fn [(l String)] -> String (quotedAfter l ":unit \"")) (stringLines (readOr taken)))))
+            (units (resultOr (st/readUnits! ctx.dir) (list)))
+            (done (filter (fn [(id String)] -> Bool (rebriefOne! ctx units id)) ids))
+            (_ (pathRemove taken))]
+        (listLength done))))
+
+; (:m :ref COND-REBRIEF :do "remodel: `conductor remodel --ids A (--tier T | --alias M) --store DIR` appends (:remodel :unit ID :tier T | :alias M) to <store>/remodel.asn; the running tick claims the file by rename and a unit not writing, gating, in review, admitting, merging or merged gets the writer tier (its lane and channel) or the gateway alias (<store>/remodel/ID.alias, which the unit's write stage pins as :model) for its next attempts, journalled as (:remodel :unit ID :tier|:alias X :was Y); a refused unit changes nothing")
+fn remodelPath dir: String -> String
+  (str dir "/remodel.asn")
+
+fn remodelAliasPath dir: String id: String -> String
+  (str dir "/remodel/" id ".alias")
+
+fn ! remodelAliasOf dir: String id: String -> String
+  (stringTrim (readOr (remodelAliasPath dir id)))
+
+fn remodelRefusal tier: String alias: String gatewayText: String lanesText: String -> String
+  (cond ((and (not (stringEmpty? tier)) (not (listContains? (writeTiers) tier))) (str "tier " tier " is not one of " (stringJoin (writeTiers) " ")))
+        ((and (not (stringEmpty? alias)) (stringEmpty? (stringTrim gatewayText))) (str "alias " alias ": no gateway.asn to check it against"))
+        ((and (not (stringEmpty? alias)) (not (remodelAliasKnown? alias gatewayText lanesText))) (str "alias " alias " is not a gateway model id"))
+        (else ""))
+
+; (:m :ref COND-REBRIEF :do "an alias is a gateway model :id, matched exactly: the family table matches by prefix, so a typo of the same prefix (synDs41Flsh) passed it and failed every attempt")
+fn remodelAliasKnown? alias: String gatewayText: String lanesText: String -> Bool
+  (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) alias)) (rs/modelNames gatewayText))
+
+; (:m :ref COND-REBRIEF :do "a tier outside writeTiers or an alias the gateway table and the families do not know is refused when asked, with a journal row per unit; --clear drops the pin of the alias, and rebrief and a merge drop it too")
+fn ! requestRemodel! dir: String ids: (List String) tier: String alias: String clear: Bool gatewayText: String lanesText: String -> Bool
+  (let [(why (remodelRefusal tier alias gatewayText lanesText))]
+    (cond ((listEmpty? ids) false)
+          ((not (stringEmpty? why)) (let [(_ (map (fn [(id String)] -> Bool (ok? (fileAppend (journalPath dir) (str "(:remodel :unit " (st/q id) " :refused " (st/q why) " :at " (n (nowMs)) ")\n")))) ids))] false))
+          ((and (stringEmpty? tier) (and (stringEmpty? alias) (not clear))) false)
+          (else (ok? (fileAppend (remodelPath dir) (str (stringJoin (map (fn [(id String)] -> String (str "(:remodel :unit " (st/q id) (if (stringEmpty? tier) "" (str " :tier " (st/q tier))) (if (stringEmpty? alias) "" (str " :alias " (st/q alias))) (if clear " :clear true" "") ")")) ids) "\n") "\n"))))))
+
+fn channelOf u: st/Task ch: String -> st/Task
+  (with u :channel ch)
+
+fn laneOf c: CUnit lane: String -> CUnit
+  (with c :lane lane)
+
+fn ! remodelOne! ctx: Ctx units: (List st/Task) line: String -> Bool
+  (let [(id (quotedAfter line ":unit \""))
+        (tier (quotedAfter line ":tier \""))
+        (alias (quotedAfter line ":alias \""))
+        (clear (stringContains? line " :clear true"))
+        (refuse (fn [(why String)] -> Bool (let [(_ (fileAppend (journalPath ctx.dir) (str "(:remodel :unit " (st/q id) " :refused " (st/q why) " :at " (n (nowMs)) ")\n")))] false)))]
+    (match (listFind (fn [(u st/Task)] -> Bool (= u.id id)) units)
+      ((none) (refuse "unknown"))
+      ((some u)
+        (match (cuOf (readCUnits! ctx.dir) id)
+          ((none) (refuse "noState"))
+          ((some c)
+            (if (inFlightState? c.st) (refuse c.st)
+            (if (and (not (stringEmpty? tier)) (not (listContains? (writeTiers) tier))) (refuse (str "tier " tier))
+              (let [(_ (if clear (pathRemove (remodelAliasPath ctx.dir id)) (ok ())))
+                    (_ (if (stringEmpty? alias) (ok ()) (let [(_ (dirCreate (str ctx.dir "/remodel")))] (fileWrite (remodelAliasPath ctx.dir id) (str alias "\n")))))
+                    (_ (if (stringEmpty? tier) (ok ())
+                         (match (st/put! ctx.dir (channelOf u tier)) ((ok _) (ok ())) ((err e) (err e)))))
+                    (_ (if (stringEmpty? tier) (ok ()) (writeCUnit! ctx.dir (laneOf c tier))))
+                    (_ (fileAppend (journalPath ctx.dir) (str "(:remodel :unit " (st/q id) (if (stringEmpty? tier) "" (str " :tier " (st/q tier) " :was " (st/q c.lane))) (if (stringEmpty? alias) "" (str " :alias " (st/q alias))) " :at " (n (nowMs)) ")\n")))]
+                true))))))))
+
+; (:m :ref COND-REBRIEF :do "the next write of a remodelled unit is served by its alias: the unit pins :model like --writer-model does, and a run-wide pin wins")
+fn ! remodelCfg rc: RealCfg dir: String id: String -> RealCfg
+  (let [(a (remodelAliasOf dir id))]
+    (if (or (stringEmpty? a) (not (stringEmpty? rc.writerModel))) rc (with rc :writerModel a)))
+
+fn ! remodelDrain! ctx: Ctx -> Int64
+  (let [(p (remodelPath ctx.dir))
+        (taken (str p ".taken"))
+        (_ (if (and (fileExists? p) (not (fileExists? taken))) (pathRename p taken) (ok ())))]
+    (if (not (fileExists? taken)) 0
+      (let [(units (resultOr (st/readUnits! ctx.dir) (list)))
+            (done (filter (fn [(l String)] -> Bool (and (not (stringEmpty? l)) (remodelOne! ctx units l))) (stringLines (readOr taken))))
             (_ (pathRemove taken))]
         (listLength done))))
 
@@ -4430,6 +4572,15 @@ fn vacuousSig gate: String -> String
 fn vacuousSig? sig: String -> Bool
   (stringStartsWith? sig "vacuousGate: ")
 
+; (:m :ref VACUOUS-SPEC-BLOCK :do "a unit whose gate is green on its merge-base with executed asserts is blocked at claim with one (:need :unit ID :needs gate :do WHY) row for the lead and no writer or review call; WHY is the red-before refusal text the gates stage already gives, so the writer and the lead read the same instruction")
+fn vacuousBlockWhy executed: Int64 -> String
+  (redBeforeRefusal (pair 0 executed) "")
+
+fn ! vacuousNeed! ctx: Ctx c: CUnit res: Res -> Bool
+  (if (!= c.esc 0)
+    false
+    (ok? (fileAppend (escalationsPath ctx.dir) (str "(:need :unit " (st/q c.id) " :needs gate :do " (st/q (vacuousBlockWhy res.asserts)) ")\n"))))
+
 ; (:m :ref OWNS-SYMBOL-CONDUCTOR :do "an :owns entry is path or path#symbol (store.asl decides clashes with the symbol); everywhere the conductor compares changed files with :owns, hands :owns to git as a pathspec or to a writer as its allowed paths, the entry means its file, so a writer owning f.asl#a may change f.asl")
 fn entryFile e: String -> String
   (optionOr (listHead (stringSplit e "#")) e)
@@ -5149,8 +5300,9 @@ fn ! handoffFail! p: String dir: String u: st/Task -> (Option Res)
     (if (stringEmpty? f) (none) (some (failRes f))))
 
 ; (:m :ref COND-TASK-SPEC :do "the write stage with its Leon run injected, so a gate can record the task text the writer would receive; writeRes passes runWrite!")
-fn ! writeResWith run: (fn ! [RealCfg String String String String String (List String) (List String) String] -> fr/Done) rc: RealCfg dir: String u0: st/Task c: CUnit -> Res
-  (let [(u (resolved! rc.repo u0))
+fn ! writeResWith run: (fn ! [RealCfg String String String String String (List String) (List String) String] -> fr/Done) rc0: RealCfg dir: String u0: st/Task c: CUnit -> Res
+  (let [(rc (remodelCfg rc0 dir u0.id))
+        (u (resolved! rc.repo u0))
         (path (w/wtPath rc.wt u.id))
         (added (settleWt! rc dir u path))]
     (match added
@@ -6124,10 +6276,15 @@ fn lastTiers rows: (List String) id: String -> String
             acc))
         "" rows)
 
+; (:m :ref COND-REBRIEF :do "a block whose reason is that the gates are not proven red-before is a fact of the receipt, not a reviewer opinion a stronger reviewer could overturn: offerStrong! does not send it back to awaitReview (15 offers of GW-STALE-HEADER-CTRL ended the same way); the reason is the unit signature or the :seen of its newest escalate row")
+fn gatesFactBlock? rows: (List String) c: CUnit -> Bool
+  (or (stringContains? (stringLower c.sig) "gates not proven")
+      (stringContains? (stringLower (fold (fn [(acc String) (r String)] -> String (if (stringContains? r (str ":unit " (st/q c.id) " ")) r acc)) "" rows)) ":seen \"gates not proven"))
+
 fn ! offerStrong! ctx: Ctx snapshot: (fn ! [] -> (List (Pair String Int64))) -> Int64
   (let [(allow (pairSecond (optionOr (listFind (fn [(p (Pair String Int64))] -> Bool (= (pairFirst p) "strong")) (snapshot)) (pair "strong" 0))))
         (rows (stringLines (readOr (escalationsPath ctx.dir))))
-        (cands (filter (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (and (= c.esc 1) (and (not (stringStartsWith? c.await "witness")) (stringStartsWith? (lastTiers rows c.id) "strong"))))) (readCUnits! ctx.dir)))]
+        (cands (filter (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (and (= c.esc 1) (and (not (stringStartsWith? c.await "witness")) (and (not (gatesFactBlock? rows c)) (stringStartsWith? (lastTiers rows c.id) "strong")))))) (readCUnits! ctx.dir)))]
     (if (<= allow 0) 0
       (fold (fn [(done Int64) (c CUnit)] -> Int64
               (if (>= done allow) done
@@ -6303,6 +6460,11 @@ fn ! main args: (List String) -> (Result Int64 String)
                            (do (println (str "(:requeue :requested " (if (requestRequeue! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
       ((= cmd "close") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))]
                          (do (println (str "(:close :requested " (if (requestClose! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
+      ((= cmd "rebrief") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))]
+                           (do (println (str "(:rebrief :requested " (if (requestRebrief! dir ids (st/opt args "row" "")) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
+      ((= cmd "remodel") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))
+                                (ok1 (requestRemodel! dir ids (st/opt args "tier" "") (st/opt args "alias" "") (listContains? args "--clear") (readOr (str rc.home "/.asl/gateway.asn")) (readOr rc.lanes)))]
+                           (do (println (str "(:remodel :requested " (if ok1 "true" "false") " :units " (st/qList ids) ")")) (ok (if ok1 0 1)))))
       ((= cmd "reload") (let [(ids (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (map stringTrim (stringSplit (st/opt args "ids" "") ","))))]
                           (do (println (str "(:reload :requested " (if (requestReload! dir ids) "true" "false") " :units " (st/qList ids) ")")) (ok 0))))
       ((= cmd "check") (let [(ps (startupProblemsIn dir rc))
@@ -6325,7 +6487,7 @@ fn ! main args: (List String) -> (Result Int64 String)
                   (_ (println (str "(:run :store " (st/q dir) " :refreshMin " (n (st/intOpt args "refresh-min" 15)) ")")))]
               (ok (runLoop! ctx (fn [] -> (List (Pair String Int64)) (laneSnapshot rc)) (fn [] -> Unit (let [(_ (sr/subsRefreshCli! (list)))] ()))
                             (nowMs) (* (st/intOpt args "refresh-min" 15) 60000) 12))))))
-      (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|close --ids A,B (merged without any check that the work is on main)|reload --ids A,B (definition re-read from the intake files, counters reset)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
+      (else (do (eprintln "usage: conductor tick|run|status|check|stop|requeue (--ids A,B|--all-blocked)|close --ids A,B (merged without any check that the work is on main)|reload --ids A,B (definition re-read from the intake files, counters reset)|rebrief --ids A --row FILE (task, gate and owns from the ASN row, journalled digests, queued, clean counters)|remodel --ids A (--tier T|--alias M|--clear) (writer tier or alias for the next attempts)|restart [--grace-sec S]|wake LANE --store DIR") (ok 2)))))
 
 ; (:m :ref MERGE-SOLO-BISECT :do "a batch red no single branch carries, an assert loss or a killed train splits the unmerged members in halves instead of sending each to a train of its own: a half of one runs solo, a larger half carries await bisect:FIRSTBRANCH/SIZE and only members of the same group ride together, so a green half merges at once and a red one splits again, k units cost at most 2*log2(k) trains")
 fn bisectAwait? a: String -> Bool

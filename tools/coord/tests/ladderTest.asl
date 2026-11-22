@@ -119,6 +119,7 @@ fn testMerge -> Bool
               (n (run (unit "low" false) (noRedGates) (pool) (list (pair "orNemotronUltraFree" (passReply)) (pair "ocLongcat" (passReply)))))]
           (do (assert (= m.action "merge") "med risk with both pass merges per the plan row")
               (assert (= n.action "fix") "gates not proven red-before go back to the writer, never merge")
+              (assert (listAny? (fn [(d String)] -> Bool (stringContains? d "add an assertion that fails without your change")) n.defects) "the fix text says what to change, as the gates stage does")
               true))))
 
 fn testSplitAndAbstain -> Bool

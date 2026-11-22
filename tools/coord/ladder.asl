@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven decide permanentError? causeOf absent? starved? scrubLines clip reviewDiffPart reviewDiffChars banNames doubtfulDefect? vetVerdict identWords diffBuiltins reviewBrief reviewWith review]
+  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven unprovenFixWhy decide permanentError? causeOf absent? starved? scrubLines clip reviewDiffPart reviewDiffChars banNames doubtfulDefect? vetVerdict identWords diffBuiltins reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -250,6 +250,10 @@ fn gateGreen g: rd/SExpr -> Bool
         (exit (fm/intOf (fm/kvGet gi ":exit")))
         (executed (fm/intOf (fm/kvGet gi ":executed")))]
     (and (= (optionOr exit 1) 0) (> (optionOr executed 0) 0)))
+
+; (:m :ref VACUOUS-SPEC-BLOCK :do "the fix text a writer reads when the receipt proves no red-before: decide and the review rung share it, and it says what to change (an assertion that fails without the change), not only that the gates are unproven")
+fn unprovenFixWhy -> String
+  "gates not proven red-before with executed assertions: the unit gate exits 0 on the merge-base, so it does not prove the change; add an assertion that fails without your change and passes with it"
 
 ; (:m :ref COND2 :do "gates proven: every gate exited 0 with executed assertions, and a redBefore receipt exists")
 fn gatesProven receipt: String -> Bool
@@ -607,7 +611,7 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
 fn unprovenRuling u: ReviewUnit -> Ruling
   (let [(grade (fn [(note String)] -> String (g/gradeRow u.id "none" "none" u.writerChannel "reject" note)))]
     (if (< u.fixesUsed 1)
-      (ruling "fix" (startRungOf u) (list "gates not proven red-before with executed assertions") "" (list (grade "gates not proven red-before with executed assertions")) u.prior "")
+      (ruling "fix" (startRungOf u) (list (unprovenFixWhy)) "" (list (grade (unprovenFixWhy))) u.prior "")
       (let [(why "gates not proven after a fix round")]
         (ruling "blocked" (startRungOf u) (list why) "" (list (g/gradeRow u.id "none" "none" u.writerChannel "pending" why) (escalateRow u (startRungOf u) u.prior why)) u.prior why))))
 
