@@ -819,6 +819,8 @@ fn ! specCheckRun! env: s/LoopEnv run: LoopRun rootDir: String written: (List St
             (cond
               ((stringContains? m "ERR_NO_GRADER_CHANNEL") (s/SpecVerdict :verdict "skipped" :model "" :reasons (list "noGrader")))
               ((reviewerUnavailable? m) (s/SpecVerdict :verdict "unavailable" :model "" :reasons (list m)))
+              ; (:m :ref LEON-GREEN-BLOCK :do "a grader of the writer's own family is no verdict whatever it answers, an unreadable reply too: JSON-STRICT-NUM 2026-11-23 had gates green, grader qwen4.0-max-preview = writer, reply unreadable, and ended fail, which the conductor blocks")
+              ((sameFamily? grader writer) (s/SpecVerdict :verdict "unavailable" :model grader :reasons (list (str "no independent grader: the grader model " grader " is the writer's model family; the gateway served no other model"))))
               (else (specFail grader (list m)))))
           ((ctx/reviewVerdict met missing)
             (cond

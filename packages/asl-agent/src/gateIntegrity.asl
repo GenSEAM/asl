@@ -1,5 +1,5 @@
 (module aslAgent/gateIntegrity
-  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns revertTimeout revertTimeoutWithin gateIntegrityWithin! gateIntegrityWithChanged! cutExports]
+  :x [Claim claimOf bumpMtime! gateFields gateResultsGreen cutParsePrefix evidenceForm unbackedTexts noteUnbacked scanSwallowedErrors! gateIntegrity! gateIntegrityWritten! testFile? implFiles revertVerdict vacuousForm gateVacuousRounds vacuousRetry unwiredFns unwiredFnsFor revertTimeout revertTimeoutWithin gateIntegrityWithin! gateIntegrityWithinFor! gateIntegrityWithChanged! gateIntegrityWithChangedFor! cutExports]
   :i [(aslAgent/gates :a g) (aslAgent/gitOps :a io) (aslAgent/context :a ctx) (aslAgent/loop :a lp) (aslAgent/core :a c) (aslAgent/diff :a d) (aslAgent/agentConfig :a ac) (asl-syntax/core/bytesText :a bt) (asl-gates/noSelfHostScan :a nsh)])
 
 enum Claim
@@ -221,13 +221,17 @@ fn ! gateIntegrityWritten! gates: (List String) owns: (List String) root: String
 
 ; (:m :ref LEON-FINISH-HANG :do "gateIntegrityWritten! bounded by the wall the run has left (seconds, none for unbounded): every revert run gets at most the wall still left when it starts, and a run that would start with less than revertMinSec is not started, so the check ends inside the run's wall and the receipt is written; STAGEPRUNE 2026-11-09 started the check with about 4 min of wall, the 900 s revert floor ran twice and the outer bound killed the run 24 min later with no receipt")
 fn ! gateIntegrityWithin! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String wall: (Option Int64) -> (Pair Bool String)
+  (gateIntegrityWithinFor! gates owns root gateResults timeout env written watch base wall "")
+
+; (:m :ref LEON-GREEN-BLOCK :do "gateIntegrityWithin! with the task text, so an export the task names is not unwired")
+fn ! gateIntegrityWithinFor! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) written: (List String) watch: (Option Int64) base: String wall: (Option Int64) task: String -> (Pair Bool String)
   (let [deadline (match wall ((some w) (some (+ (monotonicNs) (* (max 0 w) 1000000000)))) ((none) (none)))]
     (match (io/changedOwnedFiles! owns root env)
       ((err message) (pair false (str "changedOwnedFiles failed: " message)))
       ((ok changed)
         (let [rev (revertRev! root base timeout env)
               all (unionPaths (unionPaths changed (committedSince! owns root rev timeout env)) (map (fn [f] (scanPath root f)) written))]
-          (gateIntegrityWithChanged! gates root gateResults timeout env all watch rev deadline)))))
+          (gateIntegrityWithChangedFor! gates root gateResults timeout env all watch rev deadline task)))))
 
 fn ! gateIntegrity! gates: (List String) owns: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) -> (Pair Bool String)
   (match (io/changedOwnedFiles! owns root env)
@@ -280,11 +284,29 @@ fn unwiredExempt defs: (Pair String String) implNow: (List (Pair String String))
       (listAny? (fn [n] (= n (pairSecond defs))) (exportedNames (pairSecond (optionOr (listFind (fn [p] (= (pairFirst p) (pairFirst defs))) implNow) (pair "" "")))))))
 
 fn unwiredFns implNow: (List (Pair String String)) implHead: (List (Pair String String)) -> (List String)
+  (unwiredFnsFor implNow implHead "")
+
+fn codeShaped? name: String -> Bool
+  (or (stringEndsWith? name "!")
+    (or (stringEndsWith? name "?")
+      (let [inner (optionOr (stringSlice name 1 (stringLength name)) "")]
+        (!= inner (stringLower inner)))))
+
+fn taskWords task: String -> (List String)
+  (stringSplit (fold (fn [acc sep] (stringReplace acc sep " ")) task (list "\n" "\t" "(" ")" "[" "]" "{" "}" "," ";" "\"" "'" "`" "#" ":" "=" "." "/")) " ")
+
+; (:m :ref LEON-GREEN-BLOCK :do "task is the unit's own stored task text (Leon :unitTask), never the conductor brief, whose outlines, prior failure and fix-round notes would name the flagged fn back; only a code-shaped name (inner capital, or ending ! or ?) counts, so prose such as open names nothing")
+; (:m :ref LEON-GREEN-BLOCK :do "an export the task names word for word is the API the task asks for, so tests are its only caller yet (PQ-STREAM-WRITER 2026-11-23: parquetWriterOpen! Append! Close! in the existing writer.asl, gate green, run failed gateIntegrity twice and the work was restored); an unnamed export or a named private fn stays unwired")
+fn unwiredFnsFor implNow: (List (Pair String String)) implHead: (List (Pair String String)) task: String -> (List String)
   (let [defs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implNow)
         headDefs (fold (fn [acc p] (listAppend acc (map (fn [n] (pair (pairFirst p) n)) (fnNames (pairSecond p))))) (list) implHead)
         newDefs (filter (fn [d] (not (listAny? (fn [h] (and (= (pairFirst h) (pairFirst d)) (= (pairSecond h) (pairSecond d)))) headDefs))) defs)
-        texts (map pairSecond implNow)]
-    (map pairSecond (filter (fn [d] (and (= (countName (pairSecond d) texts) 1) (not (unwiredExempt d implNow implHead)))) newDefs)))
+        texts (map pairSecond implNow)
+        words (taskWords task)
+        asked (fn [d] (and (codeShaped? (pairSecond d)) (listContains? words (pairSecond d))))
+        askedExport (fn [d] (and (asked d)
+                        (listContains? (exportedNames (pairSecond (optionOr (listFind (fn [p] (= (pairFirst p) (pairFirst d))) implNow) (pair "" "")))) (pairSecond d))))]
+    (map pairSecond (filter (fn [d] (and (= (countName (pairSecond d) texts) 1) (and (not (unwiredExempt d implNow implHead)) (not (askedExport d))))) newDefs)))
 
 ; (:m :ref REVERT-REBUILD-FLOOR :do "a revert run of an asl-agent source rebuilds the native closure, 557 s for toolMemoLoopTest on 2026-11-09 against a 3 s run with the change, so a revert gate gets at least 900 s; under the 300 s gate timeout every such revert timed out")
 fn revertTimeout timeout: Int64 -> Int64
@@ -382,6 +404,9 @@ fn ! mutantCheck! gates: (List String) root: String timeout: Int64 env: (Option 
           (else decision)))))
 
 fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String deadline: (Option Int64) -> (Pair Bool String)
+  (gateIntegrityWithChangedFor! gates root gateResults timeout env changed watch rev deadline "")
+
+fn ! gateIntegrityWithChangedFor! gates: (List String) root: String gateResults: (List g/GateResult) timeout: Int64 env: (Option (List String)) changed: (List String) watch: (Option Int64) rev: String deadline: (Option Int64) task: String -> (Pair Bool String)
   (let [impl (implFiles changed gates)
         verdicts (g/gateVerdicts gateResults false)
         ; (:m :ref RED-AT-GATE :do "noSelfHostTest scans the whole tree (31 s) and is run at done only when a unit lists it, so a new bare child start in a changed test reached the merge train red (9 of 38 reds on node2 in 48 h); the same per-file rules run here on the changed files, well under a second")
@@ -416,7 +441,7 @@ fn ! gateIntegrityWithChanged! gates: (List String) root: String gateResults: (L
               implHead (map (fn [p] (pair (pairFirst p) (optionOr (pairSecond p) ""))) headText)
               newOnly (and (listEmpty? existing) (not (listEmpty? newFiles)))
               proved (if (and newOnly (and (pairFirst answer) (stringContains? (pairSecond answer) ":revertKind compile"))) (mutantCheck! gates root timeout env watch deadline impl implNow answer) answer)
-              unwired (if (and (pairFirst proved) (stringContains? (pairSecond proved) ":revertKind compile")) (unwiredFns implNow implHead) (list))
+              unwired (if (and (pairFirst proved) (stringContains? (pairSecond proved) ":revertKind compile")) (unwiredFnsFor implNow implHead task) (list))
               finalAnswer (if (listEmpty? unwired) proved (pair false (str "unwired: new fns with no caller outside tests: " (stringJoin unwired ", ") "; call them from the code path the task changes, then finish" "\n(:gateUnwired :fns (" (stringJoin (map (fn [n] (str "\"" n "\"")) unwired) " ") ") :do \"call each from the code path the task changes, then finish\")")))
               restored (fold (fn [ok p] (and ok (match (pairSecond p)
                 ((some b) (and (ok? (fileWrite (str root "/" (pairFirst p)) b)) (bumpMtime! (str root "/" (pairFirst p)))))

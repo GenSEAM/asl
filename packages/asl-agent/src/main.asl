@@ -153,11 +153,12 @@
   (:f pool (Option po/PoolSelf))
   (:f parentPid (Option Int64))
   (:f route (Option RouteSetup))
-  (:f unit String :default ""))
+  (:f unit String :default "")
+  (:f unitTask String :default ""))
 
 fn knownParams -> (List String)
   (list "agent" "task" "mode" "intent" "root" "owns" "gates" "backend" "budget" "inputTokenBudget" "dryRun" "resume" "answer" "role"
-        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "events" "inheritedBase" "net")
+        "model" "timeout" "contextFile" "base" "toolRoot" "queueTimeout" "contextTokens" "gateTimeout" "gateParallelism" "wallBudget" "plan" "attractor" "nativeTools" "prefix" "poolChan" "poolIdx" "parentPid" "remote" "commit" "unit" "unitTask" "events" "inheritedBase" "net")
 
 fn acceptedKeys -> (List String)
   (listSortBy (fn [k] k) (filter (fn [k] (not (listContains? (list "agent" "mode" "role" "poolChan" "poolIdx" "parentPid") k))) (knownParams)))
@@ -369,7 +370,7 @@ fn strParam v: j/Json -> j/Json
 
 fn applyKey ps: (List (Pair String j/Json)) key: String v: j/Json -> (Pair (List (Pair String j/Json)) (Option String))
   (cond
-    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "toolRoot" "poolChan" "remote" "unit" "events" "inheritedBase") key)
+    ((listContains? (list "task" "root" "backend" "resume" "answer" "model" "contextFile" "base" "toolRoot" "poolChan" "remote" "unit" "unitTask" "events" "inheritedBase") key)
       (pair (paramSet ps key (strParam v)) none))
     ((= key "mode") (pair (paramSet ps "modeHint" (j/jstr (lstripColons (pv/pyStr v)))) none))
     ((or (= key "intent") (= key "role")) (pair (paramSet ps key (j/jstr (lstripColons (pv/pyStr v)))) none))
@@ -2579,7 +2580,7 @@ fn ! liveApply! ra: RunArgs repoRoot: String rootDir: String path: String env: l
                   heldCap (gi/gateVacuousRounds (ac/configText! rootDir))
                   heldOpen (and greenCandidate (< heldBefore heldCap))
                   integrityCheck (if (and (or terminalModel heldOpen) (not (listEmpty? ra.gates)))
-                    (gi/gateIntegrityWithin! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)))
+                    (gi/gateIntegrityWithinFor! ra.gates ra.owns rootDir newGates (wallCapped ra.gateTimeout (wallLeft env.wallBudget (- (env.now) state.runStarted))) none (rl/writtenPaths executed.written) ra.parentPid ra.base (wallLeft env.wallBudget (- (env.now) state.runStarted)) ra.unitTask)
                     (pair true "not required"))
                   greenClose (and heldOpen (and patchReady (pairFirst integrityCheck)))
                   ; (:m :ref LEON-WRITE-FAIL-TOP :do "WRITER-GATE-VACUOUS for a finished turn, the main.asl hunk it left open: node2 2026-11-17 had 18 of 136 write stages fail gateIntegrity, three at turn 1 on a tree a lower rung left green; a finished turn whose revert check finds a gate green without the change, or a written fn no gate reaches (gateUnwired, the same retry as UNWIRED-AS-RETRY-ROUND), gets that form back and goes on, under the same gateVacuousRounds cap as a held green close; past the cap, or for any other integrity cause, it fails as before")
@@ -2893,7 +2894,7 @@ fn ! execute ra: RunArgs dry: Bool repoRoot: String rootDir: String -> MainResul
     (rejectWith (str ":error ERR_TOOLROOT :message \"toolRoot has no executable bin/asl: " (c/escapeAsn ra.toolRoot) "\"") 1))
 
 fn resumed ra: RunArgs st: ResumeState -> RunArgs
-  (RunArgs :unit ra.unit :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
+  (RunArgs :unit ra.unit :unitTask ra.unitTask :toolRoot ra.toolRoot :task st.task :modeHint st.modeHint :owns st.owns :gates st.gates :backend ra.backend
            :model ra.model :timeout ra.timeout :timeoutSet ra.timeoutSet :queueTimeout ra.queueTimeout
            :budget ra.budget :inputTokenBudget ra.inputTokenBudget :gateTimeout ra.gateTimeout :gateParallelism ra.gateParallelism :wallBudget ra.wallBudget
            :intent (match ra.intent ((some i) (some i)) ((none) st.intent))
@@ -2917,7 +2918,7 @@ fn ! runArgsOf ps: (List (Pair String j/Json)) timeout: Int64 queueTimeout: Int6
                     :wallBudget (some (optionOr (intValue (paramOr ps "wallBudget" (j/jint (min 86400 (+ timeout queueTimeout)))))
                                                   (min 86400 (+ timeout queueTimeout))))
                     :intent (optText (paramGet ps "intent"))
-                    :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :unit (textValue (paramOr ps "unit" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
+                    :base (textValue (paramOr ps "base" (j/jstr ""))) :toolRoot (textValue (paramOr ps "toolRoot" (j/jstr ""))) :remote (textValue (paramOr ps "remote" (j/jstr ""))) :unit (textValue (paramOr ps "unit" (j/jstr ""))) :unitTask (textValue (paramOr ps "unitTask" (j/jstr ""))) :contextTokens (intValue (paramOr ps "contextTokens" (j/jnull)))
                     :plan plan :commit (match (paramOr ps "commit" (j/jbool false)) ((j/jbool b) b) (_ false)) :net (match (paramOr ps "net" (j/jbool false)) ((j/jbool b) b) (_ false)) :inheritedBase (textValue (paramOr ps "inheritedBase" (j/jstr "")))
                     :attractor (textValue (paramOr ps "attractor" (j/jstr ""))) :nativeTools (textValue (paramOr ps "nativeTools" (j/jstr ""))) :prefix (textValue (paramOr ps "prefix" (j/jstr ""))) :resume none :parentPid (intValue (paramOr ps "parentPid" (j/jnull))) :route none
                     :pool (po/poolSelf (textValue (paramOr ps "poolChan" (j/jstr ""))) (optionOr (intValue (paramOr ps "poolIdx" (j/jint -1))) -1)))
