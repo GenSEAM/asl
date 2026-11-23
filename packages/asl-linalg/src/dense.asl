@@ -24,13 +24,13 @@ fn allFinite a: F64Array -> Bool
   (f64ArrayFold (fn [(ok Bool) (x Float64)] -> Bool (and ok (and (= x x) (< (abs x) 1.0e308)))) true a)
 
 fn identity n: Int64 -> F64Array
-  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (if (= (/ k n) (% k n)) 1.0 0.0)))
+  (f64ArrayGenerate (* n n) (fn [(k Int64)] -> Float64 (if (= (/ k n) (mod k n)) 1.0 0.0)))
 
 fn transpose m: Int64 n: Int64 a: F64Array -> (Result F64Array String)
   (cond
     ((or (< m 0) (< n 0)) (err "linalgShape: negative dimension"))
     ((not (= (f64ArrayLen a) (* m n))) (err "linalgShape: transpose array length is not m*n"))
-    (else (ok (f64ArrayGenerate (* m n) (fn [(k Int64)] -> Float64 (f64ArrayGet a (+ (* (% k m) n) (/ k m))))))))
+    (else (ok (f64ArrayGenerate (* m n) (fn [(k Int64)] -> Float64 (f64ArrayGet a (+ (* (mod k m) n) (/ k m))))))))
 
 fn matVec m: Int64 n: Int64 a: F64Array x: F64Array -> (Result F64Array String)
   (cond

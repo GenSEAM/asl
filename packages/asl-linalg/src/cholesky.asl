@@ -110,7 +110,7 @@ fn ! choleskyRcond n: Int64 a: F64Array l: F64Array -> (Result Float64 String)
       (match (hager! n l (f64ArrayGenerate n (fn [(i Int64)] -> Float64 (/ 1.0 (int64ToFloat64 n)))) 0 0.0)
         ((err e) (err e))
         ((ok est1)
-          (let [(alt (f64ArrayGenerate n (fn [(i Int64)] -> Float64 (* (if (= (% i 2) 0) 1.0 -1.0) (+ 1.0 (/ (int64ToFloat64 i) (int64ToFloat64 (max 1 (- n 1)))))))))]
+          (let [(alt (f64ArrayGenerate n (fn [(i Int64)] -> Float64 (* (if (= (mod i 2) 0) 1.0 -1.0) (+ 1.0 (/ (int64ToFloat64 i) (int64ToFloat64 (max 1 (- n 1)))))))))]
             (match (choleskySolve n l alt)
               ((err e) (err e))
               ((ok ya)

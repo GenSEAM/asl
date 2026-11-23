@@ -5287,7 +5287,7 @@ fn needsReviewGreen? out: String -> Bool
         (exits (optionOr (listTail (stringSplit gates ":exit ")) (list)))
         (spec (formAfter row ":specCheck "))
         (reasons (formAfter spec ":reasons "))
-        (items (filter (fn [(x String)] -> Bool (not (stringEmpty? (stringTrim x)))) (map (fn [(k Int64)] -> String (optionOr (listGet (stringSplit reasons "\"") k) "")) (filter (fn [(k Int64)] -> Bool (= (% k 2) 1)) (range 0 (listLength (stringSplit reasons "\"")))))))]
+        (items (filter (fn [(x String)] -> Bool (not (stringEmpty? (stringTrim x)))) (map (fn [(k Int64)] -> String (optionOr (listGet (stringSplit reasons "\"") k) "")) (filter (fn [(k Int64)] -> Bool (= (mod k 2) 1)) (range 0 (listLength (stringSplit reasons "\"")))))))]
     (and (or (stringContains? row ":status :needsReview") (= (stopOf out) "needsReview"))
       (and (not (listEmpty? exits))
         (and (listAll? (fn [(x String)] -> Bool (or (stringStartsWith? x "0)") (stringStartsWith? x "0 "))) exits)

@@ -67,7 +67,7 @@ fn ones12 -> (List Float64)
 fn rowMajor3 a: (List Float64) b: (List Float64) c: (List Float64) -> F64Array
   (let [(aa (arr a)) (bb (arr b)) (cc (arr c))]
     (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64
-      (let [(col (% p 3)) (row (/ p 3))]
+      (let [(col (mod p 3)) (row (/ p 3))]
         (if (= col 0) (f64ArrayGet aa row) (if (= col 1) (f64ArrayGet bb row) (f64ArrayGet cc row)))))))
 
 fn design -> F64Array
@@ -95,7 +95,7 @@ fn lcl -> I64Array
 fn ldesign -> F64Array
   (let [(a (arr (lx))) (b (arr (lz)))]
     (f64ArrayGenerate 60 (fn [(p Int64)] -> Float64
-      (let [(col (% p 3)) (row (/ p 3))]
+      (let [(col (mod p 3)) (row (/ p 3))]
         (if (= col 0) 1.0 (if (= col 1) (f64ArrayGet a row) (f64ArrayGet b row)))))))
 
 fn ! olsTests -> Bool
@@ -106,7 +106,7 @@ fn ! olsTests -> Bool
         (nc (fit (r/ols 12 2 (rowMajor2) (arr (yv)) "classical" (noCl))))
         (few (fit (r/ols 12 3 (design) (arr (yv)) "cr1" (ids (list 1 1 1 1 2 2 2 2 3 3 3 3)))))
         (two (r/ols 12 3 (design) (arr (yv)) "cr1" (ids (list 1 1 1 1 1 1 2 2 2 2 2 2))))
-        (col3 (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (if (= (% p 3) 2) (* 2.0 (f64ArrayGet (design) (- p 1))) (f64ArrayGet (design) p)))))]
+        (col3 (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (if (= (mod p 3) 2) (* 2.0 (f64ArrayGet (design) (- p 1))) (f64ArrayGet (design) p)))))]
     (do
       (assert (relAll? cls.coef (list 0.27512763316517708 0.77624161031736161 1.2108191629927265) 1.0e-9) "classical coefficients vs oracle")
       (assert (and (rel? cls.rss 2.8339635699754901 1.0e-9) (rel? cls.rSquared 0.98252150259050519 1.0e-10)) "rss and centred R2 vs oracle")
@@ -138,7 +138,7 @@ fn ! olsTests -> Bool
 
 fn rowMajor2 -> F64Array
   (let [(a (arr (x1))) (b (arr (x2)))]
-    (f64ArrayGenerate 24 (fn [(p Int64)] -> Float64 (if (= (% p 2) 0) (f64ArrayGet a (/ p 2)) (f64ArrayGet b (/ p 2))))))
+    (f64ArrayGenerate 24 (fn [(p Int64)] -> Float64 (if (= (mod p 2) 0) (f64ArrayGet a (/ p 2)) (f64ArrayGet b (/ p 2))))))
 
 fn ! logitTests -> Bool
   (let [(c (lfit (r/logit 20 3 (ldesign) (ly))))
@@ -180,20 +180,20 @@ fn ! runTests -> Bool
 ; (:m :ref NUM-REGRESSION-MODELS :do "large-eta data without separation, oracle numpy Newton to 1e-14: gen i = 0..n-1, x_i = (i*104729 mod 2003)/2003*range - range/2 (row n-1 replaced by 40 in case B), u_i = ((i*7919+13) mod 10007)/10007, y_i = 1 if u_i < sigmoid(slope*x_i); case A n=2000 slope 12 range 8 (max |eta| 45.0, beta 6.781422560441995e-05 and 11.253975623553742, se 0.21201774793164746 and 1.3160211413137277), case B n=300 slope 1.5 range 4 one outlier x=40 (max |eta| 55.8, beta -0.028169656597728313 and 1.3969127908030301, se 0.14547758324780299 and 0.15660332531702587); R2 of two dummies summing to one: centred 2.0558365198763973e-05")
 fn xAt i: Int64 rng: Float64 last: Float64 n: Int64 -> Float64
   (if (and (= i (- n 1)) (> last 0.0)) last
-    (- (* (/ (int64ToFloat64 (% (* i 104729) 2003)) 2003.0) rng) (/ rng 2.0)))
+    (- (* (/ (int64ToFloat64 (mod (* i 104729) 2003)) 2003.0) rng) (/ rng 2.0)))
 
 fn ! bigDesign n: Int64 rng: Float64 last: Float64 -> F64Array
-  (f64ArrayGenerate (* 2 n) (fn [(p Int64)] -> Float64 (if (= (% p 2) 0) 1.0 (xAt (/ p 2) rng last n))))
+  (f64ArrayGenerate (* 2 n) (fn [(p Int64)] -> Float64 (if (= (mod p 2) 0) 1.0 (xAt (/ p 2) rng last n))))
 
 fn ! bigY n: Int64 slope: Float64 rng: Float64 last: Float64 -> F64Array
   (f64ArrayGenerate n (fn [(i Int64)] -> Float64
-    (let [(u (/ (int64ToFloat64 (% (+ (* i 7919) 13) 10007)) 10007.0))
+    (let [(u (/ (int64ToFloat64 (mod (+ (* i 7919) 13) 10007)) 10007.0))
           (pr (/ 1.0 (+ 1.0 (exp (- 0.0 (* slope (xAt i rng last n)))))))]
       (if (< u pr) 1.0 0.0))))
 
 fn ! scaled3 s0: Float64 s1: Float64 s2: Float64 -> F64Array
   (let [(d (design))]
-    (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (* (f64ArrayGet d p) (if (= (% p 3) 0) s0 (if (= (% p 3) 1) s1 s2))))))
+    (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (* (f64ArrayGet d p) (if (= (mod p 3) 0) s0 (if (= (mod p 3) 1) s1 s2))))))
 
 fn ! robustTests -> Bool
   (let [(a (lfit (r/logit 2000 2 (bigDesign 2000 8.0 0.0) (bigY 2000 12.0 8.0 0.0))))
@@ -202,7 +202,7 @@ fn ! robustTests -> Bool
         (sc (fit (r/ols 12 3 (scaled3 1.0e-8 1.0 1.0e8) (arr (yv)) "classical" (noCl))))
         (sc1 (fit (r/ols 12 3 (scaled3 1.0e-8 1.0 1.0e8) (arr (yv)) "cr1" (okCl))))
         (lsc (lfit (r/logit 20 3 (ldesign) (ly))))
-        (lsc2 (lfit (r/logitWith 20 3 (f64ArrayGenerate 60 (fn [(p Int64)] -> Float64 (* (f64ArrayGet (ldesign) p) (if (= (% p 3) 0) 1.0e-7 (if (= (% p 3) 1) 1.0 1.0e7))))) (ly) "classical" (noCl) (arr (list 0.0 0.0 0.0)) 100 30)))
+        (lsc2 (lfit (r/logitWith 20 3 (f64ArrayGenerate 60 (fn [(p Int64)] -> Float64 (* (f64ArrayGet (ldesign) p) (if (= (mod p 3) 0) 1.0e-7 (if (= (mod p 3) 1) 1.0 1.0e7))))) (ly) "classical" (noCl) (arr (list 0.0 0.0 0.0)) 100 30)))
         (few (lfit (r/logitWith 20 3 (ldesign) (ly) "classical" (noCl) (arr (list 0.0 0.0 0.0)) 2 30)))
         (cy (fit (r/ols 12 3 (design) (arr (list 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0 5.0)) "classical" (noCl))))
         (dum (fit (r/ols 12 2 (dummies) (arr (yv)) "classical" (noCl))))
@@ -228,6 +228,6 @@ fn nearAt row: Int64 col: Int64 -> Float64
   (let [(t (int64ToFloat64 (+ row 1)))] (if (= col 0) 1.0 (if (= col 1) t (+ t (* 1.0e-4 (sin (* 7.0 t)))))))
 
 fn ! nearDesign -> F64Array
-  (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (nearAt (/ p 3) (% p 3))))
+  (f64ArrayGenerate 36 (fn [(p Int64)] -> Float64 (nearAt (/ p 3) (mod p 3))))
 fn ! dummies -> F64Array
-  (f64ArrayGenerate 24 (fn [(p Int64)] -> Float64 (let [(d1 (if (= (% (/ p 2) 2) 0) 1.0 0.0))] (if (= (% p 2) 0) d1 (- 1.0 d1)))))
+  (f64ArrayGenerate 24 (fn [(p Int64)] -> Float64 (let [(d1 (if (= (mod (/ p 2) 2) 0) 1.0 0.0))] (if (= (mod p 2) 0) d1 (- 1.0 d1)))))

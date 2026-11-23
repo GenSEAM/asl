@@ -32,7 +32,7 @@ fn ! orthErr m: Int64 n: Int64 a: F64Array b: F64Array f: q/Lstsq -> Float64
     (maxAbs! (gemm n 1 m at r) 0 0.0))
 
 fn xs s: Float64 -> F64Array
-  (f64ArrayGenerate 60 (fn [(k Int64)] -> Float64 (* s (sin (+ (* 0.37 (int64ToFloat64 k)) (* 0.011 (int64ToFloat64 (% (* k k) 1000))))))))
+  (f64ArrayGenerate 60 (fn [(k Int64)] -> Float64 (* s (sin (+ (* 0.37 (int64ToFloat64 k)) (* 0.011 (int64ToFloat64 (mod (* k k) 1000))))))))
 
 fn ys s: Float64 -> F64Array
   (f64ArrayGenerate 20 (fn [(k Int64)] -> Float64 (* s (cos (* 0.73 (int64ToFloat64 k))))))

@@ -58,7 +58,7 @@ fn ! gram m: Int64 k: Int64 s: F64Array -> (Result F64Array String)
     ((ok st) (ok (gemm k k m st s))))
 
 fn ! symmetrize k: Int64 a: F64Array -> F64Array
-  (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (* 0.5 (+ (f64ArrayGet a p) (f64ArrayGet a (+ (* (% p k) k) (/ p k)))))))
+  (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (* 0.5 (+ (f64ArrayGet a p) (f64ArrayGet a (+ (* (mod p k) k) (/ p k)))))))
 
 fn ! diagPositive! g: F64Array k: Int64 j: Int64 -> Bool
   (if (>= j k) true
@@ -81,7 +81,7 @@ fn ! spdInverse k: Int64 g: F64Array -> (Result (Pair F64Array Float64) String)
   (if (not (diagPositive! g k 0))
     (err "regressSingular: information matrix has a non-positive diagonal entry")
     (let [(sv (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (/ 1.0 (sqrt (f64ArrayGet g (+ (* j k) j)))))))
-          (gs (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (* (* (f64ArrayGet g p) (f64ArrayGet sv (/ p k))) (f64ArrayGet sv (% p k))))))]
+          (gs (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (* (* (f64ArrayGet g p) (f64ArrayGet sv (/ p k))) (f64ArrayGet sv (mod p k))))))]
       (match (ch/choleskyFactor k gs)
         ((err e) (err (cat2 "regressSingular: " e)))
         ((ok l)
@@ -171,7 +171,7 @@ fn ! colNorms! n: Int64 k: Int64 x: F64Array -> F64Array
   (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (let [(s (sqrt (colSS! x n k j 0 0.0)))] (if (> s 0.0) s 1.0))))
 
 fn ! scaleCols! n: Int64 k: Int64 x: F64Array c: F64Array -> F64Array
-  (f64ArrayGenerate (* n k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet x p) (f64ArrayGet c (% p k)))))
+  (f64ArrayGenerate (* n k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet x p) (f64ArrayGet c (mod p k)))))
 
 fn ! olsScaled! n: Int64 k: Int64 x: F64Array y: F64Array kind: String cl: I64Array -> (Result Ols String)
   (let [(c (colNorms! n k x))]
@@ -180,7 +180,7 @@ fn ! olsScaled! n: Int64 k: Int64 x: F64Array y: F64Array kind: String cl: I64Ar
       ((ok o)
         (ok (Ols :coef (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (/ (f64ArrayGet o.coef j) (f64ArrayGet c j))))
                  :residuals o.residuals :rss o.rss :rSquared o.rSquared :n o.n :k o.k :df o.df
-                 :cov (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet o.cov p) (* (f64ArrayGet c (/ p k)) (f64ArrayGet c (% p k))))))
+                 :cov (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet o.cov p) (* (f64ArrayGet c (/ p k)) (f64ArrayGet c (mod p k))))))
                  :se (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (/ (f64ArrayGet o.se j) (f64ArrayGet c j))))
                  :tStat o.tStat :pValue o.pValue :covKind o.covKind :clusters o.clusters :warning o.warning)))))
 
@@ -373,7 +373,7 @@ fn ! logitRun! n: Int64 k: Int64 x: F64Array y: F64Array kind: String cl: I64Arr
 
 fn ! unscaleLogit! k: Int64 o: Logit c: F64Array -> Logit
   (Logit :coef (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (/ (f64ArrayGet o.coef j) (f64ArrayGet c j))))
-         :cov (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet o.cov p) (* (f64ArrayGet c (/ p k)) (f64ArrayGet c (% p k))))))
+         :cov (f64ArrayGenerate (* k k) (fn [(p Int64)] -> Float64 (/ (f64ArrayGet o.cov p) (* (f64ArrayGet c (/ p k)) (f64ArrayGet c (mod p k))))))
          :se (f64ArrayGenerate k (fn [(j Int64)] -> Float64 (/ (f64ArrayGet o.se j) (f64ArrayGet c j))))
          :zStat o.zStat :pValue o.pValue :logLik o.logLik :iterations o.iterations :converged o.converged :n o.n :k o.k :covKind o.covKind :clusters o.clusters :warning o.warning)
 
