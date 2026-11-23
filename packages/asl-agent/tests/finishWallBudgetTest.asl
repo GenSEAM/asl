@@ -2,7 +2,7 @@
   :x [runTests]
   :i [(aslAgent/core :a c) (aslAgent/runLoop :a rl) (asl-tools/fleet/run :a fr) (aslAgent/tests/gitInitKit :a gk)])
 
-; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "a run whose grader call would outlast the wall left for the finish writes its (:partialReceipt ...) first, skips the grader with (:specCheck (:verdict skipped :reasons (wallBudget))) and ends needsReview inside the outer bound; the same run with wall to spare still calls the grader; the fixture grader sleeps 300 s, the outer bound is 90 s after a warm-up run that pays the host compile")
+; (:m :ref LEON-TIMEOUT-NO-RECEIPT-CAUSE :do "a run whose grader call would outlast the wall left for the finish writes its (:partialReceipt ...) first, skips the grader with (:specCheck (:verdict skipped :reasons (wallBudget))) and ends needsReview inside the outer bound; the same run with wall to spare still calls the grader; the fixture grader sleeps 300 s, the outer bound is 240 s after a warm-up run that pays the host compile: below the grader sleep, so a run that called the grader is still killed; the room run, which pays the host compile, has 300 s of wall for a 3 s grader; both sit above what runs under load took (node2 admission 2026-11-23, LL-BUF-RT: exit 124 at the old 90 s bound, green alone in 78 s)")
 fn ! child argv: (List String) cwd: String -> Bool
   (= (fr/runOneLimited (fr/job argv cwd (fr/childEnv (list))) (fr/limits 20 8)).exit 0)
 
@@ -69,8 +69,8 @@ fn ! runTests -> Bool
             roomRoot (tempDir "room")
             staged (and (stage slowRoot "slowFinish" 300000 60) (stage roomRoot "roomFinish" 3000 1))
             repos (and staged (and (initRepo slowRoot) (initRepo roomRoot)))
-            room (runMain roomRoot "roomFinish" 400 " :wallBudget 30")
-            slow (runMain slowRoot "slowFinish" 90 " :wallBudget 30")
+            room (runMain roomRoot "roomFinish" 400 " :wallBudget 300")
+            slow (runMain slowRoot "slowFinish" 240 " :wallBudget 30")
             slowJournal (journalOf slowRoot slow.out)
             roomJournal (journalOf roomRoot room.out)
             partialAt (indexOr slowJournal "(:partialReceipt :turns")
