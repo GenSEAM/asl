@@ -1,5 +1,5 @@
 (module aslAgent/runLoop
-  :x [ownedDigest! finishLeftFor finishShortFor wallBounded? commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
+  :x [ownedDigest! createdPaths finishLeftFor finishShortFor wallBounded? commitLanded! commitFields withUnbacked redGateOf specCheckRun! modelFamily specTargets specCheckWanted? journalModel LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision! stateFor withHeadState withTurnContext withFindings withPrefetch withBaseline baselineGreen! firstTurnPrefetch wallSeconds setup! setupWatched! head! finish! runLoopWith! runLoopWithProvider! runLoopWithProviderWatched! LoopOpen openRun openDone loopOpen! loopHead! loopFinish! usageTotalsPlus withUsageTotals usageIntOf batchingPlus withBatching]
   :i [(aslAgent/loopState :a s) (aslAgent/loop :a lp)
       (aslAgent/context :a ctx) (aslAgent/journal :a jr)
       (aslAgent/gateIntegrity :a gi) (aslAgent/gitOps :a go) (aslAgent/runOps :a ro) (aslAgent/reply :a rp)
@@ -40,6 +40,12 @@ fn withWritten run: LoopRun written: jr/Written -> LoopRun
   (LoopRun :state run.state :procs run.procs :written written :session run.session
     :commitMessage run.commitMessage :parseDefects run.parseDefects
     :lastDefect run.lastDefect :lastDefectTurn run.lastDefectTurn :parseDefectStreak run.parseDefectStreak)
+
+; (:m :ref EDIT-BY-SYMBOL :do "the paths whose snapshot holds no bytes: files this run created")
+fn createdPaths written: jr/Written -> (List String)
+  (match written.files
+    ((some files) (map pairFirst (filter (fn [p] (let [sn (pairSecond p)] (none? sn.bytes))) files)))
+    ((none) (list)))
 
 fn writtenPaths written: jr/Written -> (List String)
   (match written.files

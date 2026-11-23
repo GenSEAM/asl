@@ -165,7 +165,7 @@ fn newStructuralKeys -> (List String)
   (list "cmd" "file" "content" "old" "new" "op" "path" "anchor" "base" "rev" "limit" "commit")
 
 fn argumentHeads -> (List String)
-  (list "write" "edit" "read" "query" "outline" "check" "diff" "flush" "discard" "test" "tree" "fix"
+  (list "write" "edit" "replaceDef" "read" "query" "outline" "check" "diff" "flush" "discard" "test" "tree" "fix"
         "txn" "tools" "help" "gitDiff" "gitLog" "gitShow" "gate" "run" "delete" "manage" "note" "observe"
         "search" "research" "crawl")
 

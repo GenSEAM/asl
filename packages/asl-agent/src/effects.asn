@@ -5,6 +5,7 @@
     (:effect :op "query" :class :local :doc "Search workspace")
     (:effect :op "write" :class :local :doc "Write a file at once inside :owns, as one (:txn)")
     (:effect :op "edit" :class :local :doc "Replace a string in a file at once inside :owns, as one (:txn)")
+    (:effect :op "replaceDef" :class :local :doc "Replace one definition of a file, found by its symbol name, with a new body inside :owns")
     (:effect :op "check" :class :local :doc "Check delimiter balance")
     (:effect :op "diff" :class :local :doc "Show the session's staged changes (a write or edit step stages none)")
     (:effect :op "flush" :class :local :doc "Persist staged changes; a no-op after write and edit steps, which persist at once")

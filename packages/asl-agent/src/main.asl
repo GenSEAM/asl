@@ -1254,7 +1254,7 @@ fn readOnlyOps -> (List String)
   (list "read" "query" "q" "check" "outline" "tree" "diff" "tools" "help" "gitDiff" "gitLog" "gitShow" "note" "observe" "search" "research" "crawl" "intent" "intel")
 
 fn unchangedTurn? names: (List String) wrote: Bool -> Bool
-  (and (not wrote) (and (not (listEmpty? names)) (listAll? (fn [n] (listContains? (listAppend (readOnlyOps) (list "write" "edit")) n)) names)))
+  (and (not wrote) (and (not (listEmpty? names)) (listAll? (fn [n] (listContains? (listAppend (readOnlyOps) (list "write" "edit" "replaceDef")) n)) names)))
 
 ; (:m :ref GATE-DIGEST-REUSE :do "a worktree digest equal to the last gated digest reuses that verdict even when the turn has non-read op names")
 fn reuseGateDigest? previous: (Option String) current: String -> Bool
@@ -1786,7 +1786,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
           op (pairFirst resolvedOp)
           opName (liveOpName op)
           target (liveOpPath op)
-          mutating (listContains? (list "write" "edit" "delete") opName)
+          mutating (listContains? (list "write" "edit" "replaceDef" "delete") opName)
           ; (:m :ref LEON-WRITE-NOT-COUNTED-20261018 :do "a session with no :owns writes anywhere inside :root, but this 'owned' flag used to feed ra.owns raw into checkOwns: checkOwns on an empty list is false by definition, never true, so a real, accepted, on-disk write with no :owns declared never counted as owned, writesPersisted stayed false forever, and the run escalated nothing written by turn 20 even though the write succeeded and read back correctly. c/effectiveOwns (LEON-OWNS-ONE-RULE-20261018) is the single normalization exec.asl's writeCheck now shares, so the two owns checks can no longer drift out of sync")
           ; (:m :ref LEONDELETE :do "a delete whose path a later write in the same reply targets is superseded and not run: the write overwrites the file anyway, and a refused write (ERR_USE_RAW, ERR_OWNS) after an executed delete left the pre-existing owned file deleted")
           superseded (and (= opName "delete") (and (not (stringEmpty? target))
@@ -1811,7 +1811,7 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (pair "status" (ex/vStr "rejected")) (pair "error" (ex/vStr "ERR_JOURNAL"))
                 (pair "message" (ex/vStr e))) :procs run.procs))
             ((ok written)
-              (ex/execOp! (withRemote op ra.remote) env run.procs (fn [] (resultOr (newSessionId) sid))
+              (ex/execOp! (withRemote op ra.remote) (ex/withCreated env (rl/createdPaths run.written)) run.procs (fn [] (resultOr (newSessionId) sid))
                 (fn [path] (listContains? (rl/writtenPaths written) path))
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))))
           out (resolvedOut out (pairSecond resolvedOp))
@@ -1821,11 +1821,11 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
             (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
               " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
             true)
-          wrote (and owned (and (listContains? (list "write" "edit") opName) (liveWriteStatus out)))
+          wrote (and owned (and (listContains? (list "write" "edit" "replaceDef") opName) (liveWriteStatus out)))
           snapWritten (match before
             ((err _) run.written)
             ((ok written)
-              (if (and (and owned (listContains? (list "write" "edit") opName))
+              (if (and (and owned (listContains? (list "write" "edit" "replaceDef") opName))
                        (and (not (liveWriteStatus out))
                             (not (listContains? (rl/writtenPaths run.written) target))))
                 (liveUnwritten written target)
@@ -1972,7 +1972,7 @@ fn duplicateOpsNote dropped: Int64 -> String
 ; (:m :ref READSTREAK-WRITE-ATTEMPT :do "readStreak, the count the live nudge shows, grows only on turns that read or ran: a turn that attempted a write, edit, delete or txn and persisted nothing, a parse defect and a malformed reply hold it; the stops keep their own caps (stalledTurnCap cause refusedWrites, malformedStreak, readOnlyTurnCap)")
 ; (:m :ref LEON-YIELD-F2 :do "node2 2026-11-04: in 123 of 217 readStreak stops the model was writing and every write was refused, yet only a persisted write reset the streak; a turn that attempted a write or edit and persisted nothing counts like a not-found read, extending the streak at most notFoundStreakCap turns in a row; repeatFailure still guards identical refused content")
 fn writeAttempt? ops: (List (List (Pair String c/KvVal))) -> Bool
-  (listAny? (fn [o] (listContains? (list "write" "edit" "txn" "delete") (liveOpName o))) ops)
+  (listAny? (fn [o] (listContains? (list "write" "edit" "replaceDef" "txn" "delete") (liveOpName o))) ops)
 
 ; (:m :ref LEON-YIELD-F2B :do "audit: after one persisted write, refused writes on every turn were stopped only by wallBudget; stalledTurnCap (adopted 12, :agentLoop :stalledTurnCap in the run root's .asl.config.asn) consecutive turns that persisted nothing and read a missing file or attempted a write or edit stop the run as readStreak with cause refusedWrites (notFound when no write was attempted)")
 fn defaultStalledTurnCap -> Int64
@@ -2029,8 +2029,8 @@ fn readOnlyEntry? entry: j/Json -> Bool
 fn refusedWriteEntry? entry: j/Json -> Bool
   (let [names (entryOps entry)]
     (and (!= (historyText entry "wrote") "1")
-      (and (listAny? (fn [n] (listContains? (list "write" "edit" "delete" "txn") n)) names)
-        (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "delete" "txn") n))) names))))
+      (and (listAny? (fn [n] (listContains? (list "write" "edit" "replaceDef" "delete" "txn") n)) names)
+        (listAll? (fn [n] (or (listContains? (readOnlyOps) n) (listContains? (list "write" "edit" "replaceDef" "delete" "txn") n))) names))))
 
 ; (:m :ref LEONFIX-READSTREAK :do "a turn whose every step was a read the session's kept turns already show (history ops reread); grade H1/M3: it saves the tokens of the content but not a turn, so it counts toward the read-only cap like any read-only turn and toward the readStreak, which only an accepted write resets")
 fn rereadEntry? entry: j/Json -> Bool

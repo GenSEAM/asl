@@ -745,7 +745,7 @@ fn parseCutInfo cutStart: Int64 cutText: String fullText: String -> CutInfo
         toks (ctToks prefix pb (bytesLength pb) 0 (list))
         of (ctFields toks none none)
         op0 (pairFirst of)
-        op (if (and (none? op0) (match head ((some h) (member h (list "read" "write" "edit" "run" "tree" "outline"))) (none false))) head op0)]
+        op (if (and (none? op0) (match head ((some h) (member h (list "read" "write" "edit" "replaceDef" "run" "tree" "outline"))) (none false))) head op0)]
     (CutInfo :offset (stringLength (sl fullText 0 cutStart)) :bytes n :head head :op op :file (pairSecond of) :start cutStart :text cutText))
 
 fn dcLoop text: String bs: Bytes n: Int64 i: Int64 last: Int64 -> (Option CutInfo)
@@ -1331,13 +1331,13 @@ fn rawStepOf toks: (List FormTok) region: (Pair Int64 Int64) -> (Option RawStep)
   (let [a (pairFirst region) b (pairSecond region)
         rt (filter (fn [t] (and (>= (ftokStart t) a) (< (ftokStart t) b))) toks)
         head (if (> (listLength rt) 1) (lstripColons (tokT (c/firstOf (c/restOf rt)))) "")
-        op0 (if (member head (list "write" "edit")) (some head) none)
+        op0 (if (member head (list "write" "edit" "replaceDef")) (some head) none)
         scanned (scanFields rt op0 none (list))
         op (optionOr (pairFirst (pairFirst scanned)) "")
         file (optionOr (pairSecond (pairFirst scanned)) "")
         raws0 (pairSecond scanned)
         raws raws0]
-    (if (and (member op (list "write" "edit")) (or (not (listEmpty? raws)) (rawKeyBad? rt))) (some (rawStep op file a b raws)) none))
+    (if (and (member op (list "write" "edit" "replaceDef")) (or (not (listEmpty? raws)) (rawKeyBad? rt))) (some (rawStep op file a b raws)) none))
 
 ; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the blocks inside a step's region bind to its :raw fields by place: a block inside the step's parens takes the nearest unbound field before it, a block after the step's close and before the next step takes the step's unbound fields in order (an edit's old first); a block no field takes, or a field left without a block once the region has any, makes the step unbindable; none when the region has no block, so the step waits for the blocks after its form")
 fn bindRegion step: RawStep inner: (List (Pair Int64 Fence)) fs: Int64 close: Int64 -> (Option (Option (List (Pair RawField (Pair Int64 Fence)))))
@@ -1487,7 +1487,7 @@ fn bareRawRepls text: String fences: (List Fence) span: (Pair Int64 Int64) -> (L
     (let [ftext (sl text fs fe)
           toks (tokenizeForm ftext)
           head (if (> (listLength toks) 1) (lstripColons (tokT (c/firstOf (c/restOf toks)))) "")
-          op0 (if (member head (list "write" "edit")) (some head) none)
+          op0 (if (member head (list "write" "edit" "replaceDef")) (some head) none)
           scanned (scanFields toks op0 none (list))
           op (optionOr (pairFirst (pairFirst scanned)) "")
           raws (pairSecond scanned)
@@ -1497,7 +1497,7 @@ fn bareRawRepls text: String fences: (List Fence) span: (Pair Int64 Int64) -> (L
           nx (nextBreakAt text fe file)
           tail (pyStrip (sl text fe nx))]
       (cond
-        ((not (member op (list "write" "edit"))) (list))
+        ((not (member op (list "write" "edit" "replaceDef"))) (list))
         ((not (listEmpty? strRepls)) strRepls)
         ((or laterFence (or (stringEmpty? tail) (or (!= (listLength raws) 1) (not (tailLooksLike file tail))))) (list))
         (else (list (repl fe nx (str "\n```\n" tail "\n```\n"))))))))
