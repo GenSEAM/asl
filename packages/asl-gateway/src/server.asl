@@ -504,7 +504,7 @@ fn staleHeaderName -> String
   "X-Asl-Config-Stale"
 
 fn staleHeaderLine err: String -> String
-  (str (staleHeaderName) ": " (let [(flat (stringReplace (stringReplace err "\r" " ") "\n" " "))] (optionOr (stringSlice flat 0 (min 300 (stringLength flat))) "")) "\r\n")
+  (str (staleHeaderName) ": " (let [(flat (stringJoin (map (fn [(c String)] -> String (let [(n (charCode c))] (if (or (< n 32) (= n 127)) " " c))) (stringChars err)) ""))] (optionOr (stringSlice flat 0 (min 300 (stringLength flat))) "")) "\r\n")
 
 fn staleMarked stale: String data: String -> String
   (if (or (stringEmpty? stale) (or (not (stringStartsWith? data "HTTP/1.")) (stringContains? data (str "\r\n" (staleHeaderName) ":"))))
