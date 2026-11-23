@@ -1,5 +1,5 @@
 (module asl-tools/coord/ladder
-  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven unprovenFixWhy decide permanentError? causeOf absent? starved? scrubLines clip reviewDiffPart reviewDiffChars banNames doubtfulDefect? vetVerdict identWords diffBuiltins reviewBrief reviewWith review]
+  :x [tokensOf joinAwait familiesIn coverageProblems rankLanes Lane ReviewUnit Verdict Ruling Pick Step familyTableAsn familyRows familyIn reviewWriter selectFree selectOne parseVerdict gatesProven unprovenFixWhy pinUnit? pinProven decide permanentError? causeOf absent? starved? scrubLines clip reviewDiffPart reviewDiffChars banNames doubtfulDefect? vetVerdict identWords diffBuiltins reviewBrief reviewWith review]
   :i [(asl-tools/coord/egress :a eg) (asl-tools/coord/grade :a g) (asl-tools/fleet/model :a fm) (asl-parser/reader :a rd)])
 
 ; (:m :ref COND2 :do "review ladder for the conductor: R1 two free reviewers of two families, R2 one paid-cheap, R3 one strong; verdicts merge by tally; the family map is the ASN table familyTableAsn; the model call is injected")
@@ -27,7 +27,8 @@
   (:f fixesUsed Int64)
   (:f prior (List Verdict))
   (:f known String :default "")
-  (:f ctxTokens Int64 :default 0))
+  (:f ctxTokens Int64 :default 0)
+  (:f pinProven Bool :default false))
 
 (schema Ruling
   (:f action String)
@@ -255,8 +256,8 @@ fn gateGreen g: rd/SExpr -> Bool
 fn unprovenFixWhy -> String
   "gates not proven red-before with executed assertions: the unit gate exits 0 on the merge-base, so it does not prove the change; add an assertion that fails without your change and passes with it"
 
-; (:m :ref COND2 :do "gates proven: every gate exited 0 with executed assertions, and a redBefore receipt exists")
-fn gatesProven receipt: String -> Bool
+; (:m :ref COND2 :do "gates proven: every gate exited 0 with executed assertions, and a redBefore receipt exists; needRed false asks only for the green gates")
+fn gatesGreenWith receipt: String needRed: Bool -> Bool
   (match (fm/parseForms receipt)
     ((err e) false)
     ((ok forms)
@@ -265,8 +266,33 @@ fn gatesProven receipt: String -> Bool
         ((some form)
           (let [(items (fm/itemsOf form))
                 (gates (rowsAt items ":gates"))]
-            (and (not (listEmpty? (rowsAt items ":redBefore")))
+            (and (or (not needRed) (not (listEmpty? (rowsAt items ":redBefore"))))
                  (and (not (listEmpty? gates)) (listAll? gateGreen gates))))))))
+
+fn gatesProven receipt: String -> Bool
+  (gatesGreenWith receipt true)
+
+; (:m :ref PIN-UNIT-PROVEN :do "a pin unit pins present behaviour, so its gate is green on the merge-base by design; the marker is the task wording 'regression guard', the same one the conductor's write and gates stages already honour (regressionGuard?), so no row field and no conductor change")
+fn pinUnit? u: ReviewUnit -> Bool
+  (stringContains? (stringLower u.task) "regression guard")
+
+fn diffPaths diff: String -> (List String)
+  (map (fn [(l String)] -> String (optionOr (listLast (stringSplit l " b/")) ""))
+       (filter (fn [(l String)] -> Bool (stringStartsWith? l "diff --git a/")) (stringLines diff)))
+
+fn pinTestPath? p: String -> Bool
+  (or (stringContains? (str "/" p) "/tests/") (stringContains? (str "/" p) "/fixtures/"))
+
+fn addedAsserts diff: String -> Int64
+  (listLength (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "+") (and (not (stringStartsWith? l "+++")) (stringContains? l "(assert ")))) (stringLines diff)))
+
+; (:m :ref PIN-UNIT-PROVEN :do "a pin unit is proven by green gates with executed assertions, a diff that touches only test or fixture files (at least one) and at least one added assert line, never by red-before; a pin whose diff touches any other path, or adds no assert, is not proven")
+fn pinProven u: ReviewUnit diff: String gates: String -> Bool
+  (let [(paths (diffPaths diff))]
+    (and (pinUnit? u)
+         (and (gatesGreenWith gates false)
+              (and (not (listEmpty? paths))
+                   (and (listAll? pinTestPath? paths) (> (addedAsserts diff) 0))))))
 
 fn rungNum rung: String -> Int64
   (cond ((= rung "R1") 1) ((= rung "R2") 2) ((= rung "R3") 3) (else 0))
@@ -596,7 +622,7 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
            (let [(cur (map pairFirst asked))
                  (calls (map pairSecond asked))
                  (all (listAppend prior cur))
-                 (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (gatesProven receipt)))
+                 (step (decide rung cur all (listEmpty? prior) (finalRungOf u) fixesUsed (or u.pinProven (gatesProven receipt))))
                  (grade (fn [(verdict String) (note String)] -> String (g/gradeRow u.id "none" (modelsOf all) u.writerChannel verdict note)))]
              (match step
                ((stepMerge) (ok (ruling "merge" rung (list) "" (listAppend (list (grade "accept" (str "ladder " rung))) calls) all "")))
@@ -608,11 +634,16 @@ fn ! runRung u: ReviewUnit rows: (List rd/SExpr) lanes: (List Lane) prompt: Stri
                                  ((ok next) (ok (withEarlier next calls))))))))))))
 
 ; (:m :ref GATES-PROVEN-FIRST :do "the mechanical check before the models: a receipt that proves no red-before with executed assertions can never merge (decide refuses it after any pass), so the review answers fix (first time) or blocked (after a fix round) with decide's own words and asks no reviewer; 25% of review outcomes were this refusal after the model calls")
+fn whyFor u: ReviewUnit -> String
+  (if (pinUnit? u)
+    "pin unit not proven: its gates must exit 0 with executed assertions, its diff may touch only test or fixture files, and it must add at least one assert line"
+    (unprovenFixWhy))
+
 fn unprovenRuling u: ReviewUnit -> Ruling
   (let [(grade (fn [(note String)] -> String (g/gradeRow u.id "none" "none" u.writerChannel "reject" note)))]
     (if (< u.fixesUsed 1)
-      (ruling "fix" (startRungOf u) (list (unprovenFixWhy)) "" (list (grade (unprovenFixWhy))) u.prior "")
-      (let [(why "gates not proven after a fix round")]
+      (ruling "fix" (startRungOf u) (list (whyFor u)) "" (list (grade (whyFor u))) u.prior "")
+      (let [(why (if (pinUnit? u) "pin not proven after a fix round" "gates not proven after a fix round"))]
         (ruling "blocked" (startRungOf u) (list why) "" (list (g/gradeRow u.id "none" "none" u.writerChannel "pending" why) (escalateRow u (startRungOf u) u.prior why)) u.prior why))))
 
 ; (:m :ref COND2 :do "the conductor's review stage: (review unit diff gates lanes callModel) -> Ruling.")
@@ -623,8 +654,10 @@ fn ! reviewWith table: String u: ReviewUnit diff: String gates: String lanes: (L
       ((listEmpty? rows) (err "family table does not parse or is empty"))
       ((not (listContains? (list "low" "med" "high") u.risk)) (err (str "risk " u.risk " is not low, med or high")))
       ((= (rungNum (startRungOf u)) 0) (err (str "startRung " u.startRung " is not R1, R2 or R3")))
-      ((not (gatesProven gates)) (ok (unprovenRuling u)))
-      (else (runRung u rows lanes (reviewBrief u diff gates) gates callModel (startRungOf u) u.prior u.fixesUsed))))
+      ((and (not (gatesProven gates)) (not (pinProven u diff gates))) (ok (unprovenRuling u)))
+      (else (let [(u2 (ReviewUnit :id u.id :task u.task :risk u.risk :closureChanged u.closureChanged :writerAlias u.writerAlias :writerChannel u.writerChannel
+                                  :startRung u.startRung :fixesUsed u.fixesUsed :prior u.prior :known u.known :ctxTokens u.ctxTokens :pinProven (pinProven u diff gates)))]
+              (runRung u2 rows lanes (reviewBrief u2 diff gates) gates callModel (startRungOf u2) u2.prior u2.fixesUsed)))))
 
 fn ! review u: ReviewUnit diff: String gates: String lanes: (List Lane) callModel: (fn ! [String String] -> (Result String String)) -> (Result Ruling String)
   (reviewWith (familyTableAsn) u diff gates lanes callModel)
