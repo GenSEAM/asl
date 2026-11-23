@@ -6,6 +6,11 @@
 
 (schema PlanRow (:f id String) (:f doc String) (:f gate String) (:f owns (List String)) (:f reads (List String)) (:f after (List String)) (:f channel String))
 
+fn itemText x: rd/SExpr -> String
+  (match x
+    ((rd/sexprAtom v) (fm/stripColon (fm/unquote v)))
+    (_ (rd/renderSexpr x)))
+
 fn listOf v: (Option rd/SExpr) -> (List String)
   (match v
     ((none) (list))
@@ -13,7 +18,7 @@ fn listOf v: (Option rd/SExpr) -> (List String)
       (let [(items (fm/itemsOf x))]
         (if (listEmpty? items)
           (let [(t (fm/textOf x))] (if (stringEmpty? t) (list) (list t)))
-          (map fm/textOf items)))))
+          (map itemText items)))))
 
 fn textAt items: (List rd/SExpr) key: String -> String
   (match (fm/kvGet items key) ((none) "") ((some v) (fm/textOf v)))
@@ -34,6 +39,11 @@ fn gateCommand gateCmd: String gate: String -> String
 ; (:m :ref NODE2-FEED-BACKLOG :do "the queue template (LEONFIX-01) marks a file the unit creates as `PATH (new)`: the store owns the path itself")
 fn ownedPath p: String -> String
   (if (stringEndsWith? p " (new)") (optionOr (stringSlice p 0 (- (stringLength p) 6)) p) p)
+
+; (:m :ref PLANIMPORT-SYMBOL-OWNS :do "owns paths are validated exactly as the store's validPath? (which asl-tools/coord/store does not export), in the dry and the non-dry branch alike, so an invalid :owns is refused with the store's refusal text and reported as :bad instead of being stored")
+fn validOwns? path: String -> Bool
+  (and (not (stringEmpty? path)) (not (stringStartsWith? path "/")) (!= path "..")
+       (not (stringStartsWith? path "../")) (not (stringContains? path "/../")) (not (stringEndsWith? path "/..")))
 
 ; (:m :ref NODE2-FEED-BACKLOG :do "the workers of the backlog schema whose rows the conductor may take: the cheap-model ones")
 fn backlogWorker? worker: String -> Bool
@@ -164,9 +174,11 @@ fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (
             (_ (if dry () (let [(_ (dirCreate (str store "/tasks")))] ())))
             (results (map (fn [(r PlanRow)] -> (Pair String (Result String String))
                             (pair r.id
-                                  (if dry (ok "dry")
-                                    (let [(_ (if (fileExists? (str store "/tasks/" r.id ".txt")) (ok ()) (fileWrite (str store "/tasks/" r.id ".txt") r.doc)))]
-                                      (st/put! store (st/Task :id r.id :owns r.owns :reads r.reads :gate r.gate :channel r.channel :model "" :base base :after r.after :st "queued" :epoch 0 :receipt ""))))))
+                                  (if (not (listAll? validOwns? r.owns))
+                                    (err (str "(:refused :unit " (st/q r.id) " :why owns :path \"invalid\")"))
+                                    (if dry (ok "dry")
+                                      (let [(_ (if (fileExists? (str store "/tasks/" r.id ".txt")) (ok ()) (fileWrite (str store "/tasks/" r.id ".txt") r.doc)))]
+                                        (st/put! store (st/Task :id r.id :owns r.owns :reads r.reads :gate r.gate :channel r.channel :model "" :base base :after r.after :st "queued" :epoch 0 :receipt "")))))))
                           (filter (fn [(r PlanRow)] -> Bool (listContains? keep r.id)) fresh)))
             (parkedLines (listAppend (keptParked (resultOr (fileReadString (str store "/parked.asn")) "") (listAppend inStore (map (fn [(r PlanRow)] -> String r.id) rows)))
                                      (map (fn [(p (Pair PlanRow String))] -> String (parkedRow (pairFirst p) (pairSecond p))) needs)))
@@ -179,7 +191,7 @@ fn ! planIn! text: String store: String base: String dry: Bool lane: String -> (
         (ok (Report :put (map pairFirst (filter (fn [(p (Pair String (Result String String)))] -> Bool (ok? (pairSecond p))) results))
                     :skipped (filter (fn [(i String)] -> Bool (listContains? inStore i)) (map (fn [(r PlanRow)] -> String r.id) rows))
                     :parked (map (fn [(p (Pair PlanRow String))] -> String (str (let [(r (pairFirst p))] r.id) ":" (pairSecond p))) needs)
-                    :bad (map pairFirst (filter (fn [(p (Pair String (Result String String)))] -> Bool (not (ok? (pairSecond p)))) results))
+                    :bad (map (fn [(p (Pair String (Result String String)))] -> String (match (pairSecond p) ((err e) (str (pairFirst p) ":" e)) ((ok _) (pairFirst p)))) (filter (fn [(p (Pair String (Result String String)))] -> Bool (not (ok? (pairSecond p)))) results))
                     :refreshed refreshed)))))
 
 ; (:m :ref COND4 :do "import --ledger FILE --store DIR [--base REF] [--dry]: prints the (:import ...) report; the ledger is read, never written")
