@@ -22,7 +22,8 @@ fn ! runTests -> Bool
       ((ok m)
         (let [(entry (str m.name ".main"))
               (host (textOf (llvm/emitLlvmProgramNativeFor! m entry "0" "")))
-              (linux (textOf (llvm/emitLlvmProgramNativeFor! m entry "0" "linux-x86_64")))
+              (linux0 (textOf (llvm/emitLlvmProgramNativeFor! m entry "0" "linux-x86_64")))
+              (linux (if (= linux0 host) (textOf (llvm/emitLlvmProgramNativeFor! m entry "0" "darwin-arm64")) linux0))
               (viaWith (textOf (llvm/emitLlvmProgramNativeWith! m entry "0")))
               (rc (textOf (llvm/emitLlvmProgramNativeFor! m entry "1" "")))
               (bad (textOf (llvm/emitLlvmProgramNativeFor! m entry "bogus" "")))]
