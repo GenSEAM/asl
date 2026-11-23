@@ -1,6 +1,6 @@
 (module asl-tools/coord/janitor
   :x [Cfg Scratch WtFact Listing Row defaultCfg digitsOnly? scratchPid levelOpen? heldName? heldFrom lsofAbsent? underDir? findArgv heldVia! procHeldN! heldPath! procHeld! capNames freshFrom foreignIgnored modeOf aliveFrom wtOk? planRows renderRow renderPlan plan applyAllowed? modeApply? gatherScratch! gatherWts! gather! apply! removedTotals leadReport! tick! main]
-  :i [(asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (aslGateway/subPace :a sp) (tools/remote/form :a fm) (asl-tools/coord/leadStream :a ls)])
+  :i [(asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/store :a st) (asl-tools/fleet/run :a fr) (aslGateway/subPace :a sp) (asl-tools/remote/form :a fm) (asl-tools/coord/leadStream :a ls)])
 
 ; (:m :ref RES-JANITOR :do "the node reclaims only its own leftovers: (a) test scratch dirs of a dead pid under TMPDIR and (b) worktrees of conductor units whose state is merged, clean and not ahead of main; plan is pure over a listing, dry-run is the default and writes ~/.asl/run/janitor.asn, deletion needs `:mode apply` in ~/.asl/conductor/janitor.asn; no caches, no nativeCli, no journals")
 (schema Cfg

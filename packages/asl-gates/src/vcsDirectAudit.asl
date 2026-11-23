@@ -409,13 +409,17 @@ fn fixture? key: String -> Bool
   (let [(path (optionOr (listHead (stringSplit key "#")) ""))]
     (or (stringStartsWith? path "tests/") (stringContains? path "/tests/")))
 
+; (:m :ref ASL-IMPORTS-TOOLS-FINAL :do "a file that moves under asl/ keeps its allowlist rows: a key whose path differs from a base key only by a leading asl/ is the same site, not growth")
+fn movedKey key: String -> String
+  (if (stringStartsWith? key "asl/") (optionOr (stringSlice key 4 (stringLength key)) key) key)
+
 ; (:m :do "allowlist keys present now beyond their count at the base: product keys (first) are a violation, keys under a tests directory (second) are reported only, since fixtures need real repos")
 fn keyVerb key: String -> String
   (optionOr (listGet (stringSplit key "|git ") 1) "")
 
 ; (:m :ref VCSDIRECT-READ-VERBS :do "a key whose verb the base audit did not cover is not growth: widening the verb list finds old sites, it adds none; a new site of a covered verb still is")
 fn grownOf allow: (List String) baseAllow: (List String) baseVerbs: (List String) -> (Pair (List String) (List String))
-  (let [(grown (filter (fn [(k String)] -> Bool (listContains? baseVerbs (keyVerb k))) (excess allow baseAllow)))]
+  (let [(grown (filter (fn [(k String)] -> Bool (listContains? baseVerbs (keyVerb k))) (excess (map movedKey allow) (map movedKey baseAllow))))]
     (pair (filter (fn [(k String)] -> Bool (not (fixture? k))) grown) (filter fixture? grown)))
 
 fn q s: String -> String

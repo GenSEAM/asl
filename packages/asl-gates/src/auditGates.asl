@@ -339,7 +339,7 @@ fn conflictMarkerCheck! root: String -> (List Check)
 
 ; (:m :ref RED-AT-GATE :do "a package source under asl/packages/PKG/src imports only modules that ship with asl/ (GenSEAM/asl is a git archive of asl/ alone, so an import rooted at tools/, tests/, harness/ or bench/ does not resolve there); pre-existing importers are frozen in boundaryAllowed and a row whose file no longer imports outside leaves the list")
 fn boundaryAllowed -> (List String)
-  (list "asl/packages/asl-agent/src/remoteOps.asl")
+  (list)
 
 fn importsOutsideAsl? text: String -> Bool
   (let [(header (optionOr (listHead (stringSplit text "\n\n")) text))]

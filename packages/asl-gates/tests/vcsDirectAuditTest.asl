@@ -396,6 +396,7 @@ fn ! testWidenedGrown -> Bool
         (assert (stringContains? declaredRestore ":grown (\"t/r.asl#f!|git restore\")") (str "once the base declares the verb the same row is growth: " declaredRestore))
         (assert (and (not (= (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)) (va/verbsTagOf (va/vcsVerbs) (list "add")))) (= (va/verbsTag) (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)))) "the verbs digest changes with the worktree sub-verbs and verbsTag is that digest")
         (assert (not (= (va/verbsTagOf (va/vcsVerbs) (va/worktreeVerbs)) (va/verbsTagOf (list "commit") (va/worktreeVerbs)))) "and with the verb list")
+        (assert (and (listEmpty? (pairFirst (va/grownOf (list "asl/tools/remote/s.asl#f!|git commit") (list "tools/remote/s.asl#f!|git commit") (list "commit")))) (= (listLength (pairFirst (va/grownOf (list "asl/tools/remote/s.asl#f!|git commit" "asl/tools/remote/s.asl#f!|git commit") (list "tools/remote/s.asl#f!|git commit") (list "commit")))) 1)) "a file moved under asl/ keeps its rows, a second row of that key is still growth")
         true))
 
 ; (:m :ref VCSDIRECT-READ-VERBS :do "the verb list is part of the cache key: a store whose rows carry a valid mac but were written under the key without the verb digest (as before the list was widened), with sites emptied, does not hide a restore site; the real audit rescans and names it")
