@@ -1,7 +1,7 @@
 (module asl-tools/coord/conductor
   :x [batchVerdictsOwned tagChunks! bisectChunks zipPairs bisectAwait? heldAwait? retryVerdict? bisectTag soloConvert! docAutodrop! docAutodropAt! docAutodropOnce! preexistingOf trainPreexisting! admissionMaxParallelOf admitFull? admitLimitOf scaledEstimateS admitEstimateS! admitLimitFor! stageSecFor! killedReds admitResWith admitSweep! admissionCounts failRes admissionRowOf admissionErrors admissionOn? admissionJobsOf admitScratchOf admitArgv admitLogPath admitRedPath admitRedNote! admissionLine admitResOf admitNote admitRounds! admitRedFix! admitFinish! admitStage lanesIgnored! branchFiles! moveA! checkBaseFor! depBaseIn! dropShBase! ownBase? ownsHeldByActive? ownsFreeFirst! closeStoreDone! baseConfirmEach reviewCountable? reviewReasonKey reviewWhyPath reviewRepeat! reviewWitness! vacuousMarkPath vacuousKey! vacuousMark! vacuousSeen? baseRedPaths baseRedFlaky! baseFlakyMax baseFlakyPath baseFlaky! docOwns ownsPackages cardOf docOwnsNote cardsRegen! needsReviewGreen? formAfter pkgRootOf gateRunRetry! handoffFail! handoffPick! handoffTaskText cacheFault? blockVerdict docRowsCheckAt! docRowsCheckStepsAt! ledgerFindingsAt! workFixOwed? gatesFailureAt! failDebt! failHeadSave! failHeadPath infraGateSig? writerGates fixRoundTask writeRepeatHead! writeRepeatStopsOf writeRepeatBlocks? writeRepeatReturns writeRepeatReturned writeRepeatReturn! writeStopKey writeRepeatRowOf writeRepeatErrors writeRepeatMax writeRepeatRun writeKept? writeCounts? poolLostSig? utf8Clip verdictSig spawnFailedSig repoClip mergeHoldWhy mergeVerdictRes! mergeCheckOpts mergeTimeoutOnly? mergeRetryOnce! receiptHead unverifiedItems timeoutItem? mergeRetryPath timeoutRes? porcelainPaths unquoteGit hubGuard! leonGuard! staleSig? staleField staleWake! unitHead! cdErrors repoPath gradeCommitsPath gradeCommitRecorded? ledgerForged! settleWt! worktreeValid? ownedStates! briefTask! writeResWith pinExtra leonReceiptSave! repoBrokenPath repoErr! repoGate! ledgerState! ledgerSig! seedGradeCommits! ledgerGuard receiptRowOf fail! finish! launch! step! stepAll! priorNote! providerRequeue! worktreesPath wtBase servedField servedAliasOf servedModel journalA! wipSave! gradeLand! staleOwnsFor! CUnit Res Pace Ctx RealCfg
       cuDir cuPath journalPath escalationsPath runsDir runPath runRow renderCUnit parseCUnit readCUnits! writeCUnit! costText renderRes parseRes
-      allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict
+      allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict baseRedLine baseRedReceiptPath baseRedNote! outsideOf mainRedPath mainRedLoadPath mainRedRow mainRedNote! aloneGreen! mainRedAfter!
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? requestRebrief! rebriefDrain! rebriefOne! rebriefPath requestRemodel! remodelRefusal remodelAliasKnown? remodelDrain! remodelOne! remodelAliasOf remodelAliasPath remodelCfg inFlightState? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
       attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy ownsHeldIds! fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
@@ -755,10 +755,7 @@ fn ! baseRedFlaky! rc: RealCfg sig: String leftS: Int64 -> Bool
     (and (baseRedSig? sig)
       (and (> each 0)
        (and (not (listEmpty? paths))
-        (listAll? (fn [(p String)] -> Bool
-                    (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "test" p) rc.devRepo (mergeEnv)) (fr/limits (min each rc.gateSec) 200)))]
-                      (and (= d.exit 0) (> (optionOr (fr/executedOf d.out) 0) 0))))
-                  paths)))))
+        (listAll? (fn [(p String)] -> Bool (aloneGreen! rc each p)) paths)))))
 
 fn baseFlakyMax -> Int64
   2
@@ -4159,6 +4156,81 @@ fn trainTimesRow id: String attempt: Int64 exit: Int64 ms: Int64 out: String -> 
     (str "(:trainTimes :unit " (st/q id) " :n " (n attempt) " :exit " (n exit) " :ms " (n ms) " :receipt " (if (stringEmpty? receipt) "false" "true")
          " :phases (" (stringJoin phases " ") ") :slowest (" (if (stringEmpty? slow) "" (str "(" slow ")")) ") :unfinished (" (stringJoin (map st/q (stillRunning lines)) " ") "))"))
 
+; (:m :ref TRAIN-BASERED-LIST :do "the train's (:trainBaseRed ...) row, every base red with exit, ms, limit and whether the batch closure touches it, kept whole at runs/UNIT-baseRed.asn and as one journal row; a train whose receipt names no base red removes the file, a killed train (no receipt) leaves it")
+fn baseRedLine out: String -> String
+  (optionOr (listLast (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:trainBaseRed ")) (map stringTrim (stringLines out)))) "")
+
+fn baseRedReceiptPath store: String id: String -> String
+  (runPath store id "baseRed" "asn")
+
+fn ! baseRedNote! store: String id: String out: String -> Bool
+  (let [(line (baseRedLine out))
+        (path (baseRedReceiptPath store id))]
+    (cond
+      ((not (stringEmpty? line))
+        (let [(_ (dirCreate (runsDir store)))
+              (wrote (ok? (fileWrite path (str line "\n"))))
+              (_ (fileAppend (journalPath store) (str "(:trainBaseRed :unit " (st/q id) " :receipt " (st/q path) " " (optionOr (stringSlice line (stringLength "(:trainBaseRed ") (stringLength line)) ")") "\n")))]
+          wrote))
+      ((stringContains? out "(:train :head ") (let [(_ (pathRemove path))] false))
+      (else false)))
+
+; (:m :ref TRAIN-BASERED-LIST :do "the suites a merged train let through as base reds outside the batch closure: rows of its (:trainBaseRed ...) row with :touched false and :knownRed false, and the integration head it ran onto")
+fn outsideOf out: String -> (Pair String (List String))
+  (let [(line (baseRedLine out))
+        (rows (optionOr (listTail (stringSplit line "(:suite \"")) (list)))]
+    (pair (quotedAfter line ":onto \"")
+          (map (fn [(r String)] -> String (optionOr (listHead (stringSplit r "\"")) ""))
+               (filter (fn [(r String)] -> Bool (and (stringContains? r " :touched false ") (stringContains? r " :knownRed false "))) rows))))
+
+fn mainRedPath store: String -> String
+  (str store "/mainRed.asn")
+
+fn mainRedLoadPath store: String -> String
+  (runPath store "mainRed" "load" "txt")
+
+fn mainRedRow suite: String first: String last: String count: Int64 at: Int64 -> String
+  (str "(:mainRed :suite " (st/q suite) " :firstSha " (st/q first) " :lastSha " (st/q last) " :count " (n count) " :at " (n at) ")")
+
+fn mainRedRowOf rows: (List String) suite: String -> String
+  (optionOr (listFind (fn [(l String)] -> Bool (stringStartsWith? l (str "(:mainRed :suite " (st/q suite) " "))) rows) "")
+
+; (:m :ref TRAIN-BASERED-LIST :do "main health for a base red that no longer holds trains: the first time a suite is let through on a head, it runs alone (BASE-RED-FALSE-HOLD's confirm step, passed in as alone); still red, one row keyed by suite in STORE/mainRed.asn (outside the tracked tree) is upserted with the first and last head and a count, and journalled; green alone, the red was load: one (:mainRedLoad ...) journal row and the suite+head pair in runs/mainRed-load.txt, no row. A head already seen for the suite is not confirmed again")
+fn ! mainRedNote! store: String onto: String paths: (List String) alone: (fn ! [String] -> Bool) -> Int64
+  (fold (fn [(acc Int64) (p String)] -> Int64
+          (let [(rows (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines (resultOr (fileReadString (mainRedPath store)) ""))))
+                (old (mainRedRowOf rows p))
+                (loads (stringLines (resultOr (fileReadString (mainRedLoadPath store)) "")))
+                (key (str p " " onto))]
+            (if (or (stringContains? old (str " :lastSha " (st/q onto) " ")) (listContains? loads key)) acc
+              (if (alone p)
+                (let [(_ (dirCreate (runsDir store)))
+                      (_ (fileAppend (mainRedLoadPath store) (str key "\n")))
+                      (_ (fileAppend (journalPath store) (str "(:mainRedLoad :suite " (st/q p) " :onto " (st/q onto) " :at " (n (nowMs)) ")\n")))]
+                  acc)
+                (let [(first (if (stringEmpty? old) onto (quotedAfter old ":firstSha \"")))
+                      (count (+ 1 (optionOr (stringToInt64 (wordAfter old " :count ")) 0)))
+                      (row (mainRedRow p first onto count (nowMs)))
+                      (kept (filter (fn [(l String)] -> Bool (not (stringStartsWith? l (str "(:mainRed :suite " (st/q p) " ")))) rows))
+                      (tmp (str (mainRedPath store) "." (n (procSelf)) ".tmp"))
+                      (_ (fileWrite tmp (str (stringJoin (listAppend kept (list row)) "\n") "\n")))
+                      (_ (pathRename tmp (mainRedPath store)))
+                      (_ (fileAppend (journalPath store) (str row "\n")))]
+                  (+ acc 1))))))
+        0 paths)
+
+; (:m :ref TRAIN-BASERED-LIST :do "the confirm step of BASE-RED-FALSE-HOLD for one suite: it runs alone on the dev head under its share of the time left; green means exit 0 with executed assertions, a share under 60 s confirms nothing and counts as red")
+fn ! aloneGreen! rc: RealCfg each: Int64 p: String -> Bool
+  (and (> each 0)
+    (let [(d (fr/runOneLimited (fr/job (list (str rc.devRepo "/bin/asl") "test" p) rc.devRepo (mergeEnv)) (fr/limits (min each rc.gateSec) 200)))]
+      (and (= d.exit 0) (> (optionOr (fr/executedOf d.out) 0) 0))))
+
+fn ! mainRedAfter! rc: RealCfg store: String out: String leftS: Int64 -> Int64
+  (let [(o (outsideOf out))
+        (each (baseConfirmEach leftS (listLength (pairSecond o))))]
+    (if (or (listEmpty? (pairSecond o)) (stringEmpty? (pairFirst o))) 0
+      (mainRedNote! store (pairFirst o) (pairSecond o) (fn [(p String)] -> Bool (aloneGreen! rc each p)))))
+
 fn ! keepTrain! rc: RealCfg store: String id: String branch: String d: fr/Done sig: String -> String
   (let [(dir (trainsDir store id))
         (_ (fr/runOne (fr/job (list "mkdir" "-p" dir) "." (fr/childEnv (list)))))
@@ -4166,6 +4238,7 @@ fn ! keepTrain! rc: RealCfg store: String id: String branch: String d: fr/Done s
         (next (+ 1 (optionOr (stringToInt64 (stringReplace (optionOr (listLast old) "000000.out") ".out" "")) 0)))
         (path (str dir "/" (sixDigits next) ".out"))
         (_ (fileAppend (journalPath store) (str (trainTimesRow id next d.exit d.ms d.out) "\n")))
+        (_ (baseRedNote! store id d.out))
         (wrote (ok? (fileWrite path (str "(:trainAttempt :unit " (st/q id) " :n " (n next) " :branch " (st/q branch) " :at " (n (nowMs)) " :exit " (n d.exit) " :ms " (n d.ms) " :verdict " (st/q d.verdict) " :sig " (st/q sig) ")\n" d.out))))
         (all (attemptFiles (resultOr (dirList dir) (list))))
         (keep (trainKeepOf (resultOr (fileReadString (str rc.repo "/.asl.config.asn")) "")))
@@ -5584,7 +5657,8 @@ fn ! mergeResWith rc: RealCfg store: String u: st/Task c: CUnit check: (fn ! [Re
                     (merged green)
                     (_ (keepTrain! rc store u.id c.branch d (if merged "" (gateSig d.out))))]
                 (if merged
-                  (let [(_ (w/removeWt! rc.wt u.id true))]
+                  (let [(_ (w/removeWt! rc.wt u.id true))
+                        (_ (mainRedAfter! rc store d.out (- rc.stageSec (- (monoSec! rc) t0))))]
                     (Res :tiers "" :ok 1 :wt "" :branch "" :model "" :tokens 0 :costMicro 0 :claimedGreen 0 :sig "" :ms d.ms :exit 0 :asserts 0 :verdict ""))
                   (let [(f (failRes (gateSig d.out)))]
                     (if (baseRedFlaky! rc f.sig (- rc.stageSec (- (monoSec! rc) t0))) (with f :ms d.ms :verdict "baseFlaky") (with f :ms d.ms)))))))))))
@@ -5730,6 +5804,7 @@ fn ! batchRun! rc: RealCfg store: String lead: (Pair st/Task CUnit) pass: (List 
                                     (_ (if (= v "merged") (resultOr (w/removeWt! rc.wt id true) "") ""))]
                                 (pair id (batchRes (if (and flaky (= v "fail")) "baseFlaky" v) sig d.ms))))
                             (zipPairs cands verdicts)))
+              (_ (if (listContains? verdicts "merged") (mainRedAfter! rc store d.out (- rc.stageSec (- (clock rc) t0))) 0))
               (resOf (fn [(m (Pair (Pair st/Task CUnit) (Option Res)))] -> Res
                        (match (pairSecond m)
                          ((some stopped) stopped)
