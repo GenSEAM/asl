@@ -91,9 +91,10 @@ fn testServerOmniDispatch -> Bool
         (isEsh (server/detectEshViolation "The refactor is done and all tests pass cleanly."))]
     (do
       (assert (= (pairFirst syncRes) "ok") "Sync ingest must return ok")
-      (assert (= browserRec.status "ok") "Browser dispatch must return ok")
-      (assert (= mediaRec.status "ok") "Media dispatch must return ok")
-      (assert (= mediaRec.width 1920) "16:9 width must be 1920")
+      (assert (= browserRec.status "not_supported") "Browser dispatch must return not_supported")
+      (assert (= browserRec.capturedText "Browser dispatch not supported") "Browser dispatch must have explicit text")
+      (assert (= mediaRec.status "not_supported") "Media dispatch must return not_supported")
+      (assert (= mediaRec.width 0) "Media dispatch width must be 0")
       (assert cleanTurn.allowed "Clean conversational turn must be allowed")
       (assert isEsh "Unverified test passage claim must be detected as ESH")
       (refute (not isEsh) "ESH violation must be refuted when negated")

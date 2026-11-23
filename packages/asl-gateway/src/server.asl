@@ -63,17 +63,10 @@ fn handleSyncIngest rawPayload: Str -> (Pair Str Str)
     (pair "ok" contentHash))
 
 fn handleBrowserDispatch frame: browser/BrowserActionFrame -> browser/BrowserActionReceipt
-  (let [(isValid (browser/validateActionOp frame.op))]
-    (if isValid
-      (browser/createSuccessReceipt frame.actionId 45 "https://gateway.local" "none" "executed")
-      (browser/createErrorReceipt frame.actionId 0 "invalid_op" "Unknown browser operation")))
+  (browser/createErrorReceipt frame.actionId 0 "not_supported" "Browser dispatch not supported")
 
 fn handleMediaDispatch req: media/MediaGenRequest -> media/MediaGenReceipt
-  (let [(isValid (media/validateMediaKind req.mediaKind))
-        (dim (media/calculateMediaDimensions req.aspectRatio))]
-    (if isValid
-      (media/createMediaReceipt req.requestId "ok" "storage://generated/asset" "/tmp/asset" "hash123" (pairFirst dim) (pairSecond dim) 10)
-      (media/createMediaReceipt req.requestId "rejected" "" "" "" 0 0 0)))
+  (media/createMediaReceipt req.requestId "not_supported" "" "" "" 0 0 0)
 
 fn gatewayServerArg args: (List String) index: Int64 -> String
   (optionOr (listGet args index) "")

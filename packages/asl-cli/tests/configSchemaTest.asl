@@ -22,7 +22,7 @@ fn validText -> String
     "  :fleet (:drainBytes 1048576 :drainMs 300)"
     "  :nativeCli (:buildWaitS 3600 :coldStallS 300 :formsPin true :relayPin true :relayPaths [\"tools/remote\" \"asl/tools/fleet\"])"
     "  :deploy (:warmS 900 :warmNice 10 :warmEntries [\"asl/packages/asl-agent/src/leonServe.asl\"])"
-    "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100)"
+    "  :leonPool (:ctlProbeRetries 5 :ctlProbeDelayMs 100 :silentPollsReprobe 30)"
     "  :agentLoop (:parseDefectEscalate 8 :readOutlineBytes 16384 :baseline true :specCheck false :toolMemo false :graderIntent grade :graderProfile \"p\" :gatewayConfig \"/tmp/g.asn\" :wallReserveSec 120 :wallGateMinSec 60 :gateVacuousRounds 2 :gateMaxDescendants 512 :contextKeepTurns 8 :contextToolCapBytes 1500 :contextMaxOlderLines 50 :readStreakNudge 6 :readStreakEscalate 12 :allDownWaitSec 1200 :allDownPauseSec 60 :doneNoWriteTurns 2 :doc \"d\")"
     "  :remoteJobs (:claimSweepS 300)"
     "  :release (:pin \"0.0.2\" :min \"0.0.1\" :mode :warn))"

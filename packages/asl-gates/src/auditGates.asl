@@ -14,7 +14,8 @@
       (asl-proc/coreProcess :a p)
       (asl-proc/gitFixture :a gf)
       (asl-tools/agentSurfaceAudit :a asa)
-      (asl-tools/coverageRatchet :a cov)])
+      (asl-tools/coverageRatchet :a cov)
+      (asl-gates/metaAudit :a ma)])
 
 (schema Check
   (:f id String)
@@ -368,7 +369,43 @@ fn foreignCore! root: String corePath: String -> Bool
     ((ok bs) (and (machOCore? bs) (!= (hostKernel! root) "Darwin")))
     ((err _) false))
 
+fn isMetaArgs? args: (List String) -> Bool
+  (match (listHead args)
+    ((none) false)
+    ((some a)
+      (if (= a "audit")
+        (match (listHead (optionOr (listTail args) (list)))
+          ((none) false)
+          ((some b) (= b "meta")))
+        false)))
+
+fn metaCheck! root: String paths: (List String) -> Check
+  (match (fileReadString (str root "/asl/grammar/meta.asn"))
+    ((err _) (failCheck "meta" "ERR_META_SPEC" "cannot read asl/grammar/meta.asn" (none) (none)))
+    ((ok metaText)
+      (match (ma/loadSpec metaText)
+        ((err e) (failCheck "meta" "ERR_META_SPEC" (esc e 400) (none) (none)))
+        ((ok spec)
+          (let [(ctx (ma/loadCtx! root spec (list)))
+                (rows (match (fileReadString (str root "/scripts/audit/metaBaseline.asn"))
+                        ((ok t) (resultOr (ma/parseBaseline t) (list)))
+                        ((err _) (list))))
+                (audit (ma/auditPaths! ctx rows paths))
+                (n (listLength audit.violations))]
+            (if (= n 0)
+              (passCheck "meta" (some 0) (none))
+              (failCheck "meta" "ERR_META_VIOLATION" (esc (ma/receipt audit) 400) (some n) (none))))))))
+
+fn cmdMeta! root: String argv: (List String) -> AuditRun
+  (let [(check (metaCheck! root argv))]
+    (emit "meta" (list check) "" "" false))
+
 fn coreCheck! root: String cid: String args: (List String) -> Check
+  (if (isMetaArgs? args)
+    (metaCheck! root (optionOr (listTail (optionOr (listTail args) (list))) (list)))
+    (coreSpawnCheck! root cid args))
+
+fn coreSpawnCheck! root: String cid: String args: (List String) -> Check
   (let [(corePath (str root "/bin/asl-core"))]
     (if (not (isFile! corePath))
       (notComputedCheck cid "bin/asl-core absent")
