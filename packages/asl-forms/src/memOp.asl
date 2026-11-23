@@ -17,10 +17,34 @@ fn memOk id: Int64 body: String -> k/EditOutcome
 fn idText v: asn/AsnValue -> String
   (match v ((asn/asnStr _) (optionOr (asn/asnStringValue v) "")) ((asn/asnSym name) name) ((asn/asnKw name) name) (_ (asn/asnWrite v)))
 
+fn keyName k: String -> String
+  (if (stringStartsWith? k ":")
+    (keyName (optionOr (stringSlice k 1 (stringLength k)) ""))
+    k)
+
+fn idAfterKw vals: (List asn/AsnValue) -> (Option asn/AsnValue)
+  (match (listHead vals)
+    ((none) (none))
+    ((some x)
+      (match x
+        ((asn/asnKw k)
+          (if (= (keyName k) "id")
+            (listHead (optionOr (listTail vals) (list)))
+            (idAfterKw (optionOr (listTail vals) (list)))))
+        (_ (idAfterKw (optionOr (listTail vals) (list)))))))
+
 fn rowId v: asn/AsnValue -> String
   (match v
-    ((asn/asnCase _ fields) (match (listHead fields) ((some x) (idText x)) ((none) "")))
-    ((asn/asnRec fields) (let [(id (filter (fn [(f asn/AsnField)] -> Bool (= f.key "id")) fields))]
+    ((asn/asnCase _ fields)
+      (match (idAfterKw fields)
+        ((some x) (idText x))
+        ((none) (match (listHead fields) ((some x) (idText x)) ((none) "")))))
+    ((asn/asnTagged _ fields _)
+      (let [(id (filter (fn [(f asn/AsnField)] -> Bool (= (keyName f.key) "id")) fields))]
+        (match (listHead id)
+          ((some f) (idText f.val))
+          ((none) ""))))
+    ((asn/asnRec fields) (let [(id (filter (fn [(f asn/AsnField)] -> Bool (= (keyName f.key) "id")) fields))]
       (match (listHead id) ((some f) (idText f.val)) ((none) (match (listHead fields) ((some f) (idText f.val)) ((none) ""))))))
     (_ ""))
 
@@ -153,6 +177,11 @@ fn replaceRows text: String rows: (List MemRow) id: String newRow: String -> Str
         (str (optionOr (stringSlice text 0 target.start) "") newRow
              (optionOr (stringSlice text target.end (stringLength text)) "")))))
 
+fn countRows rows: (List MemRow) id: String -> Int64
+  (match (listHead rows)
+    ((none) 0)
+    ((some r) (+ (if (= r.id id) 1 0) (countRows (optionOr (listTail rows) (list)) id))))
+
 fn putOp! id: Int64 root: String kw: (Map String String) -> k/EditOutcome
   (let [(rel (k/kwOr kw "file" "")) (row (k/kwOr kw "row" "")) (parsed (asn/asnRead row))]
     (cond
@@ -163,9 +192,10 @@ fn putOp! id: Int64 root: String kw: (Map String String) -> k/EditOutcome
         (if (stringEmpty? key) (fail id ":ERR_INVALID_ROW" "row must have an id")
           (let [(path (memPath root rel)) (current (fileRows! root rel))]
             (match current ((err e) (fail id ":ERR_MEM_READ" e)) ((ok p)
-              (match (v/vfsContext! root) ((err e) (fail id ":ERR_STAGE_FAILED" e)) ((ok vs)
-                (let [(next (replaceRows (pairFirst p) (pairSecond p) key row))]
-                  (match (v/stage! vs path next) ((err e) (fail id ":ERR_STAGE_FAILED" e)) ((ok _) (memOk id (str " :file " (q rel) " :rowId " (q key) " :staged true")))))))))))))))
+              (if (> (countRows (pairSecond p) key) 1) (fail id ":ERR_DUPLICATE_ID" "memory ledger already has two rows with this id")
+                (match (v/vfsContext! root) ((err e) (fail id ":ERR_STAGE_FAILED" e)) ((ok vs)
+                  (let [(next (replaceRows (pairFirst p) (pairSecond p) key row))]
+                    (match (v/stage! vs path next) ((err e) (fail id ":ERR_STAGE_FAILED" e)) ((ok _) (memOk id (str " :file " (q rel) " :rowId " (q key) " :staged true"))))))))))))))))
 
 fn memStep! root: String id: Int64 kw: (Map String String) args: (List String) held: (List String) -> k/EditOutcome
   (let [(op (k/kwOr kw "op" (optionOr (listHead args) ""))) (memDir (memPath root ""))]
