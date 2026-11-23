@@ -1194,6 +1194,13 @@ fn claimed line: String -> String
         ((stringStartsWith? line "FAIL ") (str "(unrecorded) " line))
         (else line))
 
+; (:m :ref GATE-VERDICT-STDERR-ORDER :do "the child's stderr shares the captured stream, so a suite's expected-error child may print after the runner's verdict line; lines after the last verdict are tolerated unless they claim a count or a FAIL (kept neutralised by claimed), the verdict count must still equal the declared files, and the marker names the first offending trailing line")
+fn trailingDirty? l: String -> Bool
+  (or (stringContains? l " assertion(s) executed") (stringStartsWith? l "FAIL "))
+
+fn clip l: String -> String
+  (stringReplace (optionOr (stringSlice (claimed l) 0 (min 120 (stringLength (claimed l)))) "") "\"" "'")
+
 fn gateOut cmd: String out: String -> String
   (gateOutHost "" cmd out)
 
@@ -1202,15 +1209,15 @@ fn gateOutHost host: String cmd: String out: String -> String
         (lines (stringLines out))
         (body (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) lines))
         (k (listLength files))
-        (tail (listDrop body (max 0 (- (listLength body) k))))
         (isVerdict (fn [(l String)] -> Bool (listAny? (fn [(f String)] -> Bool (verdictFor l f)) files)))
-        (isPass (fn [(l String)] -> Bool (and (isVerdict l) (not (stringStartsWith? l "FAIL ")))))
+        (after (fold (fn [(acc (List String)) (l String)] -> (List String) (if (isVerdict l) (list) (listAppend acc (list l)))) (list) body))
+        (dirty (listHead (filter trailingDirty? after)))
         (all (listLength (filter isVerdict body)))
-        (okShape (and (> k 0) (= all k) (= (listLength (filter isPass tail)) (listLength (filter isPass body)))))
+        (okShape (and (> k 0) (= all k) (none? dirty)))
         (neutral (stringJoin (map claimed lines) "\n"))
         (marker (cond ((= k 0) "(:gateFormUndeclared :want \"./bin/asl test FILE.asl...\")")
                       (okShape "")
-                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) ")"))))]
+                      (else (str "(:gateVerdictInvalid :files " (stringFromInt64 k) " :verdictLines " (stringFromInt64 all) (match dirty ((some l) (str " :trailing \"" (clip l) "\"")) ((none) (match (listHead after) ((some l) (str " :trailing \"" (clip l) "\"")) ((none) "")))) ")"))))]
     (if okShape
       (let [(kept (stringJoin (map (fn [(l String)] -> String (if (isVerdict l) l (claimed l))) lines) "\n"))] kept)
       (str neutral (if (stringEndsWith? neutral "\n") "" "\n") marker "\n")))
