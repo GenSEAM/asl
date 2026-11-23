@@ -7,7 +7,7 @@ fn scratchDir! tag: String -> String
 fn txnRun! root: String payload: String -> fr/Done
   (let [(repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs"))))]
+        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "HOME=" root) (str "ASL_VFS_DIR=" (k/joinPath root ".asl/vfs"))))]
     (fr/runOneLimited (fr/job (list host "--root" root payload) repo env) (fr/limits 60 16)))
 
 fn editForm file: String old: String new: String -> String

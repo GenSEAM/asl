@@ -152,7 +152,7 @@ fn testTxnRouter! -> Bool
         (file (k/joinPath root "a.txt"))
         (repo (resultOr (realPath ".") ""))
         (host (fd/formsBin! repo))
-        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "ASL_VFS_DIR=" vfs)))
+        (env (list (str "PATH=" (optionOr (envGet "PATH") "")) (str "HOME=" root) (str "ASL_VFS_DIR=" vfs)))
         (payload "(:txn :owns (\"a.txt\") (:edit :file \"a.txt\" :old \"hello\" :new \"world\"))")]
     (do
       (assert (ok? (dirCreate vfs)) "create isolated transaction vfs")
