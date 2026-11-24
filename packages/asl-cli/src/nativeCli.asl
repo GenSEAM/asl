@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
+  :x [kwPrev? plainArg? readOnly? readHeads toolchainMoved? kept? testPinned? testArgv? testPinOn? cacheDir! headPath toolchainRootPaths rootsText pinned? relayPinned? formsPinned? formsOnly? formsPinOn? underRoot clangFacts! clangCommand! clangFor! clangCandidates clangPick configClang configNative nearestConfigText! clangOnPathIn! fresh? probe? alive? nsId! nsFromLink statRestOf statStartField statPpidField startOf! ancestorsOf! idText! idField lockStaleWhy lockStale! claimLock! dropStale! writeId! verbKind nativeGate! hostEntry! pruneEntries! pruneNativeCache! StoreEntry storeEntry! sweepEntries! sweepEntriesWith! treeBytes! headRoot! sweepNativeCache! entryStamp! treeStamp! leaseEntry! dropLeases! sharedFloorNs storeBytes dropEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cliClosure :a cc) (asl/packages/asl-remote/src/target :a rt) (asl-tools/fleet/run :a run) (asl-parser/reader :a rd)])
 
 fn ! cacheDir! -> String
@@ -752,10 +752,14 @@ fn ! dropEntry! e: StoreEntry -> Bool
   (fold (fn [(acc Bool) (p String)] -> Bool (and (ok? (pathRemove p)) acc)) true e.paths)
 
 fn ! sweepEntries! entries: (List StoreEntry) capBytes: Int64 minAgeNs: Int64 -> (Pair Int64 Int64)
+  (sweepEntriesWith! entries capBytes minAgeNs (fn [(e StoreEntry)] -> Bool e.pinned))
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "pinned is asked again right before an entry is removed, not only when the scan listed it: a lease or hold taken between the scan and the removal keeps the entry")
+fn ! sweepEntriesWith! entries: (List StoreEntry) capBytes: Int64 minAgeNs: Int64 pinnedNow!: (fn [StoreEntry] -> Bool) -> (Pair Int64 Int64)
   (let [(now (nowNs))
         (oldestFirst (listSortBy (fn [(e StoreEntry)] -> Int64 e.stamp) entries))]
     (fold (fn [(acc (Pair Int64 Int64)) (e StoreEntry)] -> (Pair Int64 Int64)
-            (if (and (> (pairFirst acc) capBytes) (and (not e.pinned) (and (> (- now e.stamp) minAgeNs) (> (- (nowNs) (pathsStamp! e.paths)) minAgeNs))))
+            (if (and (> (pairFirst acc) capBytes) (and (not e.pinned) (and (> (- now e.stamp) minAgeNs) (and (> (- (nowNs) (pathsStamp! e.paths)) minAgeNs) (not (pinnedNow! e))))))
               (if (dropEntry! e) (pair (- (pairFirst acc) e.bytes) (+ (pairSecond acc) 1)) acc)
               acc))
           (pair (storeBytes entries) 0) oldestFirst))

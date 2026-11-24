@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! leaseSlot! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -2206,9 +2206,54 @@ fn ! moduleEntries! dir: String -> (List ncli/StoreEntry)
 fn hexKey? n: String -> Bool
   (= (stringLength n) 64)
 
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a build hands its binaries to its runs and init probes after the slot lease is gone, so prepareAllIn records them in cDir/holds/PID and the sweep pins every slot a live pid holds until releaseHold! (a dead pid's hold is removed when seen)")
+fn ! holdsDirIn cDir: String -> String
+  (str cDir "/holds")
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a hold is keyed by its owner's pid and process start, the owner being the process that called prepareAllIn, not the parMap worker that wrote the file (workers exit when parMap returns); a hold whose owner is dead or whose start differs is removed when seen")
+fn ! holdLive? owner: Int64 start: String -> Bool
+  (and (pidAlive? owner) (or (stringEmpty? start) (= start (ncli/startOf! owner))))
+
+fn ! heldPaths! cDir: String -> (List String)
+  (let [(dir (holdsDirIn cDir))]
+    (fold (fn [(acc (List String)) (n String)] -> (List String)
+            (match (stringToInt64 (optionOr (listHead (stringSplit n ".")) n))
+              ((some pid) (let [(lines (stringSplit (resultOr (fileReadString (str dir "/" n)) "") "\n"))
+                                (start (stringReplace (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "start=")) lines)) "") "start=" ""))]
+                            (if (holdLive? pid start)
+                              (listAppend acc (filter (fn [(l String)] -> Bool (not (or (stringEmpty? l) (stringStartsWith? l "start=")))) lines))
+                              (do (pathRemove (str dir "/" n)) acc))))
+              ((none) acc)))
+          (list) (resultOr (dirList dir) (list))))
+
+fn ! holdBuilt! cDir: String owner: Int64 start: String b: Built -> Built
+  (let [(dir (holdsDirIn cDir))
+        (_ (dirCreate dir))
+        (_ (match b.binary
+             ((some bin) (fileWrite (str dir "/" (stringFromInt64 owner) "." (stringFromInt64 (monotonicNs)) "." (bytesSha256 (stringToBytes bin))) (str "start=" start "\n" bin)))
+             ((none) (ok ()))))]
+    b)
+
+fn ! releaseHold! cDir: String -> Bool
+  (let [(prefix (str (stringFromInt64 (procSelf)) "."))]
+    (fold (fn [(acc Bool) (n String)] -> Bool (if (stringStartsWith? n prefix) (and (ok? (pathRemove (str (holdsDirIn cDir) "/" n))) acc) acc))
+          true (resultOr (dirList (holdsDirIn cDir)) (list))))
+
+fn ! releaseHeld! -> Bool
+  (releaseHold! (cacheDir!))
+
+fn ! heldBy? held: (List String) path: String -> Bool
+  (listAny? (fn [(h String)] -> Bool (stringStartsWith? h (str path "/"))) held)
+
+fn ! entryPinnedNow! held: (List String) e: ncli/StoreEntry -> Bool
+  (listAny? (fn [(p String)] -> Bool (or (heldBy? held p) (or (lockLive? (str p "/lock")) (and (stringEndsWith? p ".lock") (lockLive? p))))) e.paths)
+
 fn ! slotEntries! cDir: String -> (List ncli/StoreEntry)
+  (slotEntriesHeld! cDir (heldPaths! cDir))
+
+fn ! slotEntriesHeld! cDir: String held: (List String) -> (List ncli/StoreEntry)
   (fold (fn [(acc (List ncli/StoreEntry)) (f String)] -> (List ncli/StoreEntry)
-          (listAppend acc (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str cDir "/" f "/" n)) (lockLive? (str cDir "/" f "/" n "/lock"))))
+          (listAppend acc (map (fn [(n String)] -> ncli/StoreEntry (ncli/storeEntry! (list (str cDir "/" f "/" n)) (or (lockLive? (str cDir "/" f "/" n "/lock")) (heldBy? held (str cDir "/" f "/" n)))))
                                (filter hexKey? (resultOr (dirList (str cDir "/" f)) (list))))))
         (list) (filter hexKey? (resultOr (dirList cDir) (list))))
 
@@ -2219,10 +2264,20 @@ fn ! deadEphemeral? name: String -> Bool
 
 ; (:m :ref BIN-NO-PERSIST-20261026 :do "a sweep walks every file of the store (539 ms on 40000 files, 2026-10-27), so a build sweeps at most once a minute per store, marked by the swept file")
 fn ! sweepStore! cDir: String -> Int64
-  (let [(mark (str cDir "/swept"))]
-    (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
-      0
-      (if (buildingLive? cDir) 0 (do (fileWrite mark "") (sweepStoreNow! cDir)))))
+  (sweepStoreBounded! cDir (nb/storeCapFor! (toolRoot)) (nb/storeMinAgeNs! (toolRoot)) (nb/storeHardCapFor! (toolRoot)) (nb/storeHardMinAgeNs! (toolRoot)))
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "while a build marker is live only the hard sweep runs, otherwise the soft sweep and then the hard one")
+fn ! sweepStoreBounded! cDir: String cap: Int64 minAgeNs: Int64 hardCap: Int64 hardAgeNs: Int64 -> Int64
+  (if (buildingLive? cDir)
+    (let [(mark (str cDir "/sweptHard"))]
+      (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
+        0
+        (do (fileWrite mark "") (sweepStoreHardWith! cDir hardCap hardAgeNs))))
+    (let [(mark (str cDir "/swept"))]
+      (if (< (- (nowNs) (ncli/entryStamp! mark)) 60000000000)
+        0
+        (do (fileWrite mark "")
+            (+ (sweepStoreWith! cDir cap minAgeNs) (sweepStoreHardWith! cDir hardCap hardAgeNs))))))
 
 ; (:m :ref NATIVE-SWEEP-PARALLEL-COMPILE :do "prepareAllIn writes cDir/building.PID (own marker per builder, name carries the pid) while parMap workers build; any live marker holds off store pruning, a dead pid marker is removed when seen")
 fn ! markerLive? cDir: String name: String -> Bool
@@ -2239,15 +2294,39 @@ fn ! sweepStoreNow! cDir: String -> Int64
   (sweepStoreWith! cDir (nb/storeCapFor! (toolRoot)) (nb/storeMinAgeNs! (toolRoot)))
 
 fn ! sweepStoreWith! cDir: String capBytes: Int64 minAgeNs: Int64 -> Int64
+  (sweepStoreKind! cDir capBytes minAgeNs "soft")
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the hard sweep bounds the store at :storeHardCap even while a build marker is live: slots a build fills hold slot/lock leases and are pinned, anything used within :storeHardMinAge stays, the rest goes oldest first; each sweep that removes something appends one (:sweep ...) row with freed bytes and entries to cDir/sweeps.asn")
+fn ! sweepStoreHardWith! cDir: String capBytes: Int64 minAgeNs: Int64 -> Int64
+  (sweepStoreKind! cDir capBytes minAgeNs "hard")
+
+fn ! sweepStoreKind! cDir: String capBytes: Int64 minAgeNs: Int64 kind: String -> Int64
   (let [(lock (str cDir "/sweep.lock"))]
     (if (not (takeLock! lock 1))
       0
       (let [(eDir (ephemeralDirIn cDir))
             (stale (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "run.") (and (deadEphemeral? n) (ok? (pathRemove (str eDir "/" n)))))) (resultOr (dirList eDir) (list))))
-            (entries (listAppend (slotEntries! cDir) (moduleEntries! (modulesDirIn cDir))))
-            (swept (ncli/sweepEntries! entries capBytes minAgeNs))
+            (held (heldPaths! cDir))
+            (entries (listAppend (slotEntriesHeld! cDir held) (moduleEntries! (modulesDirIn cDir))))
+            (before (ncli/storeBytes entries))
+            (swept (ncli/sweepEntriesWith! entries capBytes minAgeNs (fn [(e ncli/StoreEntry)] -> Bool (entryPinnedNow! held e))))
+            (_ (if (> (pairSecond swept) 0)
+                 (fileAppend (str cDir "/sweeps.asn") (str "(:sweep :kind " kind " :at " (stringFromInt64 (nowNs)) " :freedBytes " (stringFromInt64 (- before (pairFirst swept))) " :entries " (stringFromInt64 (pairSecond swept)) " :capBytes " (stringFromInt64 capBytes) ")\n"))
+                 (ok ())))
+            (_ (rotateRows! (str cDir "/sweeps.asn") 200))
             (_ (pathRemove lock))]
         (+ (listLength stale) (pairSecond swept)))))
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the receipt file keeps its last keep rows")
+fn ! rotateRows! path: String keep: Int64 -> Bool
+  (let [(rows (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringSplit (resultOr (fileReadString path) "") "\n")))]
+    (if (> (listLength rows) keep)
+      (ok? (fileWrite path (str (stringJoin (listDrop rows (- (listLength rows) keep)) "\n") "\n")))
+      true))
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "a lease lost to a sweep that removed the slot dir between dirCreate and the write is retried once after recreating it")
+fn ! leaseOnce! slot: String -> Bool
+  (or (leaseSlot! slot) (do (dirCreate slot) (leaseSlot! slot)))
 
 fn ! leaseSlot! slot: String -> Bool
   (ok? (fileWrite (str slot "/lock") (stringFromInt64 (procSelf))))
@@ -2288,7 +2367,7 @@ fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String 
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "" (mapEmpty))))))
+                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "" (mapEmpty)))) (unbuilt (str "cannot lease " slot))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2305,7 +2384,7 @@ fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String f
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (leasedBuild! slot (do (leaseSlot! slot) (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only (mapEmpty))))))
+                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only (mapEmpty)))) (unbuilt (str "cannot lease " slot))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2346,7 +2425,9 @@ fn unstride order: (List Int64) xs: (List Built) -> (List Built)
     (map (fn [(i Int64)] -> Built (optionOr (mapGet byIndex i) (Built :binary (none) :reason "stride lost a result" :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))) (range 0 (listLength order))))
 
 fn ! prepareAllIn cDir: String paths: (List String) fp: String k: Int64 -> (List Built)
-  (let [(build (fn [(p String)] -> Built (prepareInWith 1 cDir p fp "test")))
+  (let [(owner (procSelf))
+        (ownerStart (ncli/startOf! owner))
+        (build (fn [(p String)] -> Built (holdBuilt! cDir owner ownerStart (prepareInWith 1 cDir p fp "test"))))
         (marker (str cDir "/building." (stringFromInt64 (procSelf))))
         (_ (if (fileExists? cDir) true (do (dirCreate cDir) true)))
         (_ (fileWrite marker ""))

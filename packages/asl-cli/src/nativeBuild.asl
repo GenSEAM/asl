@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -358,6 +358,18 @@ fn ageValue word: String -> (Option Int64)
 
 fn ! storeMinAgeNs! dir: String -> Int64
   (optionOr (match (configured! dir ":storeMinAge") ((some w) (ageValue w)) ((none) (none))) 3600000000000)
+
+; (:m :ref NATIVETEST-CACHE-GC-NODE2 :do "the soft :storeCap sweep never runs while a build marker is live and spares everything used within :storeMinAge, so a long train grew one node2 store to 17G in 5h; :storeHardCap (8G adopted, 2026-11-23) bounds it: over it the oldest entries go even then, sparing only a leased entry or one used within :storeHardMinAge (10m adopted)")
+fn defaultStoreHardCap -> Int64
+  8589934592
+
+fn ! storeHardCapFor! dir: String -> Int64
+  (match (configured! dir ":storeHardCap")
+    ((some word) (optionOr (capValue word) (defaultStoreHardCap)))
+    ((none) (defaultStoreHardCap)))
+
+fn ! storeHardMinAgeNs! dir: String -> Int64
+  (optionOr (match (configured! dir ":storeHardMinAge") ((some w) (ageValue w)) ((none) (none))) 600000000000)
 
 ; (:m :ref NT-CLAIM-WAIT-CFG :do "how long a nativeTest process waits for another process compiling the same module or prelude key is the :native :claimWaitS row of the nearest .asl.config.asn or ~/.asl/config.asn, whole seconds 1 to 86400; 900 when absent, unreadable or out of range")
 fn defaultClaimWaitS -> Int64

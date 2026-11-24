@@ -13,6 +13,8 @@
 (:cfgKey :grp native :name node :kind path :default "tool found on PATH" :status live :ref LLVM-NODE2-REDS :doc "node executable for wasm tests")
 (:cfgKey :grp native :name storeCap :kind size :default "2G" :status live :ref BIN-NO-PERSIST-20261026 :doc "byte cap of a native build store, digits with an optional K, M or G")
 (:cfgKey :grp native :name storeMinAge :kind age :default "60m" :status live :ref BIN-NO-PERSIST-20261026 :doc "a store entry used within this age is never swept, digits in minutes or with an m or h suffix")
+(:cfgKey :grp native :name storeHardCap :kind size :default "8G" :status live :ref NATIVETEST-CACHE-GC-NODE2 :doc "adopted ceiling of a nativeTest store: over it the oldest unleased entries go even while a build runs or within storeMinAge")
+(:cfgKey :grp native :name storeHardMinAge :kind age :default "10m" :status live :ref NATIVETEST-CACHE-GC-NODE2 :doc "adopted: an entry used within this age is spared even by the storeHardCap sweep, digits in minutes or with an m or h suffix")
 (:cfgKey :grp native :name claimWaitS :kind int :lo 1 :hi 86400 :default "900" :status live :ref NT-CLAIM-WAIT-CFG :doc "seconds a nativeTest process waits for another process compiling the same module or prelude key before it compiles unclaimed")
 (:cfgKey :grp native :name lockGraceS :kind int :lo 1 :hi 3600 :default "10" :status live :ref NT-CLAIM-WAIT-CFG :doc "seconds a nativeTest lock file with no pid in it must have been idle before it is broken as dead")
 (:cfgKey :grp native :name buildPool :kind path :default "~/.asl/run/jobserver/build" :status live :ref WT-SHARED-CLI-BUILD :doc "jobserver root of the node build pool every native build clang and asl1 emit takes a token of")

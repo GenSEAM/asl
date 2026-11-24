@@ -702,7 +702,8 @@ fn ! sweepDone! ctx: sys/Context ws: String timeoutS: Int64 k: Int64 files: (Lis
         (lost (map (fn [(b (Pair (Pair Int64 String) nt/Built))] -> sw/Done
                      (sw/Done :index (pairFirst (pairFirst b)) :path (pairSecond (pairFirst b)) :code 127 :last (str "cannot create " tmp) :out ""))
                    (if (ok? made) (list) runnable)))
-        (removed (pathRemove tmp))]
+        (removed (pathRemove tmp))
+        (_ (nt/releaseHeld!))]
     (listAppend fromRuns (listAppend fromChecker (listAppend fromBuilds lost))))
 
 fn ! hostSweep! ctx: sys/Context ws: String tmp: String timeoutS: Int64 k: Int64 unbuilt: (List (Pair (Pair Int64 String) nt/Built)) -> (List sw/Done)
