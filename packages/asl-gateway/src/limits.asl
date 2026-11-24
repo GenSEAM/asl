@@ -168,12 +168,12 @@ fn dayUse sc: c/LimitScope u: Used d: ul/DayRow -> Used
 fn calendar? lim: c/GatewayLimit -> Bool
   (= (trailingMs lim.window) 0)
 
-; (:m :ref GW-LIMIT-LONG-WINDOW :do "a calendar window counts the day rows of its days plus the live rows after the rollup's :last, which are in no day row; a trailing window never spans a pruned generation and counts live rows only. Both bounds are inclusive and day aligned for a calendar window, so a day row is whole inside or outside")
+; (:m :ref GW-LIMIT-LONG-WINDOW :do "a calendar window counts the day rows of its days plus the live rows after the rollup's :last, which are in no day row; a trailing window never spans a pruned generation and counts live rows only. Both bounds are inclusive and day aligned for a calendar window, so a day row is whole inside or outside; a trailing window's start is exclusive, so a call exactly the window length ago is outside")
 fn usedBetween sc: c/LimitScope lim: c/GatewayLimit rows: (List ul/CallRow) days: (List ul/DayRow) fromMs: Int64 toMs: Int64 -> Used
   (let [(cal (calendar? lim))
         (through (if cal (ul/daysThrough days) 0))
         (live (fold (fn [(u Used) (r ul/CallRow)] -> Used
-                      (if (and (>= r.atMs fromMs) (and (<= r.atMs toMs) (and (> r.atMs through) (and (sentRow? r) (coversIn sc lim r.provider r.alias)))))
+                      (if (and (if cal (>= r.atMs fromMs) (> r.atMs fromMs)) (and (<= r.atMs toMs) (and (> r.atMs through) (and (sentRow? r) (coversIn sc lim r.provider r.alias)))))
                         (rowUse sc u r) u))
                     (noUse) rows))]
     (if (not cal)

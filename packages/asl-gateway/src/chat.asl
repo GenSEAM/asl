@@ -54,6 +54,8 @@
       stepDone
       stepRaised
       modelCascade
+      agyConfigModel
+      agyFallbackLive
       chatStart!
       effectJson
       headJson
@@ -521,12 +523,23 @@ fn agyFallback cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) ->
           (tell (usageNote "agy-cli" "agyFallback" "skipped-noBinary") (fn [] -> ChatStep (k none)))
           (agyFallbackLive cx prompt k)))))
 
+; (:m :do "the agy model name comes from the gateway config alias agy (then antigravity), so a config-only change moves both the live fallback and cliDispatch; gemini-3.8-flash is only the schema default when no alias resolves")
+fn agyConfigModel cx: Ctx -> String
+  (let [(pick (fn [(tbl c/GatewayTable) (a String)] -> (Option String)
+                (match (c/gatewayV2AliasEntry! tbl a)
+                  ((some (c/entryResolved g)) (if (stringEmpty? g.name) none (some g.name)))
+                  (_ none))))]
+    (match cx.world.table
+      ((err _) "gemini-3.8-flash")
+      ((ok tbl)
+        (optionOr (match (pick tbl "agy") ((some s) (some s)) ((none) (pick tbl "antigravity"))) "gemini-3.8-flash"))))
+
 fn agyFallbackLive cx: Ctx prompt: String k: (fn [(Option CliReply)] -> ChatStep) -> ChatStep
   (askFloat (effBreakerDown "agy")
       (fn [(left Float64)] -> ChatStep
         (if (!= left 0.0)
           (tell (usageNote "agy-cli" "agyFallback" "skipped-breaker") (fn [] -> ChatStep (k none)))
-          (askCli (effCli "agy" (list (pair "prompt" (j/jstr prompt)) (pair "model" (j/jstr "gemini-3.8-flash")) (pair "effort" (j/jstr "low"))
+          (askCli (effCli "agy" (list (pair "prompt" (j/jstr prompt)) (pair "model" (j/jstr (agyConfigModel cx))) (pair "effort" (j/jstr "low"))
                                       (pair "timeout" (j/jint 300)) (pair "queue_timeout" (j/jint 1200)) (pair "agent" (j/jnull))
                                       (pair "add_dirs" (j/jnull)) (pair "workspace" (j/jstr cx.workspace)) (pair "system_prompt" (j/jnull))
                                       (pair "no_tools" (j/jbool false))))
@@ -1668,7 +1681,7 @@ fn cliDispatch cx: Ctx l: Loop a: Attempt prompt: String system: String noTools:
         (sysJ (if (stringEmpty? system) (j/jnull) (j/jstr system)))
         (plan (cond
                 ((= prov "agy-cli")
-                 (let [(sub (cond ((stringStartsWith? m "agy/") (u/slice m 4 (stringLength m))) ((or (= m "agy") (= m "antigravity")) "gemini-3.8-flash") (else m)))]
+                 (let [(sub (cond ((stringStartsWith? m "agy/") (u/slice m 4 (stringLength m))) ((or (= m "agy") (= m "antigravity")) (agyConfigModel cx)) (else m)))]
                    (pair (pair "agy" (str "agy:" sub))
                          (cliArgs agent (getOr bodyObj "addDirs" (j/jnull)) prompt sub effort execT queueT ws system noTools))))
                 ((= prov "codex-cli")
