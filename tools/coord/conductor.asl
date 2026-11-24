@@ -4,7 +4,7 @@
       allowanceUnlimited fixedPace jobserverPace gateSig tickRepo! trainLimitFitOf checkBudgetFitOf checkBudgetFit trainLimitFit! trainSig stillRunning heavyPending deadlineSig? deadlineLeftS tierTotal deadlinePath deadlineLeftPath deadlineFresh? deadlineForget! trainDeadline! deadlineWake! trainTimeoutSig? trainTimeoutWhy trainTimesRow trainTimeout! trainTimeoutPath trainTimeoutWake! mergeYield! mergeCountIn redWakeMax mergeFair! mergingCount runningCount mergeSigKey mergeFail! mergeFailsAfter mergeRedRoundsMax mergeRedRowOf mergeRedErrors mergeRedRounds mergeRedSuitesMax mergeRedErrMax MergeRed mergeRedOf mergeRedNote mergeRedPath mergeRedNote! withMergeRed mergeRedHistory newestTrainOut! mergeRedOrFail! redSameSig? mergeBasePath redTrainPath redSamePath redTrainRow! redTrainField! redSameNow! redSame! redSameBlock! redWake! redSuitesText mergeRedFixing? progressed? bpErrors bpMaxOf mergeHeld? bpHeldPath bpHeldText bpNote! ladderProblems startupProblemsIn stillRunning trainErrors trainArgv trainArgvAll trainBatchOf batchable? batchableNow! batchPick batchGroup mainNames! additive! branchText! pkgDirOf additiveFiles? trainBatchAdditiveOf trainMergeWipOf wipHeld? wipHeldPath wipNote! mergeShared? rdRowOf rdErrors rdWaitS rdArbiter arbiterRung deferMarkPath arbiterMarkPath markAt! reviewDeferClear! deferMark! deferredRungIn legacyMark! reviewDeferBlock! reviewArbiter! reviewDeferSweep! batchPath passPath batchPlan! batchVerdicts batchRes checkBudgetLeft passRow passOf passengersOf! mergeBatchWith mergeBatchClocked monoSec! applyPassengers! baseRedSig? mergeCheckStepS baseHeld? baseHold! devRepoPath trainHead! trainKeepDefault trainKeepOf trainsDir dropTrains! closeOne! attemptFiles keepTrain! mergeBusy? surfaceReads! storeReadError! quarantinedIds quarantineRow! realCtx trainLimitSec writerNiced stageArgv! estimateSOf trainLimitOf trainEstimateS! trainLimitFor! stageSecDefault clampMergeCheckSec renamePairs ownsRemap! releaseQuarantined! unparseableIds! quarantineDir mergeRes mergeResWith mergeVerdictRes! mergeCheckWhy realMergeCheck! rulingVerdict baseRedLine baseRedReceiptPath baseRedNote! outsideOf mainRedPath mainRedLoadPath mainRedRow mainRedNote! aloneGreen! mainRedAfter!
       requestClose! closeDrain! failT! staleStateSweep! closePath depsMerged? depStalled? depBlockWhy armOf writeArm armExtra withToolRoot! vacuousWrite? vacuousSig vacuousSig? requestRebrief! rebriefDrain! rebriefOne! rebriefPath requestRemodel! remodelRefusal remodelAliasKnown? remodelDrain! remodelOne! remodelAliasOf remodelAliasPath remodelCfg inFlightState? ownedChanges! commitWrite! noEdits? blankSlate? vacuousAround! aheadGreen! baseGreen! baseGreenPath baseGreenNoteN gateInOwns? harnessPath? pinDrop! aheadRedPath reviewFailedSinceWriter? onBaseRun! onBaseEnter! onBaseHeal! attachOrAddIn! outsideOwned! writerOf! baseRef moveA! resolved! depBase! repoBase! aheadMarked? commitsPast? checkOne! gateTimeoutSig gateRowOf gateErrors gateCheckS gateTimeoutSig? gateDoneRes move! waitMore! parkedOf gateTimeoutRequeue! wakeRowsOf wakeErrors freeWake! blockSig reuseWt! baseNote! promoteDev! dispatchedModel unknownWriterFor reviewWriterOf! pickWriteProfile pickWriteProfileH pickWriteProfileX writeProfileFor stalledProfilesOf stalledProfilePath schedPace lightSlotsAt! rungCap hopsSince pfDefaultPatterns pfRowOf pfPatterns pfBackoffS pfMaxInRow pfErrors pfCfg providerFailSig? noCommits? providerHit? providerWaiting? pwLast offerBacklog! leadBacklogCap leadFresh? leadTtlMs nextRung! priorNote! tick! wake! status! drain! stopAll! gitOut gatesRes gatesResN docRowsCheck! redBaseRow redBaseHit redCached! redBefore! redBeforeRefusal refuseRes redOverlayPaths testPath? loadUnit! writeRes! realRes realLaunch attachOrAdd parkedRows! needRows! importCycle! ledgerPath offerStrong! lastTiers tiersOfRows offeredRung! offerPath freshBase! leonTokens leonCost dropRemotes! mergeEnv realPace      settled? realCfg sigKey laneSnapshot refreshWake! availWake! availNames starvedAwait? AwaitScan AvailPlan awaitScan availPlan allowanceOf staggered wakeUpTo! availWakeSpent! deadAwait? startupProblemsFor stopPath requestStop! restartPath draining? requestRestart! restartUntil! flyingIds! restart! loopOnce! runLoop! gatesStage
       stallProbes stallHooks stallStays? stallParked stallParkSig stallKept stallResetRow? stallRunOf providerWaitTail? stallInfraWhy stallInfra! aheadRes aheadWriterOf servedAliasIn aheadWriter! reapLeases! leaseDead? holderPid laneDeadRows skipDead rememberDeadLanes! laneDeadPath laneDeadLive laneCause tickBeat! tickBeatPath stopOf modelEscalatedSig modelEscalatedSig? writeFailSig parkModelEscalated! starvedOut? starvedRows starvedCap trimSlashes conductorLeaseSig? conductorStallSig? ladderHopSig? ladderHop! blockedStageIn impossibleWhy! impossibleRecheck! baseHead! impossibleSig? handoffBranches gateFiles retryBlocked! ladderHop! transientWhy! blockedRetryMax retryBackoffS claimFreed? claimHolderGone? retryLast! retriesPath stallRequeue! stallElapsedMs starvedHeld? availPlanAt starvedWakeMin unitOfRow requeuePath requestRequeue! requeueDrain! depWake! wrRowOf wrCfg wrErrors wrMinFreeMb admitWriter? warmWait! writerHeld? slotHolder? freeSlots wrNeedToken? wrIdleMin writerHoldOf warmStill? warmHeldNow? writerWhy! readyWhy! holdNames readyHoldCounts! topHold! readyHoldText! idlePath idleNote! firstCallSeen? warmPath
-      attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy ownsHeldIds! fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote!
+      attemptsRowOf attemptsErrors attemptsMax writeCounted! fixCredit fixRoundsMax fixCounted! fixBoundSig writeBoundSig writeBound! stageInfraSig? infraCause? infraStreak infraOwnAfter cdFlag! retryWaitMs ownsGone! needsPlanWhy! needsPlanSweep! planWait newStamped reloadArchive! archiveName! archiveFailed! unbranched mergeRedFix! requeueOne! reloadPath requestReload! reloadOne! reloadDrain! unitDigest! countersReset! depWaitSig? depWaiting? depRootsOf waitsOn rootCounts rootsText rootsAll rootsFor rootCountsIn rootsTextIn rootRelease! flowStages flowRowOf flowErrors flowOn? flowOrderOf flowIdle? fixRound? flowClass flowClassOf flowHeldBy ownsHeldIds! fixOwed? flowNarrow? cleaned written flowHeldIn flowHeldPath flowHeldText fixOwed flowNote! flowStep! dwellStates ageS whyOf oldestOf stateRows dwellRowOf dwellErrors dwellBound dwellMarkPath dwellNote! claimWaitWhy! claimWaitIoSig? claimWaitMark! laneWake! readyDwellWhy! laneParkedSig? tierLiveIn? laneLive! laneAlwaysLive writerProfilesOf
       main]
   :i [(asl-tools/coord/leadStream :a ls) (asl-tools/coord/store :a st) (asl-gates/auditLanded :a al) (asl-gates/docLedger :a dl) (asl-tools/coord/grade :a gr) (asl-tools/coord/planImport :a pi) (asl-tools/coord/brief :a bf) (asl-tools/coord/worktree :a w) (asl-tools/coord/sched :a sc) (asl-tools/coord/stall :a stl) (asl-tools/fleet/run :a fr) (asl-tools/fleet/jobserver :a js) (tools/fleet/freePool :a fp) (tools/fleet/train :a trn) (tools/fleet/leonClient :a lc) (asl-tools/hub/preflight :a hp) (asl-tools/vcs/vcs :a vcs)
       (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-tools/coord/reviewStage :a rs) (asl-tools/coord/ladder :a l) (asl-tools/coord/gateGuard :a gg) (asl-tools/coord/docRows :a dr) (asl-syntax/asl/asn :a asn) (asl-tools/coord/mergeCheck :a mc) (aslGateway/subPace :a sp) (aslGateway/localTime :a lt) (aslGateway/usageLedger :a ul) (aslGateway/subsRefresh :a sr)])
@@ -24,7 +24,8 @@
 ; (:m :ref CONDUCTOR :do "the admission interface SUBPACE plugs into: tokens = how many units may be in flight at once on this machine (jobserver pool size), allowance lane = how many of them may belong to that lane; a tick admits min(ready, tokens - inFlight, allowance lane - inFlight lane)")
 (schema Pace
   (:f tokens (fn [] -> Int64))
-  (:f allowance (fn [String] -> Int64)))
+  (:f allowance (fn [String] -> Int64))
+  (:f live (fn [String] -> Bool)))
 
 ; (:m :ref CONDUCTOR :do "launch stage unit state -> argv of the detached child that performs the stage and writes its Res row; stageSec is the child deadline recorded in the store run row, maxDesc its descendant limit")
 (schema Ctx
@@ -1911,6 +1912,7 @@ fn ! tickRepo! ctx: Ctx -> (Result Int64 String)
             (_ (retryBlocked! ctx units))
             (_ (needsPlanSweep! ctx units))
             (_ (depWake! ctx units))
+            (_ (laneWake! ctx))
             (_ (freeWake! ctx))
             (_ (reviewDeferSweep! ctx))
             (_ (stl/sweep! ctx.dir (nowMs) (stallProbes ctx) (stallHooks ctx)))
@@ -2571,6 +2573,31 @@ fn claimFreed? c: CUnit leases: (List st/Lease) now: Int64 cus: (List CUnit) -> 
            ((stringContains? c.sig " :why owns ") (let [(by (quotedAfter c.sig ":by \""))] (and (not (stringEmpty? by)) (or (not (liveHas by)) (claimHolderGone? by cus)))))
            (else false))))
 
+; (:m :ref CLAIMWAIT-WAKE :do "the claim errors that are the store's own trouble and not a live holder: the store lock not taken in time, or an I/O error of the store directories")
+fn claimWaitIoSig? sig: String -> Bool
+  (let [(low (stringLower sig))]
+    (and (stringStartsWith? low "waitedout: ")
+         (or (stringStartsWith? low "waitedout: store lock")
+             (listAny? (fn [(p String)] -> Bool (stringContains? low p)) (list "i/o error" "io error" "err_io" "input/output" "os error")))))
+
+; (:m :ref CLAIMWAIT-WAKE :do "a claim wait that wakes through transientWhy! (cause claimWait, bounded by :blockedRetryMax): the store lock or an I/O error, or an after refusal naming a dep that is merged in cond but not done in the store; a dep that is not merged keeps the unit blocked; the predicate has no effect, claimWaitMark! writes after the retry is admitted")
+fn ! claimWaitWhy! ctx: Ctx c: CUnit cus: (List CUnit) -> Bool
+  (cond
+    ((claimWaitIoSig? c.sig) true)
+    ((and (stringStartsWith? c.sig "waitedOut: (:refused ") (stringContains? c.sig " :why after "))
+      (let [(dep (quotedAfter c.sig ":wait \""))]
+        (and (not (stringEmpty? dep))
+             (match (cuOf cus dep)
+               ((some d) (= d.st "merged"))
+               ((none) false)))))
+    (else false))
+
+; (:m :ref CLAIMWAIT-WAKE :do "the one write of a claimWait retry, made only when retryOne admitted it under the cap and backoff: an after refusal marks its merged dep done in the store as closeStoreDone does, and the retry is skipped when the store refuses; the store lock and I/O sigs need none")
+fn ! claimWaitMark! ctx: Ctx c: CUnit -> Bool
+  (if (claimWaitIoSig? c.sig) true
+    (let [(dep (quotedAfter c.sig ":wait \""))]
+      (ok? (st/markDone! ctx.dir dep "merged"))))
+
 ; (:m :ref COND-RECOVER-C3 :do "config of the blocked-unit retry policy, in the (:conductor ...) row of the stores ladder.asn: :blockedRetryMax N automatic retries a blocked unit gets per transient cause (default 2 adopted, 0 turns the policy off), :retryBackoffS S the wait before the first retry, doubled for each later one (default 300 adopted)")
 fn ! blockedRetryMax dir: String -> Int64
   (let [(row (cdRowOf dir))]
@@ -2620,6 +2647,7 @@ fn ! transientWhy! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int
     (cond
       ((impossibleSig? c.sig) "")
       ((claimFreed? c leases now (readCUnits! ctx.dir)) "claim")
+      ((claimWaitWhy! ctx c (readCUnits! ctx.dir)) "claimWait")
       ((stringEmpty? c.sig) "")
       ((providerFailSig? c.sig (pfPatterns (pfRowOf ctx.dir))) "provider")
       ((conductorLeaseSig? c.sig) "lease")
@@ -2666,10 +2694,11 @@ fn ! retryOne! ctx: Ctx u: st/Task c: CUnit leases: (List st/Lease) now: Int64 m
               (wait (retryWaitMs backoffMs (pairFirst r) free))]
           (if (and own (= why "infra")) (ladderHop! ctx c (/ now 1000000) jr)
             (if (or (and (>= (pairFirst r) max) (not free)) (< (- (nowMs) (pairSecond r)) wait)) false
+              (if (and (= why "claimWait") (not (claimWaitMark! ctx c))) false
               (let [(_ (retryNoteSig! ctx.dir c.id why (+ (pairFirst r) 1) (if flag c.sig "")))
                     (_ (pwReset! ctx.dir c.id))
                     (_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0 :fails 0) "ready" "retry" "" 0 0 (str "retry " why) 0))]
-                true))))))))
+                true)))))))))
 
 
 ; (:m :ref FLOW-DRAIN :do "blocking classes as data: a stage that died without a result or hit its deadline is infra, like a lost lease, a dead or provider stall, a lost pool, a freed claim and a provider failure; with (:conductor :infraFree true) a blocked unit with an infra cause is retried after its backoff (doubling up to 8 times :retryBackoffS) with no cap, so infra never spends the unit's :blockedRetryMax; without the key the cap holds for every cause as before")
@@ -3504,8 +3533,42 @@ fn dwellBound row: String st: String -> Int64
 fn dwellMarkPath dir: String id: String -> String
   (str dir "/dwell/" id ".asn")
 
+; (:m :ref READY-LANE-PARKED :do "node2 2026-11-23: three ready units sat for a day with reason none, the dwell row naming nothing; a ready unit past its dwell bound is named by what holds it: laneParked LANE when its lane has no allowance (nothing can run there), ownsHeld H when a live lease of H clashes with its :owns, else its own reason")
+fn ! readyDwellWhy! ctx: Ctx c: CUnit -> String
+  (let [(pace ctx.pace)
+        (allowOf pace.allowance)
+        (liveOf pace.live)]
+    (cond
+      ((!= c.st "ready") (whyOf c))
+      ((not (liveOf c.lane)) (str "laneParked " c.lane))
+      ((<= (allowOf c.lane) 0) (str "laneExhausted " c.lane))
+      (else
+        (match (st/readLeases! ctx.dir)
+          ((err _) (whyOf c))
+          ((ok ls)
+            (let [(now (nowNs))
+                  (held (filter (fn [(l st/Lease)] -> Bool (st/live? l now)) ls))
+                  (by (match (listFind (fn [(u st/Task)] -> Bool (= u.id c.id)) (resultOr (st/readUnits! ctx.dir) (list)))
+                        ((some u) (quotedAfter (st/ownsClash u held) ":by \""))
+                        ((none) "")))]
+              (if (stringEmpty? by) (whyOf c) (str "ownsHeld " by))))))))
+
+fn laneParkedSig? sig: String -> Bool
+  (stringStartsWith? sig "laneParked ")
+
+; (:m :ref READY-LANE-PARKED :do "a ready unit past its dwell bound whose lane has no allowance blocks as laneParked LANE (journal verdict the same, one row per dwell episode) so the watch and flow see it instead of a ready count that never moves; laneWake! returns it to ready once the lane has allowance again")
+fn ! laneWake! ctx: Ctx -> Int64
+  (let [(pace ctx.pace)
+        (allowOf pace.allowance)
+        (liveOf pace.live)
+        (wake (filter (fn [(c CUnit)] -> Bool (and (= c.st "blocked") (and (stringEmpty? c.await) (and (laneParkedSig? c.sig) (liveOf c.lane))))) (readCUnits! ctx.dir)))
+        (_ (map (fn [(c CUnit)] -> Bool (let [(_ (move! ctx (with c :waited 0 :sig "" :esc 0 :epoch 0) "ready" "retry" "" 0 0 (str "retry laneAllowed " c.lane) 0))] true)) wake))]
+    (listLength wake))
+
 fn ! dwellNote! ctx: Ctx -> Int64
-  (let [(row (dwellRowOf ctx.dir))]
+  (let [(row (dwellRowOf ctx.dir))
+        (pace ctx.pace)
+        (liveOf pace.live)]
     (if (or (stringEmpty? row) (not (listEmpty? (dwellErrors row)))) 0
       (let [(now (nowMs))
             (over (filter (fn [(c CUnit)] -> Bool
@@ -3516,8 +3579,9 @@ fn ! dwellNote! ctx: Ctx -> Int64
             (_ (dirCreate (str ctx.dir "/dwell")))
             (_ (map (fn [(c CUnit)] -> Bool
                       (let [(_ (fileWrite (dwellMarkPath ctx.dir c.id) (str c.st " " (n c.since) "\n")))]
-                        (ok? (fileAppend (journalPath ctx.dir) (str "(:dwell :unit " (st/q c.id) " :st " c.st " :since " (n c.since) " :ageS " (n (ageS c now)) " :boundS " (n (dwellBound row c.st)) " :reason " (st/q (whyOf c)) " :at " (n now) ")\n")))))
-                    over))]
+                        (ok? (fileAppend (journalPath ctx.dir) (str "(:dwell :unit " (st/q c.id) " :st " c.st " :since " (n c.since) " :ageS " (n (ageS c now)) " :boundS " (n (dwellBound row c.st)) " :reason " (st/q (readyDwellWhy! ctx c)) " :at " (n now) ")\n")))))
+                    over))
+            (_ (map (fn [(c CUnit)] -> Bool (if (and (= c.st "ready") (not (liveOf c.lane))) (let [(_ (move! ctx (with c :sig (str "laneParked " c.lane)) "blocked" "dwell" "" 0 0 (str "laneParked " c.lane) 0))] true) false)) over))]
         (listLength over))))
 
 ; (:m :ref MERGE-TRAIN-THROUGHPUT :do "train parallelism: a (:train :jobs N) row in the store's ladder.asn passes -j N to the merge train, N in 1..64; no row, or a row trainErrors rejects, passes no -j and the train keeps its own default (2)")
@@ -3992,17 +4056,20 @@ fn ! status! ctx: Ctx -> String
 fn mergeRedFixing? c: CUnit -> Bool
   (and (stringStartsWith? c.sig "mergeRedFix ") (listContains? (list "ready" "writing" "gating" "awaitReview" "reviewing" "admitting" "merging") c.st))
 
+fn laneAlwaysLive lane: String -> Bool
+  true
+
 fn allowanceUnlimited lane: String -> Int64
   1000000
 
 fn fixedPace tokens: Int64 perLane: Int64 -> Pace
-  (Pace :tokens (fn [] -> Int64 tokens) :allowance (fn [(lane String)] -> Int64 perLane))
+  (Pace :tokens (fn [] -> Int64 tokens) :allowance (fn [(lane String)] -> Int64 perLane) :live laneAlwaysLive)
 
 fn ! poolSize dir: String -> Int64
   (js/tokenCount (js/rootDir dir))
 
 fn jobserverPace dir: String allowance: (fn [String] -> Int64) -> Pace
-  (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance)
+  (Pace :tokens (fn [] -> Int64 (poolSize dir)) :allowance allowance :live laneAlwaysLive)
 
 ; (:m :ref SCHED :do "the light pool: without ~/.asl/conductor/sched.asn it is the jobserver token count and nothing adapts; with one the slots come from the store's slots.asn, sampled at most once a minute from the gateway ledger, free RAM and load; gates and builds keep the jobserver class writer tokens")
 ; (:m :ref CONDTEST-SCHED-RED :do "the sample with the machine readings and the disk passed in (CONDUCTORTEST-SCHED-RED: the real disk at 86% was level low and halved :start 7 to 3): conductorTest read node2's real load (37 on 8 cores), which stepped a fresh :start 7 down to 6; tests pass fixed readings, lightSlots! the real ones")
@@ -4019,8 +4086,8 @@ fn ! lightSlotsAt! dir: String home: String freeMB: Int64 load: Float64 cores: I
 fn ! lightSlots! dir: String home: String -> Int64
   (lightSlotsAt! dir home (sc/memFreeMB (readOr "/proc/meminfo")) (sc/loadOne (readOr "/proc/loadavg")) (resultOr (cpuCount) 1) (sc/probeDisk! dir))
 
-fn schedPace dir: String home: String -> Pace
-  (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited)
+fn schedPace dir: String home: String lanes: String profile: String -> Pace
+  (Pace :tokens (fn [] -> Int64 (lightSlots! dir home)) :allowance allowanceUnlimited :live (fn [(lane String)] -> Bool (laneLive! dir home lanes profile lane)))
 
 fn realPace -> Pace
   (jobserverPace "" allowanceUnlimited)
@@ -6121,6 +6188,28 @@ fn deadFields l: String -> (List asn/AsnField)
 fn laneDeadRows dir: String -> (List String)
   (filter (fn [(l String)] -> Bool (not (listEmpty? (deadFields l)))) (stringLines (readOr (laneDeadPath dir))))
 
+; (:m :ref READY-LANE-PARKED :do "the writer profiles a tier writes with: the profiles of its (:writeProfiles :tier T) row, else the one profile writeProfileIn picks (the (:writeProfile) row, paidCheap, strong, or the --profile flag); the source the write stage picks its model from")
+fn writerProfilesOf lanesText: String profile: String tier: String -> (List String)
+  (let [(row (optionOr (listHead (filter (fn [(x String)] -> Bool (and (stringContains? x "(:writeProfiles ") (= (sp/tokAfter x ":tier") tier))) (stringLines lanesText))) ""))
+        (one (optionOr (listHead (filter (fn [(l String)] -> Bool (and (stringContains? l "(:writeProfile ") (= (sp/tokAfter l ":tier") tier))) (stringLines lanesText))) ""))
+        (given (sp/tokAfter one ":profile"))]
+    (if (not (stringEmpty? row)) (listAfter row ":profiles")
+      (list (cond ((not (stringEmpty? given)) given) ((= tier "paid") "paidCheap") ((= tier "strong") "strong") (else profile)))))
+
+; (:m :ref READY-LANE-PARKED :do "a tier is live when one of its writer profiles has a model the gateway admits: an alias on the profile's route chains that is a model row of gateway.asn and in no live laneDead row, or the profile name itself being such an alias; the review lane table does not decide writer admission, and a name that is no tier is never parked")
+fn tierLiveIn? gatewayText: String lanesText: String profile: String dead: (List String) tier: String -> Bool
+  (if (not (listContains? (list "free" "paid" "strong") tier)) true
+    (let [(models (map pairFirst (rs/modelRows gatewayText)))
+          (admitted (fn [(a String)] -> Bool (and (listContains? models a) (not (listContains? dead a)))))]
+      (listAny? (fn [(p String)] -> Bool
+                  (let [(chain (rs/profileChain gatewayText p))]
+                    (if (listEmpty? chain) (admitted p) (listAny? admitted chain))))
+                (writerProfilesOf lanesText profile tier))))
+
+fn ! laneLive! dir: String home: String lanes: String profile: String tier: String -> Bool
+  (tierLiveIn? (readOr (str home "/.asl/gateway.asn")) (readOr lanes) profile
+               (map (fn [(l String)] -> String (st/textField (deadFields l) "lane")) (laneDeadLive dir (nowMs))) tier)
+
 fn laneDeadLive dir: String nowMs: Int64 -> (List String)
   (filter (fn [(l String)] -> Bool (> (st/intField (deadFields l) "until") nowMs)) (laneDeadRows dir))
 
@@ -6559,7 +6648,7 @@ fn realLaunch args: (List String) dir: String -> (fn [String st/Task CUnit] -> (
 ; (:m :ref MERGECHECK-CLAMP :do "the service Ctx in one function, so a test reads the stage deadline the conductor really runs with: --stage-sec or the one default literal")
 fn ! realCtx args: (List String) dir: String rc: RealCfg -> Ctx
   (Ctx :dir dir :holder (str "conductor" (n (procSelf))) :ttlMs 3600000 :maxWait (st/intOpt args "max-wait" 30) :maxSame 3
-       :stageSec (st/intOpt args "stage-sec" (stageSecDefault)) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home))
+       :stageSec (st/intOpt args "stage-sec" (stageSecDefault)) :maxDesc 200 :launch (realLaunch args dir) :pace (schedPace dir rc.home rc.lanes rc.profile))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(cmd (optionOr (listHead args) ""))

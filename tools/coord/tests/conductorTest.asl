@@ -145,7 +145,7 @@ fn ! admitted2 bin: String name: String tokens: Int64 slowAllow: Int64 -> (List 
         (put (putAll! dir (list (task "P" (list "p/p") (list) (greenGate) "leon") (task "Q" (list "p/q") (list) (greenGate) "leon") (task "S" (list "p/s") (list) (greenGate) "slow"))))
         (base (ctxOf dir bin tokens 5 50))
         (ctx (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 300 :maxDesc 50 :launch base.launch
-                     :pace (cd/Pace :tokens (fn [] -> Int64 tokens) :allowance (fn [(lane String)] -> Int64 (if (= lane "slow") slowAllow 5)))))
+                     :pace (cd/Pace :tokens (fn [] -> Int64 tokens) :allowance (fn [(lane String)] -> Int64 (if (= lane "slow") slowAllow 5)) :live (fn [(lane String)] -> Bool true))))
         (t1 (cd/tick! ctx))
         (t2 (cd/tick! ctx))
         (afterTwo (list (stOf dir "P") (stOf dir "Q") (stOf dir "S")))
@@ -172,7 +172,7 @@ fn ! testDepChain bin: String -> Bool
         (put (putAll! dir (list (task "A" (list "p/a") (list) (greenGate) "slow") (task "B" (list "p/b") (list "A") (greenGate) "slow") (task "C" (list "p/c") (list "B") (greenGate) "slow"))))
         (base (ctxOf dir bin 5 5 50))
         (ctx (cd/Ctx :dir dir :holder "conductorTest" :ttlMs 600000 :maxWait 0 :maxSame 3 :stageSec 300 :maxDesc 50 :launch base.launch
-                     :pace (cd/Pace :tokens (fn [] -> Int64 5) :allowance (fn [(lane String)] -> Int64 0))))
+                     :pace (cd/Pace :tokens (fn [] -> Int64 5) :allowance (fn [(lane String)] -> Int64 0) :live (fn [(lane String)] -> Bool true))))
         (_ (cd/tick! ctx))
         (_ (cd/tick! ctx))
         (got (list (stOf dir "A") (stOf dir "B") (stOf dir "C")))
@@ -1606,7 +1606,7 @@ fn ! testNoSchedFile -> Bool
         (_ (dirCreate home))
         (_ (dirCreate dir))
         (tokens ((cd/realPace).tokens))
-        (plain ((cd/schedPace dir home).tokens))
+        (plain ((cd/schedPace dir home "" "").tokens))
         (_ (dirCreate (str home "/.asl")))
         (_ (dirCreate (str home "/.asl/conductor")))
         (_ (fileWrite (str home "/.asl/conductor/sched.asn") "(:sched :min 2 :max 9 :step 1 :start 7)\n"))
