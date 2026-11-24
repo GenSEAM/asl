@@ -103,9 +103,8 @@ fn checkCase kv: (List (Pair String p/SexpVal)) -> Bool
           (strEq cid (cl/wrongCitationNote claims) (getStr kv "want"))))
 
       ((= fnName "extractProseStrings")
-        (let [useOld (getBool kv "useOld")
-              planOn (getBool kv "planOn")
-              keys (if useOld (cl/oldStructuralKeys) (cl/newStructuralKeys))
+        (let [planOn (getBool kv "planOn")
+              keys (cl/newStructuralKeys)
               got (cl/extractProseStrings (getStr kv "text") keys planOn)
               want (getStrList kv "want")]
           (strEq cid (c/joinSep got "|") (c/joinSep want "|"))))
@@ -144,7 +143,7 @@ fn checkCase kv: (List (Pair String p/SexpVal)) -> Bool
       ((= fnName "extractClaims")
         (let [receipts (receiptsFromKv kv "receipts")
               gates (getStrList kv "gates")
-              result (cl/extractClaims (getStr kv "reply") receipts (getBool kv "isOldCall") gates
+              result (cl/extractClaims (getStr kv "reply") receipts gates
                        (getBool kv "checkProse") (getBool kv "gatePassBacked") (getBool kv "planOn"))
               gotBacked (c/joinSep (map (fn [cm] (if (cl/claimBacked cm) "true" "false")) (cl/claimsResultClaims result)) "|")
               wantBacked (c/joinSep (getStrList kv "wantBacked") "|")]

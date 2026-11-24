@@ -287,7 +287,7 @@
 (:sym "makeToolResult" :mod "aslAgentBus/types" :sig "makeToolResult callId: Str toolName: Str ok: Bool payload: Str status: Str -> ToolResult")
 (:sym "CodecKind" :mod "aslAgentBus/wire" :kind type :sig "(enum CodecKind (:c codecAsnText [] \"Plain UTF-8 ASN S-expression text codec\") (:c codecAsbBinary [] \"Binary token-indexed ASB bytecode codec\"))")
 (:sym "CompressionAlgo" :mod "aslAgentBus/wire" :kind type :sig "(enum CompressionAlgo (:c algoNone [] \"No compression applied (raw payload)\") (:c algoZstdDict [] \"Dictionary-trained grammar compaction\") (:c algoRle [] \"Byte-level run-length repetition encoding\"))")
-(:sym "WireFrame" :mod "aslAgentBus/wire" :kind type :sig "(schema WireFrame (:f version I64) (:f codec CodecKind) (:f compressed Bool) (:f algorithm CompressionAlgo) (:f uncompressedBytes I64) (:f payload Str))" :pit (record))
+(:sym "WireFrame" :mod "aslAgentBus/wire" :kind type :sig "(schema WireFrame (:f codec CodecKind) (:f compressed Bool) (:f algorithm CompressionAlgo) (:f uncompressedBytes I64) (:f payload Str))" :pit (record))
 (:sym "createWireFrame" :mod "aslAgentBus/wire" :sig "createWireFrame codec: CodecKind payload: Str enableCompress: Bool -> WireFrame")
 (:sym "compactWirePayload" :mod "aslAgentBus/wire" :sig "compactWirePayload raw: Str -> Str")
 (:sym "expandWirePayload" :mod "aslAgentBus/wire" :sig "expandWirePayload compacted: Str -> Str")

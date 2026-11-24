@@ -1,5 +1,4 @@
 (:session :id "k1wait" :task "plan WAITED stub task text")
-(:canon :version "3 fixture")
 (:baseline :green () :red ("./bin/asl test stub/tests/aTest.asl"))
 (:turn 1 :sent "Task: stub prompt for turn 1")
 (:providerWait :turn 1 :sec 9)

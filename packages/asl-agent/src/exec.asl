@@ -422,9 +422,9 @@ fn undeclaredAnswer unknown: String mode: String effects: (List (Pair String Str
       (list (vs "nearest" nearest))))
 
 ; (:m :tags (claims))
-fn collectProseStrings formText: String inEvidence: Bool out: (List String) useOld: Bool planOn: Bool -> (List String)
+fn collectProseStrings formText: String inEvidence: Bool out: (List String) planOn: Bool -> (List String)
   (listAppend out
-    (cl/collectProseStringsInner formText inEvidence (if useOld (cl/oldStructuralKeys) (cl/newStructuralKeys)) planOn (list)))
+    (cl/collectProseStringsInner formText inEvidence (cl/newStructuralKeys) planOn (list)))
 
 
 fn isWs c: String -> Bool

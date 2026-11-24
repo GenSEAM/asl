@@ -711,14 +711,12 @@ fn putEffect acc: (List (Pair String String)) op: String cls: String -> (List (P
     (map (fn [p] (if (= (pairFirst p) op) (pair op cls) p)) acc)
     (listAppend acc (list (pair op cls))))
 
-; (:m :ref scripts/agentLoop/effects.asn)
+; (:m :ref asl/packages/asl-agent/src/effects.asn)
 fn parseEffects text: String -> (List (Pair String String))
   (effectPairs text (stringLength text) 0 (list))
 
 fn ! loadEffects! repoRoot: String -> (Result (List (Pair String String)) String)
-  (let [selfHostedPath (str repoRoot "/asl/packages/asl-agent/src/effects.asn")
-        legacyPath (str repoRoot "/scripts/agentLoop/effects.asn")
-        path (if (fileExists? selfHostedPath) selfHostedPath legacyPath)]
+  (let [path (str repoRoot "/asl/packages/asl-agent/src/effects.asn")]
     (match (fileStat path)
       ((err _) (ok (list)))
       ((ok st)

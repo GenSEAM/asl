@@ -1,5 +1,4 @@
 (:session :id "e5batch" :task "plan BATCH stub task text")
-(:canon :version "3 fixture")
 (:turn 1 :sent "Task: stub prompt for turn 1")
 (:usage :in 2000 :cached 0 :out 200 :model "stub-model")
 (:served :turn 1 :model "stub-model" :alias "synDs41Flash")

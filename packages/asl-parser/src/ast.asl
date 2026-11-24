@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors canonicalSpelling bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos scriptStepParts scriptStepAt shebangless scriptMainDoc scriptStatementsOf] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseDisplayDesugared parseForTypeCheck retiredProse retiredSpelling retiredSource spellingErrors retiredFormErrors canonicalSpelling bangedBuiltins parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor findTokenPos findQualifiedTokenPos scriptStepParts scriptStepAt shebangless scriptMainDoc scriptStatementsOf] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -564,7 +564,7 @@ fn shebangless src: String -> String
 fn parse raw: String -> (Result (List TopForm) ParseError)
   (match (readableSource (shebangless raw))
     ((err e) (err e))
-    ((ok src) (match (parseLegacy src)
+    ((ok src) (match (parseDisplayDesugared src)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr forms)))))
 
@@ -575,7 +575,7 @@ fn parseForTypeCheck raw: String -> (Result (List TopForm) ParseError)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
 
-fn parseLegacy src: String -> (Result (List TopForm) ParseError)
+fn parseDisplayDesugared src: String -> (Result (List TopForm) ParseError)
   (match (parseForChecker src)
     ((ok forms) (ok (desugarWith (map displayUntypedParams forms))))
     ((err pe) (err pe)))

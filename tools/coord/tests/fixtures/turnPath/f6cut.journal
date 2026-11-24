@@ -1,5 +1,4 @@
 (:session :id "f6cut" :task "plan CUT stub task text")
-(:canon :version "3 fixture")
 (:baseline :green () :red ("./bin/asl test stub/tests/aTest.asl"))
 (:turn 1 :sent "Task: stub prompt for turn 1")
 (:usage :in 1000 :cached 500 :out 100 :model "stub-model")

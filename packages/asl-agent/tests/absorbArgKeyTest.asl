@@ -80,5 +80,4 @@ fn ! runTests -> Bool
       (assert (not (stringContains? withTools.journal "(:op :turn 1 :name \"gate\"")) (str "with the step tool offered the (:step prefill is not sent, so a bare continuation is not completed into a gate: " (c/joinSep (filter (fn [l] (stringStartsWith? l "(:op ")) (stringSplit withTools.journal "\n")) " | ")))
       (assert (stringContains? toolsOff.journal "(:op :turn 1 :name \"gate\"") (str "with nativeTools off the prefill stays and the continuation runs the gate: " (c/joinSep (filter (fn [l] (stringStartsWith? l "(:op ")) (stringSplit toolsOff.journal "\n")) " | ")))
       (assert (stringContains? afterDefect.journal "(:op :turn 2 :name \"gate\"") (str "after a turn with no step the prefill comes back even with the tool offered, so a route that strips tools still has the text contract: " (c/joinSep (filter (fn [l] (stringStartsWith? l "(:op ")) (stringSplit afterDefect.journal "\n")) " | ")))
-      (assert (stringContains? withTools.journal "(:canon :version \"") "the journal names the reply canon version at session start")
       true))

@@ -292,7 +292,7 @@ fn noteScanForms path: String tops: (List ast/TopForm) -> (List NoteCandidate)
         (noteScanForms path (optionOr (listTail tops) (list))))))
 
 fn noteScanAll path: String text: String -> (List NoteCandidate)
-  (match (ast/parseLegacy text)
+  (match (ast/parseDisplayDesugared text)
     ((err _) (list))
     ((ok tops) (noteScanForms path tops)))
 
@@ -417,7 +417,7 @@ fn findCandidates! path: String text: String -> (Result (List DocCandidate) Stri
   (match (ast/kidFormsFor text)
     ((err e) (err e.msg))
     ((ok allKids)
-      (match (ast/parseLegacy text)
+      (match (ast/parseDisplayDesugared text)
         ((err e) (err e.msg))
         ((ok tops)
           (match (findCandidatesWithTops! path text allKids tops)

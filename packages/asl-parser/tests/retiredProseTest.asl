@@ -6,7 +6,7 @@ fn verdict src: String -> String
   (match (ast/parse src) ((ok _) "ok") ((err e) e.msg))
 
 fn legacy src: String -> String
-  (match (ast/parseLegacy src) ((ok _) "ok") ((err e) e.msg))
+  (match (ast/parseDisplayDesugared src) ((ok _) "ok") ((err e) e.msg))
 
 fn head -> String
   "(module probe :x [f])\n\n"
@@ -29,5 +29,5 @@ fn runTests -> Bool
         (assert (stringContains? m "without the leading ; is not a top-level form") (str "the message forbids a bare (:m ...) top-level form, got " m))
         (refute (stringContains? m "are retired") (str "the message no longer says comments are retired and then allows one, got " m))
         true))
-    (assert (= (legacy (str (head) "; prose\nfn f -> Int64\n  :d \"x\"\n  1\n")) "ok") "parseLegacy still reads retired prose for the extractor")
+    (assert (= (legacy (str (head) "; prose\nfn f -> Int64\n  :d \"x\"\n  1\n")) "ok") "parseDisplayDesugared still reads retired prose for the extractor")
     true)

@@ -843,9 +843,7 @@ fn effectsLoop s: String n: Int64 i: Int64 acc: (List (Pair String String)) -> (
       ((none) (effectsLoop s n (+ i 1) acc))))
 
 fn ! loadEffects repoRoot: String -> (List (Pair String String))
-  (let [current (pathJoin repoRoot "asl/packages/asl-agent/src/effects.asn")
-        legacy (pathJoin repoRoot "scripts/agentLoop/effects.asn")
-        path (if (isFile? current) current legacy)]
+  (let [path (pathJoin repoRoot "asl/packages/asl-agent/src/effects.asn")]
     (if (not (isFile? path))
       (list)
       (let [text (resultOr (fileReadString path) "")]

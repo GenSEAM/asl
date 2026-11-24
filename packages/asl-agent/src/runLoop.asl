@@ -511,13 +511,6 @@ fn ! setupWatched! env: s/LoopEnv parent: (Option Int64) -> LoopSetup
       ((err e) (early (emptyResult env sid "failed" (some e) 0 none (list) none none none)))
       ((ok head) (setupAt! env state sid rootDir head parent))))
 
-; (:m :ref ABSORB-AGENT-K1-K2-K4 :do "the journal names which reply canon the run used, so a shape count from node journals can be read against the rules that produced it; bump the version when tc/canonSteps, tc/untagToolCalls or at/continueReply change what they map")
-fn canonVersion -> String
-  "3 2026-11-18 jsonCall argKeyForm tailTags noPrefillWithTools"
-
-fn canonRow -> String
-  (str "(:canon :version \"" (canonVersion) "\")\n")
-
 fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head: (Option String) parent: (Option Int64) -> LoopSetup
   (let [timeout (optionOr env.gateTimeout 10)
         header (match env.resume
@@ -527,7 +520,7 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
             (optionOr env.intent "auto") rootDir env.owns env.gates
             (optionOr env.base "") (optionOr env.model "") "default" ":transport :subprocess :transportWhy \"ASL_TRANSPORT=subprocess\""
             (stringFromInt64 timeout) (stringFromInt64 (optionOr env.contextTokens 24000))
-            (match env.wallBudget ((some n) (stringFromInt64 n)) ((none) "")) env.plan) (canonRow))))
+            (match env.wallBudget ((some n) (stringFromInt64 n)) ((none) "")) env.plan))))
         cfgText (ac/configText! rootDir)
         cfgProblems (ac/configProblems cfgText)
         baselineOn (!= (optionOr (ac/agentLoopValue cfgText ":baseline") "true") "false")

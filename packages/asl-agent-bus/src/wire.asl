@@ -4,7 +4,7 @@
 
 (enum CompressionAlgo (:c algoNone [] "No compression applied (raw payload)") (:c algoZstdDict [] "Dictionary-trained grammar compaction") (:c algoRle [] "Byte-level run-length repetition encoding"))
 
-(schema WireFrame (:f version I64) (:f codec CodecKind) (:f compressed Bool) (:f algorithm CompressionAlgo) (:f uncompressedBytes I64) (:f payload Str))
+(schema WireFrame (:f codec CodecKind) (:f compressed Bool) (:f algorithm CompressionAlgo) (:f uncompressedBytes I64) (:f payload Str))
 
 fn isCompressed? frame: WireFrame -> Bool
   frame.compressed
@@ -30,16 +30,16 @@ fn expandWirePayload compacted: Str -> Str
   (transformWirePayload compacted false)
 
 fn createWireFrame codec: CodecKind payload: Str enableCompress: Bool -> WireFrame
-  (let [(rawLen (stringLength payload)) (shouldCompress (and enableCompress (>= rawLen 128)))] (if shouldCompress (let [(compacted (compactWirePayload payload))] (WireFrame :version 1 :codec codec :compressed true :algorithm (algoZstdDict) :uncompressedBytes rawLen :payload compacted)) (WireFrame :version 1 :codec codec :compressed false :algorithm (algoNone) :uncompressedBytes rawLen :payload payload)))
+  (let [(rawLen (stringLength payload)) (shouldCompress (and enableCompress (>= rawLen 128)))] (if shouldCompress (let [(compacted (compactWirePayload payload))] (WireFrame :codec codec :compressed true :algorithm (algoZstdDict) :uncompressedBytes rawLen :payload compacted)) (WireFrame :codec codec :compressed false :algorithm (algoNone) :uncompressedBytes rawLen :payload payload)))
 
 fn encodeWireFrame frame: WireFrame -> Str
-  (let [(cTag (match frame.codec ((codecAsnText) "asn-text") ((codecAsbBinary) "asb-binary"))) (compTag (if frame.compressed "true" "false")) (algoTag (match frame.algorithm ((algoNone) "none") ((algoZstdDict) "zstd-dict") ((algoRle) "rle")))] (str "(:wire :v " (str frame.version) " :codec \"" cTag "\"" " :compressed " compTag " :algo \"" algoTag "\"" " :origLen " (str frame.uncompressedBytes) " :data \"" frame.payload "\")"))
+  (let [(cTag (match frame.codec ((codecAsnText) "asn-text") ((codecAsbBinary) "asb-binary"))) (compTag (if frame.compressed "true" "false")) (algoTag (match frame.algorithm ((algoNone) "none") ((algoZstdDict) "zstd-dict") ((algoRle) "rle")))] (str "(:wire :codec \"" cTag "\"" " :compressed " compTag " :algo \"" algoTag "\"" " :origLen " (str frame.uncompressedBytes) " :data \"" frame.payload "\")"))
 
 fn extractEnvelopeOrigLen header: Str -> (Option I64)
   (let [(idx (let [(i (stringIndexOf header ":origLen "))] (match i ((none) (stringIndexOf header ":orig-len ")) ((some pos) (some pos)))))] (match idx ((none) (none)) ((some i) (let [(needleLen (if (stringContains? (optionOr (stringSlice header i (+ i 9)) "") ":origLen") 9 10)) (sub (optionOr (stringSlice header (+ i needleLen) (stringLength header)) "")) (spIdx (stringIndexOf sub " "))] (let [(numStr (match spIdx ((none) (stringTrim sub)) ((some sp) (optionOr (stringSlice sub 0 sp) sub))))] (stringToInt64 (stringTrim numStr)))))))
 
 fn decodeWireFrame raw: Str -> WireFrame
-  (let [(trimmed (stringTrim raw)) (dataIdx (stringIndexOf trimmed ":data \""))] (match dataIdx ((none) (WireFrame :version 1 :codec (codecAsnText) :compressed false :algorithm (algoNone) :uncompressedBytes (stringLength trimmed) :payload trimmed)) ((some d) (let [(header (optionOr (stringSlice trimmed 0 d) "")) (after (optionOr (stringSlice trimmed (+ d 7) (stringLength trimmed)) ""))] (let [(payload (if (stringEndsWith? after "\")") (optionOr (stringSlice after 0 (- (stringLength after) 2)) after) after)) (isComp (stringContains? header ":compressed true")) (isBinary (stringContains? header ":codec \"asb-binary\"")) (isRle (stringContains? header ":algo \"rle\"")) (isZstd (stringContains? header ":algo \"zstd-dict\"")) (origLenOpt (extractEnvelopeOrigLen header))] (let [(origLen (optionOr origLenOpt (stringLength payload)))] (WireFrame :version 1 :codec (if isBinary (codecAsbBinary) (codecAsnText)) :compressed isComp :algorithm (if isZstd (algoZstdDict) (if isRle (algoRle) (algoNone))) :uncompressedBytes origLen :payload payload)))))))
+  (let [(trimmed (stringTrim raw)) (dataIdx (stringIndexOf trimmed ":data \""))] (match dataIdx ((none) (WireFrame :codec (codecAsnText) :compressed false :algorithm (algoNone) :uncompressedBytes (stringLength trimmed) :payload trimmed)) ((some d) (let [(header (optionOr (stringSlice trimmed 0 d) "")) (after (optionOr (stringSlice trimmed (+ d 7) (stringLength trimmed)) ""))] (let [(payload (if (stringEndsWith? after "\")") (optionOr (stringSlice after 0 (- (stringLength after) 2)) after) after)) (isComp (stringContains? header ":compressed true")) (isBinary (stringContains? header ":codec \"asb-binary\"")) (isRle (stringContains? header ":algo \"rle\"")) (isZstd (stringContains? header ":algo \"zstd-dict\"")) (origLenOpt (extractEnvelopeOrigLen header))] (let [(origLen (optionOr origLenOpt (stringLength payload)))] (WireFrame :codec (if isBinary (codecAsbBinary) (codecAsnText)) :compressed isComp :algorithm (if isZstd (algoZstdDict) (if isRle (algoRle) (algoNone))) :uncompressedBytes origLen :payload payload)))))))
 
 fn unpackWireFrame frame: WireFrame -> Str
   (if frame.compressed (expandWirePayload frame.payload) frame.payload)
