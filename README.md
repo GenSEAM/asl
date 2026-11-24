@@ -92,7 +92,7 @@ bin/asl build file.asl -o out             # native binary
 bin/asl '(:tools)'                        # the agent-plane operation catalogue; also bin/asl -f FILE and bin/asl - (forms on stdin)
 ```
 
-`bin/asl` is a launcher that execs the native CLI and rebuilds it when its sources change. `(...)` forms, `-f FILE` and `-` go to the toolbelt (`packages/asl-forms`), `asl intel ...` to `packages/asl-intel`, everything else to the CLI (`packages/asl-cli`). Inside the development workspace the same paths resolve under `asl/`. `asl help` lists the CLI commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
+`bin/asl` is a launcher that execs the native CLI and rebuilds it when its sources change. `(...)` forms, `-f FILE` and `-` go to the toolbelt (`packages/asl-forms`), `asl intel ...` to `packages/asl-intel`, everything else to the CLI (`packages/asl-cli`). Inside the development workspace the same paths resolve under `asl/`. `asl human help` lists the CLI commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
 
 ## Packages
 

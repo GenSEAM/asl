@@ -1321,7 +1321,17 @@ fn ! sandboxNote! ctx: sys/Context args: (List String) -> Bool
           (if cacheNote (sys/sayErr! (str "(:cache :denied :what nativeTestCache :why \"" shared " is not writable\" :effect \"the suite compile cache moves to " own "\" :fix \"grant write access to ~/.asl or set ASL_NATIVE_TEST_CACHE to a writable directory\")")) true)
           true)))
 
-fn ! main args: (List String) -> (Result Int64 String)
+; (:m :ref CLI-AGENT-HELP :do "asl human X ARGS is asl X ARGS: the prefix, nested ones too, is stripped before gating, rerooting and routing, so a path suite, -e, -f, test and check behave the same; asl human, asl human help and asl human -h keep the human usage")
+fn humanStripped args: (List String) -> (List String)
+  (if (and (= (first args) "human") (and (not (listEmpty? (rest args))) (not (listContains? (list "help" "-h" "--help") (first (rest args))))))
+    (humanStripped (rest args))
+    args)
+
+fn ! main argv: (List String) -> (Result Int64 String)
+  (let [(args (humanStripped argv))]
+    (mainRun! args))
+
+fn ! mainRun! args: (List String) -> (Result Int64 String)
   (match (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
     ((ok ctx) (match (nc/nativeGate! ctx args) ((some code) (ok code)) ((none) (match (cf/reroot! ctx args) ((some code) (ok code)) ((none) (do (sandboxNote! ctx args) (ok (entry! ctx args)))))))))

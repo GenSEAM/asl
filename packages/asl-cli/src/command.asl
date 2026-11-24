@@ -1,6 +1,6 @@
 (module asl-cli/command
   :x [main dispatch! route! remote! asnEcho testFiles! readStdin! ownPrelude? preludeHostAbsent]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/repairCmd :a repairC) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/agentHelp :a agentHelp) (asl/packages/asl-cli/src/cacheGc :a cg) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/repairCmd :a repairC) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/heal :a healCli) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-cli/src/release :a rel) (asl/packages/asl-remote/src/target :a rt)])
 
 (schema Open
   (:f closer String)
@@ -30,7 +30,8 @@ fn helpText -> String
        "  audit <subcmd>      Run workspace audit (gates, consistency, coupling, foreign, steps, naming, closure)\n"
        "  engine [cmd]        Resident ASL engine runtime, supervisor, and process management (start, stop, status, ping)\n"
        "  version             Display toolchain version\n"
-       "  help                Display this usage guide\n"
+       "  human [cmd ...]     Same as asl cmd; asl human help [cmd] prints this guide or the command usage\n"
+       "  help                Display the agent brief\n"
        "\n"
        "Agent Plane Usage:\n"
        "  Agents interact exclusively via pure Dyck-1 ASN S-expressions:\n"
@@ -523,9 +524,17 @@ fn ! parse! ctx: sys/Context args: (List String) -> Int64
     (do (sys/say! "(:parse :status :failed :error ERR_HOST_ABSENT :message \"asl parse needs the stage-0 host; build it with sh asl/host/build.sh or set ASL_HOST\")") 2)
     (sys/execv! (cons ctx.hostBin (cons "parse" args)) (list)))
 
+; (:m :ref CLI-AGENT-HELP :do "asl human help prints the human usage, asl human help CMD is CMD --help, and asl human CMD ARGS runs CMD ARGS, so pipelines name the same commands under one prefix")
+fn ! human! ctx: sys/Context args: (List String) -> Int64
+  (cond
+    ((or (listEmpty? args) (= (first args) "-h") (= (first args) "--help")) (do (sys/say! (helpText)) 0))
+    ((= (first args) "help") (if (listEmpty? (rest args)) (do (sys/say! (helpText)) 0) (dispatch! ctx (first (rest args)) (list "--help"))))
+    (else (dispatch! ctx (first args) (rest args))))
+
 fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
   (cond
-    ((or (= cmd "") (or (= cmd "-h") (or (= cmd "--help") (= cmd "help")))) (do (sys/say! (helpText)) 0))
+    ((or (= cmd "") (or (= cmd "-h") (or (= cmd "--help") (= cmd "help")))) (do (sys/say! (agentHelp/agentBrief! ctx.root)) 0))
+    ((= cmd "human") (human! ctx args))
     ((or (= cmd "-v") (or (= cmd "--version") (= cmd "version"))) (version! ctx))
     ((= cmd "eval") (eval! ctx args))
     ((= cmd "browser") (browser! args))
@@ -569,7 +578,7 @@ fn ! dispatch! ctx: sys/Context cmd: String args: (List String) -> Int64
     ((= cmd "mem") (retired! "mem" "asl '(:observe :dim memory)' reports the ledgers"))
     ((= cmd "tool") (retired! "tool" "asl '(:tools)' lists the operations"))
     ((= cmd "doc") (docCmd! ctx args))
-    (else (do (sys/say! (str "(:asl :status :failed :error ERR_UNKNOWN_COMMAND :message \"unknown command " cmd "; see asl help\")")) 2)))
+    (else (do (sys/say! (str "(:asl :status :failed :error ERR_UNKNOWN_COMMAND :message \"unknown command " cmd "; see asl human help\")")) 2)))
 
 fn ! readStdin! acc: (List String) -> (Result String String)
   (match (fdRead 0 65536)

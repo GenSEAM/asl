@@ -188,6 +188,9 @@
         (:module :type str :default "" :note "module path filter")
       )
       :ops (:coupling :impact :outline :query :deadcode :vacuity :graph :complexity :stubs :vitality :trace)
+      :examples (
+        "(:intel :op outline :file \"asl/packages/asl-cli/src/command.asl\")"
+      )
       :doc "Unified Code Intelligence: whole-repo call graph, execution complexity metrics, stub detection, runtime hot-path tracing, package coupling DAG, blast radius impact, dead code detection, vacuity audit, and bounded outline extraction.")
 
     (:op :read
@@ -290,7 +293,7 @@
       )
       :accepts (symbol module path spec id)
       :examples (
-        "(:observe :dim callers :symbol \"Cache.fetch\")"
+        "(:observe :dim callers :symbol \"helpText\")"
       )
       :errors (ERR_UNKNOWN_DIM ERR_NO_ENCODER ERR_BAD_ARG ERR_PATH_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_EXEC_FAILED)
       :doc "Read-only workspace facts; an unknown :dim lists :nearest.")
