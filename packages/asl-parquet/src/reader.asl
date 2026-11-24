@@ -1,4 +1,4 @@
-(module asl-parquet/reader :x [PqCursor parquetCursorI64 parquetCursorF64 parquetCursorI8 parquetCursorDecodes parquetCursorReadI64 parquetCursorReadF64 parquetCursorReadI8 parquetHasColumn parquetGroupRows parquetReadRangeF64 parquetReadRangeI64 parquetReadRangeI8 parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64 parquetColumnRange parquetWindowGroups parquetLowerBound] :i [])
+(module asl-parquet/reader :x [PqFile PqCol PqCursor parquetCursorI64 parquetCursorF64 parquetCursorI8 parquetCursorDecodes parquetCursorReadI64 parquetCursorReadF64 parquetCursorReadI8 parquetHasColumn parquetGroupRows parquetReadRangeF64 parquetReadRangeI64 parquetReadRangeI8 parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64 parquetColumnRange parquetWindowGroups parquetLowerBound] :i [])
 
 (schema PqCol (:f name String) (:f ptype Int64) (:f maxDef Int64) (:f int8 Bool))
 
