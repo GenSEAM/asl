@@ -1,6 +1,6 @@
 (module asl-tools/coord/throughput
-  :x [ProviderDay dailyByProvider renderProviderDay cacheShareOf]
-  :i [(aslGateway/usageLedger :a ul)])
+  :x [ProviderDay dailyByProvider renderProviderDay cacheShareOf UnitDay unitsByDay]
+  :i [(aslGateway/usageLedger :a ul) (asl-tools/coord/store :a st)])
 
 ; (:m :ref THROUGHPUT-DAILY :do "one row per UTC day and provider, read from the gateway ledger without writing it: calls, ok, 429s, token sums and the cached share of input tokens")
 (schema ProviderDay
@@ -74,3 +74,74 @@ fn renderProviderDay d: ProviderDay -> String
        " :cachedTokens " (stringFromInt64 d.cachedTokens)
        " :outTokens " (stringFromInt64 d.outTokens)
        " :cacheShare " (stringFromFloat64 d.cacheShare) ")")
+
+; (:m :ref THROUGHPUT-DAILY :do "the Task.st values conductor.asl writes for a unit that landed, failed or was escalated; blocked is the state escalate! and parkModelEscalated! move a unit to")
+fn mergedStates -> (List String)
+  (list "merged")
+
+fn failedStates -> (List String)
+  (list "failed")
+
+fn escalatedStates -> (List String)
+  (list "blocked")
+
+(schema UnitDay
+  (:f day String)
+  (:f channel String)
+  (:f merged Int64)
+  (:f failed Int64)
+  (:f escalated Int64))
+
+fn stIn? sts: (List String) s: String -> Bool
+  (listContains? sts s)
+
+fn dayOf days: (List (Pair String String)) id: String -> (Option String)
+  (match (listHead days)
+    ((none) (none))
+    ((some p) (if (= (pairFirst p) id) (some (pairSecond p)) (dayOf (optionOr (listTail days) (list)) id))))
+
+fn unitRow u: st/Task days: (List (Pair String String)) -> UnitDay
+  (UnitDay :day (optionOr (dayOf days u.id) "")
+    :channel u.channel
+    :merged (if (stIn? (mergedStates) u.st) 1 0)
+    :failed (if (stIn? (failedStates) u.st) 1 0)
+    :escalated (if (stIn? (escalatedStates) u.st) 1 0))
+
+fn counted? d: UnitDay -> Bool
+  (> (+ d.merged (+ d.failed d.escalated)) 0)
+
+fn dayKeyOf d: UnitDay -> String
+  (str d.day "|" d.channel)
+
+fn bumpDay d: UnitDay x: UnitDay -> UnitDay
+  (with d
+    :merged (+ d.merged x.merged)
+    :failed (+ d.failed x.failed)
+    :escalated (+ d.escalated x.escalated))
+
+fn indexOfDay rows: (List UnitDay) key: String i: Int64 -> (Option Int64)
+  (match (listHead rows)
+    ((none) (none))
+    ((some x) (if (= (dayKeyOf x) key) (some i) (indexOfDay (optionOr (listTail rows) (list)) key (+ i 1)))))
+
+fn replaceDay rows: (List UnitDay) idx: Int64 i: Int64 row: UnitDay -> (List UnitDay)
+  (match (listHead rows)
+    ((none) (list))
+    ((some x) (cons (if (= i idx) row x) (replaceDay (optionOr (listTail rows) (list)) idx (+ i 1) row))))
+
+fn stepUnit acc: (List UnitDay) u: st/Task days: (List (Pair String String)) -> (List UnitDay)
+  (let [(x (unitRow u days))]
+    (if (counted? x)
+      (match (indexOfDay acc (dayKeyOf x) 0)
+        ((some i) (replaceDay acc i 0 (bumpDay (optionOr (listGet acc i) x) x)))
+        ((none) (listAppend acc (list x))))
+      acc))
+
+fn unitsByDayLoop units: (List st/Task) days: (List (Pair String String)) acc: (List UnitDay) -> (List UnitDay)
+  (match (listHead units)
+    ((none) acc)
+    ((some u) (unitsByDayLoop (optionOr (listTail units) (list)) days (stepUnit acc u days))))
+
+; (:m :ref THROUGHPUT-DAILY :do "accepted units per UTC day and channel: days maps unit id to its day, merged/failed/escalated come from Task.st, queued and in-flight units are ignored, rows sorted by day then channel")
+fn unitsByDay units: (List st/Task) days: (List (Pair String String)) -> (List UnitDay)
+  (listSortBy dayKeyOf (unitsByDayLoop units days (list)))
