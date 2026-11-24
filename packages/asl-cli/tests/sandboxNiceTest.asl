@@ -19,7 +19,7 @@ fn tinySuite -> String
 
 ; (:m :do "args: root scratch then the asl argv; the profile and the denied nice live in scratch, the real HOME stays readable and unwritable")
 fn ! sandboxed! root: String scratch: String argv: (List String) -> run/Done
-  (sh! root "r=$1 s=$2; shift 2; rm -f \"$s/probes\"; exec sandbox-exec -f \"$s/p.sb\" env -u ASL_NICE_STATE -u ASL_NATIVE_TEST_CACHE \"PATH=$s/deny:$PATH\" \"ASL_PROBE_LOG=$s/probes\" \"$r/bin/asl\" \"$@\"" (cons root (cons scratch argv)))
+  (sh! root "r=$1 s=$2; shift 2; w=; [ -f \"$s/p.sb\" ] && w=\"sandbox-exec -f $s/p.sb\"; rm -f \"$s/probes\"; exec $w env -u ASL_NICE_STATE -u ASL_NATIVE_TEST_CACHE \"PATH=$s/deny:$PATH\" \"ASL_PROBE_LOG=$s/probes\" \"$r/bin/asl\" \"$@\"" (cons root (cons scratch argv)))
 
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
@@ -29,17 +29,17 @@ fn ! runTests -> Bool
         (_t (fileWrite (str scratch "/tinyTest.asl") (tinySuite)))
         (_t2 (fileWrite (str scratch "/tinyTwoTest.asl") (nestedSuite root (str scratch "/tinyTest.asl"))))
         (probe (sh! root "sandbox-exec -f \"$1/p.sb\" /bin/sh -c ':'" (list scratch)))]
-    (if (or (not (fileExists? "/usr/bin/sandbox-exec")) (!= probe.exit 0))
-      (do (println "(:skip :test sandboxNice :reason \"no usable sandbox-exec\")") (sh! root "rm -rf \"$1\"" (list scratch)) true)
-      (let [(control (sh! root "exec sandbox-exec -f \"$1/p.sb\" env \"PATH=$1/deny:$PATH\" nice -n 15 /usr/bin/true" (list scratch)))
-            (net (sh! root "exec sandbox-exec -f \"$1/p.sb\" /usr/bin/nc -z -w 2 127.0.0.1 22" (list scratch)))
+    (let [(sb (and (fileExists? "/usr/bin/sandbox-exec") (= probe.exit 0)))
+            (_np (if sb (ok ()) (pathRemove (str scratch "/p.sb"))))]
+      (let [(control (sh! root (str "exec " (if sb "sandbox-exec -f \"$1/p.sb\" " "") "env \"PATH=$1/deny:$PATH\" nice -n 15 /usr/bin/true") (list scratch)))
+            (net (if sb (sh! root "exec sandbox-exec -f \"$1/p.sb\" /usr/bin/nc -z -w 2 127.0.0.1 22" (list scratch)) control))
             (chk (sandboxed! root scratch (list "check" (str scratch "/tinyTest.asl"))))
             (tst (sandboxed! root scratch (list "test" (str scratch "/tinyTest.asl") (str scratch "/tinyTwoTest.asl"))))
             (probes (sh! root "cat \"$1/probes\" 2>/dev/null | wc -l" (list scratch)))
             (rd (sandboxed! root scratch (list "(:read :file \"asl/packages/asl-cli/tests/sandboxNiceTest.asl\" :symbol \"tinySuite\")")))
             (_c (sh! root "rm -rf \"$1\"" (list scratch)))]
         (do (assert (!= control.exit 0) (str "control: a bare nice fails under the denied-setpriority shim: " control.out))
-            (assert (!= net.exit 0) "control: loopback is denied by the profile")
+            (assert (or (not sb) (!= net.exit 0)) "control: loopback is denied by the profile where sandbox-exec exists")
             (assert (= chk.exit 0) (str "asl check exits 0 with nice denied: " chk.out))
             (assert (= tst.exit 0) (str "asl test exits 0 with nice denied: " tst.out))
             (assert (= (countOf tst.out "(:nice :denied") 1) (str "two suites under one denied nice print the nice line exactly once: " tst.out))
