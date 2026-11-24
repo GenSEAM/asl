@@ -1,5 +1,5 @@
 (module aslGateway/limits
-  :x [seedTtlMs needsSeed? longestStartMs keepRows withOwnRow Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?
+  :x [seedTtlMs seedTtlFromText needsSeedWithin? needsSeed? longestStartMs keepRows withOwnRow Verdict windowStartMs windowEndMs sentRow? usedCalls usedTokens decide hasLimitFor?
       decideIn decideWith windowStartFor windowEndFor spentRatioWith paceRatioWith coversIn covers? usedCallsIn usedTokensIn usedUsdIn spentRatioIn Lease concurrencyOf liveLeases full? admit release limitKey]
   :i [(aslGateway/config :a c)
       (aslGateway/usageLedger :a ul)
@@ -286,8 +286,17 @@ fn release leases: (List Lease) provider: String alias: String -> (List Lease)
 fn seedTtlMs -> Int64
   300000
 
+; (:m :ref SETTINGS-FIRST :do "(:gateway ... :limitSeedTtlSec S): how long the server holds the limit window rows it seeded from the shared ledger before reading it again; 1..86400 seconds, anything else keeps the default 300")
+fn seedTtlFromText text: String -> Int64
+  (match (c/gatewayTopIntOverride text "limitSeedTtlSec")
+    ((some n) (if (and (>= n 1) (<= n 86400)) (* n 1000) (seedTtlMs)))
+    ((none) (seedTtlMs)))
+
+fn needsSeedWithin? seededMs: Int64 nowMs: Int64 ttlMs: Int64 -> Bool
+  (or (<= seededMs 0) (>= (- nowMs seededMs) ttlMs))
+
 fn needsSeed? seededMs: Int64 nowMs: Int64 -> Bool
-  (or (<= seededMs 0) (>= (- nowMs seededMs) (seedTtlMs)))
+  (needsSeedWithin? seededMs nowMs (seedTtlMs))
 
 ; (:m :ref LIMITS-LEDGER-COST :do "the oldest instant any configured window can still count: rows before it are dropped at seeding, so a month window is the only thing that keeps a month of rows")
 fn longestStartMs limits: (List c/GatewayLimit) nowMs: Int64 -> Int64

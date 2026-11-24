@@ -742,7 +742,7 @@ fn limitGroupErrors g: (Map String rd/SExpr) -> (List String)
 fn gatewayLimitErrors g: (Map String rd/SExpr) -> (List String)
   (listAppend (listAppend (gatewayLimitWarnings g) (listAppend (groupErrors g) (limitGroupErrors g)))
               (listAppend (listAppend (rangeErrorOf g "concurrencyLeaseSec" 10 86400 "seconds") (listAppend (rangeErrorOf g "concurrencyPollMs" 10 5000 "milliseconds") (listAppend (rangeErrorOf g "requestDeadlineSec" 1 86400 "seconds") (listAppend (rangeErrorOf g "healthKeep" 1 10000 "files") (rangeErrorOf g "requestKeepRows" 100 10000000 "rows")))))
-                          (listAppend (rangeErrorOf g "ledgerRollupKeepDays" 62 3660 "days") (rollupPathErrors g))))
+                          (listAppend (listAppend (rangeErrorOf g "ledgerRollupKeepDays" 62 3660 "days") (rollupPathErrors g)) (rangeErrorOf g "limitSeedTtlSec" 1 86400 "seconds"))))
 
 ; (:m :ref GW-LIMIT-LONG-WINDOW :do "an optional (:gateway ... :ledgerRollupPath \"...\") names the day-rollup file of the shared ledger; present, it is a non-empty string")
 fn rollupPathErrors g: (Map String rd/SExpr) -> (List String)
