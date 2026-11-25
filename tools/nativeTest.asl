@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn objectFp objectSeeds nonObjectImports objectClosureIn! objectClosureMemo! headerPrefix fpLinesIn rootCovered? artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [checkerRejection! format prune closureContext settleLostRace! heldSingle! entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn objectFp objectSeeds nonObjectImports objectClosureIn! objectClosureMemo! headerPrefix fpLinesIn rootCovered? artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -663,18 +663,37 @@ fn headerPrefix src: String -> (Option String)
                      (pair 0 false) (range 0 (bytesLength bs))))]
     (if (and (stringStartsWith? body "(module") (and (= (pairFirst depth) 0) (not (pairSecond depth)))) (some body) (none)))
 
-; (:m :ref NT-FP-NARROW :do "what can move the closure besides the closure files' headers: the seed list, every path under the roots (a new or removed module), the workspace configs and the root packages' manifests the resolver reads")
+; (:m :ref NT-FP-NARROW :do "what can move the closure besides the closure files' headers: the seed list, every path under the roots (a new or removed module), and every config or manifest the resolver can read: the two workspace configs, a .asl.config.asn nested anywhere under a toolchain root, the configs of the directories above the root (the resolver scans up), and the manifest of every package under asl/packages, not only the root packages")
+fn ! configsUnder! dir: String depth: Int64 -> (List String)
+  (if (> depth 8)
+    (list)
+    (match (dirList dir)
+      ((err _) (list))
+      ((ok names)
+       (fold (fn [(acc (List String)) (n String)] -> (List String)
+               (let [(p (str dir "/" n))]
+                 (cond
+                   ((= n ".asl.config.asn") (listAppend acc (list p)))
+                   ((match (fileStat p) ((ok st) st.isDir) ((err _) false)) (listAppend acc (configsUnder! p (+ depth 1))))
+                   (else acc))))
+             (list) (listSort names)))))
+
+fn ! configsAbove! root: String -> (List String)
+  (let [(parts (stringSplit (resultOr (realPath root) root) "/"))
+        (dirs (map (fn [(i Int64)] -> String (stringJoin (listTake parts i) "/")) (range 1 (listLength parts))))]
+    (filter (fn [(p String)] -> Bool (fileExists? p)) (map (fn [(d String)] -> String (str d "/.asl.config.asn")) dirs)))
+
 fn ! closureContext root: String lines: (List String) -> String
   (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
-        (pkgs (listSort (fold (fn [(acc (List String)) (r String)] -> (List String)
-                                (let [(ps (stringSplit r "/"))
-                                      (pkg (stringJoin (listTake ps 3) "/"))]
-                                  (if (and (stringStartsWith? r "asl/packages/") (not (listContains? acc pkg))) (listAppend acc (list pkg)) acc)))
-                              (list) (nb/toolchainRootPaths))))
-        (configs (listAppend (list ".asl.config.asn" "asl/.asl.config.asn") (map (fn [(p String)] -> String (str p "/manifest.asn")) pkgs)))]
-    (bytesSha256 (stringToBytes (stringJoin (listAppend (cons "closureMemo/1" (objectSeeds))
+        (pkgNames (listSort (resultOr (dirList (under "asl/packages")) (list))))
+        (manifests (map (fn [(n String)] -> String (str "asl/packages/" n "/manifest.asn")) pkgNames))
+        (nested (fold (fn [(acc (List String)) (r String)] -> (List String) (listAppend acc (configsUnder! (under r) 0))) (list) (nb/toolchainRootPaths)))
+        (configs (listAppend (list ".asl.config.asn" "asl/.asl.config.asn") manifests))]
+    (bytesSha256 (stringToBytes (stringJoin (listAppend (cons "closureMemo/2" (objectSeeds))
                                                         (listAppend (map (fn [(c String)] -> String (str c " " (fileDigest (under c)))) configs)
-                                                                    (map (fn [(l String)] -> String (optionOr (listHead (stringSplit l " ")) "")) lines))) "\n"))))
+                                                                    (listAppend (map (fn [(c String)] -> String (str "nested " c " " (fileDigest c))) nested)
+                                                                                (listAppend (map (fn [(c String)] -> String (str "above " c " " (fileDigest c))) (configsAbove! root))
+                                                                                            (map (fn [(l String)] -> String (optionOr (listHead (stringSplit l " ")) "")) lines))))) "\n"))))
 
 fn ! headerDigest root: String rel: String -> String
   (match (fileReadString (if (= root ".") rel (str root "/" rel)))
@@ -1011,8 +1030,16 @@ fn ! manifestFileHolds? root: String path: String text: String -> Bool
         (holds (pairFirst result))
         (freshText (pairSecond result))
         (stillSame (= (match (fileStat path) ((ok st) st.mtimeNs) ((err _) -1)) manifestMtime))]
-    (do (if (and holds (and (!= freshText text) stillSame)) (writeAtomic path freshText) (ok ()))
+    (do (if (and holds (and (!= freshText text) stillSame)) (if (restampOwner? root path) (writeAtomic path freshText) (ok ())) (ok ()))
         holds))
+
+; (:m :ref NT-VARIANT-HOLD-RACE :do "two trees sharing a variant disagree on its entries' mtimes, and each restamp in place made the other's stamps stale again (a ping-pong of manifest rewrites); the first tree to restamp a manifest writes its real root beside it, and a tree that is not that root still validates by digest but leaves the stamps alone")
+fn ! restampOwner? root: String path: String -> Bool
+  (let [(mark (str path ".root"))
+        (mine (resultOr (realPath root) root))]
+    (match (fileReadString mark)
+      ((ok other) (= (stringTrim other) mine))
+      ((err _) (do (writeAtomic mark (str mine "\n")) true))))
 
 fn interfaceDigest forms: (List ast/TopForm) -> String
   (let [(modHead (fold (fn [(acc (Option ast/ModuleNode)) (t ast/TopForm)] -> (Option ast/ModuleNode)
@@ -2284,7 +2311,24 @@ fn ! slotBusy? path: String -> Bool
   (or (lockLive? (str path "/lock"))
       (< (- (nowNs) (newestMtimeNs path)) 600000000000))
 
+; (:m :ref NT-FP-MEMO-LOWS :do "closure-<root digest> memos are one per tree root that ever fingerprinted and nothing else removed them; prune keeps the closureMemoKeep most recently written and removes the rest")
+fn closureMemoKeep -> Int64
+  8
+
+fn ! pruneClosureMemos! dir: String -> Unit
+  (let [(names (filter (fn [(n String)] -> Bool (and (stringStartsWith? n "closure-") (not (stringContains? n ".tmp.")))) (resultOr (dirList dir) (list))))
+        (stamped (map (fn [(n String)] -> (Pair String Int64) (pair n (match (fileStat (str dir "/" n)) ((ok st) st.mtimeNs) ((err _) 0)))) names))
+        (stale (listDrop (listReverse (listSortBy (fn [(p (Pair String Int64))] -> Int64 (pairSecond p)) stamped)) (closureMemoKeep)))]
+    (fold (fn [(acc Unit) (p (Pair String Int64))] -> Unit
+            (match (pathRemove (str dir "/" (pairFirst p)))
+              ((ok _) acc)
+              ((err e) (eprintln (str "nativeTest: cannot prune " (pairFirst p) ": " e)))))
+          () stale))
+
 fn ! prune dir: String current: String -> Unit
+  (do (pruneClosureMemos! dir) (pruneFingerprints! dir current))
+
+fn ! pruneFingerprints! dir: String current: String -> Unit
   (match (dirList dir)
     ((err _) ())
     ((ok names)
@@ -2533,12 +2577,26 @@ fn ! publishVariant! cDir: String keyDir: String mode: String build: (fn [String
          (match (if (fileExists? (str final "/manifest")) (lookup final mode) (none))
            ((some held) (do (pathRemove tmp) held))
            ((none)
-           (match (do (pathRemove final) (pathRename tmp final))
-             ((err _) (do (pathRemove tmp) b))
-             ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final))))))))))
+            (match (pathRename tmp final)
+              ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final)))
+              ((err _) (settleLostRace! cDir keyDir mode tmp final b)))))))))
+
+; (:m :ref NT-VARIANT-HOLD-RACE :do "rename onto a non-empty directory fails, so the loser of a publish race never deletes the winner's variant: it re-reads final, uses it when it holds, and replaces it only when it does not (a broken or stale variant, which no run can use)")
+fn ! settleLostRace! cDir: String keyDir: String mode: String tmp: String final: String b: Built -> Built
+  (match (lookup final mode)
+    ((some winner) (do (pathRemove tmp) winner))
+    ((none)
+     (match (do (pathRemove final) (pathRename tmp final))
+       ((err _) (do (pathRemove tmp) b))
+       ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final))))))
+
+; (:m :ref NT-VARIANT-HOLD-RACE :do "a single asl test or run holds its variant like prepareAllIn does (cDir/holds/PID, pinned until the process ends), so variant eviction by another build cannot delete the binary this process is about to exec")
+fn ! heldSingle! cDir: String b: Built -> Built
+  (let [(owner (procSelf))]
+    (holdBuilt! cDir owner (ncli/startOf! owner) b))
 
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
-  (prepareInWith 0 cDir path fp mode)
+  (heldSingle! cDir (prepareInWith 0 cDir path fp mode))
 
 fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String -> Built
   (match (fileReadString path)
@@ -2558,6 +2616,9 @@ fn ! prepareSourceIn cDir: String actualPath: String logicalPath: String fp: Str
 
 ; (:m :ref TEST-RUNNER-SELECT :do "only names the one test function the wrapper calls in place of the entry (asl test FILE --only NAME); its slot key carries the name, so a selected binary never shares a slot, wrapper or cached link with the whole-suite binary of the same file")
 fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String fp: String mode: String only: String -> Built
+  (heldSingle! cDir (prepareSourceSelectRaw cDir actualPath logicalPath fp mode only))
+
+fn ! prepareSourceSelectRaw cDir: String actualPath: String logicalPath: String fp: String mode: String only: String -> Built
   (match (fileReadString actualPath)
     ((err _) (Built :binary (none) :reason (str "cannot read " actualPath) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKeyFor mode only logicalPath actualPath))
