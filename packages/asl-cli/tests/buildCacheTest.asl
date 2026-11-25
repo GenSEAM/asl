@@ -119,7 +119,7 @@ fn ! testCycle env: Env -> Bool
         (assert (= healed.out (want "2" "x")) (str "the binary over the rebuilt object runs correctly: " healed.out healed.err))
         true))
 
-; (:m :ref BUILD-CACHE :do "with the CLI default of 16 buckets the three modules land in buckets; a body edit in main compiles exactly one bucket part and the binary follows the edit")
+; (:m :ref BUILD-CACHE :do "with 16 buckets (the CLI default is 128, nb/defaultBuckets) the three modules land in buckets; a body edit in main compiles exactly one bucket part and the binary follows the edit")
 fn ! testBuckets env: Env -> Bool
   (let [(_ (write! env "2" "x"))
         (cold (buildIn! env 11 16))

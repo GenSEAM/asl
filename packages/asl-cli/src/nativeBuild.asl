@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! bucketsFor! bucketsValue defaultBuckets storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
+  :x [Build setup! toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! bucketsFor! bucketsValue defaultBuckets storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -133,11 +133,14 @@ fn ! adopt! b: Build dir: String needs: (List String) -> Bool
 
 fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir)) :buckets (bucketsFor! root)
+        (buckets (bucketsFor! root))
+        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir)) :buckets (resultOr buckets (defaultBuckets))
                       :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)) cacheDir))]
-    (if (not (sys/isFile? lib))
-      (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
-      (match (firstLine! start (list (clang!) "-print-target-triple"))
+    (match buckets
+     ((err e) (err e))
+     ((ok _) (cond
+      ((not (sys/isFile? lib)) (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)"))
+      (else (match (firstLine! start (list (clang!) "-print-target-triple"))
         ((err e) (err e))
         ((ok machine)
           (let [(triple (seedTriple machine))]
@@ -151,7 +154,7 @@ fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build S
                       ((err e) (err e))
                         ((ok libSha) (match (dirCreate start.tmp)
                         ((err e) (err (str "cannot create " start.tmp ": " e)))
-                        ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row)))))))))))))))
+                        ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row))))))))))))))))))
 
 fn ! writeParts! ll: String parts: (List (Pair Int64 String)) -> (Result (List String) String)
   (match (listHead parts)
@@ -411,15 +414,16 @@ fn ! suiteWorkersFor! dir: String -> Int64
 fn defaultBuckets -> Int64
   128
 
-fn bucketsValue word: String -> (Option Int64)
+; (:m :ref CLI-BUCKETS-LOWS :do "a row that is not an integer in 0..4096 is a config error the build reports, like :parts and :level, instead of silently building with the default")
+fn bucketsValue word: String -> (Result Int64 String)
   (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
-    ((some n) (if (and (>= n 0) (<= n 4096)) (some n) (none)))
-    ((none) (none)))
+    ((some n) (if (and (>= n 0) (<= n 4096)) (ok n) (err (str "ERR_CONFIG: :native :buckets must be 0..4096, got " word))))
+    ((none) (err (str "ERR_CONFIG: :native :buckets must be an integer, got " word))))
 
-fn ! bucketsFor! dir: String -> Int64
+fn ! bucketsFor! dir: String -> (Result Int64 String)
   (match (configured! dir ":buckets")
-    ((some word) (optionOr (bucketsValue word) (defaultBuckets)))
-    ((none) (defaultBuckets)))
+    ((some word) (bucketsValue word))
+    ((none) (ok (defaultBuckets))))
 
 fn ! storeCapFor! dir: String -> Int64
   (match (configured! dir ":storeCap")
