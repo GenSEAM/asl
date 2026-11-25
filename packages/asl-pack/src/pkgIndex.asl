@@ -1,5 +1,5 @@
 (module aslPack/pkgIndex
-  :x [Artefact Dep Version Pkg Index normVersion caretPrefixEq mapResult kvFind strField listField atomText unquote validName? validVersion? validSha? validTriple? validSpec? versionParts versionCompare versionSatisfies? findPkg findVersion highestMatching artefactFor parseIndex parseRequest]
+  :x [Artefact Dep Version Pkg Index normVersion caretPrefixEq mapResult kvFind strField listField atomText unquote validName? validVersion? validSha? validTriple? validSpec? specValid? versionParts versionCompare versionSatisfies? findPkg findVersion highestMatching artefactFor parseIndex parseRequest]
   :i [(asl-parser/reader :a rd)])
 
 (schema Artefact (:f triple String) (:f url String) (:f sha256 String))
@@ -83,14 +83,37 @@ fn validSha? s: String -> Bool
 fn validTriple? s: String -> Bool
   (and (and (not (stringEmpty? s)) (<= (stringLength s) 40)) (listAll? tripleChar? (stringChars s)))
 
-fn specBody spec: String -> String
+fn afterPrefix t: String n: Int64 -> String
+  (optionOr (stringSlice t n (stringLength t)) "")
+
+fn specAlts spec: String -> (List String)
+  (stringSplit spec "||")
+
+fn specTerms alt: String -> (List String)
+  (filter (fn [(t String)] -> Bool (not (stringEmpty? t))) (stringSplit (stringTrim alt) " "))
+
+fn termValid? t: String -> Bool
   (cond
-    ((stringStartsWith? spec ">=") (optionOr (stringSlice spec 2 (stringLength spec)) ""))
-    ((stringStartsWith? spec "^") (optionOr (stringSlice spec 1 (stringLength spec)) ""))
-    (else spec))
+    ((= t "*") true)
+    ((stringStartsWith? t ">=") (validVersion? (afterPrefix t 2)))
+    ((stringStartsWith? t "<=") (validVersion? (afterPrefix t 2)))
+    ((stringStartsWith? t ">") (validVersion? (afterPrefix t 1)))
+    ((stringStartsWith? t "<") (validVersion? (afterPrefix t 1)))
+    ((stringStartsWith? t "=") (validVersion? (afterPrefix t 1)))
+    ((stringStartsWith? t "~") (validVersion? (afterPrefix t 1)))
+    ((stringStartsWith? t "^") (validVersion? (afterPrefix t 1)))
+    (else (validVersion? t)))
+
+fn specValid? spec: String -> Bool
+  (let [(alts (specAlts spec))]
+    (and (not (listEmpty? alts))
+         (listAll? (fn [(a String)] -> Bool
+                     (let [(ts (specTerms a))]
+                       (and (not (listEmpty? ts)) (listAll? termValid? ts))))
+                   alts)))
 
 fn validSpec? spec: String -> Bool
-  (or (= spec "*") (validVersion? (specBody spec)))
+  (specValid? spec)
 
 fn versionParts v: String -> (List Int64)
   (map (fn [(p String)] -> Int64 (optionOr (stringToInt64 p) 0)) (stringSplit v "."))
@@ -125,13 +148,29 @@ fn normVersion v: String -> String
 fn padStrings ps: (List String) k: Int64 -> (List String)
   (if (>= (listLength ps) k) ps (padStrings (listAppend ps (list "0")) k))
 
+fn termSatisfies? t: String vp: (List Int64) -> Bool
+  (cond
+    ((= t "*") true)
+    ((stringStartsWith? t ">=") (>= (versionCompare vp (versionParts (afterPrefix t 2))) 0))
+    ((stringStartsWith? t "<=") (<= (versionCompare vp (versionParts (afterPrefix t 2))) 0))
+    ((stringStartsWith? t ">") (> (versionCompare vp (versionParts (afterPrefix t 1))) 0))
+    ((stringStartsWith? t "<") (< (versionCompare vp (versionParts (afterPrefix t 1))) 0))
+    ((stringStartsWith? t "=") (= (versionCompare vp (versionParts (afterPrefix t 1))) 0))
+    ((stringStartsWith? t "~")
+     (let [(bp (versionParts (afterPrefix t 1)))]
+       (and (>= (versionCompare vp bp) 0)
+            (= (listTake (padTo vp 2) 2) (listTake (padTo bp 2) 2)))))
+    ((stringStartsWith? t "^")
+     (let [(bp (versionParts (afterPrefix t 1)))]
+       (and (>= (versionCompare vp bp) 0) (caretPrefixEq vp bp))))
+    (else (= (versionCompare vp (versionParts t)) 0)))
+
 fn versionSatisfies? spec: String v: String -> Bool
-  (let [(vp (versionParts v)) (bp (versionParts (specBody spec)))]
-    (cond
-      ((= spec "*") true)
-      ((stringStartsWith? spec ">=") (>= (versionCompare vp bp) 0))
-      ((stringStartsWith? spec "^") (and (>= (versionCompare vp bp) 0) (caretPrefixEq vp bp)))
-      (else (= (versionCompare vp bp) 0))))
+  (if (not (specValid? spec)) false
+    (let [(vp (versionParts v))]
+      (listAny? (fn [(a String)] -> Bool
+                  (listAll? (fn [(t String)] -> Bool (termSatisfies? t vp)) (specTerms a)))
+                (specAlts spec))))
 
 fn findPkg idx: Index name: String -> (Option Pkg)
   (listFind (fn [(p Pkg)] -> Bool (= p.name name)) idx.pkgs)

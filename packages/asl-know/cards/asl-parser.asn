@@ -30,7 +30,7 @@
 (:sym "KidForm" :mod "asl-parser/ast" :kind type :sig "(schema KidForm (:f pf PosForm) (:f kids (List (Pair Int64 Int64))) (:f startOffset Int64) (:f endOffset Int64))" :pit (record))
 (:sym "readForms" :mod "asl-parser/ast" :sig "readForms toks: (List lx/Token) -> (Result (List PosForm) ParseError)" :doc "Reads a token stream into positioned forms." :pit (result))
 (:sym "parse" :mod "asl-parser/ast" :sig "parse raw: String -> (Result (List TopForm) ParseError)" :doc "Parses source code text into typed AST top-level forms." :pit (result))
-(:sym "parseDisplayDesugared" :mod "asl-parser/ast" :sig "parseDisplayDesugared src: String -> (Result (List TopForm) ParseError)" :doc "Parses source then desugars with-style param display for callers still expecting the legacy AST shape." :pit (result))
+(:sym "parseDisplayDesugared" :mod "asl-parser/ast" :sig "parseDisplayDesugared src: String -> (Result (List TopForm) ParseError)" :doc "Parses source then desugars with-style param display." :pit (result))
 (:sym "parseForTypeCheck" :mod "asl-parser/ast" :sig "parseForTypeCheck raw: String -> (Result (List TopForm) ParseError)" :doc "Parses source for the checker: rejects retired syntax first, then parses for the checker's own AST shape." :pit (result))
 (:sym "retiredProse" :mod "asl-parser/ast" :sig "retiredProse src: String -> (Option ParseError)" :pit (option))
 (:sym "retiredSpelling" :mod "asl-parser/ast" :sig "retiredSpelling src: String -> (Option ParseError)" :pit (option))
