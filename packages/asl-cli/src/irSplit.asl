@@ -347,7 +347,7 @@ fn globalsPart ix: Index -> (Result Named String)
 fn splitModules text: String limit: Int64 -> (Result (List Named) String)
   (splitBuckets text limit 0)
 
-; (:m :ref BUILD-CACHE :do "the bucketed split: module groups hashed into n buckets (16 for the CLI, about 9 MB of IR each), so a cold build compiles a few large parts and a body edit compiles the one bucket that holds the module")
+; (:m :ref BUILD-CACHE :do "the bucketed split: module groups hashed into n buckets (128 for the CLI, near one part per module; 16 was about 9 MB of IR each), so a cold build compiles a few large parts and a body edit compiles the one bucket that holds the module")
 fn splitBuckets text: String limit: Int64 n: Int64 -> (Result (List Named) String)
   (match (parse text)
     ((err e) (err e))
