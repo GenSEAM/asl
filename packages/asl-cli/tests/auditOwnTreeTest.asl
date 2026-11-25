@@ -1,4 +1,4 @@
-(module asl-cli/auditOwnTreeTest :x [runTests] :i [(asl-tools/fleet/run :a run)])
+(module asl-cli/auditOwnTreeTest :x [runTests] :i [(asl-tools/fleet/run :a run) (asl-tools/vcs/git :a vcs)])
 
 ; (:m :ref MERGECHECK-CLI-AUDITS-OWN-TREE :do "the audit verb audits the tree it is pointed at while running this CLI's auditor: a scratch git tree holding an unbalanced asn fails ERR_UNBALANCED by cwd and by --root from elsewhere, and this tree stays green; the CLI is the worktree's own built one, so no CLI is built here")
 fn ! sh! cwd: String argv: (List String) -> run/Done
@@ -14,7 +14,7 @@ fn ! runTests -> Bool
         (made (listAll? (fn [(d String)] -> Bool (ok? (dirCreate d))) (list (str root "/.asl/cache") (str root "/.asl/cache/auditOwnTree") t)))
         (wrote (put! (str t "/bad.asn") "(:broken (:a 1)\n"))
         (inited (sh! t (list "git" "init" "-q")))
-        (added (sh! t (list "git" "add" "bad.asn")))
+        (added (vcs/stageNamed! t (list "bad.asn")))
         (byCwd (sh! t (list cli "audit" "consistency" "--no-cache")))
         (byRoot (sh! root (list cli "audit" "consistency" "--no-cache" "--root" t)))
         (own (sh! root (list cli "audit" "consistency" "--no-cache")))
@@ -24,4 +24,4 @@ fn ! runTests -> Bool
       (assert (stringContains? byCwd.out "ERR_UNBALANCED") "by cwd names ERR_UNBALANCED")
       (assert (= byRoot.exit 1) "unbalanced scratch tree by --root exits 1")
       (assert (stringContains? byRoot.out "ERR_UNBALANCED") "by --root names ERR_UNBALANCED")
-      (assert (and (stringContains? own.out ":id syntax :status :passed") (not (stringContains? own.out "ERR_UNBALANCED"))) "the CLI's own balanced tree passes the syntax check") true))
+      (assert (= own.exit 0) "the CLI's own clean tree exits 0") true))
