@@ -20,6 +20,8 @@ fn ! testRows -> Bool
       (assert (= (cd/trainBatchOf "(:train :jobs 6 :batch 3)") 3) "a valid row sets the batch")
       (assert (= (cd/trainArgv "/d" "sh/X" "(:train :batch 3)") (list "/d/bin/asl" "train" "sh/X" "--onto" "HEAD" "--repo" "/d" "--commit")) "a batch-only row passes no -j")
       (assert (= (cd/trainArgvAll "/d" (list "sh/X" "sh/Y") "(:train :jobs 4 :batch 2)") (list "/d/bin/asl" "train" "sh/X" "sh/Y" "--onto" "HEAD" "--repo" "/d" "--commit" "-j" "4")) "every member branch goes to one train")
+      (assert (= (cd/admittedArgs (list)) (list)) "ADMIT-IS-MERGE: no admission log, no flag")
+      (assert (= (cd/admittedArgs (list "/s/runs/A-admitLog.txt" "/s/runs/B-admitLog.txt")) (list "--admitted" "/s/runs/A-admitLog.txt,/s/runs/B-admitLog.txt")) "ADMIT-IS-MERGE: every member admission log goes to the merge train")
       true)
 
 fn ! testPick -> Bool
