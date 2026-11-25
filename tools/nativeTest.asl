@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn objectFp objectSeeds nonObjectImports objectClosureIn! objectClosureMemo! headerPrefix fpLinesIn rootCovered? artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -20,7 +20,8 @@
       (asl-cli/verify :a verify)
       (asl-compiler/checkCache :a ccache)
       (asl-checker/check :a chk)
-      (asl-checker/checkCached :a ccd)])
+      (asl-checker/checkCached :a ccd)
+      (asl-checker/resolve :a rsv)])
 
 (schema Verdict
   (:f exit Int64)
@@ -608,16 +609,132 @@ fn ! fingerprintOf clangVersion: String targetTriple: String -> String
   (fingerprintIn (toolRoot) clangVersion targetTriple)
 
 ; (:m :ref FPNARROW :do "nativeTest.asl enters the fingerprint as its artifactSlice, not its bytes: a cached object, prelude, suite binary or checker verdict can only come from code the compile paths run, so editing a driver-only body (sweep, suite pool, test runner, verdict parsing, the key itself) or a top-level comment keeps every module warm; every other root still enters by content digest")
-fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
-  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
-        (lines (fold (fn [(acc (List String)) (r String)] -> (List String)
+fn ! fpLinesIn root: String -> (List String)
+  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))]
+    (fold (fn [(acc (List String)) (r String)] -> (List String)
                        (listAppend acc (if (= r (selfSource))
                                          (list (match (fileReadString (under r))
                                                  ((err e) (str r " missing " e))
                                                  ((ok src) (str r " slice " (bytesSha256 (stringToBytes (artifactSlice src)))))))
                                          (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under r))))))
-                     (list) (nb/toolchainRootPaths)))]
-    (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
+                     (list) (nb/toolchainRootPaths)))
+
+fn ! fingerprintIn root: String clangVersion: String targetTriple: String -> String
+  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
+        (lines (fpLinesIn root))
+        (wide (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple lines))) "\n"))))
+        (objLines (match (objectClosureCached! root lines)
+                    ((none) lines)
+                    ((some rels) (let [(kept (filter (fn [(l String)] -> Bool (let [(p (optionOr (listHead (stringSplit l " ")) ""))] (or (listContains? rels p) (not (stringStartsWith? p "asl/packages/"))))) lines))
+                                       (outside (filter (fn [(p String)] -> Bool (not (rootCovered? p))) rels))]
+                                   (listAppend kept (fold (fn [(acc (List String)) (p String)] -> (List String) (listAppend acc (map (fn [(l String)] -> String (relativeTo root l)) (treeLines (under p))))) (list) outside))))))
+        (narrow (bytesSha256 (stringToBytes (stringJoin (cons "objectFp/1" (cons (format) (cons clangVersion (cons targetTriple objLines)))) "\n"))))]
+    (str (optionOr (stringSlice narrow 0 32) narrow) (optionOr (stringSlice wide 0 32) wide)))
+
+; (:m :ref NT-FP-NARROW :do "a 64-char fingerprint is two halves: the object half digests only the sources the compile path imports (objectClosureIn!) plus prelude, overlay, runtime archive and nativeTest's slice, and keys module and prelude objects; the whole fp, whose second half digests every toolchain root, still names slots, the self binary and checker verdicts, so a checker-only edit relinks and rechecks but compiles no module. A label fp (nativeOracle, tests) keys objects whole")
+fn objectFp fp: String -> String
+  (if (= (stringLength fp) 64) (optionOr (stringSlice fp 0 32) fp) fp)
+
+; (:m :ref NT-FP-NARROW :do "nativeTest's imports that reach object bytes: lowering, linking (link imports asl-checker/check for match and script elaboration), LLVM emission and target routing; their resolver closure is the object half's source set")
+fn objectSeeds -> (List String)
+  (list "asl-ir/link" "asl-ir/lower" "asl-ir/types" "asl-target-llvm" "asl-target-llvm/ssa" "asl-target-llvm/libc" "asl-target-llvm/sysRoute"
+        "asl-parser/ast" "asl-parser/reader" "asl-checker/check")
+
+; (:m :ref NT-FP-NARROW :do "nativeTest's imports that only accept, reject, render, schedule or sweep: checker verdicts and their rendering, eval text balance, process guards, the CLI store and config, the resolver this key uses; fingerprintScopeTest fails when an import is in neither list, so a new import is classified before it can shape an object unkeyed")
+fn nonObjectImports -> (List String)
+  (list "asl-tools/corpusNative" "asl-tools/renderTag" "asl-syntax/asl/paren" "asl-tools/fleet/run" "asl-cli/nativeCli"
+        "asl/packages/asl-cli/src/system" "asl/packages/asl-cli/src/asl1Cache" "asl/packages/asl-cli/src/nativeBuild" "asl/packages/asl-cli/src/rcConfig"
+        "asl-cli/verify" "asl-compiler/checkCache" "asl-checker/checkCached" "asl-checker/resolve")
+
+; (:m :ref NT-FP-NARROW :do "the module header of a source: its lines up to the first column-0 form or comment after the module line (a header may hold blank lines, asl-target-llvm/ssa does); none when it does not open with (module or its parens do not balance outside strings, and then the closure memo is not trusted")
+fn headerPrefix src: String -> (Option String)
+  (let [(ls (stringLines src))
+        (rest (optionOr (listTail ls) (list)))
+        (stop (fn [(l String)] -> Bool (or (stringStartsWith? l "(") (or (stringStartsWith? l "fn ") (stringStartsWith? l ";")))))
+        (body (stringJoin (cons (optionOr (listHead ls) "") (pairFirst (fold (fn [(acc (Pair (List String) Bool)) (l String)] -> (Pair (List String) Bool) (if (or (pairSecond acc) (stop l)) (pair (pairFirst acc) true) (pair (listAppend (pairFirst acc) (list l)) false))) (pair (list) false) rest))) "\n"))
+        (bs (stringToBytes body))
+        (depth (fold (fn [(acc (Pair Int64 Bool)) (i Int64)] -> (Pair Int64 Bool)
+                       (let [(c (bytesGet bs i))]
+                         (cond ((= c 34) (pair (pairFirst acc) (not (pairSecond acc))))
+                               ((pairSecond acc) acc)
+                               ((= c 40) (pair (+ (pairFirst acc) 1) false))
+                               ((= c 41) (pair (- (pairFirst acc) 1) false))
+                               (else acc))))
+                     (pair 0 false) (range 0 (bytesLength bs))))]
+    (if (and (stringStartsWith? body "(module") (and (= (pairFirst depth) 0) (not (pairSecond depth)))) (some body) (none)))
+
+; (:m :ref NT-FP-NARROW :do "what can move the closure besides the closure files' headers: the seed list, every path under the roots (a new or removed module), the workspace configs and the root packages' manifests the resolver reads")
+fn ! closureContext root: String lines: (List String) -> String
+  (let [(under (fn [(rel String)] -> String (if (= root ".") rel (str root "/" rel))))
+        (pkgs (listSort (fold (fn [(acc (List String)) (r String)] -> (List String)
+                                (let [(ps (stringSplit r "/"))
+                                      (pkg (stringJoin (listTake ps 3) "/"))]
+                                  (if (and (stringStartsWith? r "asl/packages/") (not (listContains? acc pkg))) (listAppend acc (list pkg)) acc)))
+                              (list) (nb/toolchainRootPaths))))
+        (configs (listAppend (list ".asl.config.asn" "asl/.asl.config.asn") (map (fn [(p String)] -> String (str p "/manifest.asn")) pkgs)))]
+    (bytesSha256 (stringToBytes (stringJoin (listAppend (cons "closureMemo/1" (objectSeeds))
+                                                        (listAppend (map (fn [(c String)] -> String (str c " " (fileDigest (under c)))) configs)
+                                                                    (map (fn [(l String)] -> String (optionOr (listHead (stringSplit l " ")) "")) lines))) "\n"))))
+
+fn ! headerDigest root: String rel: String -> String
+  (match (fileReadString (if (= root ".") rel (str root "/" rel)))
+    ((err _) "")
+    ((ok src) (match (headerPrefix src) ((none) "") ((some h) (bytesSha256 (stringToBytes h))))))
+
+fn ! closureMemoPath root: String -> String
+  (str (fingerprintMemoDir) "/closure-" (bytesSha256 (stringToBytes (resultOr (realPath root) root))))
+
+; (:m :ref NT-FP-NARROW :do "a memo hit needs the same context and, for every remembered closure file, the same balanced header: the resolver costs about 2 s a call and only headers decide the closure, so a body edit anywhere keeps the memo and a header edit, new file, manifest or seed change re-resolves")
+fn ! objectClosureMemo! root: String lines: (List String) -> (Option (List String))
+  (match (fileReadString (closureMemoPath root))
+    ((err _) (none))
+    ((ok text) (let [(ls (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines text)))
+                     (rows (map (fn [(l String)] -> (List String) (stringSplit l " ")) (optionOr (listTail ls) (list))))]
+                 (if (and (= (optionOr (listHead ls) "") (closureContext root lines))
+                          (and (not (listEmpty? rows))
+                               (listAll? (fn [(r (List String))] -> Bool (let [(d (optionOr (listGet r 1) ""))] (and (not (stringEmpty? d)) (= d (headerDigest root (optionOr (listHead r) "")))))) rows)))
+                   (some (map (fn [(r (List String))] -> String (optionOr (listHead r) "")) rows))
+                   (none)))))
+
+fn ! objectClosureCached! root: String lines: (List String) -> (Option (List String))
+  (match (objectClosureMemo! root lines)
+    ((some rels) (some rels))
+    ((none) (let [(found (objectClosureIn! root))
+                  (_ (match found
+                       ((none) ())
+                       ((some rels) (let [(rows (map (fn [(p String)] -> String (str p " " (headerDigest root p))) rels))]
+                                      (if (listAny? (fn [(r String)] -> Bool (stringEndsWith? r " ")) rows)
+                                        ()
+                                        (do (dirCreate (fingerprintMemoDir))
+                                            (writeAtomic (closureMemoPath root) (str (closureContext root lines) "\n" (stringJoin rows "\n") "\n"))
+                                            ()))))))]
+              found)))
+
+fn rootCovered? rel: String -> Bool
+  (listAny? (fn [(r String)] -> Bool (or (= rel r) (stringStartsWith? rel (str r "/")))) (nb/toolchainRootPaths))
+
+; (:m :ref NT-FP-NARROW :do "root-relative sorted paths of the object seeds and their header-only resolver closure; none when a seed is missing, a closure has an error or unresolved import, or a path leaves the root, and then the object half covers every root")
+fn ! objectClosureIn! root: String -> (Option (List String))
+  (let [(real (resultOr (realPath root) root))
+        (importer (str real "/" (selfSource)))
+        (step (fn [(acc (Option (List String))) (seed String)] -> (Option (List String))
+                (match acc
+                  ((none) (none))
+                  ((some ps) (let [(res (rsv/resolveImport! importer seed (rsv/emptyModIndex)))]
+                               (match res.status
+                                 ((resOk) (if (listContains? ps res.path)
+                                            (some ps)
+                                            (let [(c (rsv/loadModuleClosure! res.path false))]
+                                              (if (and (listEmpty? c.errors) (listEmpty? c.unresolved))
+                                                (some (fold (fn [(a (List String)) (p String)] -> (List String) (if (listContains? a p) a (listAppend a (list p)))) ps (cons res.path c.paths)))
+                                                (none)))))
+                                 (_ (none))))))))
+        (found (fold step (some (list)) (objectSeeds)))]
+    (match found
+      ((none) (none))
+      ((some ps) (let [(rels (map (fn [(p String)] -> String (relativeTo real (resultOr (realPath p) p))) ps))]
+                   (if (listAny? (fn [(p String)] -> Bool (stringStartsWith? p "/")) rels) (none) (some (listSort rels)))))))
+
 
 ; (:m :ref FPNARROW :do "bodies that cannot shape a cached artifact: entry dispatch, the suite sweep and its pool, the test runner and verdict parsing, and the fingerprint itself; one of them still enters the slice when any other fn names it")
 fn driverOnlyNames -> (List String)
@@ -737,7 +854,7 @@ fn ! fingerprint -> String
         (stamps (fold (fn [(acc (Pair Int64 (List String))) (r String)] -> (Pair Int64 (List String))
                         (let [(t (treeStamps r))] (pair (max (pairFirst acc) (pairFirst t)) (listAppend (pairSecond acc) (pairSecond t)))))
                       (pair 0 (list)) (toolchainRoots)))
-        (memo (str (fingerprintMemoDir) "/" (bytesSha256 (stringToBytes (stringJoin (cons (format) (cons clangVersion (cons targetTriple (pairSecond stamps)))) "\n")))))
+        (memo (str (fingerprintMemoDir) "/" (bytesSha256 (stringToBytes (stringJoin (cons "fp/2" (cons (format) (cons clangVersion (cons targetTriple (pairSecond stamps))))) "\n")))))
         (kept (stringTrim (resultOr (fileReadString memo) "")))]
     (if (= (stringLength kept) 64)
       kept
@@ -1100,7 +1217,7 @@ fn ! unitKey fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String)
   (unitKeyIn (selfRoot) fp opt u ifaceMap isEntry inits)
 
 fn ! unitKeyIn root: String fp: String opt: String u: lk/LinkUnit ifaceMap: (Map String String) isEntry: Bool inits: (List String) -> String
-  (moduleCacheKey fp (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
+  (moduleCacheKey (objectFp fp) (if isEntry "@entry" (relativeTo root u.path)) (fileDigest u.path)
                   (listAppend (map (fn [(imp (Pair String String))] -> String (str (relativeTo root (pairSecond imp)) " " (optionOr (mapGet ifaceMap (pairSecond imp)) ""))) u.imports)
                               (cons (str "@name " u.name) (cons (str "@opt " opt) (if isEntry (list (str "@inits " (stringJoin inits ","))) (list))))))
 
@@ -1404,7 +1521,7 @@ fn ! dropStale objPath: String metaPath: String -> Unit
 fn ! compileSubsetPrelude facts: (Option libc/TripleFacts) cDir: String fp: String allPreludeRefs: (List String) prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> PreludeStep
   (let [(preludeFns (map (fn [(n String)] -> String (optionOr (stringSlice n 8 (stringLength n)) n)) allPreludeRefs))
         (preludeKey (bytesSha256 (stringToBytes (str "prelude/2
-" fp "
+" (objectFp fp) "
 " (preludeDigestIn (toolRoot)) "
 " (stringJoin (listSort preludeFns) ",")))))
         (preludeObj (str (modulesDirIn cDir) "/prelude-" preludeKey ".o"))
@@ -1428,7 +1545,7 @@ fn ! preludeDigestIn root: String -> String
     (bytesSha256 (stringToBytes (stringJoin (map (fn [(l String)] -> String (relativeTo root l)) (listAppend (treeLines (at (lk/preludePath))) (treeLines (at overlayDir)))) "\n"))))
 
 fn fullPreludeKey fp: String preludeDigest: String opt: String extra: (List String) -> String
-  (bytesSha256 (stringToBytes (str "preludeFull/2\n" fp "\n" preludeDigest "\n" opt "\n" (stringJoin extra " "))))
+  (bytesSha256 (stringToBytes (str "preludeFull/2\n" (objectFp fp) "\n" preludeDigest "\n" opt "\n" (stringJoin extra " "))))
 
 fn ! compileFullPrelude facts: (Option libc/TripleFacts) cDir: String fp: String prelude: lk/LinkUnit ovlNames: (List String) slot: String counter: Int64 opt: String extra: (List String) -> (Option PreludeStep)
   (let [(key (fullPreludeKey fp (preludeDigestIn (toolRoot)) opt extra))
