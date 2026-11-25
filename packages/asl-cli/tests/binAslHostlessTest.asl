@@ -6,6 +6,11 @@ fn probe -> String
 fn ! sh! root: String argv: (List String) timeoutS: Int64 maxDesc: Int64 -> run/Done
   (run/runOneLimited (run/job argv root (run/childEnv (list))) (run/limits timeoutS maxDesc))
 
+; (:m :ref CLI-TEST-ADOPT :do "the run's host store (ASL_HOST_CACHE_DIR, else HOME/.asl/run/hosts) is only read: the cold run gets a scratch store whose rt, seed and nativeBuild entries are symlinks to it, so bin/asl copies the builder, runtime and asl1 of the same keys (build.sh stored path) instead of lowering seed and asl1 again, and anything new it wrote would land in the scratch store, never under ~/.asl")
+fn ! realHostStore -> String
+  (let [(configured (optionOr (envGet "ASL_HOST_CACHE_DIR") ""))]
+    (if (stringEmpty? configured) (str (optionOr (envGet "HOME") "") "/.asl/run/hosts") configured))
+
 fn ! dropPrefixes -> (List String)
   (list "ASL_HOST=" "ASL_NATIVE_CLI_" "ASL_HOST_CACHE_DIR=" "ASL_ROOT=" "ASL_PRELUDE=" "PATH=" "HOME=")
 
@@ -37,7 +42,8 @@ fn ! runTests -> Bool
         (added (sh! root (list "git" "worktree" "add" "--detach" fresh "HEAD") 120 16))
         (noOut (not (ok? (dirList (str fresh "/asl/host/out")))))
         (homed (dirCreate home))
-        (upstream (nf/adoptFrom! cache (list "rt" "cli")))
+        (upstream (nf/adoptFrom! cache (list "seed" "rt" "asl1" "cli")))
+        (hostLinked (sh! root (list "/bin/sh" "-c" "mkdir -p \"$1\" && for k in nativeBuild rt seed; do mkdir -p \"$1/$k\" && for e in \"$0\"/$k/*; do [ -e \"$e\" ] && ln -s \"$e\" \"$1/$k/\"; done; done; true" (realHostStore) hostCache) 60 8))
         (noPathHost (sh! fresh (list "/bin/sh" "-c" "command -v asl-host") 10 4))
         (cold (binAslHostless! fresh (list "test" (probe)) home cache hostCache))
         (removed (sh! root (list "git" "worktree" "remove" "--force" fresh) 30 8))
@@ -46,7 +52,8 @@ fn ! runTests -> Bool
         (assert (= added.exit 0) (str "a fresh worktree was checked out with no asl/host/out: " added.out added.verdict))
         (assert noOut "the fresh worktree has no asl/host/out/asl-host (a true cold clone)")
         (assert (ok? homed) "a fresh HOME for the cold run was created")
-        (assert upstream "the fresh native CLI cache copies only the runtime and the CLI stage from the run store: seed and asl1 are still lowered cold with no asl-host")
+        (assert upstream "the fresh native CLI cache copies seed, runtime, asl1 and the CLI from the run store: the cold run still has no asl/host/out, no asl-host and a fresh HOME, only the lowering work is shared")
+        (assert (= hostLinked.exit 0) (str "the scratch host store links the run's rt, seed and nativeBuild entries read-only: " hostLinked.out))
         (assert (!= noPathHost.exit 0) "the cold run's PATH has no asl-host on it either")
         (assert (= cold.verdict "exit") (str "bin/asl test ended on its own, inside the limit: " cold.verdict " " cold.out))
         (assert (= cold.exit 0) (str "a fresh clone with no asl-host and no asl-host on PATH still answers bin/asl test: " cold.out))

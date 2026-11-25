@@ -1,5 +1,5 @@
 (module asl-tools/nativeTest
-  :x [prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
+  :x [entryLabelOf! storedBody replayedBody publishVariant! variantLookup variantNames slotVariantCap prepareTestMutant! placeWrapper! mutantSlot! closureHolds! mutantCopy? withoutRunnerSwitches reapOrphanedRuns! Watched PumpState runWatched limitLine runReceipt withoutPeakLines maxWallS selectionSource testFunctionsOf selectedVerdict prepareTestSelected workerPhasesWanted? prepareAll prepareAllIn suiteWorkersFor strideOrder takeLock! lockLive? unparsableStale? runTests main failLine suiteFailLine initPhaseOff initPhaseOn initVerdict judgeInit! selfSlotOf linkArchives exportsOf entryOf mainTakesArgs importPathOf wrapperSource reportCounts verdictOf suiteWall declaredWallS hostVerdictLine toolchainRoots slotKey suiteSlotKey suiteSlotKeyIn treeOf rcTag rcModeFor! relativeTo manifestText manifestHolds? manifestFileHolds? interfaceDigest ifaceMapOf initsInUnitOrder moduleCacheKey unitKey unitKeyIn optLevelFor soloWorkersOf soloWorkers! workerCount! soloSpread minWorkerBytes prepareInWith fullPreludeKey preludeDigestIn prepare prepareIn prepareTestSource ephemeralSlotIn! linkedWorktree? defaultCacheDirFor sweepStore! sweepStoreNow! sweepStoreWith! sweepStoreHardWith! sweepStoreBounded! leaseSlot! holdBuilt! releaseHold! releaseHeld! heldPaths! rotateRows! entryPinnedNow! slotEntriesHeld! moduleEntries! slotEntries! prepareRun prepareRunIn fingerprint fingerprintIn artifactSlice compile compileIn Built Verdict Outcome ProcOut runProc runProcIn runProcWithin withEnvOverrides! withEnvStripped! fileDigest readVerifiedMeta WorkerProc WorkerWatch spawnWorker! awaitWorkersWithin! workersVerdict]
   :i [(asl-tools/corpusNative :a cn) (asl-tools/renderTag :a rtag)
       (asl-parser/ast :a ast)
       (asl-parser/reader :a rd)
@@ -256,8 +256,9 @@ fn ! homeWritable? dir: String -> Bool
     ((ok _) (let [(probe (str dir "/.probe." (stringFromInt64 (procSelf))))]
               (match (fileWrite probe "") ((err _) false) ((ok _) (do (pathRemove probe) true))))))
 
+; (:m :ref NT-SLOT-PATHFREE :do "the main checkout shares the home store too, so a suite warm in one tree is a hit in every other: slots carry no tree path and lookup revalidates each closure file by content against the asking tree, so only a tree whose closure differs rebuilds")
 fn ! defaultCacheDirFor root: String home: String -> String
-  (if (and (not (stringEmpty? home)) (and (linkedWorktree? root) (homeWritable? (str home "/.asl/run/nativeTest")))) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
+  (if (and (not (stringEmpty? home)) (homeWritable? (str home "/.asl/run/nativeTest"))) (str home "/.asl/run/nativeTest") ".asl/cache/nativeTest")
 
 fn ! cacheDir! -> String
   (let [(c (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (defaultCacheDirFor (toolRoot) (optionOr (envGet "HOME") ""))))]
@@ -754,8 +755,9 @@ fn slotKey path: String suiteDigest: String -> String
   (bytesSha256 (stringToBytes (str (format) "\n" (wrapperVersion) "\n" path "\n" suiteDigest)))
 
 ; (:m :ref MODKEY-OPTLEVEL :do "the linked binary carries the opt level its objects were compiled at, so a slot built under another ASL_NATIVE_OPT is another slot")
+; (:m :ref NT-SLOT-PATHFREE :do "tree is accepted for callers and left out of the key: a slot is named by mode, opt, rc, root-relative suite path and suite digest, and the manifest of each closure file's content decides whether it holds in the asking tree, so a worktree reuses a binary another one linked")
 fn suiteSlotKeyIn tree: String mode: String opt: String rc: String logicalPath: String digest: String -> String
-  (slotKey (str mode opt rc ":" (importPathOf logicalPath) "@" tree) digest)
+  (slotKey (str mode opt rc ":" (importPathOf logicalPath)) digest)
 
 fn ! treeOf root: String -> String
   (resultOr (realPath root) root)
@@ -1860,16 +1862,37 @@ fn entryFor mode: String src: String -> (Option String)
 fn ! checkRootsForNative -> (List String)
   (list "." "asl/packages" "asl")
 
+; (:m :ref NT-CHECK-PORTABLE :do "the verdict key names a suite by its path under the nearest .asl.config.asn (basename when none), the rule checkCache's entryLabel! applies for asl check, so identical suites at a/ and b/ of one tree get two verdicts and the same relative path in two trees shares one")
+fn ! configRootOf! parts: (List String) -> String
+  (let [(dir (stringJoin parts "/"))]
+    (if (listEmpty? parts) ""
+      (if (fileExists? (str dir "/.asl.config.asn")) dir (configRootOf! (listTake parts (- (listLength parts) 1))))))
+
+fn ! entryLabelOf! actualPath: String -> String
+  (let [(real (resultOr (realPath actualPath) actualPath))
+        (root (configRootOf! (stringSplit real "/")))
+        (prefix (str root "/"))]
+    (if (and (not (stringEmpty? root)) (stringStartsWith? real prefix))
+      (optionOr (stringSlice real (stringLength prefix) (stringLength real)) real)
+      (optionOr (listLast (stringSplit real "/")) real)))
+
 ; (:m :ref U4-MARKER-PARITY :do "test and run used to compile straight from AST to IR/SSA/LLVM with no static check at all (compileSeparate! and compileWhole! both lower unconditionally), so a type error only ever surfaced if the VM or the native runtime happened to trap it, in a different format with no line:col, or (when the fixture has no main/runTests, like the sem/invalid corpus) not at all before ERR_NO_ENTRY. checkerRejection! runs asl-checker's own checkFile! once per entry, through the same digest-keyed on-disk Verdict cache asl1's own check subcommand already uses (asl-compiler/checkCache), so a repeat test/run of an unchanged entry (and unchanged checker) replays the cached verdict instead of rechecking; a hit with diagnostics renders them through asl-cli/verify's formatDiags, the exact formatter asl check's own printDiag! uses, so the three subcommands name the same site. actualPath is read (checkFile! does its own fileReadString); logicalPath is only substituted into the rendered text, so a staged or root-relative name still shows the form check would print")
 fn ! checkerRejection! actualPath: String logicalPath: String fp: String -> (Option String)
   (let [(inline (inlineStaged? logicalPath))
         (shown (if inline (inlineName logicalPath) logicalPath))]
-    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) "") (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
+    (match (ccache/verdictKeyWith! actualPath (if inline (str "inline " shown) (entryLabelOf! actualPath)) (str "nativeTest render " (rtag/renderTagIn! (toolRoot)) " " fp))
       ((none) (freshRejection! actualPath shown (none)))
       ((some key)
        (match (ccache/lookup! key)
-         ((some v) (if (= v.exitCode 0) (none) (some v.body)))
+         ((some v) (if (= v.exitCode 0) (none) (some (replayedBody v.body (ccache/rootPairs! actualPath)))))
          ((none) (freshRejection! actualPath shown (some key)))))))
+
+; (:m :ref NT-CHECK-PORTABLE :do "a stored rejection names the writing tree's entry directory and working root by placeholder tokens (cc/portable) and a replay substitutes the asking tree's (cc/localize), so a cached rejection never sends the reader to another tree's dependency path")
+fn storedBody body: String roots: (List (Pair String String)) -> String
+  (let [(v (ccache/portable (ccache/Verdict :exitCode 1 :body body) roots))] v.body)
+
+fn replayedBody body: String roots: (List (Pair String String)) -> String
+  (let [(v (ccache/localize (ccache/Verdict :exitCode 1 :body body) roots))] v.body)
 
 ; (:m :ref NT-VERDICT-KEY-COVERS-RENDER :do "the verdict key carries asl-tools/renderTag: the cached body is rendered text and the toolchain fingerprint does not cover asl-cli/verify, so the key digests verify and its direct imports and a renderer edit misses old bodies")
 ; (:m :ref SCRIPT-RUN-UNCHECKED :do "a file the checker cannot key or read is checked uncached or rejected, never let through unchecked")
@@ -1880,7 +1903,7 @@ fn ! freshRejection! actualPath: String logicalPath: String key: (Option String)
      (let [(diags verdict.diags)
            (body (if (listEmpty? diags) "" (stringReplace (verify/formatDiagsHinted! diags) actualPath logicalPath)))
            (_ (match key
-                ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body body)) ((ok _) ()) ((err _) ())))
+                ((some k) (match (ccache/store! k (ccache/Verdict :exitCode (if (listEmpty? diags) 0 1) :body (storedBody body (ccache/rootPairs! actualPath)))) ((ok _) ()) ((err _) ())))
                 ((none) ())))]
        (if (listEmpty? diags) (none) (some body)))))
 
@@ -2355,6 +2378,48 @@ fn ! compile path: String src: String slot: String key: String fp: String -> Bui
   (compileIn (cacheDir!) path path src slot key fp "test")
 
 ; (:m :ref OUT-OF-ROOT-USERPATH :do "a run/test FILE argument is the caller's own, resolved against the caller's cwd like any other CLI tool (NATIVE-CHDIR: the native CLI never chdirs to the toolchain root first); only the toolchain's own internal lookups (cache dirs, dep manifests) are root-relative, so prepareIn reads and digests path as given, never through resolveIn (toolRoot)")
+; (:m :ref NT-SLOT-PATHFREE :do "a slot name (cDir/fp/KEY) is a directory of variants, one per closure content: each build is made in a temp dir b.PID.NS and renamed to the sha of its manifest's content lines, so a tree whose closure differs from every variant builds a new one and never rewrites a variant another tree runs or links; lookup takes the first variant whose manifest holds for the asking tree; the variants are capped at slotVariantCap, oldest by mtime out unless a live pid holds it")
+fn slotVariantCap -> Int64
+  4
+
+fn ! variantNames keyDir: String -> (List String)
+  (filter hexKey? (resultOr (dirList keyDir) (list)))
+
+fn ! variantLookup keyDir: String mode: String -> (Option Built)
+  (fold (fn [(acc (Option Built)) (n String)] -> (Option Built) (match acc ((some _) acc) ((none) (lookup (str keyDir "/" n) mode))))
+        (none) (variantNames keyDir))
+
+fn ! closureDigestOf manifest: String -> String
+  (bytesSha256 (stringToBytes (stringJoin (map (fn [(e (Option (List String)))] -> String (match e ((some fs) (str (optionOr (listGet fs 0) "") " " (optionOr (listGet fs 3) ""))) ((none) ""))) (manifestEntries manifest)) "\n")))
+
+fn ! rebased b: Built from: String to: String -> Built
+  (Built :binary (match b.binary ((some p) (some (if (stringStartsWith? p from) (str to (optionOr (stringSlice p (stringLength from) (stringLength p)) "")) p))) ((none) (none)))
+         :reason b.reason :cache b.cache :recompiled b.recompiled :reused b.reused :depsMs b.depsMs :asl1Ms b.asl1Ms :clangMs b.clangMs)
+
+fn ! evictVariants! cDir: String keyDir: String -> Unit
+  (let [(names (variantNames keyDir))]
+    (if (<= (listLength names) (slotVariantCap))
+      ()
+      (let [(held (heldPaths! cDir))
+            (oldest (listSortBy (fn [(n String)] -> Int64 (match (fileStat (str keyDir "/" n)) ((ok st) st.mtimeNs) ((err _) 0))) names))
+            (drop (filter (fn [(n String)] -> Bool (not (heldBy? held (str keyDir "/" n)))) (listTake oldest (- (listLength names) (slotVariantCap)))))]
+        (do (fold (fn [(acc Unit) (n String)] -> Unit (match (pathRemove (str keyDir "/" n)) ((ok _) acc) ((err _) acc))) () drop) ()))))
+
+fn ! publishVariant! cDir: String keyDir: String mode: String build: (fn [String] -> Built) -> Built
+  (let [(tmp (str keyDir "/b." (stringFromInt64 (procSelf)) "." (stringFromInt64 (monotonicNs))))
+        (_ (dirCreate tmp))
+        (b (build tmp))]
+    (match (fileReadString (str tmp "/manifest"))
+      ((err _) (do (pathRemove tmp) b))
+      ((ok text)
+       (let [(final (str keyDir "/" (closureDigestOf text)))]
+         (match (if (fileExists? (str final "/manifest")) (lookup final mode) (none))
+           ((some held) (do (pathRemove tmp) held))
+           ((none)
+           (match (do (pathRemove final) (pathRename tmp final))
+             ((err _) (do (pathRemove tmp) b))
+             ((ok _) (do (evictVariants! cDir keyDir) (rebased b tmp final))))))))))
+
 fn ! prepareIn cDir: String path: String fp: String mode: String -> Built
   (prepareInWith 0 cDir path fp mode)
 
@@ -2363,11 +2428,11 @@ fn ! prepareInWith cap: Int64 cDir: String path: String fp: String mode: String 
     ((err _) (Built :binary (none) :reason (str "cannot read " path) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKey mode path path))
                     (slot (str cDir "/" fp "/" key))]
-                (match (lookup slot mode)
+                (match (variantLookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (compileInWith cap cDir path path src slot key fp mode "" (mapEmpty)))) (unbuilt (str "cannot lease " slot))))
+                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (publishVariant! cDir slot mode (fn [(tmp String)] -> Built (compileInWith cap cDir path path src tmp key fp mode "" (mapEmpty)))))) (unbuilt (str "cannot lease " slot))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2380,11 +2445,11 @@ fn ! prepareSourceSelectIn cDir: String actualPath: String logicalPath: String f
     ((err _) (Built :binary (none) :reason (str "cannot read " actualPath) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
     ((ok src) (let [(key (suiteSlotKeyFor mode only logicalPath actualPath))
                     (slot (str cDir "/" fp "/" key))]
-                (match (lookup slot mode)
+                (match (variantLookup slot mode)
                   ((some b) b)
                   ((none) (match (dirCreate slot)
                             ((err e) (Built :binary (none) :reason (str "cannot create " slot ": " e) :cache "miss" :recompiled (list) :reused (list) :depsMs 0 :asl1Ms 0 :clangMs 0))
-                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (compileInWith 0 cDir logicalPath actualPath src slot key fp mode only (mapEmpty)))) (unbuilt (str "cannot lease " slot))))
+                            ((ok _) (let [(built (if (leaseOnce! slot) (leasedBuild! slot (dropWrapperIn cDir key (publishVariant! cDir slot mode (fn [(tmp String)] -> Built (compileInWith 0 cDir logicalPath actualPath src tmp key fp mode only (mapEmpty)))))) (unbuilt (str "cannot lease " slot))))
                                           (_ (sweepStore! cDir))]
                                       built))))))))
 
@@ -2680,7 +2745,7 @@ fn ! keptRun root: String rel: String fp: String -> (Option String)
     (match (fileReadString (str root "/" rel))
       ((err _) (none))
       ((ok _) (let [(key (suiteSlotKeyIn (treeOf root) "run" (optLevelFor "run") (rcTag (rcModeFor! rel)) rel (fileDigest (str root "/" rel))))]
-                (match (lookup (str (cacheDir!) "/" fp "/" key) "run")
+                (match (variantLookup (str (cacheDir!) "/" fp "/" key) "run")
                   ((some b) b.binary)
                   ((none) (none)))))))
 
@@ -2748,8 +2813,15 @@ fn ! selfSlotOf cDir: String root: String fp: String -> String
   (:f failure (Option String)))
 
 fn ! selfStateOf cDir: String root: String fp: String -> SelfState
-  (let [(slot (selfSlotOf cDir root fp))
-        (bin (str slot "/run"))
+  (let [(keyDir (selfSlotOf cDir root fp))]
+    (fold (fn [(acc SelfState) (n String)] -> SelfState
+            (match acc.binary
+              ((some _) acc)
+              ((none) (match acc.failure ((some _) acc) ((none) (selfStateAt (str keyDir "/" n) root))))))
+          (SelfState :binary (none) :failure (none)) (variantNames keyDir)))
+
+fn ! selfStateAt slot: String root: String -> SelfState
+  (let [(bin (str slot "/run"))
         (unknown (SelfState :binary (none) :failure (none)))]
     (match (fileReadString (str slot "/manifest"))
       ((err _) unknown)

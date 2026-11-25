@@ -47,12 +47,13 @@ fn ! remember key: (Option String) v: cc/Verdict -> Unit
       ((err e) (do (eprintln (str "asl1: [cache] verdict not stored: " e)) ())))))
 
 fn ! check entry: String -> (Result Int64 String)
-  (let [(key (cc/verdictKey! entry))]
+  (let [(key (cc/verdictKey! entry))
+        (roots (cc/rootPairs! entry))]
     (match (match key ((some k) (cc/lookup! k)) ((none) (none)))
-      ((some v) (cc/replay! v))
+      ((some v) (cc/replay! (cc/localize v roots)))
       ((none) (match (verdictOf entry)
         ((none) (report (list (str entry ": [ERR_LOAD] its imports do not load"))))
-        ((some v) (let [(out (cc/replay! v))] (do (remember key v) out)))))))
+        ((some v) (let [(out (cc/replay! v))] (do (remember key (cc/portable v roots)) out)))))))
 
 fn distinctSorted xs: (List String) -> (List String)
   (listReverse (fold (fn [(acc (List String)) (x String)] -> (List String) (if (= (listHead acc) (some x)) acc (cons x acc))) (list) (listSort xs)))

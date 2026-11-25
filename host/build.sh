@@ -61,7 +61,7 @@ cold_lock() {
   rm -f "$mark"
   COLD_L=$L
   printf '%s\n%s\n%s\n' "$$" "$OUT" "$(cold_start $$)" > "$L/holder"
-  sh "$0" --cold-watch "$$" "$1" "$win" "$OUT" &
+  sh "$0" --cold-watch "$$" "$1" "$win" "$OUT" "$PPID" &
   COLD_W=$!
   echo "$COLD_W" >> "$L/holder"
   trap 'cold_release' EXIT
@@ -73,8 +73,17 @@ cold_release() {
   [ -z "${COLD_L:-}" ] || rm -rf "$COLD_L"
 }
 cold_watch() {
-  h=$1; mark="$2/build.lockd/.self"; : > "$mark" 2>/dev/null || true; seen=$(date +%s); cpu0=""
+  h=$1; own=${5:-0}; mark="$2/build.lockd/.self"; : > "$mark" 2>/dev/null || true; seen=$(date +%s); cpu0=""
   while kill -0 "$h" 2>/dev/null; do
+    # (:m :why "BUILD-OWNER-WATCH: the caller that started the build (bin/asl, build.sh's parent) is its owner; once it is gone the whole tree of the build is stopped within a second, whatever stage it is in (a cli-stage asl1 emit or a link outlived the owner by minutes)")
+    if [ "$own" -gt 1 ] 2>/dev/null && ! kill -0 "$own" 2>/dev/null; then
+      kids=$(cold_descendants "$h" "$$")
+      kill -TERM "$h" 2>/dev/null || true
+      for d in $kids; do kill -TERM "$d" 2>/dev/null || true; done
+      sleep 1
+      for d in $h $kids; do kill -KILL "$d" 2>/dev/null || true; done
+      break
+    fi
     cpu=$(cold_cpu "$h" "$$")
     if { [ -n "$cpu0" ] && [ "$cpu" -gt "$cpu0" ]; } || cold_files "$h" "$4" "$2" "$mark" "$$"; then seen=$(date +%s); : > "$mark" 2>/dev/null || true; fi
     cpu0=$cpu
@@ -90,7 +99,7 @@ cold_watch() {
   rm -f "$mark" 2>/dev/null || true
 }
 case "${1:-}" in
-  --cold-watch) trap "" PIPE; cold_watch "$2" "$3" "$4" "$5"; exit 0 ;;
+  --cold-watch) trap "" PIPE; cold_watch "$2" "$3" "$4" "$5" "${6:-0}"; exit 0 ;;
   --cold|--cold-probe|--cold-hold)
     w=${3:-$(cold_window)}; case "$w" in ''|*[!0-9]*) w=1800 ;; esac
     cold_lock "${2:?build.sh $1 needs the cache dir}" "$w" || exit 1
