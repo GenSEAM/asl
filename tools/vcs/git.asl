@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeBase! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [pinRef! peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeBase! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -189,6 +189,11 @@ fn ! mergeBase! repo: String name: String a: String b: String msg: String cfg: (
           (if (!= made.exit 0) made
             (let [(u (gitRun! repo (list "update-ref" (str "refs/heads/" name) sha) 20))]
               (if (= u.exit 0) (Out :exit 0 :out sha) u)))))))
+
+; (:m :ref NODE-DEPLOY-RECEIPT-REPO :do "point ref at sha in repo (update-ref): the deploy verify pins train receipt trees so one fetch brings them into the verify repo; only a full hex sha and a refs/ name are accepted")
+fn ! pinRef! repo: String ref: String sha: String -> Bool
+  (and (stringStartsWith? ref "refs/") (= (stringLength sha) 40)
+       (= (gitRun! repo (list "update-ref" ref sha) 10).exit 0))
 
 ; (:m :ref VCS-DIRECT :do "check out branch name at base, creating it or resetting it there (checkout -q -B); the name must be a branch git accepts and the base is resolved to a sha first, so no ref text reaches git as an option; base = name re-checks out a branch where it is")
 fn ! switch! repo: String name: String base: String -> Out
