@@ -283,6 +283,7 @@ fn ! cockpit! ctx: sys/Context args: (List String) -> Int64
 fn intelAudit? sub: String -> Bool
   (listContains? (list "coupling" "deadcode" "vacuity" "sweep" "graph" "complexity" "stubs" "vitality" "trace" "full" "all" "system") sub)
 
+; (:m :ref MERGECHECK-CLI-AUDITS-OWN-TREE :do "the auditor code is this CLI's (ctx.root) but the audited tree is the one pointed at, --root or the cwd: auditMain discovers it, so ROOT_DIR is not forced to the CLI's own tree")
 fn ! audit! ctx: sys/Context args: (List String) -> Int64
   (let [(given (first args))
         (sub (if (stringEmpty? given) "consistency" given))]
@@ -291,7 +292,7 @@ fn ! audit! ctx: sys/Context args: (List String) -> Int64
       (let [(entry (str ctx.root "/asl/packages/asl-gates/src/auditMain.asl"))
             (selfBin (str ctx.root "/bin/asl"))]
         (if (sys/isFile? entry)
-          (sys/execv! (cons selfBin (cons "run" (cons entry (cons sub (rest args))))) (list (str "ROOT_DIR=" ctx.root)))
+          (sys/execv! (cons selfBin (cons "run" (cons entry (cons sub (rest args))))) (list))
           (do (sys/sayErr! "Error: the asl-gates audit entry was not found") 1)))))
 
 fn asnQuote v: String -> String

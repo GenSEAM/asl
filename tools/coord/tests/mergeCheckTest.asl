@@ -773,8 +773,11 @@ fn ! testAuditClosure base: String -> Bool
         (idUnres (mc/auditClosureId! repo hUnres))
         (idSame (mc/auditClosureId! repo hSame1))
         (idSame2 (mc/auditClosureId! repo hSame2))
-        (idGates (mc/auditClosureId! repo hGates))]
+        (idGates (mc/auditClosureId! repo hGates))
+        (idNoRepo (mc/auditClosureId! (str base "/noSuchRepo") hSame1))]
     (do
+      (assert (stringEmpty? idNoRepo) "MERGECHECK-INDEX-FAIL-OPEN: a git grep error (exit >= 2) yields no closure id, so nothing is cached under the data-only id")
+      (assert (and (listContains? (mc/auditArgv "c" "consistency" "/t") "--root") (listContains? (mc/auditArgv "c" "gates" "/t") "/t")) "MERGECHECK-CLI-AUDITS-OWN-TREE: both audits pass the side tree as --root")
       (assert (and (= (pairFirst seed) 0) (= seedBase 1) (stringContains? (out seed) ":baseCached 0")) (str "the first check of the base audits it: " (out seed)))
       (assert (and (= (pairFirst otherCli) 0) (= otherCliBase 0) (stringContains? (out otherCli) ":baseCached 2")) (str "another cli build with other bytes reuses the base audit of the same closure: " (out otherCli)))
       (assert (and (= idSame idSame2) (!= idSame idGates) (stringStartsWith? idSame "audit:")) (str "the closure id names the audit's code and inputs only: " idSame " " idGates))

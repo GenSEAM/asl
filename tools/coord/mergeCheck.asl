@@ -226,8 +226,9 @@ fn leftS deadlineNs: Int64 stepS: Int64 -> Int64
     (if (< left stepS) left stepS))
 
 ; (:m :ref VCS-AUDIT-LOWS-F1 :do "merge-time audits run with the vcsDirect scan cache off: consistency gets --no-cache")
-fn auditArgv cli: String sub: String -> (List String)
-  (if (= sub "consistency") (list cli "audit" sub "--no-cache") (list cli "audit" sub))
+; (:m :ref MERGECHECK-CLI-AUDITS-OWN-TREE :do "the audited tree is passed as --root, so a CLI whose own tree is another checkout (the conductor's devRepo/bin/asl) still audits the side under test")
+fn auditArgv cli: String sub: String side: String -> (List String)
+  (if (= sub "consistency") (list cli "audit" sub "--no-cache" "--root" side) (list cli "audit" sub "--root" side))
 
 ; (:m :do "audit sub (consistency|gates) at side with the step bound: the failed rows and whether the audit ran (exit 0 or 1 with a receipt); gates run with suites off by default")
 fn ! checkSide! side: String cli: String sub: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Result (List (Pair String String)) String)
@@ -237,7 +238,7 @@ fn ! checkSide! side: String cli: String sub: String deadlineNs: Int64 stepS: In
 fn ! checkSideAll! side: String cli: String sub: String deadlineNs: Int64 stepS: Int64 env: (List String) -> (Result (Pair (List (Pair String String)) Bool) String)
   (let [(s (leftS deadlineNs stepS))]
     (if (<= s 0) (err "deadline")
-      (let [(d (fr/runOneLimited (fr/job (auditArgv (cliOf side cli) sub) side env) (fr/limits s 64)))]
+      (let [(d (fr/runOneLimited (fr/job (auditArgv (cliOf side cli) sub side) side env) (fr/limits s 64)))]
         (cond
           ((or (= d.verdict "timeout") (= d.verdict "runaway")) (err (str "timeout " sub)))
           ((not (stringContains? d.out "(:audit ")) (err (str "no receipt " sub " exit " (n d.exit))))
@@ -456,21 +457,22 @@ fn auditDataPaths -> (List String)
 fn auditToolchainPaths -> (List String)
   (list "asl/packages/asl-compiler/src" "asl/packages/asl-checker/src" "asl/packages/asl-codegen/src" "asl/packages/asl-ir/src"
         "asl/packages/asl-parser/src" "asl/packages/asl-syntax/src/core" "asl/packages/asl-target-llvm/src"
-        "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl")
+        "asl/prelude/prelude.asl" "asl/prelude/native" "asl/tools/nativeTest.asl" "asl/packages/asl-cli/src/command.asl")
 
 ; (:m :do "one row per tracked module header of the tree: its declared name and path, from one git grep")
-fn ! moduleIndex! repo: String sha: String -> (List (Pair String String))
+fn ! moduleIndex! repo: String sha: String -> (Option (List (Pair String String)))
   (let [(d (gitOut! repo (list "grep" "-I" "-E" "^\\(module [^ )]+" sha "--" "asl/*.asl")))
         (k (+ (stringLength sha) 1))]
-    (if (!= d.exit 0) (list)
-      (nonEmptyPairs (map (fn [(l String)] -> (Pair String String)
+    (if (>= d.exit 2) (none)
+     (if (!= d.exit 0) (some (list))
+      (some (nonEmptyPairs (map (fn [(l String)] -> (Pair String String)
                             (let [(row (optionOr (stringSlice l k (stringLength l)) ""))
                                   (at (optionOr (stringIndexOf row ":") 0))
                                   (path (optionOr (stringSlice row 0 at) ""))
                                   (text (optionOr (stringSlice row (+ at 1) (stringLength row)) ""))
                                   (name (optionOr (listHead (stringSplit (stringTrim (optionOr (listGet (stringSplit text "(module ") 1) "")) " ")) ""))]
                               (pair name path)))
-                          (stringLines d.out)))))
+                          (stringLines d.out)))))))
 
 fn nonEmptyPairs rows: (List (Pair String String)) -> (List (Pair String String))
   (filter (fn [(r (Pair String String))] -> Bool (and (not (stringEmpty? (pairFirst r))) (not (stringEmpty? (pairSecond r))))) rows)
@@ -516,8 +518,12 @@ fn ! pathId! repo: String sha: String p: String -> String
   (str p "=" (stringTrim (gitOut! repo (list "rev-parse" "--verify" "-q" (str sha ":" p))).out))
 
 fn ! auditClosureId! repo: String sha: String -> String
-  (let [(ix (moduleIndex! repo sha))
-        (entry (pairSecond (optionOr (listHead (filter (fn [(r (Pair String String))] -> Bool (= (pairFirst r) (auditEntry))) ix)) (pair "" ""))))]
+  (match (moduleIndex! repo sha)
+    ((none) "")
+    ((some ix) (auditClosureOf! repo sha ix)))
+
+fn ! auditClosureOf! repo: String sha: String ix: (List (Pair String String)) -> String
+  (let [(entry (pairSecond (optionOr (listHead (filter (fn [(r (Pair String String))] -> Bool (= (pairFirst r) (auditEntry))) ix)) (pair "" ""))))]
     (match (if (stringEmpty? entry) (some (list)) (closureWalk! repo sha ix (list (pair "" entry)) (list) (list) 600))
       ((none) "")
       ((some mods) (str "audit:" (digest16 (stringJoin (listAppend (listSort mods) (map (fn [(p String)] -> String (pathId! repo sha p)) (listAppend (auditDataPaths) (auditToolchainPaths)))) "\n"))))))
