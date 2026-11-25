@@ -1,5 +1,5 @@
 (module asl-tools/vcs/git
-  :x [pinRef! peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeBase! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
+  :x [pinRef! listRefs! deleteRef! fetchRefs! peerStaged! Out Tx gitRun! head! changes! diff! stageNamed! prepare! finish! discard! branchCreate! mergeBase! switch! mergeFf! restoreTree! applyPatch! worktreeAdd! worktreeRemove! worktreePrune! applyPatchChecked! outcomeOf argOk? log! isAncestor! pathOk? isDirPath? refOk? resolve! clean capOut]
   :i [(asl-tools/fleet/run :a fr)])
 
 ; (:m :ref VCS-LAYER-CORE :do "the git backend and the only file of the vcs layer that spawns git: every call is a bounded fleet child run through env -u GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE .. so a caller's git environment never redirects it, as git --literal-pathspecs -C repo with core.hooksPath=/dev/null, core.fsmonitor off and quotepath off")
@@ -292,3 +292,16 @@ fn ! peerFold! repo: String lines: (List String) acc: (List String) -> (List Str
 fn ! peerStaged! repo: String paths: (List String) -> (List String)
   (let [(ls (gitRun! repo (listAppend (list "ls-files" "-s" "--") paths) 30))]
     (peerFold! repo (filter (fn [(l String)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringLines ls.out)) (list)))
+
+; (:m :ref DEPLOY-RECEIPT-LOWS :do "the ref names under PREFIX in repo (for-each-ref), empty when the call fails; the deploy verify lists its refs/receipts pins to prune them")
+fn ! listRefs! repo: String prefix: String secs: Int64 -> (List String)
+  (let [(o (gitRun! repo (list "for-each-ref" "--format=%(refname)" prefix) secs))]
+    (if (= o.exit 0) (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (map stringTrim (stringLines o.out))) (list)))
+
+; (:m :ref DEPLOY-RECEIPT-LOWS :do "delete ref in repo (update-ref -d); only a refs/ name is accepted")
+fn ! deleteRef! repo: String ref: String -> Bool
+  (and (stringStartsWith? ref "refs/") (= (gitRun! repo (list "update-ref" "-d" ref) 10).exit 0))
+
+; (:m :ref DEPLOY-RECEIPT-LOWS :do "fetch SPEC from the repo or path FROM into repo, quiet and without tags, bounded by secs; true when git exits 0")
+fn ! fetchRefs! repo: String from: String spec: String secs: Int64 -> Bool
+  (= (gitRun! repo (list "fetch" "-q" "--no-tags" from spec) secs).exit 0)
