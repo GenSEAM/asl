@@ -1,5 +1,5 @@
 (module asl-cli/nativeBuild
-  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
+  :x [Build toolchainRootPaths variantKey! main suiteWorkersFor! suiteWorkersValue defaultSuiteWorkers storeCapFor! bucketsFor! bucketsValue defaultBuckets storeHardCapFor! storeHardMinAgeNs! defaultStoreHardCap claimWaitFor! lockGraceFor! buildPoolFor! buildTokensValue defaultBuildTokens claimWaitValue defaultClaimWaitS capValue defaultStoreCap sweepOn? storeMinAgeNs! ageValue link! linkParts! inlineFor partsWith minPartBytes partsForSize linkPartsFor! linkLevelFor! levelFlag partsValue nativeKey compile! stage! stageKey! lookup! partsOf sanitizeFlags linkSanitized! asanRuntime! notraceRuntime! countedRuntime! transientFailure? ObjLink linkCached! objKey objCompileArgv objDirOf objStoreFor! sweepObjects! sweepObjectsAs! receiptLine upstreamOf upstreamFile adopt! mainRootOfGit seedRcUpstream!]
   :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-cli/src/nativeRefresh :a nr) (asl/prelude/native/sha256 :a sh) (asl/packages/asl-cli/src/objStore :a os) (asl/packages/asl-proc/src/jobPool :a run) (asl/packages/asl-cli/src/irSplit :a ir) (asl-parser/ast :a a) (asl-parser/reader :a rd) (asl-checker/resolve :a r) (asl-tools/fleet/jobserver :a js)])
 
 (schema Build
@@ -14,7 +14,7 @@
   (:f maxDesc Int64)
   (:f links (List String) :default (list))
   (:f objs String :default "")
-  (:f buckets Int64 :default 16)
+  (:f buckets Int64 :default 128)
   (:f upstream String :default "")
   (:f take (List String) :default (list)))
 
@@ -133,7 +133,7 @@ fn ! adopt! b: Build dir: String needs: (List String) -> Bool
 
 fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir))
+        (start (withUpstream (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner :objs (if (objCacheOff? root) "" (objDirOf cacheDir)) :buckets (bucketsFor! root)
                       :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)) cacheDir))]
     (if (not (sys/isFile? lib))
       (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
@@ -406,6 +406,20 @@ fn ! suiteWorkersFor! dir: String -> Int64
   (match (configured! dir ":suiteWorkers")
     ((some word) (optionOr (suiteWorkersValue word) (defaultSuiteWorkers)))
     ((none) (defaultSuiteWorkers)))
+
+; (:m :ref CLI-MODULE-OBJECTS :do "the CLI IR splits into this many module buckets; at 16 (about 9 MB of IR each) an edit of irSplit.asl recompiled 6.5 MB and one of system.asl baseName, a small body copied into its callers, 60 MB of 157; at 128 it is 0.8 MB and 27 MB of 170, near one part per module (0.8 and 25 MB of 180), 2026-11-25 on 66c698f7f. :native :buckets N in the nearest config, 0 meaning one part per module")
+fn defaultBuckets -> Int64
+  128
+
+fn bucketsValue word: String -> (Option Int64)
+  (match (stringToInt64 (stringTrim (stringReplace word "\"" "")))
+    ((some n) (if (and (>= n 0) (<= n 4096)) (some n) (none)))
+    ((none) (none)))
+
+fn ! bucketsFor! dir: String -> Int64
+  (match (configured! dir ":buckets")
+    ((some word) (optionOr (bucketsValue word) (defaultBuckets)))
+    ((none) (defaultBuckets)))
 
 fn ! storeCapFor! dir: String -> Int64
   (match (configured! dir ":storeCap")
